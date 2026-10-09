@@ -1,0 +1,16 @@
+include: lint_options.yaml
+
+analyzer:
+  exclude:
+    - build/**
+    - dist/**
+    - lib/l10n/**
+    - lib/**/generated/**
+    # 本地包各自带 analysis_options.yaml，单独分析。
+    - plugins/**
+    - android/**
+    - macos/**
+    - linux/**
+    - windows/**
+  errors:
+    invalid_annotation_target: ignore

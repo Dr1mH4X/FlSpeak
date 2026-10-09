@@ -1,0 +1,22 @@
+[package]
+name = "flspeak_ffi"
+description = "Flutter 与 Rust core 之间的唯一 FFI 边界"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "flspeak_ffi"
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+flutter_rust_bridge = "=2.13.0"
+tokio.workspace = true
+audio.workspace = true
+policy.workspace = true
+proto.workspace = true
+session.workspace = true
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }

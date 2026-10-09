@@ -1,0 +1,16 @@
+[package]
+name = "session"
+description = "会话 actor：Client 的所有权与并发边界"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+policy.workspace = true
+proto.workspace = true
+tsclient-rs.workspace = true

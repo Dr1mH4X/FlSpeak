@@ -1,0 +1,16 @@
+[package]
+name = "proto"
+description = "tsclient-rs 的窄封装：策略通过后建连，并剥夺协议层自行解析地址的能力"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+thiserror.workspace = true
+policy.workspace = true
+tsclient-rs.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true

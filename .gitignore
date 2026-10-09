@@ -1,0 +1,60 @@
+# Rust
+/target/
+**/target/
+
+# Flutter / Dart 构建产物
+.dart_tool/
+build/
+dist/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# 注意：flutter_rust_bridge 的生成物（rust/src/frb_generated.rs、
+# lib/src/rust/**、api/*.freezed.dart）必须提交，CI 靠 `git diff` 校验它们是最新的。
+
+# 签名材料
+# Remember to never publicly share your keystore.
+# See https://flutter.dev/to/reference-keystore
+**/keystore.jks
+**/*.jks
+**/*.keystore
+**/key.properties
+
+# IDE / 系统
+.idea/
+.vscode/
+.DS_Store
+*.iml
+
+# Android
+gradle-wrapper.jar
+.cxx/
+**/gradlew
+**/gradlew.bat
+local.properties
+.gradle/
+/captures/
+GeneratedPluginRegistrant.java
+
+# iOS / macOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/ephemeral/
+macos/Pods/
+macos/Flutter/ephemeral/
+**/xcuserdata/
+**/dgph
+
+# Linux / Windows
+linux/flutter/ephemeral/
+windows/flutter/ephemeral/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+x64/
+x86/
+*.[Cc]ache
+!*.[Cc]ache/

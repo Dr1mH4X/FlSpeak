@@ -1,0 +1,11 @@
+include: ../../lint_options.yaml
+
+analyzer:
+  exclude:
+    # flutter_rust_bridge_codegen 生成，不手改。
+    - lib/src/rust/**
+    - build/**
+    - android/**
+    - macos/**
+    - linux/**
+    - windows/**

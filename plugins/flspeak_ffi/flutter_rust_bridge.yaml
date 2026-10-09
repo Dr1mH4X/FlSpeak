@@ -1,0 +1,5 @@
+rust_input: crate::api
+rust_root: rust/
+dart_output: lib/src/rust
+# 频道/客户端 ID 是 u64，但实际取值远小于 2^53，用 Dart int 比 BigInt 好用得多。
+type_64bit_int: true

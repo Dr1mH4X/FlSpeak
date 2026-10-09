@@ -1,0 +1,6 @@
+# 这个文件必须留在 crate 目录里：
+# 1. native assets 钩子只在 plugins/flspeak_ffi/rust/ 下找 rust-toolchain.toml；
+# 2. rustfmt 的导入排序风格要与 flutter_rust_bridge 生成代码一致，否则
+#    `flutter_rust_bridge_codegen generate` 与 `cargo fmt` 会互相改写同一个文件，
+#    CI 里“生成物最新”与“格式干净”两个闸门会互相打架。
+style_edition = "2024"

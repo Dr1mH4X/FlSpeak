@@ -1,0 +1,44 @@
+[workspace]
+resolver = "3"
+members = [
+    "core/audio",
+    "core/policy",
+    "core/proto",
+    "core/session",
+    "plugins/flspeak_ffi/rust",
+]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+license = "GPL-3.0-only"
+repository = "https://github.com/Dr1mH4X/FlSpeak"
+
+[workspace.dependencies]
+async-trait = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = [
+    "fs",
+    "io-util",
+    "macros",
+    "net",
+    "rt-multi-thread",
+    "sync",
+    "time",
+] }
+tracing = "0.1"
+tsclient-rs = "0.1.5"
+
+audio = { path = "core/audio" }
+policy = { path = "core/policy" }
+proto = { path = "core/proto" }
+session = { path = "core/session" }
+
+[profile.release]
+strip = true
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "unwind"
