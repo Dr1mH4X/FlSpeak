@@ -13,9 +13,9 @@ crate-type = ["cdylib", "staticlib"]
 [dependencies]
 flutter_rust_bridge = "=2.13.0"
 tokio.workspace = true
-audio.workspace = true
-policy.workspace = true
+audio = { workspace = true, features = ["audio"] }
 proto.workspace = true
+server.workspace = true
 session.workspace = true
 
 [lints.rust]

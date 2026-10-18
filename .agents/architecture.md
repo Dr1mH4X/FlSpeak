@@ -11,9 +11,8 @@ FFI (plugins/flspeak_ffi)
   ▼
 session      命令队列 + 事件广播；独占 Client
   ▼
-proto        策略门 + deny-all 解析器 + 建连
-  ▼
-policy       地址合法性、T1 硬拦、T2 登记
+proto        SRV 解析 + 最终连接边界 + deny-all 解析器 + 建连
+  ├────────> server   档案模型 + 地址解析 + 本地登记
   ▼
 tsclient-rs           Teamspeak 协议实现（crates.io 依赖）
 ```
@@ -42,13 +41,17 @@ tsclient-rs 的 `Client` 有两个特性决定了边界形状：
 ## 一次连接发生了什么
 
 1. Dart 调 `registerServer(label, address)` → actor 调 `ServerRegistry::register`
-   → **T1**：地址必须能解析成 host[:port]，不能是裸昵称，不能命中官方禁连清单。
+   → `server::parse_address` 只接受 IP/域名和可选端口，拒绝裸昵称。
 2. 通过后成为档案，写进 `servers.json`，事件 `Servers` 推给 Dart。
-3. Dart 调 `connect(id, nickname)` → actor 从档案取地址（**T2**：连接目标只能来自档案）。
+3. Dart 调 `connect(id, nickname)` → actor 从档案取地址，连接目标只能来自档案。
 4. 身份从 `identity.txt` 读，缺失则生成并存盘。
-5. `proto::client` 再校验一次，构造 `Client`，强制注入 deny-all `AddrResolver`。
-6. `connect()` + `wait_connected()` 带 20s 超时；失败先 `disconnect()` 再抛错。
-7. 成功后 `Arc<Client>` 交给 actor，事件 `State(Connected{client_id, channel_id})`。
+5. `proto::resolve_target` 先做 SRV 查询（标准 DNS）；`proto::client` 在最终目标上
+   检查一次官方主机清单，构造 `Client`，强制注入 deny-all `AddrResolver`。
+6. `connect()` + `wait_connected()` 带 8s 超时；失败先 `disconnect()`。连续 3 次握手超时
+   触发身份等级提升（+5，上限 29，独立线程、可取消、原子写身份文件）。
+7. 成功后 `Arc<Client>` 交给 actor，事件 `State(Connected{client_id, channel_id})`，
+   随后拉取频道/成员/codec 快照与历史消息；capture/playback 线程按频道 codec 启动。
+8. 非主动断开按 1/2/4/15/30/…s 退避重连；首轮成功前最多 5 次，之后不限次。
 
 ## 事件到界面
 
@@ -58,6 +61,11 @@ tsclient-rs 的 `Client` 有两个特性决定了边界形状：
 
 ## 尚未接线
 
-- 语音：`audio` 已实现并有单测，但还没接进 actor（既不发也不收）。
-- 文件传输：策略层已有 `check_transfer_host`，FFI 未暴露，Dart 无法传主机名。
-- 私聊/频道消息的完整历史：只保留本次会话收到的消息。
+- 聊天图片：TS6 官方图片是 `ts.file.myts` JSON，字节在 myTS 附件服务；当前只显示
+  “不支持的图片格式”。第三方 URL 走 `core/session::images::fetch_image`（DNS/私网/
+  重定向/大小校验），图床上传未接线。见 `docs/images.md`。
+- TSDNS：可选 legacy fallback，当前只做 SRV，未实现 TSDNS。
+- 文件传输 UI：后端与 FFI 已暴露上传/下载、进度事件，Dart 还没有文件选择器和传输列表。
+- 历史清除入口：`messages.jsonl` 已持久化并在连接时回放，设置页还不能清除。
+- 音频处理：没有 AEC/降噪/AGC；语音包没有 seq，播放只能按到达顺序做固定延迟 jitter。
+- 频道创建/删除没有实时事件，靠 30s 轮询快照兜底。

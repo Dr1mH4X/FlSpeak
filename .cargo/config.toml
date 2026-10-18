@@ -1,0 +1,4 @@
+# audiopus_sys 内置的 Opus 用 `cmake_minimum_required(VERSION <3.5)`，CMake 4 默认拒绝。
+# CI 在作业级设置了这个变量；本地与 native assets 钩子也走同一份配置，避免每次手动 export。
+[env]
+CMAKE_POLICY_VERSION_MINIMUM = "3.5"

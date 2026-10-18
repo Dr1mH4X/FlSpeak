@@ -55,7 +55,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String dco_decode_String(dynamic raw);
 
   @protected
+  AudioDeviceView dco_decode_audio_device_view(dynamic raw);
+
+  @protected
+  AudioDevicesView dco_decode_audio_devices_view(dynamic raw);
+
+  @protected
+  bool dco_decode_bool(dynamic raw);
+
+  @protected
   CoreSessionState dco_decode_box_autoadd_core_session_state(dynamic raw);
+
+  @protected
+  CoreVoiceState dco_decode_box_autoadd_core_voice_state(dynamic raw);
 
   @protected
   ChannelView dco_decode_channel_view(dynamic raw);
@@ -70,16 +82,34 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   CoreEvent dco_decode_core_event(dynamic raw);
 
   @protected
+  CoreMessage dco_decode_core_message(dynamic raw);
+
+  @protected
   CoreSessionState dco_decode_core_session_state(dynamic raw);
 
   @protected
+  CoreTransferDirection dco_decode_core_transfer_direction(dynamic raw);
+
+  @protected
+  CoreVoiceState dco_decode_core_voice_state(dynamic raw);
+
+  @protected
   int dco_decode_i_32(dynamic raw);
+
+  @protected
+  List<AudioDeviceView> dco_decode_list_audio_device_view(dynamic raw);
 
   @protected
   List<ChannelView> dco_decode_list_channel_view(dynamic raw);
 
   @protected
   List<ClientView> dco_decode_list_client_view(dynamic raw);
+
+  @protected
+  List<CoreMessage> dco_decode_list_core_message(dynamic raw);
+
+  @protected
+  Int32List dco_decode_list_prim_i_32_strict(dynamic raw);
 
   @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
@@ -95,6 +125,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   int dco_decode_u_16(dynamic raw);
+
+  @protected
+  int dco_decode_u_32(dynamic raw);
 
   @protected
   BigInt dco_decode_u_64(dynamic raw);
@@ -141,7 +174,21 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String sse_decode_String(SseDeserializer deserializer);
 
   @protected
+  AudioDeviceView sse_decode_audio_device_view(SseDeserializer deserializer);
+
+  @protected
+  AudioDevicesView sse_decode_audio_devices_view(SseDeserializer deserializer);
+
+  @protected
+  bool sse_decode_bool(SseDeserializer deserializer);
+
+  @protected
   CoreSessionState sse_decode_box_autoadd_core_session_state(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  CoreVoiceState sse_decode_box_autoadd_core_voice_state(
     SseDeserializer deserializer,
   );
 
@@ -158,16 +205,38 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   CoreEvent sse_decode_core_event(SseDeserializer deserializer);
 
   @protected
+  CoreMessage sse_decode_core_message(SseDeserializer deserializer);
+
+  @protected
   CoreSessionState sse_decode_core_session_state(SseDeserializer deserializer);
 
   @protected
+  CoreTransferDirection sse_decode_core_transfer_direction(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  CoreVoiceState sse_decode_core_voice_state(SseDeserializer deserializer);
+
+  @protected
   int sse_decode_i_32(SseDeserializer deserializer);
+
+  @protected
+  List<AudioDeviceView> sse_decode_list_audio_device_view(
+    SseDeserializer deserializer,
+  );
 
   @protected
   List<ChannelView> sse_decode_list_channel_view(SseDeserializer deserializer);
 
   @protected
   List<ClientView> sse_decode_list_client_view(SseDeserializer deserializer);
+
+  @protected
+  List<CoreMessage> sse_decode_list_core_message(SseDeserializer deserializer);
+
+  @protected
+  Int32List sse_decode_list_prim_i_32_strict(SseDeserializer deserializer);
 
   @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
@@ -189,6 +258,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int sse_decode_u_16(SseDeserializer deserializer);
 
   @protected
+  int sse_decode_u_32(SseDeserializer deserializer);
+
+  @protected
   BigInt sse_decode_u_64(SseDeserializer deserializer);
 
   @protected
@@ -199,9 +271,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   BigInt sse_decode_usize(SseDeserializer deserializer);
-
-  @protected
-  bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
   void sse_encode_AnyhowException(
@@ -243,8 +312,29 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_String(String self, SseSerializer serializer);
 
   @protected
+  void sse_encode_audio_device_view(
+    AudioDeviceView self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_audio_devices_view(
+    AudioDevicesView self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_bool(bool self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_core_session_state(
     CoreSessionState self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_core_voice_state(
+    CoreVoiceState self,
     SseSerializer serializer,
   );
 
@@ -261,13 +351,34 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_core_event(CoreEvent self, SseSerializer serializer);
 
   @protected
+  void sse_encode_core_message(CoreMessage self, SseSerializer serializer);
+
+  @protected
   void sse_encode_core_session_state(
     CoreSessionState self,
     SseSerializer serializer,
   );
 
   @protected
+  void sse_encode_core_transfer_direction(
+    CoreTransferDirection self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_core_voice_state(
+    CoreVoiceState self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_i_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_audio_device_view(
+    List<AudioDeviceView> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_channel_view(
@@ -278,6 +389,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_client_view(
     List<ClientView> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_core_message(
+    List<CoreMessage> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_prim_i_32_strict(
+    Int32List self,
     SseSerializer serializer,
   );
 
@@ -306,6 +429,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_u_16(int self, SseSerializer serializer);
 
   @protected
+  void sse_encode_u_32(int self, SseSerializer serializer);
+
+  @protected
   void sse_encode_u_64(BigInt self, SseSerializer serializer);
 
   @protected
@@ -316,9 +442,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_usize(BigInt self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_bool(bool self, SseSerializer serializer);
 }
 
 // Section: wire_class

@@ -9,23 +9,34 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'session.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `runtime`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
-/// 合规审计入口：把策略判定暴露给 Dart，供设置页做“为什么连不上”的解释。
-ServerProfileView validateServerAddress({required String address}) =>
-    RustLib.instance.api.crateApiSessionValidateServerAddress(address: address);
+/// 抓取第三方图片 URL。myTS 的 `ts.file.myts` 附件不经过这里。
+Future<Uint8List> fetchImage({required String url}) =>
+    RustLib.instance.api.crateApiSessionFetchImage(url: url);
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<CoreSession>>
 abstract class CoreSession implements RustOpaqueInterface {
+  Future<void> cancelIdentityUpgrade();
+
   Future<void> connect({required String id, required String nickname});
 
   Future<void> disconnect();
+
+  Future<int> downloadFile({
+    required String remotePath,
+    required String localPath,
+    required int channelId,
+    String? password,
+  });
 
   /// 订阅事件流。
   ///
   /// 取消订阅要在 `shutdown()` 之后：`shutdown()` 关闭广播通道，转发任务随即退出，
   /// 这时 Dart 侧取消订阅会立刻完成；反过来先取消，要等下一次 `add` 失败才收尾。
   Stream<CoreEvent> events();
+
+  Future<AudioDevicesView> listAudioDevices();
 
   Future<List<ChannelView>> listChannels();
 
@@ -42,7 +53,7 @@ abstract class CoreSession implements RustOpaqueInterface {
   factory CoreSession({required String storePath}) =>
       RustLib.instance.api.crateApiSessionCoreSessionNew(storePath: storePath);
 
-  /// 录入服务器。地址在这里过 T1 校验，通过后成为 T2 档案，连接目标只能来自档案。
+  /// 录入服务器。地址在这里解析并登记，连接目标只能来自档案。
   Future<ServerProfileView> registerServer({
     required String label,
     required String address,
@@ -50,15 +61,80 @@ abstract class CoreSession implements RustOpaqueInterface {
 
   Future<void> removeServer({required String id});
 
+  /// 主动拉一次频道/成员快照。连接期间 actor 也会每 30 秒自动刷新。
+  Future<void> requestSnapshot();
+
   Future<void> sendText({
     required int targetMode,
     required int targetId,
     required String message,
   });
 
+  Future<void> setAudioDevices({String? input, String? output});
+
+  Future<void> setAutoReconnect({required bool enabled});
+
+  Future<void> setDeafened({required bool deafened});
+
+  Future<void> setMuted({required bool muted});
+
+  Future<void> setPttActive({required bool active});
+
+  Future<void> setPttMode({required bool enabled});
+
   Future<void> shutdown();
 
   Future<CoreSessionState> state();
+
+  Future<int> uploadFile({
+    required String localPath,
+    required String remotePath,
+    required int channelId,
+    String? password,
+    required bool overwrite,
+  });
+}
+
+class AudioDeviceView {
+  final String id;
+  final String name;
+  final bool isDefault;
+
+  const AudioDeviceView({
+    required this.id,
+    required this.name,
+    required this.isDefault,
+  });
+
+  @override
+  int get hashCode => id.hashCode ^ name.hashCode ^ isDefault.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AudioDeviceView &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          name == other.name &&
+          isDefault == other.isDefault;
+}
+
+class AudioDevicesView {
+  final List<AudioDeviceView> inputs;
+  final List<AudioDeviceView> outputs;
+
+  const AudioDevicesView({required this.inputs, required this.outputs});
+
+  @override
+  int get hashCode => inputs.hashCode ^ outputs.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AudioDevicesView &&
+          runtimeType == other.runtimeType &&
+          inputs == other.inputs &&
+          outputs == other.outputs;
 }
 
 class ChannelView {
@@ -121,9 +197,13 @@ class ClientView {
 sealed class CoreError with _$CoreError implements FrbException {
   const CoreError._();
 
-  /// 命中合规策略，例如目标属于官方基础设施或服务器未登记。
-  const factory CoreError.policyDenied({required String message}) =
-      CoreError_PolicyDenied;
+  /// 地址为空、格式非法或不是 IP/域名。
+  const factory CoreError.invalidAddress({required String message}) =
+      CoreError_InvalidAddress;
+
+  /// 地址或图片主机被最终连接边界拒绝。
+  const factory CoreError.blockedAddress({required String message}) =
+      CoreError_BlockedAddress;
 
   /// 建连或协议层失败。
   const factory CoreError.connection({required String message}) =
@@ -142,16 +222,24 @@ sealed class CoreEvent with _$CoreEvent {
       CoreEvent_State;
   const factory CoreEvent.servers({required List<ServerProfileView> profiles}) =
       CoreEvent_Servers;
+  const factory CoreEvent.snapshot({
+    required List<ChannelView> channels,
+    required List<ClientView> clients,
+  }) = CoreEvent_Snapshot;
+  const factory CoreEvent.history({required List<CoreMessage> messages}) =
+      CoreEvent_History;
   const factory CoreEvent.textMessage({
     required String from,
     required String fromUid,
     required String message,
     required int targetMode,
     required int targetId,
+    required int at,
   }) = CoreEvent_TextMessage;
   const factory CoreEvent.clientJoined({
     required int id,
     required String nickname,
+    required String uid,
     required int channelId,
   }) = CoreEvent_ClientJoined;
   const factory CoreEvent.clientLeft({required int id}) = CoreEvent_ClientLeft;
@@ -159,12 +247,76 @@ sealed class CoreEvent with _$CoreEvent {
     required int id,
     required int channelId,
   }) = CoreEvent_ClientMoved;
+  const factory CoreEvent.voice({required CoreVoiceState state}) =
+      CoreEvent_Voice;
+  const factory CoreEvent.speaking({required Int32List clientIds}) =
+      CoreEvent_Speaking;
+  const factory CoreEvent.selfSpeaking({required bool speaking}) =
+      CoreEvent_SelfSpeaking;
+  const factory CoreEvent.identityUpgrade({
+    required int from,
+    required int to,
+  }) = CoreEvent_IdentityUpgrade;
+  const factory CoreEvent.identityUpgraded({required int level}) =
+      CoreEvent_IdentityUpgraded;
+  const factory CoreEvent.transferStarted({
+    required int id,
+    required CoreTransferDirection direction,
+    required String remotePath,
+    required int total,
+  }) = CoreEvent_TransferStarted;
+  const factory CoreEvent.transferProgress({
+    required int id,
+    required int transferred,
+    required int total,
+  }) = CoreEvent_TransferProgress;
+  const factory CoreEvent.transferFinished({required int id, String? error}) =
+      CoreEvent_TransferFinished;
   const factory CoreEvent.log({
     required String level,
     required String message,
   }) = CoreEvent_Log;
   const factory CoreEvent.denied({required String message}) = CoreEvent_Denied;
   const factory CoreEvent.failed({required String message}) = CoreEvent_Failed;
+}
+
+class CoreMessage {
+  final String from;
+  final String fromUid;
+  final String message;
+  final int targetMode;
+  final int targetId;
+  final int at;
+
+  const CoreMessage({
+    required this.from,
+    required this.fromUid,
+    required this.message,
+    required this.targetMode,
+    required this.targetId,
+    required this.at,
+  });
+
+  @override
+  int get hashCode =>
+      from.hashCode ^
+      fromUid.hashCode ^
+      message.hashCode ^
+      targetMode.hashCode ^
+      targetId.hashCode ^
+      at.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CoreMessage &&
+          runtimeType == other.runtimeType &&
+          from == other.from &&
+          fromUid == other.fromUid &&
+          message == other.message &&
+          targetMode == other.targetMode &&
+          targetId == other.targetId &&
+          at == other.at;
 }
 
 @freezed
@@ -177,6 +329,55 @@ sealed class CoreSessionState with _$CoreSessionState {
     required int clientId,
     required int channelId,
   }) = CoreSessionState_Connected;
+  const factory CoreSessionState.reconnecting({
+    required int attempt,
+    required int delayMs,
+  }) = CoreSessionState_Reconnecting;
+}
+
+enum CoreTransferDirection { upload, download }
+
+class CoreVoiceState {
+  final bool muted;
+  final bool deafened;
+  final bool pttMode;
+  final bool pttActive;
+  final bool inputReady;
+  final bool outputReady;
+  final String? message;
+
+  const CoreVoiceState({
+    required this.muted,
+    required this.deafened,
+    required this.pttMode,
+    required this.pttActive,
+    required this.inputReady,
+    required this.outputReady,
+    this.message,
+  });
+
+  @override
+  int get hashCode =>
+      muted.hashCode ^
+      deafened.hashCode ^
+      pttMode.hashCode ^
+      pttActive.hashCode ^
+      inputReady.hashCode ^
+      outputReady.hashCode ^
+      message.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CoreVoiceState &&
+          runtimeType == other.runtimeType &&
+          muted == other.muted &&
+          deafened == other.deafened &&
+          pttMode == other.pttMode &&
+          pttActive == other.pttActive &&
+          inputReady == other.inputReady &&
+          outputReady == other.outputReady &&
+          message == other.message;
 }
 
 class ServerProfileView {

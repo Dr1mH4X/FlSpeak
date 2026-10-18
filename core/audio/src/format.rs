@@ -1,4 +1,7 @@
-//! 音频格式几何：与 TeamSpeak 语音包一致的 48kHz 立体声 20ms 帧。
+//! 音频格式几何：与 TeamSpeak 语音包一致的 48kHz、20ms 帧。
+//!
+//! 上行声道数由频道 codec 决定：codec 4（Opus Voice）单声道，codec 5（Opus Music）
+//! 立体声。下行统一按立体声解码，Opus 会把单声道包展开成双声道。
 
 use std::time::Duration;
 
@@ -6,23 +9,41 @@ use std::time::Duration;
 pub const VOICE_CODEC: i32 = 4;
 pub const MUSIC_CODEC: i32 = 5;
 
-/// TeamSpeak 语音帧长度。
+/// 48kHz、20ms 的每声道样本数。
+pub const FRAME_SAMPLES_PER_CHANNEL: usize = 960;
+/// 48kHz、20ms 的立体声交织样本数。
+pub const FRAME_SAMPLES: usize = FRAME_SAMPLES_PER_CHANNEL * 2;
+/// 协议层语音帧长度。
 pub const FRAME_MS: u64 = 20;
 
-/// 出站 Opus 码率，与 TeamSpeakClaw 出流参数一致。
-pub const OUTBOUND_BITRATE_BPS: i32 = 128_000;
+/// Opus 单包最长 120ms，解码缓冲按这个上限准备。
+pub const MAX_OPUS_SAMPLES_PER_CHANNEL: usize = 5_760;
+pub const MAX_OPUS_SAMPLES: usize = MAX_OPUS_SAMPLES_PER_CHANNEL * 2;
+
+/// Opus 输出缓冲上限；实际发送前还要过 TS 的 500 字节数据报上限。
+pub const MAX_PACKET_BYTES: usize = 1_275;
+
+/// 人声 64kbps、音乐 128kbps；两者在 20ms 帧下都远低于 500 字节包上限。
+pub const VOICE_BITRATE_BPS: i32 = 64_000;
+pub const MUSIC_BITRATE_BPS: i32 = 128_000;
+
+/// 48kHz 立体声：解码与混音的中间格式。
+pub const OPUS_STEREO: AudioFormat = AudioFormat {
+    sample_rate_hz: 48_000,
+    channels: 2,
+};
+
+/// 48kHz 单声道：codec 4 的上行格式。
+pub const OPUS_MONO: AudioFormat = AudioFormat {
+    sample_rate_hz: 48_000,
+    channels: 1,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AudioFormat {
     pub sample_rate_hz: u32,
     pub channels: u16,
 }
-
-/// 编解码统一使用 48kHz 立体声，与协议一致，避免收发两侧额外重采样。
-pub const OPUS_PCM: AudioFormat = AudioFormat {
-    sample_rate_hz: 48_000,
-    channels: 2,
-};
 
 impl AudioFormat {
     pub const fn samples_per_channel(&self, duration: Duration) -> usize {
@@ -39,10 +60,30 @@ impl AudioFormat {
     }
 }
 
-/// 一帧 20ms 的样本数（单声道 / 立体声交织）。
-pub const FRAME_SAMPLES_PER_CHANNEL: usize =
-    OPUS_PCM.samples_per_channel(Duration::from_millis(FRAME_MS));
-pub const FRAME_SAMPLES: usize = OPUS_PCM.samples(Duration::from_millis(FRAME_MS));
+pub fn is_supported_codec(codec: i32) -> bool {
+    matches!(codec, VOICE_CODEC | MUSIC_CODEC)
+}
+
+/// 频道 codec → 上行声道数。未知 codec 返回 `None`。
+pub fn codec_channels(codec: i32) -> Option<u16> {
+    match codec {
+        VOICE_CODEC => Some(1),
+        MUSIC_CODEC => Some(2),
+        _ => None,
+    }
+}
+
+/// 频道 codec → 上行格式。
+pub fn codec_format(codec: i32) -> Option<AudioFormat> {
+    codec_channels(codec).map(|channels| AudioFormat {
+        sample_rate_hz: 48_000,
+        channels,
+    })
+}
+
+pub fn frame_samples(channels: u16) -> usize {
+    FRAME_SAMPLES_PER_CHANNEL * channels as usize
+}
 
 #[cfg(test)]
 mod tests {
@@ -52,8 +93,13 @@ mod tests {
     fn frame_geometry_matches_pcm_geometry() {
         assert_eq!(FRAME_SAMPLES_PER_CHANNEL, 960);
         assert_eq!(FRAME_SAMPLES, 1920);
+        assert_eq!(MAX_OPUS_SAMPLES_PER_CHANNEL, 5760);
         assert_eq!(
-            OPUS_PCM.duration_of(FRAME_SAMPLES),
+            OPUS_STEREO.duration_of(FRAME_SAMPLES),
+            Duration::from_millis(20)
+        );
+        assert_eq!(
+            OPUS_MONO.duration_of(FRAME_SAMPLES_PER_CHANNEL),
             Duration::from_millis(20)
         );
     }
@@ -62,5 +108,10 @@ mod tests {
     fn codec_ids_follow_protocol() {
         assert_eq!(VOICE_CODEC, 4);
         assert_eq!(MUSIC_CODEC, 5);
+        assert_eq!(codec_channels(VOICE_CODEC), Some(1));
+        assert_eq!(codec_channels(MUSIC_CODEC), Some(2));
+        assert_eq!(codec_channels(0), None);
+        assert!(is_supported_codec(4));
+        assert!(!is_supported_codec(3));
     }
 }

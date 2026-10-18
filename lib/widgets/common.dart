@@ -17,66 +17,40 @@ class NoticeBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final scheme = context.scheme;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+      padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
       decoration: BoxDecoration(
-        color: scheme.errorContainer,
-        borderRadius: Radii.smallAll,
+        color: scheme.error.withValues(alpha: 0.10),
+        borderRadius: Radii.xxlAll,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            Icons.report_gmailerrorred_rounded,
-            size: 20,
-            color: scheme.onErrorContainer,
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(Icons.wifi_off_rounded, size: 16, color: scheme.error),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Expanded(
             child: SelectableText(
               message,
-              style: Theme.of(context).textTheme.bodyMedium
-                  ?.copyWith(color: scheme.onErrorContainer),
+              style: context.texts.bodySmall?.copyWith(color: scheme.error),
             ),
           ),
-          IconButton(
-            tooltip: dismissTooltip,
-            visualDensity: VisualDensity.compact,
-            iconSize: 18,
-            color: scheme.onErrorContainer,
-            onPressed: onDismiss,
-            icon: const Icon(Icons.close_rounded),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 分栏标题。句子大小写，靠字重和颜色分层，不靠全大写。
-class SectionHeader extends StatelessWidget {
-  const SectionHeader({required this.label, this.trailing, super.key});
-
-  final String label;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 8, 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.titleSmall
-                  ?.copyWith(color: scheme.onSurfaceVariant),
+          SizedBox(
+            width: 32,
+            height: 24,
+            child: IconButton(
+              tooltip: dismissTooltip,
+              iconSize: 14,
+              padding: EdgeInsets.zero,
+              color: scheme.error,
+              onPressed: onDismiss,
+              icon: const Icon(Icons.close_rounded),
             ),
           ),
-          ?trailing,
         ],
       ),
     );
@@ -85,14 +59,14 @@ class SectionHeader extends StatelessWidget {
 
 /// 空状态是行动邀请：说清楚现在缺什么、下一步点哪里。
 ///
-/// 标题可选——分栏自己已经有标题时不必再写一遍。
+/// 标题可选——调用方已经有标题时不必再写一遍。
 class EmptyState extends StatelessWidget {
   const EmptyState({
     required this.icon,
     required this.body,
     this.title,
     this.action,
-    this.maxWidth = 320,
+    this.maxWidth = 360,
     super.key,
   });
 
@@ -104,7 +78,7 @@ class EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final scheme = context.scheme;
     return Center(
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: maxWidth),
@@ -112,18 +86,23 @@ class EmptyState extends StatelessWidget {
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, size: 28, color: scheme.onSurfaceVariant),
-              const SizedBox(height: 14),
+              Icon(icon, size: 40, color: scheme.onSurfaceVariant),
+              const SizedBox(height: 12),
               if (title != null) ...[
-                Text(title!, style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  title!,
+                  textAlign: TextAlign.center,
+                  style: context.texts.titleMedium,
+                ),
                 const SizedBox(height: 6),
               ],
               Text(
                 body,
-                style: Theme.of(context).textTheme.bodyMedium
-                    ?.copyWith(color: scheme.onSurfaceVariant),
+                textAlign: TextAlign.center,
+                style: context.texts.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
               if (action != null) ...[const SizedBox(height: 18), action!],
             ],
@@ -134,57 +113,182 @@ class EmptyState extends StatelessWidget {
   }
 }
 
-/// 分栏外壳：统一标题栏高度与分隔线，让左右两栏的顶边对齐。
-class PaneShell extends StatelessWidget {
-  const PaneShell({
+/// 列表分组标题，和设计稿的 `SectionLabel` 同规格（`px-3 pt-5 pb-2 text-xs`）。
+class SectionLabel extends StatelessWidget {
+  const SectionLabel({required this.label, this.padding, super.key});
+
+  final String label;
+  final EdgeInsetsGeometry? padding;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: padding ?? const EdgeInsets.fromLTRB(12, 20, 12, 8),
+    child: Text(
+      label,
+      style: context.texts.labelSmall?.copyWith(
+        color: context.scheme.onSurfaceVariant,
+        fontWeight: FontWeight.w500,
+        letterSpacing: 0.6,
+      ),
+    ),
+  );
+}
+
+/// 页面级卡片描边：浅色下靠细线，深色下靠面阶。
+BoxBorder? cardBorder(BuildContext context) => Border.fromBorderSide(
+  BorderSide(
+    color: context.isDark
+        ? context.scheme.outlineVariant.withValues(alpha: 0.35)
+        : context.scheme.outlineVariant.withValues(alpha: 0.7),
+  ),
+);
+
+/// 对话框 / 底部抽屉的统一外壳。
+///
+/// 设计稿里桌面端是居中卡片、手机端是贴底抽屉，两者共用同一套标题栏、
+/// 内容区和操作栏，所以这里只实现一次。
+Future<T?> showAppModal<T>(
+  BuildContext context, {
+  required String title,
+  String? description,
+  required WidgetBuilder builder,
+  WidgetBuilder? footer,
+}) {
+  final compact = context.isCompact;
+  Widget panel(BuildContext context) => _ModalPanel(
+    title: title,
+    description: description,
+    footer: footer,
+    child: builder(context),
+  );
+
+  if (compact) {
+    return showModalBottomSheet<T>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: false,
+      backgroundColor: context.scheme.surfaceContainerLow,
+      barrierColor: context.scheme.onSurface.withValues(alpha: 0.35),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.92,
+      ),
+      builder: (context) => Padding(
+        // 底部抽屉没有自动避让软键盘：添加服务器的输入框必须跟着键盘上移。
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: panel(context),
+      ),
+    );
+  }
+
+  return showDialog<T>(
+    context: context,
+    barrierColor: context.scheme.onSurface.withValues(alpha: 0.35),
+    builder: (context) => Dialog(
+      backgroundColor: context.scheme.surfaceContainerLow,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: Radii.xxxlAll,
+        side: BorderSide(color: context.scheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 512),
+        child: panel(context),
+      ),
+    ),
+  );
+}
+
+class _ModalPanel extends StatelessWidget {
+  const _ModalPanel({
     required this.title,
+    required this.description,
     required this.child,
-    this.trailing,
-    this.background,
-    super.key,
+    required this.footer,
   });
 
-  static const headerHeight = 52.0;
-
   final String title;
+  final String? description;
   final Widget child;
-  final Widget? trailing;
-  final Color? background;
+  final WidgetBuilder? footer;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return ColoredBox(
-      color: background ?? scheme.surface,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SizedBox(
-            height: headerHeight,
-            child: Row(
-              children: [
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleSmall
-                        ?.copyWith(color: scheme.onSurfaceVariant),
-                  ),
-                ),
-                if (trailing != null)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: trailing!,
-                  )
-                else
-                  const SizedBox(width: 16),
-              ],
+    final scheme = context.scheme;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (context.isCompact)
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(top: 10),
+              decoration: BoxDecoration(
+                color: scheme.outlineVariant,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
           ),
-          Divider(height: 1, color: scheme.outlineVariant),
-          Expanded(child: child),
-        ],
-      ),
+        Padding(
+          padding: EdgeInsets.fromLTRB(20, context.isCompact ? 14 : 20, 12, 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Semantics(
+                      header: true,
+                      child: Text(title, style: context.texts.titleLarge),
+                    ),
+                    if (description != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        description!,
+                        style: context.texts.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                          height: 1.55,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
+                onPressed: () => Navigator.of(context).maybePop(),
+                iconSize: 20,
+                color: scheme.onSurfaceVariant,
+                icon: const Icon(Icons.close_rounded),
+              ),
+            ],
+          ),
+        ),
+        Flexible(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: child,
+          ),
+        ),
+        if (footer != null)
+          Container(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: scheme.outlineVariant)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [footer!(context)],
+            ),
+          ),
+      ],
     );
   }
 }

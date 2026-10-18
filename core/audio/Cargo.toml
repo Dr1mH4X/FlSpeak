@@ -1,6 +1,6 @@
 [package]
 name = "audio"
-description = "语音模块：Opus 编解码、说话人队列、设备后端"
+description = "语音模块：双线程采集/播放、Opus、VAD、jitter 与设备后端"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,9 +10,10 @@ repository.workspace = true
 default = []
 # 采集与播放需要系统音频库（Linux 另需 alsa），Opus 需要 libopus。
 # 默认关闭，保证没有这些依赖的机器上 workspace 仍可构建与测试。
-audio = ["dep:audiopus", "dep:cpal"]
+audio = ["dep:audiopus", "dep:cpal", "dep:crossbeam-queue"]
 
 [dependencies]
 thiserror.workspace = true
 audiopus = { version = "0.3.0-rc.0", optional = true }
 cpal = { version = "0.18.2", optional = true }
+crossbeam-queue = { version = "0.3", optional = true }

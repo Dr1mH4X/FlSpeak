@@ -8,11 +8,13 @@ use std::sync::OnceLock;
 
 use flutter_rust_bridge::for_generated::SseCodec;
 use flutter_rust_bridge::frb;
-use policy::ServerProfile as PolicyProfile;
 use proto::ConnectError;
+use server::ServerProfile as ServerProfileCore;
 use session::{
-    ChannelView as CoreChannelView, ClientView as CoreClientView, SessionError, SessionEvent,
-    SessionHandle, SessionState as SessionStateCore,
+    AudioDeviceView as CoreAudioDeviceView, ChannelView as CoreChannelView,
+    ClientView as CoreClientView, SessionError, SessionEvent, SessionHandle,
+    SessionState as SessionStateCore, TextMessageView as CoreTextMessage,
+    TransferDirection as SessionTransferDirection,
 };
 use tokio::runtime::{Builder, Runtime};
 
@@ -43,10 +45,51 @@ pub struct ClientView {
 }
 
 #[derive(Debug, Clone)]
+pub struct CoreMessage {
+    pub from: String,
+    pub from_uid: String,
+    pub message: String,
+    pub target_mode: i32,
+    pub target_id: u64,
+    pub at: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct CoreVoiceState {
+    pub muted: bool,
+    pub deafened: bool,
+    pub ptt_mode: bool,
+    pub ptt_active: bool,
+    pub input_ready: bool,
+    pub output_ready: bool,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct AudioDeviceView {
+    pub id: String,
+    pub name: String,
+    pub is_default: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct AudioDevicesView {
+    pub inputs: Vec<AudioDeviceView>,
+    pub outputs: Vec<AudioDeviceView>,
+}
+
+#[derive(Debug, Clone)]
+pub enum CoreTransferDirection {
+    Upload,
+    Download,
+}
+
+#[derive(Debug, Clone)]
 pub enum CoreSessionState {
     Disconnected,
     Connecting,
     Connected { client_id: i32, channel_id: u64 },
+    Reconnecting { attempt: u32, delay_ms: u64 },
 }
 
 /// 送往 Dart 的事件。语音帧不走这里，它在 Rust 侧直接进音频后端。
@@ -58,16 +101,25 @@ pub enum CoreEvent {
     Servers {
         profiles: Vec<ServerProfileView>,
     },
+    Snapshot {
+        channels: Vec<ChannelView>,
+        clients: Vec<ClientView>,
+    },
+    History {
+        messages: Vec<CoreMessage>,
+    },
     TextMessage {
         from: String,
         from_uid: String,
         message: String,
         target_mode: i32,
         target_id: u64,
+        at: u64,
     },
     ClientJoined {
         id: i32,
         nickname: String,
+        uid: String,
         channel_id: u64,
     },
     ClientLeft {
@@ -76,6 +128,37 @@ pub enum CoreEvent {
     ClientMoved {
         id: i32,
         channel_id: u64,
+    },
+    Voice {
+        state: CoreVoiceState,
+    },
+    Speaking {
+        client_ids: Vec<i32>,
+    },
+    SelfSpeaking {
+        speaking: bool,
+    },
+    IdentityUpgrade {
+        from: i32,
+        to: i32,
+    },
+    IdentityUpgraded {
+        level: i32,
+    },
+    TransferStarted {
+        id: u64,
+        direction: CoreTransferDirection,
+        remote_path: String,
+        total: u64,
+    },
+    TransferProgress {
+        id: u64,
+        transferred: u64,
+        total: u64,
+    },
+    TransferFinished {
+        id: u64,
+        error: Option<String>,
     },
     Log {
         level: String,
@@ -91,8 +174,10 @@ pub enum CoreEvent {
 
 #[derive(Debug, Clone)]
 pub enum CoreError {
-    /// 命中合规策略，例如目标属于官方基础设施或服务器未登记。
-    PolicyDenied { message: String },
+    /// 地址为空、格式非法或不是 IP/域名。
+    InvalidAddress { message: String },
+    /// 地址或图片主机被最终连接边界拒绝。
+    BlockedAddress { message: String },
     /// 建连或协议层失败。
     Connection { message: String },
     /// 桥自身的问题。
@@ -140,7 +225,7 @@ impl CoreSession {
         Ok(profiles.into_iter().map(ServerProfileView::from).collect())
     }
 
-    /// 录入服务器。地址在这里过 T1 校验，通过后成为 T2 档案，连接目标只能来自档案。
+    /// 录入服务器。地址在这里解析并登记，连接目标只能来自档案。
     pub async fn register_server(
         &self,
         label: String,
@@ -200,20 +285,93 @@ impl CoreSession {
         Ok(clients.into_iter().map(ClientView::from).collect())
     }
 
+    /// 主动拉一次频道/成员快照。连接期间 actor 也会每 30 秒自动刷新。
+    pub async fn request_snapshot(&self) -> Result<(), CoreError> {
+        Ok(self.handle.request_snapshot().await?)
+    }
+
+    pub async fn set_muted(&self, muted: bool) -> Result<(), CoreError> {
+        Ok(self.handle.set_muted(muted).await?)
+    }
+
+    pub async fn set_deafened(&self, deafened: bool) -> Result<(), CoreError> {
+        Ok(self.handle.set_deafened(deafened).await?)
+    }
+
+    pub async fn set_ptt_mode(&self, enabled: bool) -> Result<(), CoreError> {
+        Ok(self.handle.set_ptt_mode(enabled).await?)
+    }
+
+    pub async fn set_ptt_active(&self, active: bool) -> Result<(), CoreError> {
+        Ok(self.handle.set_ptt_active(active).await?)
+    }
+
+    pub async fn cancel_identity_upgrade(&self) -> Result<(), CoreError> {
+        Ok(self.handle.cancel_identity_upgrade().await?)
+    }
+
+    pub async fn set_auto_reconnect(&self, enabled: bool) -> Result<(), CoreError> {
+        Ok(self.handle.set_auto_reconnect(enabled).await?)
+    }
+
+    pub async fn list_audio_devices(&self) -> Result<AudioDevicesView, CoreError> {
+        Ok(self.handle.list_audio_devices().await?.into())
+    }
+
+    pub async fn set_audio_devices(
+        &self,
+        input: Option<String>,
+        output: Option<String>,
+    ) -> Result<(), CoreError> {
+        Ok(self.handle.set_audio_devices(input, output).await?)
+    }
+
+    pub async fn upload_file(
+        &self,
+        local_path: String,
+        remote_path: String,
+        channel_id: u64,
+        password: Option<String>,
+        overwrite: bool,
+    ) -> Result<u64, CoreError> {
+        Ok(self
+            .handle
+            .upload_file(local_path, remote_path, channel_id, password, overwrite)
+            .await?)
+    }
+
+    pub async fn download_file(
+        &self,
+        remote_path: String,
+        local_path: String,
+        channel_id: u64,
+        password: Option<String>,
+    ) -> Result<u64, CoreError> {
+        Ok(self
+            .handle
+            .download_file(remote_path, local_path, channel_id, password)
+            .await?)
+    }
+
     pub async fn shutdown(&self) -> Result<(), CoreError> {
         Ok(self.handle.shutdown().await?)
     }
 }
 
-/// 合规审计入口：把策略判定暴露给 Dart，供设置页做“为什么连不上”的解释。
-#[frb(sync)]
-pub fn validate_server_address(address: String) -> Result<ServerProfileView, CoreError> {
-    let target = proto::approve(&address)?;
-    Ok(ServerProfileView {
-        id: target.authority(),
-        label: String::new(),
-        host: target.host,
-        port: target.port,
+/// 抓取第三方图片 URL。myTS 的 `ts.file.myts` 附件不经过这里。
+pub async fn fetch_image(url: String) -> Result<Vec<u8>, CoreError> {
+    session::fetch_image(&url).await.map_err(|err| match err {
+        session::ImageError::InvalidUrl(_) => CoreError::InvalidAddress {
+            message: err.to_string(),
+        },
+        session::ImageError::BlockedHost(_) | session::ImageError::BlockedAddress(_) => {
+            CoreError::BlockedAddress {
+                message: err.to_string(),
+            }
+        }
+        _ => CoreError::Connection {
+            message: err.to_string(),
+        },
     })
 }
 
@@ -236,8 +394,8 @@ fn runtime() -> Result<&'static Runtime, CoreError> {
     })
 }
 
-impl From<PolicyProfile> for ServerProfileView {
-    fn from(profile: PolicyProfile) -> Self {
+impl From<ServerProfileCore> for ServerProfileView {
+    fn from(profile: ServerProfileCore) -> Self {
         Self {
             id: profile.id,
             label: profile.label,
@@ -269,6 +427,19 @@ impl From<CoreClientView> for ClientView {
     }
 }
 
+impl From<CoreTextMessage> for CoreMessage {
+    fn from(message: CoreTextMessage) -> Self {
+        Self {
+            from: message.from,
+            from_uid: message.from_uid,
+            message: message.message,
+            target_mode: message.target_mode,
+            target_id: message.target_id,
+            at: message.at,
+        }
+    }
+}
+
 impl From<SessionStateCore> for CoreSessionState {
     fn from(state: SessionStateCore) -> Self {
         match state {
@@ -281,6 +452,51 @@ impl From<SessionStateCore> for CoreSessionState {
                 client_id,
                 channel_id,
             },
+            SessionStateCore::Reconnecting { attempt, delay_ms } => {
+                CoreSessionState::Reconnecting { attempt, delay_ms }
+            }
+        }
+    }
+}
+
+impl From<SessionTransferDirection> for CoreTransferDirection {
+    fn from(direction: SessionTransferDirection) -> Self {
+        match direction {
+            SessionTransferDirection::Upload => CoreTransferDirection::Upload,
+            SessionTransferDirection::Download => CoreTransferDirection::Download,
+        }
+    }
+}
+
+impl From<session::VoiceStateView> for CoreVoiceState {
+    fn from(state: session::VoiceStateView) -> Self {
+        Self {
+            muted: state.muted,
+            deafened: state.deafened,
+            ptt_mode: state.ptt_mode,
+            ptt_active: state.ptt_active,
+            input_ready: state.input_ready,
+            output_ready: state.output_ready,
+            message: state.message,
+        }
+    }
+}
+
+impl From<CoreAudioDeviceView> for AudioDeviceView {
+    fn from(device: CoreAudioDeviceView) -> Self {
+        Self {
+            id: device.id,
+            name: device.name,
+            is_default: device.is_default,
+        }
+    }
+}
+
+impl From<session::AudioDevicesView> for AudioDevicesView {
+    fn from(devices: session::AudioDevicesView) -> Self {
+        Self {
+            inputs: devices.inputs.into_iter().map(Into::into).collect(),
+            outputs: devices.outputs.into_iter().map(Into::into).collect(),
         }
     }
 }
@@ -294,21 +510,60 @@ impl From<SessionEvent> for CoreEvent {
             SessionEvent::Servers(profiles) => CoreEvent::Servers {
                 profiles: profiles.into_iter().map(ServerProfileView::from).collect(),
             },
+            SessionEvent::Snapshot { channels, clients } => CoreEvent::Snapshot {
+                channels: channels.into_iter().map(ChannelView::from).collect(),
+                clients: clients.into_iter().map(ClientView::from).collect(),
+            },
+            SessionEvent::History { messages } => CoreEvent::History {
+                messages: messages.into_iter().map(CoreMessage::from).collect(),
+            },
             SessionEvent::TextMessage(message) => CoreEvent::TextMessage {
                 from: message.from,
                 from_uid: message.from_uid,
                 message: message.message,
                 target_mode: message.target_mode,
                 target_id: message.target_id,
+                at: message.at,
             },
             SessionEvent::ClientJoined(client) => CoreEvent::ClientJoined {
                 id: client.id,
                 nickname: client.nickname,
+                uid: client.uid,
                 channel_id: client.channel_id,
             },
             SessionEvent::ClientLeft { id } => CoreEvent::ClientLeft { id },
             SessionEvent::ClientMoved { id, channel_id } => {
                 CoreEvent::ClientMoved { id, channel_id }
+            }
+            SessionEvent::Voice(state) => CoreEvent::Voice {
+                state: state.into(),
+            },
+            SessionEvent::Speaking { client_ids } => CoreEvent::Speaking { client_ids },
+            SessionEvent::SelfSpeaking { speaking } => CoreEvent::SelfSpeaking { speaking },
+            SessionEvent::IdentityUpgrade { from, to } => CoreEvent::IdentityUpgrade { from, to },
+            SessionEvent::IdentityUpgraded { level } => CoreEvent::IdentityUpgraded { level },
+            SessionEvent::TransferStarted {
+                id,
+                direction,
+                remote_path,
+                total,
+            } => CoreEvent::TransferStarted {
+                id,
+                direction: direction.into(),
+                remote_path,
+                total,
+            },
+            SessionEvent::TransferProgress {
+                id,
+                transferred,
+                total,
+            } => CoreEvent::TransferProgress {
+                id,
+                transferred,
+                total,
+            },
+            SessionEvent::TransferFinished { id, error } => {
+                CoreEvent::TransferFinished { id, error }
             }
             SessionEvent::Log { level, message } => CoreEvent::Log { level, message },
             SessionEvent::Denied { message } => CoreEvent::Denied { message },
@@ -320,11 +575,14 @@ impl From<SessionEvent> for CoreEvent {
 impl From<SessionError> for CoreError {
     fn from(err: SessionError) -> Self {
         match err {
-            SessionError::Policy(_) | SessionError::Connect(ConnectError::Policy(_)) => {
-                CoreError::PolicyDenied {
-                    message: err.to_string(),
-                }
-            }
+            SessionError::Server(server::ServerError::Address(_))
+            | SessionError::Address(_)
+            | SessionError::Connect(ConnectError::Address(_)) => CoreError::InvalidAddress {
+                message: err.to_string(),
+            },
+            SessionError::Connect(ConnectError::Blocked { .. }) => CoreError::BlockedAddress {
+                message: err.to_string(),
+            },
             SessionError::Closed | SessionError::Spawn(_) => CoreError::Internal {
                 message: err.to_string(),
             },
@@ -338,12 +596,17 @@ impl From<SessionError> for CoreError {
 impl From<ConnectError> for CoreError {
     fn from(err: ConnectError) -> Self {
         match err {
-            ConnectError::Policy(_) => CoreError::PolicyDenied {
+            ConnectError::Address(_) => CoreError::InvalidAddress {
                 message: err.to_string(),
             },
-            ConnectError::Protocol(_) => CoreError::Connection {
+            ConnectError::Blocked { .. } => CoreError::BlockedAddress {
                 message: err.to_string(),
             },
+            ConnectError::TransferHostMismatch { .. } | ConnectError::Protocol(_) => {
+                CoreError::Connection {
+                    message: err.to_string(),
+                }
+            }
         }
     }
 }

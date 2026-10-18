@@ -110,11 +110,53 @@ abstract class AppLocalizations {
   /// **'FlSpeak'**
   String get appName;
 
-  /// No description provided for @appTagline.
+  /// No description provided for @commonClose.
   ///
   /// In en, this message translates to:
-  /// **'Self-hosted TeamSpeak client'**
-  String get appTagline;
+  /// **'Close'**
+  String get commonClose;
+
+  /// No description provided for @commonCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get commonCancel;
+
+  /// No description provided for @commonDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get commonDone;
+
+  /// No description provided for @commonMore.
+  ///
+  /// In en, this message translates to:
+  /// **'More'**
+  String get commonMore;
+
+  /// No description provided for @commonCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get commonCopy;
+
+  /// No description provided for @commonCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied'**
+  String get commonCopied;
+
+  /// No description provided for @commonSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get commonSave;
+
+  /// No description provided for @commonRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get commonRemove;
 
   /// No description provided for @connectTitle.
   ///
@@ -134,59 +176,23 @@ abstract class AppLocalizations {
   /// **'ts.example.com or ts.example.com:9987'**
   String get connectAddressHint;
 
-  /// No description provided for @connectAddressHelp.
-  ///
-  /// In en, this message translates to:
-  /// **'A full host name or IP. Port defaults to 9987.'**
-  String get connectAddressHelp;
-
-  /// No description provided for @connectAction.
-  ///
-  /// In en, this message translates to:
-  /// **'Connect'**
-  String get connectAction;
-
-  /// No description provided for @connectKnownServers.
-  ///
-  /// In en, this message translates to:
-  /// **'Registered servers'**
-  String get connectKnownServers;
-
-  /// No description provided for @connectNoServers.
-  ///
-  /// In en, this message translates to:
-  /// **'No server yet. Type an address above to register the first one.'**
-  String get connectNoServers;
-
-  /// No description provided for @connectNewServerTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Register a new server'**
-  String get connectNewServerTitle;
-
-  /// No description provided for @connectBack.
-  ///
-  /// In en, this message translates to:
-  /// **'Back to all servers'**
-  String get connectBack;
-
   /// No description provided for @connectNicknameLabel.
   ///
   /// In en, this message translates to:
   /// **'Nickname'**
   String get connectNicknameLabel;
 
-  /// No description provided for @connectNicknameHelp.
-  ///
-  /// In en, this message translates to:
-  /// **'The name others see. No account needed.'**
-  String get connectNicknameHelp;
-
   /// No description provided for @serverLabelField.
   ///
   /// In en, this message translates to:
   /// **'Label (optional)'**
   String get serverLabelField;
+
+  /// No description provided for @serverLabelHint.
+  ///
+  /// In en, this message translates to:
+  /// **'For example: Photo club'**
+  String get serverLabelHint;
 
   /// No description provided for @serverAdd.
   ///
@@ -200,11 +206,41 @@ abstract class AppLocalizations {
   /// **'Remove'**
   String get serverRemove;
 
-  /// No description provided for @serverDisconnect.
+  /// No description provided for @serverRemoveFromList.
   ///
   /// In en, this message translates to:
-  /// **'Disconnect'**
-  String get serverDisconnect;
+  /// **'Remove from list'**
+  String get serverRemoveFromList;
+
+  /// No description provided for @serverRemoveTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove server?'**
+  String get serverRemoveTitle;
+
+  /// No description provided for @serverRemoveBody.
+  ///
+  /// In en, this message translates to:
+  /// **'“{label}” will be removed from the list; local chat history stays.'**
+  String serverRemoveBody(String label);
+
+  /// No description provided for @serverAddAndConnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Add & connect'**
+  String get serverAddAndConnect;
+
+  /// No description provided for @serverAddAndConnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Adding…'**
+  String get serverAddAndConnecting;
+
+  /// No description provided for @serverAddressRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a server address.'**
+  String get serverAddressRequired;
 
   /// No description provided for @serverInvalidAddress.
   ///
@@ -212,29 +248,155 @@ abstract class AppLocalizations {
   /// **'Invalid server address.'**
   String get serverInvalidAddress;
 
-  /// No description provided for @railServers.
+  /// No description provided for @serverDisconnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnect'**
+  String get serverDisconnect;
+
+  /// No description provided for @serverEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No servers yet'**
+  String get serverEmptyTitle;
+
+  /// No description provided for @serverEmptyAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Add your first server'**
+  String get serverEmptyAction;
+
+  /// No description provided for @serversTitle.
   ///
   /// In en, this message translates to:
   /// **'Servers'**
-  String get railServers;
+  String get serversTitle;
 
-  /// No description provided for @railCollapse.
+  /// No description provided for @serversUsedBy.
   ///
   /// In en, this message translates to:
-  /// **'Collapse server bar'**
-  String get railCollapse;
+  /// **'{count, plural, =1{Used by 1 server} other{Used by {count} servers}}'**
+  String serversUsedBy(int count);
 
-  /// No description provided for @channelsTitle.
+  /// No description provided for @sessionConnected.
   ///
   /// In en, this message translates to:
-  /// **'Channels'**
-  String get channelsTitle;
+  /// **'Connected'**
+  String get sessionConnected;
 
-  /// No description provided for @chatTitle.
+  /// No description provided for @sessionConnecting.
   ///
   /// In en, this message translates to:
-  /// **'Chat'**
-  String get chatTitle;
+  /// **'Connecting…'**
+  String get sessionConnecting;
+
+  /// No description provided for @sessionDisconnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Offline'**
+  String get sessionDisconnected;
+
+  /// No description provided for @sessionConnectedTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected to {name}'**
+  String sessionConnectedTo(String name);
+
+  /// No description provided for @sessionConnectingTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting to {name}…'**
+  String sessionConnectingTo(String name);
+
+  /// No description provided for @sessionLastConnectedNever.
+  ///
+  /// In en, this message translates to:
+  /// **'Never connected'**
+  String get sessionLastConnectedNever;
+
+  /// No description provided for @sessionLastConnectedJustNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Just now'**
+  String get sessionLastConnectedJustNow;
+
+  /// No description provided for @sessionLastConnectedMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} min ago'**
+  String sessionLastConnectedMinutes(int count);
+
+  /// No description provided for @sessionLastConnectedHours.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} h ago'**
+  String sessionLastConnectedHours(int count);
+
+  /// No description provided for @sessionLastConnectedYesterday.
+  ///
+  /// In en, this message translates to:
+  /// **'Yesterday'**
+  String get sessionLastConnectedYesterday;
+
+  /// No description provided for @sessionLastConnectedDays.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} days ago'**
+  String sessionLastConnectedDays(int count);
+
+  /// No description provided for @workspaceReturn.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to workspace'**
+  String get workspaceReturn;
+
+  /// No description provided for @identityCurrent.
+  ///
+  /// In en, this message translates to:
+  /// **'Current identity'**
+  String get identityCurrent;
+
+  /// No description provided for @identityManage.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage identity'**
+  String get identityManage;
+
+  /// No description provided for @identityTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Identity'**
+  String get identityTitle;
+
+  /// No description provided for @identityRename.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename'**
+  String get identityRename;
+
+  /// No description provided for @identitySave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get identitySave;
+
+  /// No description provided for @identityNicknameEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Nickname cannot be empty.'**
+  String get identityNicknameEmpty;
+
+  /// No description provided for @identityCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get identityCancel;
+
+  /// No description provided for @identityUpgrading.
+  ///
+  /// In en, this message translates to:
+  /// **'Upgrading identity level to {target}…'**
+  String identityUpgrading(int target);
 
   /// No description provided for @channelsEmpty.
   ///
@@ -242,35 +404,23 @@ abstract class AppLocalizations {
   /// **'Not connected.'**
   String get channelsEmpty;
 
-  /// No description provided for @channelExpand.
+  /// No description provided for @channelsSection.
   ///
   /// In en, this message translates to:
-  /// **'Expand'**
-  String get channelExpand;
+  /// **'Channels'**
+  String get channelsSection;
 
-  /// No description provided for @channelCollapse.
+  /// No description provided for @workspaceNoChannels.
   ///
   /// In en, this message translates to:
-  /// **'Collapse'**
-  String get channelCollapse;
+  /// **'This server has no channels yet.'**
+  String get workspaceNoChannels;
 
-  /// No description provided for @channelJoin.
+  /// No description provided for @workspaceOpenMenu.
   ///
   /// In en, this message translates to:
-  /// **'Join'**
-  String get channelJoin;
-
-  /// No description provided for @channelCurrent.
-  ///
-  /// In en, this message translates to:
-  /// **'You are here'**
-  String get channelCurrent;
-
-  /// No description provided for @workspaceOnlineCount.
-  ///
-  /// In en, this message translates to:
-  /// **'{count} online'**
-  String workspaceOnlineCount(int count);
+  /// **'Open channel menu'**
+  String get workspaceOpenMenu;
 
   /// No description provided for @workspaceNotConnectedTitle.
   ///
@@ -284,17 +434,209 @@ abstract class AppLocalizations {
   /// **'Pick a registered server from the bar on the left, or add a new address.'**
   String get workspaceNotConnectedBody;
 
-  /// No description provided for @workspaceReturn.
-  ///
-  /// In en, this message translates to:
-  /// **'Back to workspace'**
-  String get workspaceReturn;
-
   /// No description provided for @workspaceRefresh.
   ///
   /// In en, this message translates to:
   /// **'Refresh'**
   String get workspaceRefresh;
+
+  /// No description provided for @channelExpand.
+  ///
+  /// In en, this message translates to:
+  /// **'Expand'**
+  String get channelExpand;
+
+  /// No description provided for @channelCollapse.
+  ///
+  /// In en, this message translates to:
+  /// **'Collapse'**
+  String get channelCollapse;
+
+  /// No description provided for @channelCurrent.
+  ///
+  /// In en, this message translates to:
+  /// **'You are here'**
+  String get channelCurrent;
+
+  /// No description provided for @voiceTab.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice'**
+  String get voiceTab;
+
+  /// No description provided for @voiceJoin.
+  ///
+  /// In en, this message translates to:
+  /// **'Join voice'**
+  String get voiceJoin;
+
+  /// No description provided for @voiceLeave.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave'**
+  String get voiceLeave;
+
+  /// No description provided for @voiceDisconnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave voice'**
+  String get voiceDisconnect;
+
+  /// No description provided for @voiceMembersCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 person in voice} other{{count} people in voice}}'**
+  String voiceMembersCount(int count);
+
+  /// No description provided for @voiceEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Nobody is here yet. Be the first.'**
+  String get voiceEmpty;
+
+  /// No description provided for @voiceConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice connected'**
+  String get voiceConnected;
+
+  /// No description provided for @voiceMute.
+  ///
+  /// In en, this message translates to:
+  /// **'Mute'**
+  String get voiceMute;
+
+  /// No description provided for @voiceUnmute.
+  ///
+  /// In en, this message translates to:
+  /// **'Unmute'**
+  String get voiceUnmute;
+
+  /// No description provided for @voiceDeafen.
+  ///
+  /// In en, this message translates to:
+  /// **'Deafen'**
+  String get voiceDeafen;
+
+  /// No description provided for @voiceUndeafen.
+  ///
+  /// In en, this message translates to:
+  /// **'Undeafen'**
+  String get voiceUndeafen;
+
+  /// No description provided for @voiceSelfOnline.
+  ///
+  /// In en, this message translates to:
+  /// **'Online'**
+  String get voiceSelfOnline;
+
+  /// No description provided for @memberMuted.
+  ///
+  /// In en, this message translates to:
+  /// **'Muted'**
+  String get memberMuted;
+
+  /// No description provided for @voiceMicUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone unavailable'**
+  String get voiceMicUnavailable;
+
+  /// No description provided for @voiceSpeakerUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Speaker unavailable'**
+  String get voiceSpeakerUnavailable;
+
+  /// No description provided for @voiceReconnectingAttempt.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnecting (attempt {attempt})…'**
+  String voiceReconnectingAttempt(int attempt);
+
+  /// No description provided for @voiceModeVad.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice activation'**
+  String get voiceModeVad;
+
+  /// No description provided for @voiceModePtt.
+  ///
+  /// In en, this message translates to:
+  /// **'Push to talk'**
+  String get voiceModePtt;
+
+  /// No description provided for @voicePushToTalk.
+  ///
+  /// In en, this message translates to:
+  /// **'Push to talk'**
+  String get voicePushToTalk;
+
+  /// No description provided for @voicePushToTalkHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Release to stop sending'**
+  String get voicePushToTalkHint;
+
+  /// No description provided for @voiceSelfSpeaking.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending'**
+  String get voiceSelfSpeaking;
+
+  /// No description provided for @voiceRejoinLast.
+  ///
+  /// In en, this message translates to:
+  /// **'Rejoin last channel'**
+  String get voiceRejoinLast;
+
+  /// No description provided for @chatTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat'**
+  String get chatTitle;
+
+  /// No description provided for @chatTabMessages.
+  ///
+  /// In en, this message translates to:
+  /// **'Messages'**
+  String get chatTabMessages;
+
+  /// No description provided for @chatTabMedia.
+  ///
+  /// In en, this message translates to:
+  /// **'Media'**
+  String get chatTabMedia;
+
+  /// No description provided for @chatWelcomeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Welcome to {channel}'**
+  String chatWelcomeTitle(String channel);
+
+  /// No description provided for @chatWelcomeBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This is the start of the channel. Share text, images and videos.'**
+  String get chatWelcomeBody;
+
+  /// No description provided for @chatComposerHintTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Message {target}'**
+  String chatComposerHintTo(String target);
+
+  /// No description provided for @chatSend.
+  ///
+  /// In en, this message translates to:
+  /// **'Send'**
+  String get chatSend;
+
+  /// No description provided for @chatScopeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Send to'**
+  String get chatScopeTitle;
 
   /// No description provided for @chatScopeChannel.
   ///
@@ -308,18 +650,6 @@ abstract class AppLocalizations {
   /// **'Whole server'**
   String get chatScopeServer;
 
-  /// No description provided for @chatComposerHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Message'**
-  String get chatComposerHint;
-
-  /// No description provided for @chatSend.
-  ///
-  /// In en, this message translates to:
-  /// **'Send'**
-  String get chatSend;
-
   /// No description provided for @chatEmptyChannel.
   ///
   /// In en, this message translates to:
@@ -332,29 +662,101 @@ abstract class AppLocalizations {
   /// **'No server-wide messages yet.'**
   String get chatEmptyServer;
 
-  /// No description provided for @chatDirectTag.
-  ///
-  /// In en, this message translates to:
-  /// **'Direct'**
-  String get chatDirectTag;
-
   /// No description provided for @chatNoChannel.
   ///
   /// In en, this message translates to:
   /// **'Join a channel before sending channel messages.'**
   String get chatNoChannel;
 
-  /// No description provided for @sessionConnected.
+  /// No description provided for @chatAddMedia.
   ///
   /// In en, this message translates to:
-  /// **'Connected'**
-  String get sessionConnected;
+  /// **'Add image or video'**
+  String get chatAddMedia;
 
-  /// No description provided for @voiceRustNote.
+  /// No description provided for @chatRemoveAttachment.
   ///
   /// In en, this message translates to:
-  /// **'Capture, playback and the Opus codec live in Rust (core/audio). Audio frames never cross the FFI boundary; routing them through the session actor is the next milestone.'**
-  String get voiceRustNote;
+  /// **'Remove {name}'**
+  String chatRemoveAttachment(String name);
+
+  /// No description provided for @chatUnsupportedImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Unsupported image format'**
+  String get chatUnsupportedImage;
+
+  /// No description provided for @chatImageLoading.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading image…'**
+  String get chatImageLoading;
+
+  /// No description provided for @chatImageLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Image failed to load'**
+  String get chatImageLoadFailed;
+
+  /// No description provided for @chatTs6Attachment.
+  ///
+  /// In en, this message translates to:
+  /// **'TS6 official attachment'**
+  String get chatTs6Attachment;
+
+  /// No description provided for @chatTs6AttachmentPolicy.
+  ///
+  /// In en, this message translates to:
+  /// **'myTeamSpeak media is not used; showing file metadata only.'**
+  String get chatTs6AttachmentPolicy;
+
+  /// No description provided for @chatDirectTag.
+  ///
+  /// In en, this message translates to:
+  /// **'Direct'**
+  String get chatDirectTag;
+
+  /// No description provided for @chatWelcomeServerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Whole server'**
+  String get chatWelcomeServerTitle;
+
+  /// No description provided for @chatWelcomeServerBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Server-wide messages appear here, visible to everyone.'**
+  String get chatWelcomeServerBody;
+
+  /// No description provided for @mediaEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No images or videos in this channel yet'**
+  String get mediaEmpty;
+
+  /// No description provided for @mediaViewerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Media viewer'**
+  String get mediaViewerTitle;
+
+  /// No description provided for @mediaDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Download'**
+  String get mediaDownload;
+
+  /// No description provided for @mediaPrevious.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous'**
+  String get mediaPrevious;
+
+  /// No description provided for @mediaNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get mediaNext;
 
   /// No description provided for @settingsTitle.
   ///
@@ -362,83 +764,131 @@ abstract class AppLocalizations {
   /// **'Settings'**
   String get settingsTitle;
 
-  /// No description provided for @settingsVersion.
+  /// No description provided for @settingsGeneral.
   ///
   /// In en, this message translates to:
-  /// **'Version'**
-  String get settingsVersion;
+  /// **'General'**
+  String get settingsGeneral;
 
-  /// No description provided for @settingsLocale.
+  /// No description provided for @settingsVoice.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice'**
+  String get settingsVoice;
+
+  /// No description provided for @settingsData.
+  ///
+  /// In en, this message translates to:
+  /// **'Data'**
+  String get settingsData;
+
+  /// No description provided for @settingsAbout.
+  ///
+  /// In en, this message translates to:
+  /// **'About'**
+  String get settingsAbout;
+
+  /// No description provided for @settingsLanguage.
   ///
   /// In en, this message translates to:
   /// **'Language'**
-  String get settingsLocale;
+  String get settingsLanguage;
 
-  /// No description provided for @settingsLocaleSystem.
+  /// No description provided for @settingsLanguageSystem.
   ///
   /// In en, this message translates to:
   /// **'System'**
-  String get settingsLocaleSystem;
+  String get settingsLanguageSystem;
+
+  /// No description provided for @settingsTheme.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance'**
+  String get settingsTheme;
+
+  /// No description provided for @settingsThemeDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'System, light or dark'**
+  String get settingsThemeDesc;
+
+  /// No description provided for @settingsThemeSystem.
+  ///
+  /// In en, this message translates to:
+  /// **'System'**
+  String get settingsThemeSystem;
+
+  /// No description provided for @settingsThemeLight.
+  ///
+  /// In en, this message translates to:
+  /// **'Light'**
+  String get settingsThemeLight;
+
+  /// No description provided for @settingsThemeDark.
+  ///
+  /// In en, this message translates to:
+  /// **'Dark'**
+  String get settingsThemeDark;
+
+  /// No description provided for @settingsPttMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Push to talk'**
+  String get settingsPttMode;
+
+  /// No description provided for @settingsPttModeDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'When off, voice activation is used'**
+  String get settingsPttModeDesc;
+
+  /// No description provided for @settingsInputDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone'**
+  String get settingsInputDevice;
+
+  /// No description provided for @settingsOutputDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Speaker'**
+  String get settingsOutputDevice;
+
+  /// No description provided for @settingsDeviceDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'System default'**
+  String get settingsDeviceDefault;
+
+  /// No description provided for @settingsAudioUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio devices unavailable'**
+  String get settingsAudioUnavailable;
+
+  /// No description provided for @settingsAudioLoading.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading audio devices…'**
+  String get settingsAudioLoading;
 
   /// No description provided for @settingsStorePath.
   ///
   /// In en, this message translates to:
-  /// **'Core state file'**
+  /// **'Storage directory'**
   String get settingsStorePath;
 
-  /// No description provided for @settingsValidateTitle.
+  /// No description provided for @settingsStorePathDesc.
   ///
   /// In en, this message translates to:
-  /// **'Check an address'**
-  String get settingsValidateTitle;
+  /// **'Where profiles and preferences live'**
+  String get settingsStorePathDesc;
 
-  /// No description provided for @settingsValidateHint.
+  /// No description provided for @settingsAboutTagline.
   ///
   /// In en, this message translates to:
-  /// **'host or host:port'**
-  String get settingsValidateHint;
-
-  /// No description provided for @settingsValidate.
-  ///
-  /// In en, this message translates to:
-  /// **'Check'**
-  String get settingsValidate;
-
-  /// No description provided for @settingsValidateOk.
-  ///
-  /// In en, this message translates to:
-  /// **'Allowed, normalized to'**
-  String get settingsValidateOk;
-
-  /// No description provided for @settingsAudioTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Voice'**
-  String get settingsAudioTitle;
-
-  /// No description provided for @complianceTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Compliance'**
-  String get complianceTitle;
-
-  /// No description provided for @compliancePolicy.
-  ///
-  /// In en, this message translates to:
-  /// **'This client only connects to servers you entered yourself and never contacts official TeamSpeak services.'**
-  String get compliancePolicy;
-
-  /// No description provided for @commonClose.
-  ///
-  /// In en, this message translates to:
-  /// **'Close'**
-  String get commonClose;
-
-  /// No description provided for @commonMore.
-  ///
-  /// In en, this message translates to:
-  /// **'More'**
-  String get commonMore;
+  /// **'Self-hosted TeamSpeak client'**
+  String get settingsAboutTagline;
 }
 
 class _AppLocalizationsDelegate

@@ -1,18 +1,21 @@
 import 'dart:async';
 
-import 'package:flutter/widgets.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import 'models.dart';
+import 'preferences.dart';
 
 /// 在 `main()` 里用真实句柄覆盖；测试里用假的实现覆盖。
 final coreSessionProvider = Provider<CoreSession>(
   (ref) => throw StateError('coreSessionProvider 必须在 ProviderScope 里覆盖'),
 );
 
-/// 核心状态文件位置，设置页展示用。
-final storePathProvider = Provider<String>((ref) => '');
+/// `servers.json` 的绝对路径，设置页展示与复制用。同样在 `main()` 里覆盖。
+final storePathProvider = Provider<String>(
+  (ref) => throw StateError('storePathProvider 必须在 ProviderScope 里覆盖'),
+);
 
 /// `CoreEvent` 流收敛成的界面状态。
 final sessionViewProvider = NotifierProvider<SessionController, SessionView>(
@@ -52,9 +55,14 @@ class SessionController extends Notifier<SessionView> {
   Future<void> connect({required String id, required String nickname}) async {
     await _run(() async {
       // 先记下目标档案：状态事件只带客户端 id，界面需要知道连的是哪台服务器。
-      state = state.copyWith(activeServerId: id, messages: const []);
+      state = state.copyWith(
+        activeServerId: id,
+        messages: const [],
+        speaking: const {},
+        voiceNotice: null,
+      );
+      // 频道/成员快照由 actor 在连接成功后主动推送，不再额外拉一遍。
       await ref.read(coreSessionProvider).connect(id: id, nickname: nickname);
-      await refresh();
     });
   }
 
@@ -81,6 +89,61 @@ class SessionController extends Notifier<SessionView> {
 
   void selectChatScope(ChatScope scope) {
     state = state.copyWith(chatScope: scope);
+  }
+
+  /// 静音只停发送；deafen 同时停发送并静音播放。状态以 Rust 的 Voice 事件为准。
+  Future<void> setMuted(bool muted) async {
+    try {
+      await ref.read(coreSessionProvider).setMuted(muted: muted);
+    } on CoreError catch (error) {
+      state = state.copyWith(voiceNotice: describeCoreError(error));
+    }
+  }
+
+  Future<void> setDeafened(bool deafened) async {
+    try {
+      await ref.read(coreSessionProvider).setDeafened(deafened: deafened);
+    } on CoreError catch (error) {
+      state = state.copyWith(voiceNotice: describeCoreError(error));
+    }
+  }
+
+  Future<void> setPttMode(bool enabled) async {
+    try {
+      await ref.read(coreSessionProvider).setPttMode(enabled: enabled);
+    } on CoreError catch (error) {
+      state = state.copyWith(voiceNotice: describeCoreError(error));
+    }
+  }
+
+  Future<void> setPttActive(bool active) async {
+    if (!state.pttMode) {
+      return;
+    }
+    try {
+      await ref.read(coreSessionProvider).setPttActive(active: active);
+    } on CoreError catch (error) {
+      state = state.copyWith(voiceNotice: describeCoreError(error));
+    }
+  }
+
+  Future<void> cancelIdentityUpgrade() async {
+    try {
+      await ref.read(coreSessionProvider).cancelIdentityUpgrade();
+    } on CoreError catch (error) {
+      state = state.copyWith(voiceNotice: describeCoreError(error));
+    }
+  }
+
+  /// 掉线后是否自动重连。策略在 Rust 侧，这里只转发开关。
+  Future<void> setAutoReconnect(bool enabled) async {
+    await _run(
+      () => ref.read(coreSessionProvider).setAutoReconnect(enabled: enabled),
+    );
+  }
+
+  void dismissVoiceNotice() {
+    state = state.copyWith(voiceNotice: null);
   }
 
   /// 按当前范围发送。频道范围要求已进入某个频道，否则拒绝发送而不是发错地方。
@@ -149,17 +212,37 @@ class SessionController extends Notifier<SessionView> {
             activeServerId: null,
             channels: const [],
             clients: const [],
+            speaking: const {},
+            selfSpeaking: false,
+            pttActive: false,
+            identityUpgradeTarget: null,
+            busy: false,
           ),
+          CoreSessionState_Connected(:final channelId) when channelId != 0 =>
+            current.copyWith(
+              state: next,
+              // 自动重连会回到服务器默认频道，不能覆盖断线前的“上次频道”。
+              lastChannelId: current.reconnecting
+                  ? current.lastChannelId
+                  : channelId,
+            ),
           _ => current.copyWith(state: next),
         };
       case CoreEvent_Servers(:final profiles):
         state = current.copyWith(servers: profiles);
+      case CoreEvent_Snapshot(:final channels, :final clients):
+        state = current.copyWith(channels: channels, clients: clients);
+      case CoreEvent_History(:final messages):
+        state = current.copyWith(
+          messages: messages.map(ChatMessage.fromCore).toList(),
+        );
       case CoreEvent_TextMessage(
         :final from,
         :final fromUid,
         :final message,
         :final targetMode,
         :final targetId,
+        :final at,
       ):
         final appended = [
           ...current.messages,
@@ -167,7 +250,7 @@ class SessionController extends Notifier<SessionView> {
             from: from,
             fromUid: fromUid,
             text: message,
-            at: DateTime.now(),
+            at: DateTime.fromMillisecondsSinceEpoch(at),
             scope: ChatScope.fromProtocol(targetMode),
             targetId: targetId,
           ),
@@ -177,7 +260,12 @@ class SessionController extends Notifier<SessionView> {
               ? appended.sublist(appended.length - _messageLimit)
               : appended,
         );
-      case CoreEvent_ClientJoined(:final id, :final nickname, :final channelId):
+      case CoreEvent_ClientJoined(
+        :final id,
+        :final nickname,
+        :final uid,
+        :final channelId,
+      ):
         final others = current.clients.where((client) => client.id != id);
         state = current.copyWith(
           clients: [
@@ -185,7 +273,7 @@ class SessionController extends Notifier<SessionView> {
             ClientView(
               id: id,
               nickname: nickname,
-              uid: '',
+              uid: uid,
               channelId: channelId,
             ),
           ],
@@ -195,6 +283,7 @@ class SessionController extends Notifier<SessionView> {
           clients: current.clients.where((client) => client.id != id).toList(),
         );
       case CoreEvent_ClientMoved(:final id, :final channelId):
+        final selfMoved = id == current.selfClientId && channelId != 0;
         state = current.copyWith(
           clients: [
             for (final client in current.clients)
@@ -208,48 +297,109 @@ class SessionController extends Notifier<SessionView> {
               else
                 client,
           ],
+          lastChannelId: selfMoved ? channelId : current.lastChannelId,
         );
+      case CoreEvent_Voice(state: final voice):
+        state = current.copyWith(
+          muted: voice.muted,
+          deafened: voice.deafened,
+          pttMode: voice.pttMode,
+          pttActive: voice.pttActive,
+          voiceInputReady: voice.inputReady,
+          voiceOutputReady: voice.outputReady,
+          voiceNotice: voice.message,
+        );
+      case CoreEvent_Speaking(:final clientIds):
+        state = current.copyWith(speaking: clientIds.toSet());
+      case CoreEvent_SelfSpeaking(:final speaking):
+        state = current.copyWith(selfSpeaking: speaking);
+      case CoreEvent_IdentityUpgrade(:final to):
+        state = current.copyWith(
+          identityUpgradeTarget: to,
+          notice: '身份等级不足，正在提升到 $to…',
+        );
+      case CoreEvent_IdentityUpgraded(:final level):
+        state = current.copyWith(
+          identityUpgradeTarget: null,
+          notice: '身份等级已提升到 $level，正在重连…',
+        );
+      case CoreEvent_TransferStarted():
+      case CoreEvent_TransferProgress():
+      case CoreEvent_TransferFinished():
+        // 传输进度暂时没有界面入口；后端事件先保留，避免以后加 UI 时改协议。
+        break;
       case CoreEvent_Log():
         // 协议日志不进界面，避免刷屏。
         break;
       case CoreEvent_Denied(:final message):
         state = current.copyWith(notice: message);
       case CoreEvent_Failed(:final message):
+        // 保留 activeServerId：掉线重连期间服务器栏仍然标着原服务器；
+        // 用户主动断开由 State(Disconnected) 负责清空。
         state = current.copyWith(
           notice: message,
-          activeServerId: null,
           channels: const [],
           clients: const [],
+          speaking: const {},
+          identityUpgradeTarget: null,
         );
     }
   }
 }
 
-/// 连接时使用的昵称，进程内保存。
-final nicknameProvider = NotifierProvider<NicknameController, String>(
-  NicknameController.new,
+/// 读写昵称与最近连接时间。`main()` 里覆盖成文件实现；测试里默认是内存实现。
+final preferencesStoreProvider = Provider<PreferencesStore>(
+  (ref) => PreferencesStore.inMemory(),
 );
 
-class NicknameController extends Notifier<String> {
-  static const _fallback = 'ts-client';
+final preferencesProvider =
+    NotifierProvider<PreferencesController, SessionPreferences>(
+      PreferencesController.new,
+    );
 
+class PreferencesController extends Notifier<SessionPreferences> {
   @override
-  String build() => _fallback;
+  SessionPreferences build() => ref.watch(preferencesStoreProvider).current;
 
-  void update(String value) {
+  void setNickname(String value) {
     final trimmed = value.trim();
-    state = trimmed.isEmpty ? _fallback : trimmed;
+    if (trimmed.isEmpty || trimmed == state.nickname) {
+      return;
+    }
+    _update(state.copyWith(nickname: trimmed));
   }
-}
 
-/// 界面语言；`null` 表示跟随系统。
-final localeProvider = NotifierProvider<LocaleController, Locale?>(
-  LocaleController.new,
-);
+  /// `null` 表示跟随系统。
+  void setLocale(String? code) {
+    if (code == state.locale) {
+      return;
+    }
+    _update(state.copyWith(locale: code));
+  }
 
-class LocaleController extends Notifier<Locale?> {
-  @override
-  Locale? build() => null;
+  void setTheme(AppThemePreference theme) {
+    if (theme == state.theme) {
+      return;
+    }
+    _update(state.copyWith(theme: theme));
+  }
 
-  void update(Locale? locale) => state = locale;
+  void markConnected(String serverId, DateTime at) {
+    _update(
+      state.copyWith(lastConnected: {...state.lastConnected, serverId: at}),
+    );
+  }
+
+  void _update(SessionPreferences next) {
+    state = next;
+    unawaited(_persist(next));
+  }
+
+  Future<void> _persist(SessionPreferences next) async {
+    try {
+      await ref.read(preferencesStoreProvider).save(next);
+    } on Object catch (error) {
+      debugPrint('保存 preferences 失败：$error');
+    }
+  }
 }

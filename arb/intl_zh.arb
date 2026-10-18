@@ -2,64 +2,225 @@
   "@@locale": "zh",
   "appTitle": "自托管 TeamSpeak",
   "appName": "FlSpeak",
-  "appTagline": "自托管 TeamSpeak 客户端",
+  "commonClose": "关闭",
+  "commonCancel": "取消",
+  "commonDone": "完成",
+  "commonMore": "更多",
+  "commonCopy": "复制",
+  "commonCopied": "已复制",
+  "commonSave": "保存",
+  "commonRemove": "移除",
   "connectTitle": "连接服务器",
   "connectAddressLabel": "服务器地址",
   "connectAddressHint": "ts.example.com 或 ts.example.com:9987",
-  "connectAddressHelp": "完整域名或 IP，端口默认 9987。",
-  "connectAction": "连接",
-  "connectKnownServers": "已登记的服务器",
-  "connectNoServers": "还没有服务器。在上面填入地址，登记第一台。",
-  "connectNewServerTitle": "登记新服务器",
-  "connectBack": "返回服务器列表",
   "connectNicknameLabel": "昵称",
-  "connectNicknameHelp": "其他人看到的名字，不需要注册账号。",
   "serverLabelField": "备注名（可选）",
+  "serverLabelHint": "例如：旅行摄影社",
   "serverAdd": "添加服务器",
-  "serverRemove": "删除",
-  "serverDisconnect": "断开",
-  "serverInvalidAddress": "服务器地址非法。",
-  "railServers": "服务器",
-  "railCollapse": "收起服务器栏",
-  "channelsTitle": "频道",
-  "chatTitle": "聊天",
-  "channelsEmpty": "尚未连接。",
-  "channelExpand": "展开",
-  "channelCollapse": "收起",
-  "channelJoin": "加入",
-  "channelCurrent": "当前所在",
-  "workspaceOnlineCount": "{count} 人在线",
-  "@workspaceOnlineCount": {
+  "serverRemove": "移除",
+  "serverRemoveFromList": "从列表移除",
+  "serverRemoveTitle": "移除服务器？",
+  "serverRemoveBody": "“{label}”会从列表移除；本机聊天记录仍会保留。",
+  "@serverRemoveBody": {
     "placeholders": {
-      "count": {"type": "int"}
+      "label": {
+        "type": "String"
+      }
     }
   },
+  "serverAddAndConnect": "添加并连接",
+  "serverAddAndConnecting": "正在添加…",
+  "serverAddressRequired": "请输入服务器地址。",
+  "serverInvalidAddress": "服务器地址非法。",
+  "serverDisconnect": "断开",
+  "serverEmptyTitle": "还没有服务器",
+  "serverEmptyAction": "添加第一台服务器",
+  "serversTitle": "服务器",
+  "serversUsedBy": "{count, plural, other{用于 {count} 台服务器}}",
+  "@serversUsedBy": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sessionConnected": "已连接",
+  "sessionConnecting": "正在连接…",
+  "sessionDisconnected": "未连接",
+  "sessionConnectedTo": "已连接到 {name}",
+  "@sessionConnectedTo": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "sessionConnectingTo": "正在连接 {name}…",
+  "@sessionConnectingTo": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "sessionLastConnectedNever": "还没连接过",
+  "sessionLastConnectedJustNow": "刚刚",
+  "sessionLastConnectedMinutes": "{count} 分钟前",
+  "@sessionLastConnectedMinutes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sessionLastConnectedHours": "{count} 小时前",
+  "@sessionLastConnectedHours": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sessionLastConnectedYesterday": "昨天",
+  "sessionLastConnectedDays": "{count} 天前",
+  "@sessionLastConnectedDays": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "workspaceReturn": "返回工作区",
+  "identityCurrent": "当前身份",
+  "identityManage": "管理身份",
+  "identityTitle": "身份",
+  "identityRename": "修改昵称",
+  "identitySave": "保存",
+  "identityNicknameEmpty": "昵称不能为空。",
+  "identityCancel": "取消",
+  "identityUpgrading": "正在把身份等级提升到 {target}…",
+  "@identityUpgrading": {
+    "placeholders": {
+      "target": {
+        "type": "int"
+      }
+    }
+  },
+  "channelsEmpty": "尚未连接。",
+  "channelsSection": "频道",
+  "workspaceNoChannels": "服务器还没有频道。",
+  "workspaceOpenMenu": "打开频道菜单",
   "workspaceNotConnectedTitle": "未连接服务器",
   "workspaceNotConnectedBody": "从左侧服务器栏选择一台已登记的服务器，或添加新地址。",
-  "workspaceReturn": "返回工作区",
   "workspaceRefresh": "刷新",
+  "channelExpand": "展开",
+  "channelCollapse": "收起",
+  "channelCurrent": "当前所在",
+  "voiceTab": "语音",
+  "voiceJoin": "加入语音",
+  "voiceLeave": "离开",
+  "voiceDisconnect": "断开语音",
+  "voiceMembersCount": "{count} 人正在语音中",
+  "@voiceMembersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "voiceEmpty": "现在还没有人，来当第一个吧",
+  "voiceConnected": "语音已连接",
+  "voiceMute": "静音",
+  "voiceUnmute": "取消静音",
+  "voiceDeafen": "关闭声音",
+  "voiceUndeafen": "取消闭麦",
+  "voiceSelfOnline": "在线",
+  "memberMuted": "已静音",
+  "voiceMicUnavailable": "麦克风不可用",
+  "voiceSpeakerUnavailable": "扬声器不可用",
+  "voiceReconnectingAttempt": "正在重连（第 {attempt} 次）…",
+  "@voiceReconnectingAttempt": {
+    "placeholders": {
+      "attempt": {
+        "type": "int"
+      }
+    }
+  },
+  "voiceModeVad": "语音激活",
+  "voiceModePtt": "按住说话",
+  "voicePushToTalk": "按住说话",
+  "voicePushToTalkHint": "松开停止发送",
+  "voiceSelfSpeaking": "正在发送",
+  "voiceRejoinLast": "回到上次频道",
+  "chatTitle": "聊天",
+  "chatTabMessages": "消息",
+  "chatTabMedia": "媒体",
+  "chatWelcomeTitle": "欢迎来到 {channel}",
+  "@chatWelcomeTitle": {
+    "placeholders": {
+      "channel": {
+        "type": "String"
+      }
+    }
+  },
+  "chatWelcomeBody": "这是频道的起点，分享文字、图片和视频吧。",
+  "chatComposerHintTo": "发送到 {target}",
+  "@chatComposerHintTo": {
+    "placeholders": {
+      "target": {
+        "type": "String"
+      }
+    }
+  },
+  "chatSend": "发送",
+  "chatScopeTitle": "发送范围",
   "chatScopeChannel": "本频道",
   "chatScopeServer": "整个服务器",
-  "chatComposerHint": "输入消息",
-  "chatSend": "发送",
   "chatEmptyChannel": "本频道还没有消息。",
   "chatEmptyServer": "服务器上还没有广播消息。",
-  "chatDirectTag": "私聊",
   "chatNoChannel": "先进入一个频道再发送频道消息。",
-  "sessionConnected": "已连接",
-  "voiceRustNote": "采集、播放与 Opus 编解码都在 Rust 侧（core/audio）。音频帧不经过 FFI；把它们接进会话 actor 是下一个里程碑。",
+  "chatAddMedia": "添加图片或视频",
+  "chatRemoveAttachment": "移除 {name}",
+  "@chatRemoveAttachment": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "chatUnsupportedImage": "不支持的图片格式",
+  "chatImageLoading": "正在加载图片…",
+  "chatImageLoadFailed": "图片加载失败",
+  "chatTs6Attachment": "TS6 官方附件",
+  "chatTs6AttachmentPolicy": "当前策略不连接 myTeamSpeak 媒体服务，仅显示文件信息。",
+  "chatDirectTag": "私聊",
+  "chatWelcomeServerTitle": "整个服务器",
+  "chatWelcomeServerBody": "这里显示服务器广播消息，所有人都能看到。",
+  "mediaEmpty": "这个频道还没有图片或视频",
+  "mediaViewerTitle": "媒体浏览",
+  "mediaDownload": "下载",
+  "mediaPrevious": "上一个",
+  "mediaNext": "下一个",
   "settingsTitle": "设置",
-  "settingsVersion": "版本",
-  "settingsLocale": "语言",
-  "settingsLocaleSystem": "跟随系统",
-  "settingsStorePath": "核心状态文件",
-  "settingsValidateTitle": "校验地址",
-  "settingsValidateHint": "host 或 host:port",
-  "settingsValidate": "校验",
-  "settingsValidateOk": "允许，归一化为",
-  "settingsAudioTitle": "语音",
-  "complianceTitle": "合规",
-  "compliancePolicy": "本客户端只连接你手动录入的服务器，且不会访问任何 TeamSpeak 官方服务。",
-  "commonClose": "关闭",
-  "commonMore": "更多"
+  "settingsGeneral": "通用",
+  "settingsVoice": "语音",
+  "settingsData": "数据",
+  "settingsAbout": "关于",
+  "settingsLanguage": "语言",
+  "settingsLanguageSystem": "跟随系统",
+  "settingsTheme": "外观",
+  "settingsThemeDesc": "跟随系统、浅色或深色",
+  "settingsThemeSystem": "跟随系统",
+  "settingsThemeLight": "浅色",
+  "settingsThemeDark": "深色",
+  "settingsPttMode": "按住说话",
+  "settingsPttModeDesc": "关闭时使用语音激活",
+  "settingsInputDevice": "麦克风",
+  "settingsOutputDevice": "扬声器",
+  "settingsDeviceDefault": "系统默认",
+  "settingsAudioUnavailable": "音频设备不可用",
+  "settingsAudioLoading": "正在读取音频设备…",
+  "settingsStorePath": "存储目录",
+  "settingsStorePathDesc": "服务器档案与偏好文件的位置",
+  "settingsAboutTagline": "自托管 TeamSpeak 客户端"
 }

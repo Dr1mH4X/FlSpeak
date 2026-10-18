@@ -9,15 +9,23 @@ import '../../l10n/app_localizations.dart';
 import '../../router.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common.dart';
-import '../../widgets/monogram.dart';
+import 'widgets/add_server_dialog.dart';
+import 'widgets/connect_header.dart';
+import 'widgets/dashed_border.dart';
+import 'widgets/identity_card.dart';
+import 'widgets/identity_dialog.dart';
+import 'widgets/login_rail.dart';
+import 'widgets/remove_server_dialog.dart';
+import 'widgets/server_row.dart';
 
-/// 打开应用看到的第一个界面：录入地址、挑一台已登记的服务器、填昵称。
+/// 打开应用看到的第一页：身份 + 服务器列表。
 ///
-/// 两步式与 Fladder 的登录一致——先选服务器，再进入该服务器的凭据步骤。
+/// 一行服务器就是一次连接，昵称从本机身份里带过去，不再有第二步。
+/// 宽屏是「身份卡 + 列表」两列，窄屏把身份压成一条，首屏留给服务器。
 class ConnectPage extends ConsumerStatefulWidget {
   const ConnectPage({this.serverId, super.key});
 
-  /// 从服务器栏跳进来时预选这台服务器，直接落在昵称步骤。
+  /// 从工作区服务器栏跳进来时直接连接这台服务器。
   final String? serverId;
 
   @override
@@ -25,66 +33,78 @@ class ConnectPage extends ConsumerStatefulWidget {
 }
 
 class _ConnectPageState extends ConsumerState<ConnectPage> {
-  final _address = TextEditingController();
-  final _label = TextEditingController();
-  final _nickname = TextEditingController();
-
-  String? _selectedId;
-  String? _addressError;
+  /// 正在连接的目标。用来在状态事件到达前就把对应行标成连接中。
+  String? _pendingServerId;
+  bool _autoConnectTried = false;
 
   @override
-  void initState() {
-    super.initState();
-    _selectedId = widget.serverId;
-  }
-
-  @override
-  void dispose() {
-    _address.dispose();
-    _label.dispose();
-    _nickname.dispose();
-    super.dispose();
-  }
-
-  Future<void> _register() async {
-    final address = _address.text.trim();
-    if (address.isEmpty) {
-      setState(
-        () => _addressError = AppLocalizations.of(context).serverInvalidAddress,
-      );
-      return;
+  void didUpdateWidget(ConnectPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.serverId != oldWidget.serverId) {
+      _autoConnectTried = false;
     }
-    setState(() => _addressError = null);
-
-    final label = _label.text.trim();
-    final profile = await ref
-        .read(sessionViewProvider.notifier)
-        .addServer(
-          label: label.isEmpty ? _hostOf(address) : label,
-          address: address,
-        );
-    if (!mounted || profile == null) {
-      return;
-    }
-    _address.clear();
-    _label.clear();
-    setState(() => _selectedId = profile.id);
   }
 
   Future<void> _connect(ServerProfileView profile) async {
-    final nickname = _nickname.text.trim();
-    ref.read(nicknameProvider.notifier).update(nickname);
+    if (!mounted || _pendingServerId != null) {
+      return;
+    }
+    final view = ref.read(sessionViewProvider);
+    if (view.connected && view.activeServerId == profile.id) {
+      context.go(AppRoutes.workspace);
+      return;
+    }
+    if (view.connecting || view.busy) {
+      return;
+    }
+
+    _pendingServerId = profile.id;
     await ref
         .read(sessionViewProvider.notifier)
         .connect(
           id: profile.id,
-          nickname: nickname.isEmpty ? ref.read(nicknameProvider) : nickname,
+          nickname: ref.read(preferencesProvider).nickname,
         );
     if (!mounted) {
       return;
     }
-    if (ref.read(sessionViewProvider).connected) {
-      context.go(AppRoutes.workspace);
+    // 正常路径由 build 里的 listen 处理；这里兜住「事件已经处理完」的时序。
+    final next = ref.read(sessionViewProvider);
+    if (next.connected && next.activeServerId == profile.id) {
+      if (_pendingServerId == profile.id) {
+        _pendingServerId = null;
+        ref
+            .read(preferencesProvider.notifier)
+            .markConnected(profile.id, DateTime.now());
+        context.go(AppRoutes.workspace);
+      }
+      return;
+    }
+    if (next.notice != null ||
+        (next.activeServerId != null && next.activeServerId != profile.id)) {
+      _pendingServerId = null;
+    }
+  }
+
+  Future<void> _openAddServer() async {
+    final profile = await showAddServerDialog(context);
+    if (profile != null && mounted) {
+      await _connect(profile);
+    }
+  }
+
+  Future<void> _openIdentity() async {
+    await showIdentityDialog(
+      context,
+      nickname: ref.read(preferencesProvider).nickname,
+      onRename: ref.read(preferencesProvider.notifier).setNickname,
+    );
+  }
+
+  Future<void> _removeServer(ServerProfileView profile) async {
+    final confirmed = await showRemoveServerDialog(context, profile);
+    if (confirmed && mounted) {
+      await ref.read(sessionViewProvider.notifier).removeServer(profile.id);
     }
   }
 
@@ -92,545 +112,163 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final view = ref.watch(sessionViewProvider);
-    final controller = ref.read(sessionViewProvider.notifier);
-    final selected = _selectedProfile(view);
+    final preferences = ref.watch(preferencesProvider);
+    final scheme = context.scheme;
+    final size = MediaQuery.sizeOf(context);
+    final desktop = size.width >= Breakpoints.compact;
+    final wide = size.width >= Breakpoints.wide;
 
-    return Scaffold(
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _TopBar(
-              connected: view.connected,
-              onSettings: () => context.go(AppRoutes.settings),
-              onWorkspace: () => context.go(AppRoutes.workspace),
-            ),
-            Expanded(
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 620),
-                  child: ListView(
-                    padding: EdgeInsets.fromLTRB(
-                      MediaQuery.sizeOf(context).width < Breakpoints.compact
-                          ? 16
-                          : 24,
-                      8,
-                      MediaQuery.sizeOf(context).width < Breakpoints.compact
-                          ? 16
-                          : 24,
-                      32,
-                    ),
-                    children: [
-                      _Wordmark(name: l10n.appName, tagline: l10n.appTagline),
-                      const SizedBox(height: 28),
-                      if (view.notice != null) ...[
-                        NoticeBar(
-                          message: view.notice!,
-                          dismissTooltip: l10n.commonClose,
-                          onDismiss: controller.dismissNotice,
-                        ),
-                        const SizedBox(height: 20),
-                      ],
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 220),
-                        switchInCurve: Curves.easeOutCubic,
-                        switchOutCurve: Curves.easeInCubic,
-                        transitionBuilder: (child, animation) => FadeTransition(
-                          opacity: animation,
-                          child: SizeTransition(
-                            sizeFactor: animation,
-                            alignment: Alignment.topLeft,
-                            child: child,
-                          ),
-                        ),
-                        child: selected == null
-                            ? _ServerListStep(
-                                key: const ValueKey('servers'),
-                                address: _address,
-                                label: _label,
-                                addressError: _addressError,
-                                busy: view.busy,
-                                servers: view.servers,
-                                activeServerId: view.activeServerId,
-                                onAddressSubmitted: _register,
-                                onRegister: _register,
-                                onPick: (profile) =>
-                                    setState(() => _selectedId = profile.id),
-                                onRemove: controller.removeServer,
-                              )
-                            : _NicknameStep(
-                                key: ValueKey(selected.id),
-                                profile: selected,
-                                nickname: _nickname,
-                                busy: view.busy || view.connecting,
-                                connected:
-                                    view.connected &&
-                                    view.activeServerId == selected.id,
-                                onBack: () =>
-                                    setState(() => _selectedId = null),
-                                onConnect: () => _connect(selected),
-                              ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+    ref.listen<SessionView>(sessionViewProvider, (previous, next) {
+      final pending = _pendingServerId;
+      if (pending == null) {
+        return;
+      }
+      if (next.connected && next.activeServerId == pending) {
+        _pendingServerId = null;
+        ref
+            .read(preferencesProvider.notifier)
+            .markConnected(pending, DateTime.now());
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            context.go(AppRoutes.workspace);
+          }
+        });
+      } else if (next.notice != null ||
+          (next.activeServerId != null && next.activeServerId != pending)) {
+        // 只有明确的失败/换目标才放掉连接中状态；busy 结束不等于连上。
+        _pendingServerId = null;
+      }
+    });
 
-  ServerProfileView? _selectedProfile(SessionView view) {
-    final id = _selectedId;
-    if (id == null) {
-      return null;
-    }
-    for (final server in view.servers) {
-      if (server.id == id) {
-        return server;
+    if (!_autoConnectTried && widget.serverId != null) {
+      final target = _serverById(view.servers, widget.serverId!);
+      if (target != null) {
+        _autoConnectTried = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _connect(target);
+          }
+        });
       }
     }
-    return null;
-  }
-}
 
-String _hostOf(String address) {
-  final withoutScheme = address.contains('://')
-      ? address.split('://').last
-      : address;
-  final host = withoutScheme.split(':').first;
-  return host.isEmpty ? address : host;
-}
+    final connectedId = view.connected ? view.activeServerId : null;
+    final connectingId =
+        _pendingServerId ??
+        ((view.connecting || view.reconnecting) ? view.activeServerId : null);
+    final busy =
+        _pendingServerId != null || view.connecting || view.reconnecting;
+    final servers = _orderedServers(view, preferences.lastConnected);
 
-class _TopBar extends StatelessWidget {
-  const _TopBar({
-    required this.connected,
-    required this.onSettings,
-    required this.onWorkspace,
-  });
+    final section = _ServerSection(
+      servers: servers,
+      lastConnected: preferences.lastConnected,
+      connectedId: connectedId,
+      connectingId: connectingId,
+      enabled: !busy && !view.busy,
+      notice: view.notice,
+      onDismissNotice: ref.read(sessionViewProvider.notifier).dismissNotice,
+      onAdd: _openAddServer,
+      onConnect: _connect,
+      onRemove: _removeServer,
+    );
 
-  final bool connected;
-  final VoidCallback onSettings;
-  final VoidCallback onWorkspace;
+    final identity = wide
+        ? IdentityCard(
+            nickname: preferences.nickname,
+            identityCount: 1,
+            serverCount: view.servers.length,
+            onManage: _openIdentity,
+          )
+        : IdentityStrip(
+            nickname: preferences.nickname,
+            serverCount: view.servers.length,
+            onManage: _openIdentity,
+          );
 
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      child: Row(
-        children: [
-          const Spacer(),
-          if (connected)
-            TextButton.icon(
-              onPressed: onWorkspace,
-              icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-              label: Text(l10n.workspaceReturn),
-            ),
-          IconButton(
-            tooltip: l10n.settingsTitle,
-            onPressed: onSettings,
-            icon: const Icon(Icons.settings_outlined),
-          ),
-        ],
+    final horizontal = wide ? 32.0 : (size.width >= 640 ? 24.0 : 16.0);
+    final top = wide ? 40.0 : (size.width >= 640 ? 24.0 : 8.0);
+    final content = SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(horizontal, top, horizontal, 24),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: Sizes.connectContent),
+          child: wide
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(width: Sizes.identityColumn, child: identity),
+                    const SizedBox(width: 24),
+                    Expanded(child: section),
+                  ],
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [identity, const SizedBox(height: 20), section],
+                ),
+        ),
       ),
     );
-  }
-}
 
-class _Wordmark extends StatelessWidget {
-  const _Wordmark({required this.name, required this.tagline});
+    final header = ConnectHeader(
+      desktop: desktop,
+      connected: view.connected,
+      status: _statusText(l10n, view),
+      statusColor: view.connected
+          ? context.status.live
+          : (busy ? scheme.primary : scheme.outline),
+      onWorkspace: () => context.go(AppRoutes.workspace),
+      onSettings: () => context.push(AppRoutes.settings),
+    );
 
-  final String name;
-  final String tagline;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-    return Row(
-      children: [
-        Container(
-          width: 56,
-          height: 56,
+    final glow = Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 520,
+      child: IgnorePointer(
+        child: DecoratedBox(
           decoration: BoxDecoration(
-            color: scheme.primary,
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: Icon(
-            Icons.graphic_eq_rounded,
-            color: scheme.onPrimary,
-            size: 30,
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(name, style: text.displaySmall),
-              const SizedBox(height: 2),
-              Text(
-                tagline,
-                style: text.bodyMedium?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ],
+            gradient: RadialGradient(
+              center: const Alignment(0.1, -1),
+              radius: 0.95,
+              colors: [
+                scheme.primary.withValues(alpha: 0.10),
+                scheme.primary.withValues(alpha: 0),
+              ],
+              stops: const [0, 0.7],
+            ),
           ),
         ),
-      ],
+      ),
     );
-  }
-}
 
-/// 第一步：登记新服务器，并列出已登记的档案。
-class _ServerListStep extends StatelessWidget {
-  const _ServerListStep({
-    required this.address,
-    required this.label,
-    required this.addressError,
-    required this.busy,
-    required this.servers,
-    required this.activeServerId,
-    required this.onAddressSubmitted,
-    required this.onRegister,
-    required this.onPick,
-    required this.onRemove,
-    super.key,
-  });
-
-  final TextEditingController address;
-  final TextEditingController label;
-  final String? addressError;
-  final bool busy;
-  final List<ServerProfileView> servers;
-  final String? activeServerId;
-  final VoidCallback onAddressSubmitted;
-  final VoidCallback onRegister;
-  final ValueChanged<ServerProfileView> onPick;
-  final Future<void> Function(String id) onRemove;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final text = Theme.of(context).textTheme;
-    final scheme = Theme.of(context).colorScheme;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(l10n.connectNewServerTitle, style: text.titleMedium),
-        const SizedBox(height: 12),
-        TextField(
-          controller: address,
-          autofocus: true,
-          autocorrect: false,
-          keyboardType: TextInputType.url,
-          textInputAction: TextInputAction.next,
-          onSubmitted: (_) => onAddressSubmitted(),
-          decoration: InputDecoration(
-            labelText: l10n.connectAddressLabel,
-            hintText: l10n.connectAddressHint,
-            helperText: l10n.connectAddressHelp,
-            errorText: addressError,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    if (desktop) {
+      return Scaffold(
+        backgroundColor: scheme.surface,
+        body: Stack(
           children: [
-            Expanded(
-              child: TextField(
-                controller: label,
-                autocorrect: false,
-                textInputAction: TextInputAction.go,
-                onSubmitted: (_) => onRegister(),
-                decoration: InputDecoration(labelText: l10n.serverLabelField),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: FilledButton.icon(
-                onPressed: busy ? null : onRegister,
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: Text(l10n.serverAdd),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 24),
-        Row(
-          children: [
-            Expanded(
-              child: Text(l10n.connectKnownServers, style: text.titleMedium),
-            ),
-            if (servers.isNotEmpty)
-              Text(
-                '${servers.length}',
-                style: text.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                  fontFeatures: tabularFigures,
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        if (servers.isEmpty)
-          Text(
-            l10n.connectNoServers,
-            style: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-          )
-        else
-          _ServerGrid(
-            servers: servers,
-            activeServerId: activeServerId,
-            onPick: onPick,
-            onRemove: onRemove,
-          ),
-      ],
-    );
-  }
-}
-
-class _ServerGrid extends StatelessWidget {
-  const _ServerGrid({
-    required this.servers,
-    required this.activeServerId,
-    required this.onPick,
-    required this.onRemove,
-  });
-
-  final List<ServerProfileView> servers;
-  final String? activeServerId;
-  final ValueChanged<ServerProfileView> onPick;
-  final Future<void> Function(String id) onRemove;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        const spacing = 12.0;
-        final columns = constraints.maxWidth >= 520 ? 2 : 1;
-        final width =
-            (constraints.maxWidth - spacing * (columns - 1)) / columns;
-        return Wrap(
-          spacing: spacing,
-          runSpacing: spacing,
-          children: [
-            for (final server in servers)
-              SizedBox(
-                width: width,
-                child: ServerCard(
-                  profile: server,
-                  online: server.id == activeServerId,
-                  onPressed: () => onPick(server),
-                  onRemove: () => onRemove(server.id),
-                ),
-              ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-/// 已登记服务器的卡片。默认只描边，悬停/聚焦才抬起高度，避免每张卡都长一样。
-class ServerCard extends StatefulWidget {
-  const ServerCard({
-    required this.profile,
-    required this.online,
-    required this.onPressed,
-    required this.onRemove,
-    super.key,
-  });
-
-  final ServerProfileView profile;
-  final bool online;
-  final VoidCallback onPressed;
-  final VoidCallback onRemove;
-
-  @override
-  State<ServerCard> createState() => _ServerCardState();
-}
-
-class _ServerCardState extends State<ServerCard> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final scheme = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-    final profile = widget.profile;
-    final raised = _hovered;
-
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: Material(
-        color: raised ? scheme.surfaceContainer : scheme.surfaceContainerLow,
-        borderRadius: Radii.mediumAll,
-        child: InkWell(
-          onTap: widget.onPressed,
-          borderRadius: Radii.mediumAll,
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(14, 14, 6, 14),
-            decoration: BoxDecoration(
-              borderRadius: Radii.mediumAll,
-              border: Border.all(
-                color: widget.online ? scheme.primary : scheme.outline,
-                width: widget.online ? 1.5 : 1,
-              ),
-            ),
-            child: Row(
-              children: [
-                ServerMonogram(
-                  id: profile.id,
-                  label: profile.label,
-                  host: profile.host,
-                  size: 40,
-                  online: widget.online,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        profile.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: text.titleSmall,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${profile.host}:${profile.port}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: text.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                      if (widget.online) ...[
-                        const SizedBox(height: 6),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
+            glow,
+            SafeArea(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  LoginRail(onSettings: () => context.push(AppRoutes.settings)),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(0, 8, 8, 8),
+                      child: Material(
+                        color: context.cardColor.withValues(alpha: 0.6),
+                        borderRadius: Radii.xxxlAll,
+                        clipBehavior: Clip.antiAlias,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            StatusDot(
-                              color: context.status.live,
-                              ringColor: scheme.surfaceContainerLow,
-                              size: 8,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              l10n.sessionConnected,
-                              style: text.labelSmall?.copyWith(
-                                color: context.status.live,
-                              ),
-                            ),
+                            header,
+                            Expanded(child: content),
                           ],
                         ),
-                      ],
-                    ],
-                  ),
-                ),
-                PopupMenuButton<String>(
-                  tooltip: l10n.serverRemove,
-                  icon: const Icon(Icons.more_vert_rounded, size: 18),
-                  onSelected: (_) => widget.onRemove(),
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                      value: 'remove',
-                      enabled: !widget.online,
-                      child: Row(
-                        children: [
-                          const Icon(Icons.delete_outline_rounded, size: 18),
-                          const SizedBox(width: 10),
-                          Text(l10n.serverRemove),
-                        ],
                       ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 第二步：昵称，然后连接。连接目标只能来自档案，所以这里不再有地址输入。
-class _NicknameStep extends StatelessWidget {
-  const _NicknameStep({
-    required this.profile,
-    required this.nickname,
-    required this.busy,
-    required this.connected,
-    required this.onBack,
-    required this.onConnect,
-    super.key,
-  });
-
-  final ServerProfileView profile;
-  final TextEditingController nickname;
-  final bool busy;
-  final bool connected;
-  final VoidCallback onBack;
-  final VoidCallback onConnect;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final scheme = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            SizedBox.square(
-              dimension: 48,
-              child: IconButton.filledTonal(
-                tooltip: l10n.connectBack,
-                onPressed: busy ? null : onBack,
-                icon: const Icon(Icons.arrow_back_rounded),
-              ),
-            ),
-            const SizedBox(width: 12),
-            ServerMonogram(
-              id: profile.id,
-              label: profile.label,
-              host: profile.host,
-              size: 48,
-              online: connected,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    profile.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: text.titleLarge,
-                  ),
-                  Text(
-                    '${profile.host}:${profile.port}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: text.bodySmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
                     ),
                   ),
                 ],
@@ -638,42 +276,378 @@ class _NicknameStep extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 28),
-        TextField(
-          controller: nickname,
-          autofocus: true,
-          autocorrect: false,
-          textInputAction: TextInputAction.go,
-          onSubmitted: busy ? null : (_) => onConnect(),
-          decoration: InputDecoration(
-            labelText: l10n.connectNicknameLabel,
-            hintText: 'ts-client',
-            helperText: l10n.connectNicknameHelp,
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: scheme.surface,
+      body: Stack(
+        children: [
+          glow,
+          SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                header,
+                Expanded(child: content),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _statusText(AppLocalizations l10n, SessionView view) {
+    if (view.reconnecting) {
+      return l10n.voiceReconnectingAttempt(view.reconnectAttempt ?? 1);
+    }
+    final active = view.activeServer;
+    if (view.connected) {
+      return active == null
+          ? l10n.sessionConnected
+          : l10n.sessionConnectedTo(active.label);
+    }
+    final pending = _pendingServerId;
+    if (pending != null) {
+      final target = _serverById(view.servers, pending);
+      if (target != null) {
+        return l10n.sessionConnectingTo(target.label);
+      }
+    }
+    if ((view.connecting || view.busy) && active != null) {
+      return l10n.sessionConnectingTo(active.label);
+    }
+    return l10n.sessionDisconnected;
+  }
+}
+
+List<ServerProfileView> _orderedServers(
+  SessionView view,
+  Map<String, DateTime> lastConnected,
+) {
+  final order = <String, int>{
+    for (var index = 0; index < view.servers.length; index++)
+      view.servers[index].id: index,
+  };
+  final servers = [...view.servers];
+  servers.sort((a, b) {
+    final aConnected = view.connected && view.activeServerId == a.id;
+    final bConnected = view.connected && view.activeServerId == b.id;
+    if (aConnected != bConnected) {
+      return aConnected ? -1 : 1;
+    }
+    final aTime = lastConnected[a.id];
+    final bTime = lastConnected[b.id];
+    if (aTime != null || bTime != null) {
+      if (aTime == null) {
+        return 1;
+      }
+      if (bTime == null) {
+        return -1;
+      }
+      final byTime = bTime.compareTo(aTime);
+      if (byTime != 0) {
+        return byTime;
+      }
+    }
+    return (order[a.id] ?? 0).compareTo(order[b.id] ?? 0);
+  });
+  return servers;
+}
+
+ServerProfileView? _serverById(List<ServerProfileView> servers, String id) {
+  for (final server in servers) {
+    if (server.id == id) {
+      return server;
+    }
+  }
+  return null;
+}
+
+class _ServerSection extends StatelessWidget {
+  const _ServerSection({
+    required this.servers,
+    required this.lastConnected,
+    required this.connectedId,
+    required this.connectingId,
+    required this.enabled,
+    required this.notice,
+    required this.onDismissNotice,
+    required this.onAdd,
+    required this.onConnect,
+    required this.onRemove,
+  });
+
+  final List<ServerProfileView> servers;
+  final Map<String, DateTime> lastConnected;
+  final String? connectedId;
+  final String? connectingId;
+  final bool enabled;
+  final String? notice;
+  final VoidCallback onDismissNotice;
+  final VoidCallback onAdd;
+  final ValueChanged<ServerProfileView> onConnect;
+  final ValueChanged<ServerProfileView> onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final scheme = context.scheme;
+    final texts = context.texts;
+    // 640 以下按钮只留图标，把宽度让给标题与计数。
+    final showAddLabel = MediaQuery.sizeOf(context).width >= 640;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Flexible(
+                    child: Text(
+                      l10n.serversTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: texts.titleLarge,
+                    ),
+                  ),
+                  if (servers.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      '${servers.length}',
+                      style: texts.bodySmall?.copyWith(
+                        fontSize: 13,
+                        color: scheme.onSurfaceVariant,
+                        fontFeatures: tabularFigures,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (servers.isNotEmpty)
+              showAddLabel
+                  ? OutlinedButton(
+                      onPressed: onAdd,
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, Sizes.touch),
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        foregroundColor: scheme.onSurface,
+                        backgroundColor: scheme.surface,
+                        textStyle: texts.bodyMedium?.copyWith(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.add_rounded, size: 16),
+                          const SizedBox(width: 6),
+                          Text(l10n.serverAdd),
+                        ],
+                      ),
+                    )
+                  : IconButton.outlined(
+                      tooltip: l10n.serverAdd,
+                      onPressed: onAdd,
+                      iconSize: 18,
+                      style: IconButton.styleFrom(
+                        minimumSize: const Size(Sizes.touch, Sizes.touch),
+                        maximumSize: const Size(Sizes.touch, Sizes.touch),
+                        padding: EdgeInsets.zero,
+                      ),
+                      icon: const Icon(Icons.add_rounded),
+                    ),
+          ],
+        ),
+        if (notice != null) ...[
+          const SizedBox(height: 16),
+          NoticeBar(
+            message: notice!,
+            dismissTooltip: l10n.commonClose,
+            onDismiss: onDismissNotice,
+          ),
+        ],
+        const SizedBox(height: 16),
+        if (servers.isEmpty)
+          _EmptyServers(onAdd: onAdd)
+        else ...[
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: Radii.xxxlAll,
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x0A171D1B),
+                  blurRadius: 2,
+                  offset: Offset(0, 1),
+                ),
+              ],
+            ),
+            child: Material(
+              color: context.cardColor,
+              clipBehavior: Clip.antiAlias,
+              shape: RoundedRectangleBorder(
+                borderRadius: Radii.xxxlAll,
+                side: hairlineSide(context),
+              ),
+              child: Column(
+                children: [
+                  for (var index = 0; index < servers.length; index++) ...[
+                    if (index > 0)
+                      Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: context.hairline.withValues(alpha: 0.6),
+                      ),
+                    ServerRow(
+                      profile: servers[index],
+                      lastConnected: lastConnected[servers[index].id],
+                      connected: servers[index].id == connectedId,
+                      connecting: servers[index].id == connectingId,
+                      enabled: enabled && servers[index].id != connectingId,
+                      onTap: () => onConnect(servers[index]),
+                      onRemove: () => onRemove(servers[index]),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _AddServerRow(onTap: onAdd),
+        ],
+      ],
+    );
+  }
+}
+
+class _EmptyServers extends StatelessWidget {
+  const _EmptyServers({required this.onAdd});
+
+  final VoidCallback onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final scheme = context.scheme;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: context.cardColor.withValues(alpha: 0.5),
+        borderRadius: Radii.xxxlAll,
+      ),
+      child: DashedBorder(
+        color: context.hairline,
+        radius: Radii.xxxl,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: scheme.primaryContainer,
+                  borderRadius: Radii.xxlAll,
+                ),
+                child: Icon(
+                  Icons.dns_outlined,
+                  size: 22,
+                  color: scheme.onPrimaryContainer,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                l10n.serverEmptyTitle,
+                style: context.texts.bodyLarge?.copyWith(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                onPressed: onAdd,
+                icon: const Icon(Icons.add_rounded, size: 16),
+                label: Text(l10n.serverEmptyAction),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 20),
-        FilledButton(
-          onPressed: busy || connected ? null : onConnect,
-          child: busy
-              ? const SizedBox.square(
-                  dimension: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      connected ? l10n.sessionConnected : l10n.connectAction,
-                    ),
-                    if (!connected) ...[
-                      const SizedBox(width: 8),
-                      const Icon(Icons.login_rounded, size: 18),
-                    ],
-                  ],
+      ),
+    );
+  }
+}
+
+class _AddServerRow extends StatelessWidget {
+  const _AddServerRow({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final scheme = context.scheme;
+
+    return Material(
+      color: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: Radii.xxlAll),
+      clipBehavior: Clip.antiAlias,
+      child: DashedBorder(
+        color: context.hairline,
+        radius: Radii.xxl,
+        child: InkWell(
+          onTap: onTap,
+          hoverColor: scheme.surfaceContainer.withValues(alpha: 0.6),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainer,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.add_rounded,
+                    size: 18,
+                    color: scheme.primary,
+                  ),
                 ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    l10n.serverAdd,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.texts.bodyMedium?.copyWith(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  Icons.arrow_forward_rounded,
+                  size: 16,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ],
+            ),
+          ),
         ),
-      ],
+      ),
     );
   }
 }

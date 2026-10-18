@@ -37,6 +37,15 @@ class ChatMessage {
 
   /// 频道消息是频道 id，私聊是收件客户端 id，服务器广播为 0。
   final int targetId;
+
+  factory ChatMessage.fromCore(CoreMessage message) => ChatMessage(
+    from: message.from,
+    fromUid: message.fromUid,
+    text: message.message,
+    at: DateTime.fromMillisecondsSinceEpoch(message.at),
+    scope: ChatScope.fromProtocol(message.targetMode),
+    targetId: message.targetId,
+  );
 }
 
 const Object _unset = Object();
@@ -53,6 +62,17 @@ class SessionView {
     this.chatScope = ChatScope.channel,
     this.busy = false,
     this.notice,
+    this.muted = false,
+    this.deafened = false,
+    this.voiceInputReady = false,
+    this.voiceOutputReady = false,
+    this.voiceNotice,
+    this.speaking = const <int>{},
+    this.selfSpeaking = false,
+    this.pttMode = false,
+    this.pttActive = false,
+    this.lastChannelId,
+    this.identityUpgradeTarget,
   });
 
   final CoreSessionState state;
@@ -70,8 +90,43 @@ class SessionView {
   final bool busy;
   final String? notice;
 
+  /// 自己是否处于静音/聋听状态；由 Rust 的 Voice 事件确认。
+  final bool muted;
+  final bool deafened;
+  final bool voiceInputReady;
+  final bool voiceOutputReady;
+
+  /// 音频设备或编解码错误。与聊天提示条分开，避免互相覆盖。
+  final String? voiceNotice;
+
+  /// 当前正在说话的客户端 id。只在集合变化时由 Rust 推送。
+  final Set<int> speaking;
+
+  /// 本端 VAD/PTT 是否正在发送。
+  final bool selfSpeaking;
+
+  final bool pttMode;
+  final bool pttActive;
+
+  /// 本次连接最后待过的频道；断线后保留，用于“回到上次频道”。
+  final int? lastChannelId;
+
+  /// 非空表示正在提升身份等级，值为目标等级。
+  final int? identityUpgradeTarget;
+
   bool get connected => state is CoreSessionState_Connected;
   bool get connecting => state is CoreSessionState_Connecting;
+  bool get reconnecting => state is CoreSessionState_Reconnecting;
+
+  int? get reconnectAttempt => switch (state) {
+    CoreSessionState_Reconnecting(:final attempt) => attempt,
+    _ => null,
+  };
+
+  int? get reconnectDelayMs => switch (state) {
+    CoreSessionState_Reconnecting(:final delayMs) => delayMs,
+    _ => null,
+  };
 
   int? get selfClientId => switch (state) {
     CoreSessionState_Connected(:final clientId) => clientId,
@@ -153,11 +208,11 @@ class SessionView {
     return null;
   }
 
-  /// 当前范围下要显示的消息。
+  /// 当前范围下要显示的消息。默认看自己所在的频道。
   ///
   /// 私聊在任何范围都显示——漏掉一条私聊比多显示一行严重得多。
-  List<ChatMessage> visibleMessages() {
-    final channelId = selfChannelId;
+  List<ChatMessage> visibleMessages({int? channelId}) {
+    final scopeChannel = channelId ?? selfChannelId;
     return messages.where((message) {
       if (message.scope == ChatScope.direct) {
         return true;
@@ -166,7 +221,7 @@ class SessionView {
         return message.scope == ChatScope.server;
       }
       return message.scope == ChatScope.channel &&
-          message.targetId == channelId;
+          message.targetId == scopeChannel;
     }).toList();
   }
 
@@ -180,6 +235,17 @@ class SessionView {
     ChatScope? chatScope,
     bool? busy,
     Object? notice = _unset,
+    bool? muted,
+    bool? deafened,
+    bool? voiceInputReady,
+    bool? voiceOutputReady,
+    Object? voiceNotice = _unset,
+    Set<int>? speaking,
+    bool? selfSpeaking,
+    bool? pttMode,
+    bool? pttActive,
+    Object? lastChannelId = _unset,
+    Object? identityUpgradeTarget = _unset,
   }) => SessionView(
     state: state ?? this.state,
     servers: servers ?? this.servers,
@@ -192,12 +258,30 @@ class SessionView {
     chatScope: chatScope ?? this.chatScope,
     busy: busy ?? this.busy,
     notice: identical(notice, _unset) ? this.notice : notice as String?,
+    muted: muted ?? this.muted,
+    deafened: deafened ?? this.deafened,
+    voiceInputReady: voiceInputReady ?? this.voiceInputReady,
+    voiceOutputReady: voiceOutputReady ?? this.voiceOutputReady,
+    voiceNotice: identical(voiceNotice, _unset)
+        ? this.voiceNotice
+        : voiceNotice as String?,
+    speaking: speaking ?? this.speaking,
+    selfSpeaking: selfSpeaking ?? this.selfSpeaking,
+    pttMode: pttMode ?? this.pttMode,
+    pttActive: pttActive ?? this.pttActive,
+    lastChannelId: identical(lastChannelId, _unset)
+        ? this.lastChannelId
+        : lastChannelId as int?,
+    identityUpgradeTarget: identical(identityUpgradeTarget, _unset)
+        ? this.identityUpgradeTarget
+        : identityUpgradeTarget as int?,
   );
 }
 
 /// 把 FFI 错误翻成可以直接显示给用户的中文文案。
 String describeCoreError(CoreError error) => switch (error) {
-  CoreError_PolicyDenied(:final message) => '合规策略拒绝：$message',
+  CoreError_InvalidAddress(:final message) => '服务器地址不可用：$message',
+  CoreError_BlockedAddress(:final message) => '已阻止该地址：$message',
   CoreError_Connection(:final message) => '连接失败：$message',
   CoreError_Internal(:final message) => '内部错误：$message',
 };

@@ -16,7 +16,28 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appName => 'FlSpeak';
 
   @override
-  String get appTagline => '自托管 TeamSpeak 客户端';
+  String get commonClose => '关闭';
+
+  @override
+  String get commonCancel => '取消';
+
+  @override
+  String get commonDone => '完成';
+
+  @override
+  String get commonMore => '更多';
+
+  @override
+  String get commonCopy => '复制';
+
+  @override
+  String get commonCopied => '已复制';
+
+  @override
+  String get commonSave => '保存';
+
+  @override
+  String get commonRemove => '移除';
 
   @override
   String get connectTitle => '连接服务器';
@@ -28,75 +49,148 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connectAddressHint => 'ts.example.com 或 ts.example.com:9987';
 
   @override
-  String get connectAddressHelp => '完整域名或 IP，端口默认 9987。';
-
-  @override
-  String get connectAction => '连接';
-
-  @override
-  String get connectKnownServers => '已登记的服务器';
-
-  @override
-  String get connectNoServers => '还没有服务器。在上面填入地址，登记第一台。';
-
-  @override
-  String get connectNewServerTitle => '登记新服务器';
-
-  @override
-  String get connectBack => '返回服务器列表';
-
-  @override
   String get connectNicknameLabel => '昵称';
-
-  @override
-  String get connectNicknameHelp => '其他人看到的名字，不需要注册账号。';
 
   @override
   String get serverLabelField => '备注名（可选）';
 
   @override
+  String get serverLabelHint => '例如：旅行摄影社';
+
+  @override
   String get serverAdd => '添加服务器';
 
   @override
-  String get serverRemove => '删除';
+  String get serverRemove => '移除';
 
   @override
-  String get serverDisconnect => '断开';
+  String get serverRemoveFromList => '从列表移除';
+
+  @override
+  String get serverRemoveTitle => '移除服务器？';
+
+  @override
+  String serverRemoveBody(String label) {
+    return '“$label”会从列表移除；本机聊天记录仍会保留。';
+  }
+
+  @override
+  String get serverAddAndConnect => '添加并连接';
+
+  @override
+  String get serverAddAndConnecting => '正在添加…';
+
+  @override
+  String get serverAddressRequired => '请输入服务器地址。';
 
   @override
   String get serverInvalidAddress => '服务器地址非法。';
 
   @override
-  String get railServers => '服务器';
+  String get serverDisconnect => '断开';
 
   @override
-  String get railCollapse => '收起服务器栏';
+  String get serverEmptyTitle => '还没有服务器';
 
   @override
-  String get channelsTitle => '频道';
+  String get serverEmptyAction => '添加第一台服务器';
 
   @override
-  String get chatTitle => '聊天';
+  String get serversTitle => '服务器';
+
+  @override
+  String serversUsedBy(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '用于 $count 台服务器',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get sessionConnected => '已连接';
+
+  @override
+  String get sessionConnecting => '正在连接…';
+
+  @override
+  String get sessionDisconnected => '未连接';
+
+  @override
+  String sessionConnectedTo(String name) {
+    return '已连接到 $name';
+  }
+
+  @override
+  String sessionConnectingTo(String name) {
+    return '正在连接 $name…';
+  }
+
+  @override
+  String get sessionLastConnectedNever => '还没连接过';
+
+  @override
+  String get sessionLastConnectedJustNow => '刚刚';
+
+  @override
+  String sessionLastConnectedMinutes(int count) {
+    return '$count 分钟前';
+  }
+
+  @override
+  String sessionLastConnectedHours(int count) {
+    return '$count 小时前';
+  }
+
+  @override
+  String get sessionLastConnectedYesterday => '昨天';
+
+  @override
+  String sessionLastConnectedDays(int count) {
+    return '$count 天前';
+  }
+
+  @override
+  String get workspaceReturn => '返回工作区';
+
+  @override
+  String get identityCurrent => '当前身份';
+
+  @override
+  String get identityManage => '管理身份';
+
+  @override
+  String get identityTitle => '身份';
+
+  @override
+  String get identityRename => '修改昵称';
+
+  @override
+  String get identitySave => '保存';
+
+  @override
+  String get identityNicknameEmpty => '昵称不能为空。';
+
+  @override
+  String get identityCancel => '取消';
+
+  @override
+  String identityUpgrading(int target) {
+    return '正在把身份等级提升到 $target…';
+  }
 
   @override
   String get channelsEmpty => '尚未连接。';
 
   @override
-  String get channelExpand => '展开';
+  String get channelsSection => '频道';
 
   @override
-  String get channelCollapse => '收起';
+  String get workspaceNoChannels => '服务器还没有频道。';
 
   @override
-  String get channelJoin => '加入';
-
-  @override
-  String get channelCurrent => '当前所在';
-
-  @override
-  String workspaceOnlineCount(int count) {
-    return '$count 人在线';
-  }
+  String get workspaceOpenMenu => '打开频道菜单';
 
   @override
   String get workspaceNotConnectedTitle => '未连接服务器';
@@ -105,10 +199,114 @@ class AppLocalizationsZh extends AppLocalizations {
   String get workspaceNotConnectedBody => '从左侧服务器栏选择一台已登记的服务器，或添加新地址。';
 
   @override
-  String get workspaceReturn => '返回工作区';
+  String get workspaceRefresh => '刷新';
 
   @override
-  String get workspaceRefresh => '刷新';
+  String get channelExpand => '展开';
+
+  @override
+  String get channelCollapse => '收起';
+
+  @override
+  String get channelCurrent => '当前所在';
+
+  @override
+  String get voiceTab => '语音';
+
+  @override
+  String get voiceJoin => '加入语音';
+
+  @override
+  String get voiceLeave => '离开';
+
+  @override
+  String get voiceDisconnect => '断开语音';
+
+  @override
+  String voiceMembersCount(int count) {
+    return '$count 人正在语音中';
+  }
+
+  @override
+  String get voiceEmpty => '现在还没有人，来当第一个吧';
+
+  @override
+  String get voiceConnected => '语音已连接';
+
+  @override
+  String get voiceMute => '静音';
+
+  @override
+  String get voiceUnmute => '取消静音';
+
+  @override
+  String get voiceDeafen => '关闭声音';
+
+  @override
+  String get voiceUndeafen => '取消闭麦';
+
+  @override
+  String get voiceSelfOnline => '在线';
+
+  @override
+  String get memberMuted => '已静音';
+
+  @override
+  String get voiceMicUnavailable => '麦克风不可用';
+
+  @override
+  String get voiceSpeakerUnavailable => '扬声器不可用';
+
+  @override
+  String voiceReconnectingAttempt(int attempt) {
+    return '正在重连（第 $attempt 次）…';
+  }
+
+  @override
+  String get voiceModeVad => '语音激活';
+
+  @override
+  String get voiceModePtt => '按住说话';
+
+  @override
+  String get voicePushToTalk => '按住说话';
+
+  @override
+  String get voicePushToTalkHint => '松开停止发送';
+
+  @override
+  String get voiceSelfSpeaking => '正在发送';
+
+  @override
+  String get voiceRejoinLast => '回到上次频道';
+
+  @override
+  String get chatTitle => '聊天';
+
+  @override
+  String get chatTabMessages => '消息';
+
+  @override
+  String get chatTabMedia => '媒体';
+
+  @override
+  String chatWelcomeTitle(String channel) {
+    return '欢迎来到 $channel';
+  }
+
+  @override
+  String get chatWelcomeBody => '这是频道的起点，分享文字、图片和视频吧。';
+
+  @override
+  String chatComposerHintTo(String target) {
+    return '发送到 $target';
+  }
+
+  @override
+  String get chatSend => '发送';
+
+  @override
+  String get chatScopeTitle => '发送范围';
 
   @override
   String get chatScopeChannel => '本频道';
@@ -117,69 +315,124 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatScopeServer => '整个服务器';
 
   @override
-  String get chatComposerHint => '输入消息';
-
-  @override
-  String get chatSend => '发送';
-
-  @override
   String get chatEmptyChannel => '本频道还没有消息。';
 
   @override
   String get chatEmptyServer => '服务器上还没有广播消息。';
 
   @override
-  String get chatDirectTag => '私聊';
-
-  @override
   String get chatNoChannel => '先进入一个频道再发送频道消息。';
 
   @override
-  String get sessionConnected => '已连接';
+  String get chatAddMedia => '添加图片或视频';
 
   @override
-  String get voiceRustNote =>
-      '采集、播放与 Opus 编解码都在 Rust 侧（core/audio）。音频帧不经过 FFI；把它们接进会话 actor 是下一个里程碑。';
+  String chatRemoveAttachment(String name) {
+    return '移除 $name';
+  }
+
+  @override
+  String get chatUnsupportedImage => '不支持的图片格式';
+
+  @override
+  String get chatImageLoading => '正在加载图片…';
+
+  @override
+  String get chatImageLoadFailed => '图片加载失败';
+
+  @override
+  String get chatTs6Attachment => 'TS6 官方附件';
+
+  @override
+  String get chatTs6AttachmentPolicy => '当前策略不连接 myTeamSpeak 媒体服务，仅显示文件信息。';
+
+  @override
+  String get chatDirectTag => '私聊';
+
+  @override
+  String get chatWelcomeServerTitle => '整个服务器';
+
+  @override
+  String get chatWelcomeServerBody => '这里显示服务器广播消息，所有人都能看到。';
+
+  @override
+  String get mediaEmpty => '这个频道还没有图片或视频';
+
+  @override
+  String get mediaViewerTitle => '媒体浏览';
+
+  @override
+  String get mediaDownload => '下载';
+
+  @override
+  String get mediaPrevious => '上一个';
+
+  @override
+  String get mediaNext => '下一个';
 
   @override
   String get settingsTitle => '设置';
 
   @override
-  String get settingsVersion => '版本';
+  String get settingsGeneral => '通用';
 
   @override
-  String get settingsLocale => '语言';
+  String get settingsVoice => '语音';
 
   @override
-  String get settingsLocaleSystem => '跟随系统';
+  String get settingsData => '数据';
 
   @override
-  String get settingsStorePath => '核心状态文件';
+  String get settingsAbout => '关于';
 
   @override
-  String get settingsValidateTitle => '校验地址';
+  String get settingsLanguage => '语言';
 
   @override
-  String get settingsValidateHint => 'host 或 host:port';
+  String get settingsLanguageSystem => '跟随系统';
 
   @override
-  String get settingsValidate => '校验';
+  String get settingsTheme => '外观';
 
   @override
-  String get settingsValidateOk => '允许，归一化为';
+  String get settingsThemeDesc => '跟随系统、浅色或深色';
 
   @override
-  String get settingsAudioTitle => '语音';
+  String get settingsThemeSystem => '跟随系统';
 
   @override
-  String get complianceTitle => '合规';
+  String get settingsThemeLight => '浅色';
 
   @override
-  String get compliancePolicy => '本客户端只连接你手动录入的服务器，且不会访问任何 TeamSpeak 官方服务。';
+  String get settingsThemeDark => '深色';
 
   @override
-  String get commonClose => '关闭';
+  String get settingsPttMode => '按住说话';
 
   @override
-  String get commonMore => '更多';
+  String get settingsPttModeDesc => '关闭时使用语音激活';
+
+  @override
+  String get settingsInputDevice => '麦克风';
+
+  @override
+  String get settingsOutputDevice => '扬声器';
+
+  @override
+  String get settingsDeviceDefault => '系统默认';
+
+  @override
+  String get settingsAudioUnavailable => '音频设备不可用';
+
+  @override
+  String get settingsAudioLoading => '正在读取音频设备…';
+
+  @override
+  String get settingsStorePath => '存储目录';
+
+  @override
+  String get settingsStorePathDesc => '服务器档案与偏好文件的位置';
+
+  @override
+  String get settingsAboutTagline => '自托管 TeamSpeak 客户端';
 }

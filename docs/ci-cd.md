@@ -4,11 +4,9 @@
 
 | 作业 | 内容 |
 | --- | --- |
-| `commit-msg` | 跑提交信息闸门的自测；PR 时检查区间内每条提交 |
 | `rust` | `cargo fmt --check`、`clippy -D warnings`、`cargo test`（`--all-features`，含音频） |
-| `policy` | `tool/audit_policy.sh` + `cargo test -p policy -p proto` |
-| `dart` | `dart format --set-exit-if-changed`、`flutter analyze`、`flutter test` |
-| `plugins` | 重跑 `flutter_rust_bridge_codegen generate` 并用 `git diff` 校验生成物一致；再分析插件（插件没有 Dart 测试，Rust 侧测试在 `rust` 作业里） |
+| `dart` | `dart format --output=none --set-exit-if-changed lib setup.dart`、`flutter analyze` |
+| `plugins` | 重跑 `flutter_rust_bridge_codegen generate` 并用 `git diff` 校验生成物一致；再分析插件 |
 | `desktop` | linux / windows / macos 各跑一次 `flutter build <platform> --debug`，验证 native assets 钩子能编出 Rust |
 | `android` | 装 NDK 后 `flutter build apk --debug` |
 
@@ -28,7 +26,7 @@
 打 `v*` tag（或手动给版本号）后：
 
 1. `meta` 从 tag 推导版本号；
-2. `build` 在 7 个条目上跑 `tool/set_version.sh <version>` + `dart setup.dart <platform> <arch>`，
+2. `build` 在 7 个条目上跑 `dart setup.dart <platform> <arch> --version <version>`，
    产物上传为 artifact：
 
    | 平台 | runner | 架构 |
@@ -43,8 +41,8 @@
 
 3. `publish` 汇总产物，生成 `SHA256SUMS.txt`，用 draft release 发布。
 
-版本号只有一处来源：`tool/set_version.sh` 同时改写 `pubspec.yaml` 与 workspace
-`Cargo.toml`（后者初始固定 `0.0.0`，与 tsclient-rs 的发版习惯一致）。
+版本号只在 `meta` 作业里从 tag 推导，并通过 `--version` 传给 `setup.dart`；
+产物名和 Flutter build name 使用这个值。
 
 ## `setup.dart` 做了与没做什么
 
@@ -72,9 +70,5 @@ CMAKE_POLICY_VERSION_MINIMUM=3.5 cargo test --workspace --all-features
 
 # Dart
 cd ../../..
-flutter pub get && flutter analyze --no-fatal-infos && flutter test
-
-# 闸门
-bash tool/audit_policy.sh
-bash tool/check_commit_msg_test.sh
+flutter pub get && flutter analyze --no-fatal-infos
 ```

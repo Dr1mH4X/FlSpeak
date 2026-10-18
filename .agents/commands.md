@@ -24,11 +24,15 @@ brew install pkgconf                       # 让 pkg-config 找到 /opt/homebrew
 CMAKE_POLICY_VERSION_MINIMUM=3.5 cargo test --workspace --all-features   # 或放宽 CMake 策略
 ```
 
-只跑核心 crate（不碰音频依赖）：
+只跑档案/协议测试（不碰音频依赖）：
 
 ```sh
-cargo test -p policy -p proto -p session
+cargo test -p server -p proto
 ```
+
+`session` 现在依赖 `audio` 的 `audio` feature（Opus/cpal），跑它需要 Opus 工具链。
+仓库根 `.cargo/config.toml` 已设置 `CMAKE_POLICY_VERSION_MINIMUM=3.5`；macOS 上若
+`audiopus_sys` 找不到 `pkg-config` 会走内置源码构建，装了 `pkgconf` 可以省掉这一步。
 
 ## FFI 绑定
 
@@ -39,7 +43,8 @@ cd plugins/flspeak_ffi
 flutter_rust_bridge_codegen generate      # 需要 flutter_rust_bridge_codegen 2.13.0
 ```
 
-生成物：`rust/src/frb_generated.rs`、`lib/src/rust/**`。CI 会重跑并 `git diff` 校验一致性。
+生成物：`plugins/flspeak_ffi/rust/src/frb_generated.rs`、
+`plugins/flspeak_ffi/lib/src/rust/**`。CI 会重跑并 `git diff` 校验一致性。
 配置在 `flutter_rust_bridge.yaml`（`type_64bit_int: true`：频道/客户端 ID 用 Dart `int`）。
 
 ## Flutter
@@ -47,38 +52,60 @@ flutter_rust_bridge_codegen generate      # 需要 flutter_rust_bridge_codegen 2
 ```sh
 flutter pub get
 flutter gen-l10n                          # 改了 arb/ 之后（pub get 也会触发）
-dart format lib test tool setup.dart
+dart format lib setup.dart
 flutter analyze --no-fatal-infos
-flutter test
 ```
 
 `plugins/flspeak_ffi` 单独分析：
 
 ```sh
-cd plugins/flspeak_ffi && flutter analyze && flutter test
+cd plugins/flspeak_ffi && flutter analyze
 ```
 
-`flutter test` / `flutter build` 会通过 native assets 钩子自动编译 Rust（首次会下载
+`flutter build` 会通过 native assets 钩子自动编译 Rust（首次会下载
 `rust-toolchain.toml` 里列的 10 个 target）。想跳过：`--dart-define` 无效，用
 `hooks.user_defines.flspeak_ffi.build_assets=false` 改 `pubspec.yaml`。
 
-## 闸门
+## 真实服务器连接测试（手动，不走 CI）
+
+`core/session/tests/live_connect.rs` 默认 `#[ignore]`，只在显式指定时运行；它关闭音频，
+不会申请麦克风/扬声器权限：
 
 ```sh
-bash tool/audit_policy.sh                 # 官方域名只出现在策略层
-bash tool/check_commit_msg_test.sh        # 提交信息闸门自测
-bash tool/check_commit_msg.sh .git/COMMIT_EDITMSG   # 单条提交信息
+cd plugins/flspeak_ffi/rust
+FLSPEAK_TEST_SERVER=ts.example.com \
+FLSPEAK_TEST_NICKNAME=flspeak-probe \
+cargo test -p session --test live_connect -- --ignored --nocapture
 ```
+
+注意：tsclient-rs 走 UDP 9987。`proto::resolve_target` 会先查标准 DNS 的
+`_ts3._udp.<domain>` SRV；最终目标由 `proto::client` 检查一次，DNS 查询失败时回退到档案字面地址。
+TSDNS 尚未实现。服务器对访客关闭 `channellist` 时，测试只验证连接与状态，列表调用
+会打印权限拒绝而不判失败。
+
+### 最小消息探针（后台等消息）
+
+`core/session/examples/live_probe.rs` 会保持在线，把收到的文本消息**原文**写到 stdout 和
+`/tmp/flspeak-probe.log`，用于抓 TS6 图片消息的 BBCode/URL 格式：
+
+```sh
+cd plugins/flspeak_ffi/rust
+FLSPEAK_TEST_SERVER=example.com \
+FLSPEAK_TEST_NICKNAME=flspeak-probe \
+FLSPEAK_PROBE_SECONDS=1800 \
+cargo run -p session --example live_probe
+```
+
+访客身份可能没有服务器广播权限（`insufficient client permissions`）；连接、收消息不受影响。
+停止用 Ctrl-C，或把 `FLSPEAK_PROBE_SECONDS` 设小。
 
 ## 发版
 
 ```sh
-bash tool/set_version.sh 0.2.0 1          # 写 pubspec.yaml 与 workspace Cargo.toml
-dart setup.dart macos arm64                # 内置 flutter build + 归拢产物到 dist/
+dart setup.dart macos arm64 --version 0.2.0   # 内置 flutter build + 归拢产物到 dist/
 ```
 
-CI 上打 `v*` tag 会自动跑 `tool/set_version.sh` 再按 7 个平台矩阵打包，见
-`docs/ci-cd.md`。
+CI 上打 `v*` tag 会从 tag 推导版本号，再按 7 个平台矩阵打包，见 `docs/ci-cd.md`。
 
 ## 本地改上游 tsclient-rs
 

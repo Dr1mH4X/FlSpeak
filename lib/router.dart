@@ -7,11 +7,13 @@ import 'features/workspace/workspace_page.dart';
 import 'features/workspace/workspace_shell.dart';
 
 abstract final class AppRoutes {
-  /// 打开应用落在这里：录入地址、挑服务器、填昵称。
+  /// 打开应用落在这里：身份 + 服务器列表。
   static const connect = '/connect';
 
   /// 进入之后的工作区，左侧固定是服务器栏。
   static const workspace = '/workspace';
+
+  /// 整页设置。用 push 打开，返回时回到来路。
   static const settings = '/settings';
 }
 
@@ -24,19 +26,16 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) =>
             ConnectPage(serverId: state.uri.queryParameters['server']),
       ),
-      ShellRoute(
-        builder: (context, state, child) =>
-            WorkspaceShell(location: state.uri.path, child: child),
-        routes: [
-          GoRoute(
-            path: AppRoutes.workspace,
-            builder: (context, state) => const WorkspacePage(),
-          ),
-          GoRoute(
-            path: AppRoutes.settings,
-            builder: (context, state) => const SettingsPage(),
-          ),
-        ],
+      GoRoute(
+        path: AppRoutes.workspace,
+        builder: (context, state) => const WorkspaceShell(
+          location: AppRoutes.workspace,
+          child: WorkspacePage(),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.settings,
+        builder: (context, state) => const SettingsPage(),
       ),
     ],
   );

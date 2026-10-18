@@ -87,11 +87,6 @@ jobs:
           workspaces: plugins/flspeak_ffi/rust
           cache-directories: .dart_tool/hooks_runner
 
-      # 版本号统一由 tag 决定：先改写清单，再让构建过程把它带进产物。
-      - name: Set version
-        shell: bash
-        run: bash tool/set_version.sh "${{ needs.meta.outputs.version }}"
-
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -131,7 +126,7 @@ jobs:
       - name: Package
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
-        run: dart setup.dart ${{ matrix.platform }} ${{ matrix.arch || 'all' }}
+        run: dart setup.dart ${{ matrix.platform }} ${{ matrix.arch || 'all' }} --version "${{ needs.meta.outputs.version }}"
 
       - name: Upload
         uses: actions/upload-artifact@v4

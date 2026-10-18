@@ -1,7 +1,7 @@
 # 决策记录：音频帧不过 FFI
 
 日期：2026-10-08
-状态：已实施（音频 crate 已完成，尚未接进 actor）
+状态：已实施（2026-10-18 已接进 actor，见 2026-10-18-full-duplex-audio.md）
 
 ## 背景
 
@@ -21,7 +21,7 @@ TeamSpeak 语音是 48kHz 立体声、20ms 一帧。一个 8 人频道意味着�
 
 - 界面拿不到波形/电平之类的实时数据。真要做可视化，走“低频（≤10Hz）聚合指标”这一条新
   的轻量事件，而不是搬音频帧。
-- `audio` 默认不进产物（`plugins/flspeak_ffi` 依赖它时不带 `audio` feature），
-  这样日常构建不需要 Opus 工具链；接进 actor 时再打开，见 `docs/audio.md`。
+- `audio` 默认不进产物；2026-10-18 接进 actor 时 `plugins/flspeak_ffi` 已打开
+  `audio` feature，应用构建因此需要 Opus 工具链，见 `docs/audio.md`。
 - 现在无法做重排序与抖动缓冲：tsclient-rs 的 `VoiceData` 丢掉了包号。候选上游改动见
-  `docs/compliance.md` 末尾。
+  `.agents/notes/implemented/2026-10-18-full-duplex-audio.md`。

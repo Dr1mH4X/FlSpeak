@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_rust_bridge_hooks/flutter_rust_bridge_hooks.dart';
 
-/// Flutter 在每次平台构建与 `flutter test` 时运行本钩子：用 Cargo 编译 `rust/`，
+/// Flutter 在每次平台构建时运行本钩子：用 Cargo 编译 `rust/`，
 /// 把产物注册成 code asset，交给 Flutter 打包与签名。
 void main(List<String> args) async {
   await build(args, (input, output) async {

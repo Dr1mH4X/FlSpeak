@@ -2,64 +2,225 @@
   "@@locale": "en",
   "appTitle": "Self-hosted TeamSpeak",
   "appName": "FlSpeak",
-  "appTagline": "Self-hosted TeamSpeak client",
+  "commonClose": "Close",
+  "commonCancel": "Cancel",
+  "commonDone": "Done",
+  "commonMore": "More",
+  "commonCopy": "Copy",
+  "commonCopied": "Copied",
+  "commonSave": "Save",
+  "commonRemove": "Remove",
   "connectTitle": "Connect to a server",
   "connectAddressLabel": "Server address",
   "connectAddressHint": "ts.example.com or ts.example.com:9987",
-  "connectAddressHelp": "A full host name or IP. Port defaults to 9987.",
-  "connectAction": "Connect",
-  "connectKnownServers": "Registered servers",
-  "connectNoServers": "No server yet. Type an address above to register the first one.",
-  "connectNewServerTitle": "Register a new server",
-  "connectBack": "Back to all servers",
   "connectNicknameLabel": "Nickname",
-  "connectNicknameHelp": "The name others see. No account needed.",
   "serverLabelField": "Label (optional)",
+  "serverLabelHint": "For example: Photo club",
   "serverAdd": "Add server",
   "serverRemove": "Remove",
-  "serverDisconnect": "Disconnect",
-  "serverInvalidAddress": "Invalid server address.",
-  "railServers": "Servers",
-  "railCollapse": "Collapse server bar",
-  "channelsTitle": "Channels",
-  "chatTitle": "Chat",
-  "channelsEmpty": "Not connected.",
-  "channelExpand": "Expand",
-  "channelCollapse": "Collapse",
-  "channelJoin": "Join",
-  "channelCurrent": "You are here",
-  "workspaceOnlineCount": "{count} online",
-  "@workspaceOnlineCount": {
+  "serverRemoveFromList": "Remove from list",
+  "serverRemoveTitle": "Remove server?",
+  "serverRemoveBody": "“{label}” will be removed from the list; local chat history stays.",
+  "@serverRemoveBody": {
     "placeholders": {
-      "count": {"type": "int"}
+      "label": {
+        "type": "String"
+      }
     }
   },
+  "serverAddAndConnect": "Add & connect",
+  "serverAddAndConnecting": "Adding…",
+  "serverAddressRequired": "Enter a server address.",
+  "serverInvalidAddress": "Invalid server address.",
+  "serverDisconnect": "Disconnect",
+  "serverEmptyTitle": "No servers yet",
+  "serverEmptyAction": "Add your first server",
+  "serversTitle": "Servers",
+  "serversUsedBy": "{count, plural, =1{Used by 1 server} other{Used by {count} servers}}",
+  "@serversUsedBy": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sessionConnected": "Connected",
+  "sessionConnecting": "Connecting…",
+  "sessionDisconnected": "Offline",
+  "sessionConnectedTo": "Connected to {name}",
+  "@sessionConnectedTo": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "sessionConnectingTo": "Connecting to {name}…",
+  "@sessionConnectingTo": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "sessionLastConnectedNever": "Never connected",
+  "sessionLastConnectedJustNow": "Just now",
+  "sessionLastConnectedMinutes": "{count} min ago",
+  "@sessionLastConnectedMinutes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sessionLastConnectedHours": "{count} h ago",
+  "@sessionLastConnectedHours": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sessionLastConnectedYesterday": "Yesterday",
+  "sessionLastConnectedDays": "{count} days ago",
+  "@sessionLastConnectedDays": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "workspaceReturn": "Back to workspace",
+  "identityCurrent": "Current identity",
+  "identityManage": "Manage identity",
+  "identityTitle": "Identity",
+  "identityRename": "Rename",
+  "identitySave": "Save",
+  "identityNicknameEmpty": "Nickname cannot be empty.",
+  "identityCancel": "Cancel",
+  "identityUpgrading": "Upgrading identity level to {target}…",
+  "@identityUpgrading": {
+    "placeholders": {
+      "target": {
+        "type": "int"
+      }
+    }
+  },
+  "channelsEmpty": "Not connected.",
+  "channelsSection": "Channels",
+  "workspaceNoChannels": "This server has no channels yet.",
+  "workspaceOpenMenu": "Open channel menu",
   "workspaceNotConnectedTitle": "Not connected",
   "workspaceNotConnectedBody": "Pick a registered server from the bar on the left, or add a new address.",
-  "workspaceReturn": "Back to workspace",
   "workspaceRefresh": "Refresh",
+  "channelExpand": "Expand",
+  "channelCollapse": "Collapse",
+  "channelCurrent": "You are here",
+  "voiceTab": "Voice",
+  "voiceJoin": "Join voice",
+  "voiceLeave": "Leave",
+  "voiceDisconnect": "Leave voice",
+  "voiceMembersCount": "{count, plural, =1{1 person in voice} other{{count} people in voice}}",
+  "@voiceMembersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "voiceEmpty": "Nobody is here yet. Be the first.",
+  "voiceConnected": "Voice connected",
+  "voiceMute": "Mute",
+  "voiceUnmute": "Unmute",
+  "voiceDeafen": "Deafen",
+  "voiceUndeafen": "Undeafen",
+  "voiceSelfOnline": "Online",
+  "memberMuted": "Muted",
+  "voiceMicUnavailable": "Microphone unavailable",
+  "voiceSpeakerUnavailable": "Speaker unavailable",
+  "voiceReconnectingAttempt": "Reconnecting (attempt {attempt})…",
+  "@voiceReconnectingAttempt": {
+    "placeholders": {
+      "attempt": {
+        "type": "int"
+      }
+    }
+  },
+  "voiceModeVad": "Voice activation",
+  "voiceModePtt": "Push to talk",
+  "voicePushToTalk": "Push to talk",
+  "voicePushToTalkHint": "Release to stop sending",
+  "voiceSelfSpeaking": "Sending",
+  "voiceRejoinLast": "Rejoin last channel",
+  "chatTitle": "Chat",
+  "chatTabMessages": "Messages",
+  "chatTabMedia": "Media",
+  "chatWelcomeTitle": "Welcome to {channel}",
+  "@chatWelcomeTitle": {
+    "placeholders": {
+      "channel": {
+        "type": "String"
+      }
+    }
+  },
+  "chatWelcomeBody": "This is the start of the channel. Share text, images and videos.",
+  "chatComposerHintTo": "Message {target}",
+  "@chatComposerHintTo": {
+    "placeholders": {
+      "target": {
+        "type": "String"
+      }
+    }
+  },
+  "chatSend": "Send",
+  "chatScopeTitle": "Send to",
   "chatScopeChannel": "This channel",
   "chatScopeServer": "Whole server",
-  "chatComposerHint": "Message",
-  "chatSend": "Send",
   "chatEmptyChannel": "No messages in this channel yet.",
   "chatEmptyServer": "No server-wide messages yet.",
-  "chatDirectTag": "Direct",
   "chatNoChannel": "Join a channel before sending channel messages.",
-  "sessionConnected": "Connected",
-  "voiceRustNote": "Capture, playback and the Opus codec live in Rust (core/audio). Audio frames never cross the FFI boundary; routing them through the session actor is the next milestone.",
+  "chatAddMedia": "Add image or video",
+  "chatRemoveAttachment": "Remove {name}",
+  "@chatRemoveAttachment": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "chatUnsupportedImage": "Unsupported image format",
+  "chatImageLoading": "Loading image…",
+  "chatImageLoadFailed": "Image failed to load",
+  "chatTs6Attachment": "TS6 official attachment",
+  "chatTs6AttachmentPolicy": "myTeamSpeak media is not used; showing file metadata only.",
+  "chatDirectTag": "Direct",
+  "chatWelcomeServerTitle": "Whole server",
+  "chatWelcomeServerBody": "Server-wide messages appear here, visible to everyone.",
+  "mediaEmpty": "No images or videos in this channel yet",
+  "mediaViewerTitle": "Media viewer",
+  "mediaDownload": "Download",
+  "mediaPrevious": "Previous",
+  "mediaNext": "Next",
   "settingsTitle": "Settings",
-  "settingsVersion": "Version",
-  "settingsLocale": "Language",
-  "settingsLocaleSystem": "System",
-  "settingsStorePath": "Core state file",
-  "settingsValidateTitle": "Check an address",
-  "settingsValidateHint": "host or host:port",
-  "settingsValidate": "Check",
-  "settingsValidateOk": "Allowed, normalized to",
-  "settingsAudioTitle": "Voice",
-  "complianceTitle": "Compliance",
-  "compliancePolicy": "This client only connects to servers you entered yourself and never contacts official TeamSpeak services.",
-  "commonClose": "Close",
-  "commonMore": "More"
+  "settingsGeneral": "General",
+  "settingsVoice": "Voice",
+  "settingsData": "Data",
+  "settingsAbout": "About",
+  "settingsLanguage": "Language",
+  "settingsLanguageSystem": "System",
+  "settingsTheme": "Appearance",
+  "settingsThemeDesc": "System, light or dark",
+  "settingsThemeSystem": "System",
+  "settingsThemeLight": "Light",
+  "settingsThemeDark": "Dark",
+  "settingsPttMode": "Push to talk",
+  "settingsPttModeDesc": "When off, voice activation is used",
+  "settingsInputDevice": "Microphone",
+  "settingsOutputDevice": "Speaker",
+  "settingsDeviceDefault": "System default",
+  "settingsAudioUnavailable": "Audio devices unavailable",
+  "settingsAudioLoading": "Reading audio devices…",
+  "settingsStorePath": "Storage directory",
+  "settingsStorePathDesc": "Where profiles and preferences live",
+  "settingsAboutTagline": "Self-hosted TeamSpeak client"
 }

@@ -1,6 +1,6 @@
 [package]
 name = "proto"
-description = "tsclient-rs 的窄封装：策略通过后建连，并剥夺协议层自行解析地址的能力"
+description = "tsclient-rs 的窄封装：SRV 解析、最终连接边界与建连"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,7 +9,8 @@ repository.workspace = true
 [dependencies]
 async-trait.workspace = true
 thiserror.workspace = true
-policy.workspace = true
+hickory-resolver = "0.24.4"
+server.workspace = true
 tsclient-rs.workspace = true
 
 [dev-dependencies]

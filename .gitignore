@@ -9,8 +9,9 @@ dist/
 .flutter-plugins
 .flutter-plugins-dependencies
 
-# 注意：flutter_rust_bridge 的生成物（rust/src/frb_generated.rs、
-# lib/src/rust/**、api/*.freezed.dart）必须提交，CI 靠 `git diff` 校验它们是最新的。
+# 注意：flutter_rust_bridge 的生成物（plugins/flspeak_ffi/rust/src/frb_generated.rs、
+# plugins/flspeak_ffi/lib/src/rust/**、plugins/flspeak_ffi/rust/src/api/*.freezed.dart）
+# 必须提交，CI 靠 `git diff` 校验它们是最新的。
 
 # 签名材料
 # Remember to never publicly share your keystore.
@@ -58,3 +59,5 @@ x64/
 x86/
 *.[Cc]ache
 !*.[Cc]ache/
+
+refer/

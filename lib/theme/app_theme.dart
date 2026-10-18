@@ -7,8 +7,8 @@ import 'package:flutter/material.dart';
 /// 一个语音客户端最贵的像素是「谁在线、谁在说话」，所以调色板只把饱和槽位留给
 /// 连接态与拒绝态，其余全部走中性面阶。
 ///
-/// 两者的对比度由 `test/theme_contrast_test.dart` 守住：连接态会当正文用，
-/// 必须满足 4.5:1；拒绝态只出现在提示与校验结果里，同样按正文要求。
+/// 两者都按正文对比度要求保持至少 4.5:1：连接态会当正文用，拒绝态只出现在
+/// 提示与校验结果里。
 @immutable
 class StatusColors extends ThemeExtension<StatusColors> {
   const StatusColors({required this.live, required this.deny});
@@ -41,31 +41,107 @@ extension StatusColorsOf on BuildContext {
       const StatusColors(live: Color(0xFF3FBF87), deny: Color(0xFFE0574F));
 }
 
-/// 圆角只有三档，层级越高的容器用越大的档。
+extension AppSchemeOf on BuildContext {
+  ColorScheme get scheme => Theme.of(this).colorScheme;
+  TextTheme get texts => Theme.of(this).textTheme;
+  bool get isDark => Theme.of(this).brightness == Brightness.dark;
+
+  /// 卡片面：浅色下是纯白，深色下比页面上浮一级。
+  Color get cardColor => isDark ? scheme.surfaceContainerLow : scheme.surface;
+
+  /// 页面底板：浅色是带一点青的米白，深色接近黑。
+  Color get pageColor => scheme.surface;
+
+  /// 浅色下页面与卡片需要靠描边分开，深色下靠面阶本身就够了。
+  Color get hairline => scheme.outlineVariant;
+
+  bool get isCompact => MediaQuery.sizeOf(this).width < Breakpoints.compact;
+}
+
+/// 圆角只有这几档，和设计稿的 Tailwind 半径一一对应。
+///
+/// `xl` 给按钮与输入框，`xxl` 给列表与非主导航卡片，`xxxl` 给页面级卡片与对话框。
 abstract final class Radii {
   static const small = 10.0;
-  static const medium = 14.0;
-  static const large = 20.0;
+  static const medium = 13.0;
+  static const large = 16.0;
+  static const xl = 22.0;
+  static const xxl = 29.0;
+  static const xxxl = 35.0;
+
+  /// 胶囊形：频道行、标签页、头像、状态点都用它。
+  static const pill = 999.0;
 
   static BorderRadius get smallAll => BorderRadius.circular(small);
   static BorderRadius get mediumAll => BorderRadius.circular(medium);
   static BorderRadius get largeAll => BorderRadius.circular(large);
+  static BorderRadius get xlAll => BorderRadius.circular(xl);
+  static BorderRadius get xxlAll => BorderRadius.circular(xxl);
+  static BorderRadius get xxxlAll => BorderRadius.circular(xxxl);
+  static BorderRadius get pillAll => BorderRadius.circular(pill);
 
   static RoundedRectangleBorder get smallShape =>
       RoundedRectangleBorder(borderRadius: smallAll);
+  static RoundedRectangleBorder get xlShape =>
+      RoundedRectangleBorder(borderRadius: xlAll);
+  static RoundedRectangleBorder get xxlShape =>
+      RoundedRectangleBorder(borderRadius: xxlAll);
+  static RoundedRectangleBorder get xxxlShape =>
+      RoundedRectangleBorder(borderRadius: xxxlAll);
 }
 
-/// 布局断点。三栏工作区在 [wide] 以上展开，以下收成图标栏 + 单栏切换。
+/// 布局断点。和设计稿的 `md` / `lg` 对齐。
 abstract final class Breakpoints {
-  static const compact = 720.0;
-  static const wide = 1080.0;
+  /// `md`：以下是手机布局，抽屉取代常驻侧栏。
+  static const compact = 768.0;
+
+  /// `lg`：连接页从单列变成「身份卡 + 服务器列表」两列。
+  static const wide = 1024.0;
+}
+
+/// 固定尺寸。全部取自设计稿的 Tailwind 标尺（1 单位 = 4px）。
+abstract final class Sizes {
+  /// 顶栏高度 `h-16`。
+  static const header = 64.0;
+
+  /// 服务器栏宽度 `w-20`。
+  static const rail = 80.0;
+
+  /// 频道栏宽度 `w-72`。
+  static const channelPanel = 288.0;
+
+  /// 连接页内容最大宽度 `max-w-5xl`。
+  static const connectContent = 1024.0;
+
+  /// 身份栏宽度 `340px`。
+  static const identityColumn = 340.0;
+
+  /// 聊天内容最大宽度 `max-w-3xl`。
+  static const chatContent = 768.0;
+
+  /// 最小可点区域：44×44。
+  static const touch = 44.0;
+
+  /// 服务器栏磁贴 `size-12`。
+  static const railTile = 48.0;
+}
+
+/// 页面级容器的描边：浅色下一根很淡的线，深色下几乎不画。
+BorderSide hairlineSide(BuildContext context) {
+  final scheme = context.scheme;
+  return BorderSide(
+    color: context.isDark
+        ? scheme.outlineVariant.withValues(alpha: 0.5)
+        : scheme.outlineVariant.withValues(alpha: 0.7),
+  );
 }
 
 /// 服务器磁贴的配色：色相由档案 id 稳定散列而来，亮度则被归一到固定区间。
 ///
-/// HSL 的 lightness 不是感知亮度——同一个 L 下黄色比蓝色亮得多。所以散列出颜色后
-/// 再把相对亮度压进 `_minLuminance`–`_maxLuminance`：一排磁贴看起来一样重，
-/// 白色标记的对比度也始终在 4.5:1 以上。
+/// 与 `refer/components/login/monogram.tsx` 共用同一组色相。HSL 的 lightness
+/// 不是感知亮度——同一个 L 下黄色比蓝色亮得多，所以散列后再把相对亮度压进
+/// `_minLuminance`–`_maxLuminance`：一排磁贴看起来一样重，白色单字的对比度也
+/// 始终在 4.5:1 以上。
 abstract final class ServerPalette {
   static const _hues = <double>[
     232,
@@ -87,8 +163,10 @@ abstract final class ServerPalette {
 
   static final _cache = <String, Color>{};
 
+  /// 两种主题共用同一块颜色：磁贴是纯色块，深浅主题切换时保留识别度，
+  /// 同时保证「同一台服务器在两种主题下是同一个色相」这条闸门成立。
   static Color of(String id, Brightness brightness) => _cache.putIfAbsent(
-    '${brightness.name}:$id',
+    id,
     () => _clampLuminance(
       HSLColor.fromAHSL(
         1,
@@ -173,20 +251,20 @@ TextTheme _textTheme(Brightness brightness) {
       height: 1.2,
     ),
     titleLarge: base.titleLarge?.copyWith(
-      fontSize: 19,
+      fontSize: 20,
       fontWeight: FontWeight.w600,
       letterSpacing: -0.2,
     ),
     titleMedium: base.titleMedium?.copyWith(
-      fontSize: 15.5,
-      fontWeight: FontWeight.w600,
+      fontSize: 15,
+      fontWeight: FontWeight.w500,
     ),
     titleSmall: base.titleSmall?.copyWith(
       fontSize: 13.5,
       fontWeight: FontWeight.w600,
       letterSpacing: 0.1,
     ),
-    bodyLarge: base.bodyLarge?.copyWith(fontSize: 15, height: 1.5),
+    bodyLarge: base.bodyLarge?.copyWith(fontSize: 16, height: 1.5),
     bodyMedium: base.bodyMedium?.copyWith(fontSize: 14, height: 1.5),
     bodySmall: base.bodySmall?.copyWith(fontSize: 12.5, height: 1.45),
     labelLarge: base.labelLarge?.copyWith(
@@ -195,11 +273,11 @@ TextTheme _textTheme(Brightness brightness) {
     ),
     labelMedium: base.labelMedium?.copyWith(
       fontSize: 12.5,
-      fontWeight: FontWeight.w600,
+      fontWeight: FontWeight.w500,
       letterSpacing: 0.2,
     ),
     labelSmall: base.labelSmall?.copyWith(
-      fontSize: 11.5,
+      fontSize: 11,
       fontWeight: FontWeight.w500,
       letterSpacing: 0.3,
     ),
@@ -209,61 +287,61 @@ TextTheme _textTheme(Brightness brightness) {
 ColorScheme _scheme(Brightness brightness) {
   final dark = brightness == Brightness.dark;
   final seeded = ColorScheme.fromSeed(
-    seedColor: const Color(0xFF5B6CF0),
+    seedColor: const Color(0xFF006A60),
     brightness: brightness,
     dynamicSchemeVariant: DynamicSchemeVariant.fidelity,
   );
 
   if (dark) {
     return seeded.copyWith(
-      primary: const Color(0xFF9AA4FF),
-      onPrimary: const Color(0xFF10142B),
-      primaryContainer: const Color(0xFF2B3470),
-      onPrimaryContainer: const Color(0xFFDFE2FF),
-      secondaryContainer: const Color(0xFF272E3D),
-      onSecondaryContainer: const Color(0xFFDCE0EC),
-      surface: const Color(0xFF12151B),
-      surfaceContainerLowest: const Color(0xFF0B0D11),
-      surfaceContainerLow: const Color(0xFF161A21),
-      surfaceContainer: const Color(0xFF1B202A),
-      surfaceContainerHigh: const Color(0xFF222834),
-      surfaceContainerHighest: const Color(0xFF2A313E),
-      onSurface: const Color(0xFFE8EAF0),
-      onSurfaceVariant: const Color(0xFFA6AEBE),
-      outline: const Color(0xFF6B7590),
-      outlineVariant: const Color(0xFF333B4A),
-      error: const Color(0xFFE0574F),
-      onError: const Color(0xFF2A0C0A),
-      errorContainer: const Color(0xFF4A1D19),
+      primary: const Color(0xFF6FDBD0),
+      onPrimary: const Color(0xFF003733),
+      primaryContainer: const Color(0xFF00504A),
+      onPrimaryContainer: const Color(0xFF8DF7EB),
+      secondaryContainer: const Color(0xFF2A3330),
+      onSecondaryContainer: const Color(0xFFDCE5E1),
+      surface: const Color(0xFF0E1513),
+      surfaceContainerLowest: const Color(0xFF090F0E),
+      surfaceContainerLow: const Color(0xFF151C1A),
+      surfaceContainer: const Color(0xFF1A211F),
+      surfaceContainerHigh: const Color(0xFF252C2A),
+      surfaceContainerHighest: const Color(0xFF303836),
+      onSurface: const Color(0xFFDEE4E1),
+      onSurfaceVariant: const Color(0xFFB9C6C3),
+      outline: const Color(0xFF84938F),
+      outlineVariant: const Color(0xFF3F4947),
+      error: const Color(0xFFFFB4AB),
+      onError: const Color(0xFF690005),
+      errorContainer: const Color(0xFF93000A),
       onErrorContainer: const Color(0xFFFFDAD6),
-      inverseSurface: const Color(0xFFE8EAF0),
-      onInverseSurface: const Color(0xFF12151B),
+      inverseSurface: const Color(0xFFDEE4E1),
+      onInverseSurface: const Color(0xFF2B3230),
     );
   }
 
   return seeded.copyWith(
-    primary: const Color(0xFF4A5AD8),
+    primary: const Color(0xFF006A60),
     onPrimary: Colors.white,
-    primaryContainer: const Color(0xFFDFE2FF),
-    onPrimaryContainer: const Color(0xFF11144A),
-    secondaryContainer: const Color(0xFFE4E7F2),
-    onSecondaryContainer: const Color(0xFF1B2030),
-    surface: const Color(0xFFFFFFFF),
+    primaryContainer: const Color(0xFF9EF2E4),
+    onPrimaryContainer: const Color(0xFF00201C),
+    secondaryContainer: const Color(0xFFDCE5E2),
+    onSecondaryContainer: const Color(0xFF151D1B),
+    surface: const Color(0xFFF4FBF8),
     surfaceContainerLowest: const Color(0xFFFFFFFF),
-    surfaceContainerLow: const Color(0xFFF6F7FA),
-    surfaceContainer: const Color(0xFFF0F2F7),
-    surfaceContainerHigh: const Color(0xFFE8EBF2),
-    surfaceContainerHighest: const Color(0xFFDFE3EC),
-    onSurface: const Color(0xFF171A20),
-    onSurfaceVariant: const Color(0xFF5A6273),
-    outline: const Color(0xFF7B8397),
-    outlineVariant: const Color(0xFFCFD4E0),
-    error: const Color(0xFFC0392F),
+    surfaceContainerLow: const Color(0xFFFFFFFF),
+    surfaceContainer: const Color(0xFFE9EFEC),
+    surfaceContainerHigh: const Color(0xFFDDE4E1),
+    surfaceContainerHighest: const Color(0xFFD2DCD9),
+    onSurface: const Color(0xFF171D1B),
+    onSurfaceVariant: const Color(0xFF5B6461),
+    outline: const Color(0xFF6F7B78),
+    outlineVariant: const Color(0xFFC9D1CE),
+    error: const Color(0xFFBA1A1A),
     onError: Colors.white,
     errorContainer: const Color(0xFFFFDAD6),
-    onErrorContainer: const Color(0xFF410E0B),
-    inverseSurface: const Color(0xFF2A313E),
-    onInverseSurface: const Color(0xFFF0F2F7),
+    onErrorContainer: const Color(0xFF410002),
+    inverseSurface: const Color(0xFF2B3230),
+    onInverseSurface: const Color(0xFFEAF1EE),
   );
 }
 
@@ -304,13 +382,10 @@ ThemeData buildAppTheme(Brightness brightness) {
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
       color: scheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(
-        borderRadius: Radii.mediumAll,
-        side: BorderSide(color: scheme.outline),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: Radii.xxlAll),
     ),
     listTileTheme: ListTileThemeData(
-      shape: Radii.smallShape,
+      shape: Radii.xlShape,
       iconColor: scheme.onSurfaceVariant,
       textColor: scheme.onSurface,
       minVerticalPadding: 8,
@@ -321,28 +396,26 @@ ThemeData buildAppTheme(Brightness brightness) {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: dark
-          ? scheme.surfaceContainerLowest
-          : scheme.surfaceContainerLow,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      fillColor: scheme.surfaceContainerLowest,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       border: OutlineInputBorder(
-        borderRadius: Radii.smallAll,
+        borderRadius: Radii.xlAll,
         borderSide: BorderSide(color: scheme.outline),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: Radii.smallAll,
+        borderRadius: Radii.xlAll,
         borderSide: BorderSide(color: scheme.outline),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: Radii.smallAll,
+        borderRadius: Radii.xlAll,
         borderSide: BorderSide(color: scheme.primary, width: 2),
       ),
       errorBorder: OutlineInputBorder(
-        borderRadius: Radii.smallAll,
+        borderRadius: Radii.xlAll,
         borderSide: BorderSide(color: scheme.error),
       ),
       focusedErrorBorder: OutlineInputBorder(
-        borderRadius: Radii.smallAll,
+        borderRadius: Radii.xlAll,
         borderSide: BorderSide(color: scheme.error, width: 2),
       ),
       labelStyle: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
@@ -354,28 +427,36 @@ ThemeData buildAppTheme(Brightness brightness) {
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: ButtonStyle(
-        minimumSize: const WidgetStatePropertyAll(Size(0, 44)),
+        minimumSize: const WidgetStatePropertyAll(Size(0, Sizes.touch)),
         padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: 20),
+          EdgeInsets.symmetric(horizontal: 16),
         ),
-        shape: WidgetStatePropertyAll(Radii.smallShape),
+        shape: const WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(Radii.xl)),
+          ),
+        ),
         textStyle: WidgetStatePropertyAll(text.labelLarge),
         side: focusRing,
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: ButtonStyle(
-        minimumSize: const WidgetStatePropertyAll(Size(0, 44)),
+        minimumSize: const WidgetStatePropertyAll(Size(0, Sizes.touch)),
         padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: 20),
+          EdgeInsets.symmetric(horizontal: 16),
         ),
-        shape: WidgetStatePropertyAll(Radii.smallShape),
+        shape: const WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(Radii.xl)),
+          ),
+        ),
         textStyle: WidgetStatePropertyAll(text.labelLarge),
         side: WidgetStateProperty.resolveWith(
           (states) => BorderSide(
             color: states.contains(WidgetState.focused)
                 ? scheme.primary
-                : scheme.outline,
+                : scheme.outlineVariant,
             width: states.contains(WidgetState.focused) ? 2 : 1,
           ),
         ),
@@ -383,26 +464,28 @@ ThemeData buildAppTheme(Brightness brightness) {
     ),
     textButtonTheme: TextButtonThemeData(
       style: ButtonStyle(
-        minimumSize: const WidgetStatePropertyAll(Size(0, 40)),
-        shape: WidgetStatePropertyAll(Radii.smallShape),
+        minimumSize: const WidgetStatePropertyAll(Size(0, Sizes.touch)),
+        shape: const WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(Radii.xl)),
+          ),
+        ),
         textStyle: WidgetStatePropertyAll(text.labelLarge),
       ),
     ),
     iconButtonTheme: IconButtonThemeData(
       style: ButtonStyle(
-        shape: WidgetStatePropertyAll(Radii.smallShape),
+        shape: const WidgetStatePropertyAll(CircleBorder()),
         side: focusRing,
       ),
     ),
     segmentedButtonTheme: SegmentedButtonThemeData(
       style: ButtonStyle(
         textStyle: WidgetStatePropertyAll(text.labelMedium),
-        // 竖向内边距要让每个分段自己就有 44 高：分段是独立落点，
-        // 不能靠外层容器凑高度。
         padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         ),
-        shape: WidgetStatePropertyAll(Radii.smallShape),
+        shape: WidgetStatePropertyAll(Radii.xlShape),
         side: WidgetStatePropertyAll(BorderSide(color: scheme.outline)),
         backgroundColor: WidgetStateProperty.resolveWith(
           (states) => states.contains(WidgetState.selected)
@@ -419,7 +502,7 @@ ThemeData buildAppTheme(Brightness brightness) {
     dialogTheme: DialogThemeData(
       backgroundColor: scheme.surfaceContainerLow,
       surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: Radii.largeAll),
+      shape: RoundedRectangleBorder(borderRadius: Radii.xxxlAll),
       titleTextStyle: text.titleLarge,
       contentTextStyle: text.bodyMedium,
     ),
@@ -427,7 +510,7 @@ ThemeData buildAppTheme(Brightness brightness) {
       backgroundColor: scheme.surfaceContainerLow,
       surfaceTintColor: Colors.transparent,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.large)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xxxl)),
       ),
     ),
     tooltipTheme: TooltipThemeData(
@@ -435,7 +518,7 @@ ThemeData buildAppTheme(Brightness brightness) {
       textStyle: text.bodySmall?.copyWith(color: scheme.onInverseSurface),
       decoration: BoxDecoration(
         color: scheme.inverseSurface,
-        borderRadius: Radii.smallAll,
+        borderRadius: Radii.mediumAll,
       ),
     ),
     snackBarTheme: SnackBarThemeData(
@@ -444,7 +527,7 @@ ThemeData buildAppTheme(Brightness brightness) {
       contentTextStyle: text.bodyMedium?.copyWith(
         color: scheme.onInverseSurface,
       ),
-      shape: RoundedRectangleBorder(borderRadius: Radii.mediumAll),
+      shape: RoundedRectangleBorder(borderRadius: Radii.xxlAll),
       insetPadding: const EdgeInsets.all(16),
       elevation: 4,
     ),
@@ -460,9 +543,10 @@ ThemeData buildAppTheme(Brightness brightness) {
       strokeCap: StrokeCap.round,
     ),
     popupMenuTheme: PopupMenuThemeData(
-      color: scheme.surfaceContainerHigh,
+      color: scheme.surfaceContainerLow,
       surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: Radii.mediumAll),
+      elevation: 8,
+      shape: RoundedRectangleBorder(borderRadius: Radii.xxlAll),
       textStyle: text.bodyMedium,
     ),
     switchTheme: SwitchThemeData(
@@ -496,18 +580,7 @@ String serverMonogram(String label, String host) {
   return String.fromCharCode(fallback.runes.first).toUpperCase();
 }
 
-/// 相对时间：列表里只写「刚刚 / 12 分钟前」，超过一天回到时钟。
-String relativeTime(DateTime at, DateTime now) {
-  final delta = now.difference(at);
-  if (delta.inSeconds < 45) {
-    return 'now';
-  }
-  if (delta.inMinutes < 60) {
-    return '${math.max(1, delta.inMinutes)}m';
-  }
-  if (delta.inHours < 24) {
-    return '${delta.inHours}h';
-  }
-  return '${at.hour.toString().padLeft(2, '0')}:'
-      '${at.minute.toString().padLeft(2, '0')}';
-}
+/// 消息时间：会话内消息只显示当天的时钟，不随界面刷新而变化。
+String clockTime(DateTime at) =>
+    '${at.hour.toString().padLeft(2, '0')}:'
+    '${at.minute.toString().padLeft(2, '0')}';
