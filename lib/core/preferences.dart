@@ -37,8 +37,11 @@ class SessionPreferences {
     this.theme = AppThemePreference.system,
   });
 
-  /// 没有设置过昵称时的默认值，和旧版连接流程保持一致。
-  static const fallbackNickname = 'ts-client';
+  /// 没有设置过昵称时的默认值。
+  static const fallbackNickname = 'FlSpeakUser';
+
+  /// 旧版默认值；已持久化的文件里可能出现，读取时按未设置处理。
+  static const _legacyFallbackNickname = 'ts-client';
 
   final String nickname;
 
@@ -89,7 +92,9 @@ class SessionPreferences {
     final nickname = rawNickname is String ? rawNickname.trim() : '';
     final rawLocale = json['locale'];
     return SessionPreferences(
-      nickname: nickname.isEmpty ? fallbackNickname : nickname,
+      nickname: nickname.isEmpty || nickname == _legacyFallbackNickname
+          ? fallbackNickname
+          : nickname,
       lastConnected: lastConnected,
       locale: rawLocale is String && rawLocale.isNotEmpty ? rawLocale : null,
       theme: AppThemePreference.fromId(json['theme']),
