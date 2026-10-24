@@ -6,8 +6,6 @@ import '../../../theme/app_theme.dart';
 import '../../../widgets/monogram.dart';
 import 'relative_time.dart';
 
-enum _ServerMenuAction { remove }
-
 /// 连接页的一行服务器：整行是主落点，右侧「更多」只放「从列表移除」。
 ///
 /// 连接中整行变暗（除了正在连接的那行），避免用户连点两个目标。
@@ -176,39 +174,25 @@ class _ServerRowState extends State<ServerRow> {
               child: SizedBox(
                 width: Sizes.touch,
                 height: Sizes.touch,
-                child: PopupMenuButton<_ServerMenuAction>(
-                  tooltip: l10n.commonMore,
-                  padding: EdgeInsets.zero,
-                  iconSize: 20,
-                  icon: Icon(
-                    Icons.more_horiz_rounded,
-                    color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
-                  ),
-                  onSelected: (action) {
-                    if (action == _ServerMenuAction.remove) {
-                      widget.onRemove();
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                      value: _ServerMenuAction.remove,
-                      enabled: !connected,
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.delete_outline_rounded,
-                            size: 18,
-                            color: scheme.error,
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            l10n.serverRemoveFromList,
-                            style: TextStyle(fontSize: 13, color: scheme.error),
-                          ),
-                        ],
-                      ),
+                child: MenuAnchor(
+                  clipBehavior: Clip.antiAlias,
+                  menuChildren: [
+                    MenuItemButton(
+                      leadingIcon: const Icon(Icons.delete_outline_rounded),
+                      onPressed: connected ? null : widget.onRemove,
+                      child: Text(l10n.serverRemoveFromList),
                     ),
                   ],
+                  builder: (context, controller, child) => IconButton(
+                    tooltip: l10n.commonMore,
+                    onPressed: () => controller.open(),
+                    padding: EdgeInsets.zero,
+                    iconSize: 20,
+                    icon: Icon(
+                      Icons.more_horiz_rounded,
+                      color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+                    ),
+                  ),
                 ),
               ),
             ),

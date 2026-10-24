@@ -542,12 +542,24 @@ ThemeData buildAppTheme(Brightness brightness) {
       color: scheme.primary,
       strokeCap: StrokeCap.round,
     ),
-    popupMenuTheme: PopupMenuThemeData(
-      color: scheme.surfaceContainerLow,
-      surfaceTintColor: Colors.transparent,
-      elevation: 8,
-      shape: RoundedRectangleBorder(borderRadius: Radii.xxlAll),
-      textStyle: text.bodyMedium,
+    // 面板样式归 MenuTheme；条目的 hover/按压高亮形状归 MenuButtonTheme 的
+    // shape（M3 默认是直角，这里给 10 才和应用圆角一致）。
+    // 面板不留内边距：条目高亮贴满面板，圆角由面板形状统一裁出来，
+    // 和原生桌面菜单一致；M3 默认的 8dp 上下留白会让高亮悬在面板中间。
+    menuTheme: MenuThemeData(
+      style: MenuStyle(
+        backgroundColor: WidgetStatePropertyAll(scheme.surfaceContainerLow),
+        surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+        elevation: const WidgetStatePropertyAll(8.0),
+        shape: WidgetStatePropertyAll(Radii.xxlShape),
+        padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+      ),
+    ),
+    menuButtonTheme: MenuButtonThemeData(
+      style: ButtonStyle(
+        shape: WidgetStatePropertyAll(Radii.smallShape),
+        textStyle: WidgetStatePropertyAll(text.bodyMedium),
+      ),
     ),
     switchTheme: SwitchThemeData(
       thumbIcon: WidgetStateProperty.resolveWith(

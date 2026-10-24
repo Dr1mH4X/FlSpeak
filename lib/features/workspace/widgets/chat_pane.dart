@@ -299,27 +299,29 @@ class _ScopeButton extends StatelessWidget {
 
     return SizedBox.square(
       dimension: Sizes.touch,
-      child: PopupMenuButton<ChatScope>(
-        tooltip: l10n.chatScopeTitle,
-        padding: EdgeInsets.zero,
-        iconSize: 20,
-        icon: Icon(
-          server ? Icons.public_rounded : Icons.tag_rounded,
-          color: scheme.onSurfaceVariant,
-        ),
-        onSelected: onChanged,
-        itemBuilder: (context) => [
-          CheckedPopupMenuItem(
-            value: ChatScope.channel,
-            checked: scope == ChatScope.channel,
+      child: MenuAnchor(
+        clipBehavior: Clip.antiAlias,
+        menuChildren: [
+          CheckboxMenuButton(
+            value: scope == ChatScope.channel,
+            onChanged: (_) => onChanged(ChatScope.channel),
             child: Text(l10n.chatScopeChannel),
           ),
-          CheckedPopupMenuItem(
-            value: ChatScope.server,
-            checked: scope == ChatScope.server,
+          CheckboxMenuButton(
+            value: scope == ChatScope.server,
+            onChanged: (_) => onChanged(ChatScope.server),
             child: Text(l10n.chatScopeServer),
           ),
         ],
+        builder: (context, controller, child) => IconButton(
+          tooltip: l10n.chatScopeTitle,
+          onPressed: () => controller.open(),
+          iconSize: 20,
+          icon: Icon(
+            server ? Icons.public_rounded : Icons.tag_rounded,
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
       ),
     );
   }
