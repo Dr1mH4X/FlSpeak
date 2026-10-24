@@ -199,9 +199,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get workspaceNotConnectedBody => '从左侧服务器栏选择一台已登记的服务器，或添加新地址。';
 
   @override
-  String get workspaceRefresh => '刷新';
-
-  @override
   String get channelExpand => '展开';
 
   @override
@@ -232,9 +229,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get voiceEmpty => '现在还没有人，来当第一个吧';
-
-  @override
-  String get voiceConnected => '语音已连接';
 
   @override
   String get voiceMute => '静音';

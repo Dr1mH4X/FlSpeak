@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
@@ -12,7 +10,7 @@ import '../../../widgets/common.dart';
 import '../../../widgets/monogram.dart';
 import '../workspace_state.dart';
 
-/// 频道栏：服务器身份、统一的频道树、已连接语音、当前用户。
+/// 频道栏：服务器身份、统一的频道树、当前用户。
 ///
 /// TeamSpeak 的频道不区分文字与语音——每个频道既是语音房间也承载文字消息，
 /// 所以设计稿里的「文字频道 / 语音频道」两段在真实数据上没有依据，这里只保留
@@ -37,9 +35,6 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
     final scheme = context.scheme;
     final view = ref.watch(sessionViewProvider);
     final activeId = ref.watch(activeChannelIdProvider);
-    final selfChannel = view.selfChannelId == null
-        ? null
-        : view.channelById(view.selfChannelId!);
     final String nickname =
         view.selfClient?.nickname ??
         ref.watch(preferencesProvider.select((prefs) => prefs.nickname));
@@ -90,7 +85,6 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
               ],
             ),
           ),
-          if (selfChannel != null) _ConnectedVoiceCard(channel: selfChannel),
           _UserFooter(
             nickname: nickname,
             connected: view.connected,
@@ -112,9 +106,6 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
     AppLocalizations l10n,
     SessionView view,
   ) {
-    final scheme = context.scheme;
-    final controller = ref.read(sessionViewProvider.notifier);
-
     return SizedBox(
       height: Sizes.header,
       child: Padding(
@@ -132,40 +123,6 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
                 ),
               ),
             ),
-            if (view.connected || view.connecting)
-              PopupMenuButton<_PanelAction>(
-                tooltip: l10n.commonMore,
-                icon: Icon(
-                  Icons.more_vert_rounded,
-                  size: 20,
-                  color: scheme.onSurfaceVariant,
-                ),
-                onSelected: (action) {
-                  switch (action) {
-                    case _PanelAction.refresh:
-                      controller.refresh();
-                    case _PanelAction.disconnect:
-                      controller.disconnect();
-                  }
-                },
-                itemBuilder: (context) => [
-                  if (view.connected)
-                    PopupMenuItem(
-                      value: _PanelAction.refresh,
-                      child: _MenuRow(
-                        icon: Icons.refresh_rounded,
-                        label: l10n.workspaceRefresh,
-                      ),
-                    ),
-                  PopupMenuItem(
-                    value: _PanelAction.disconnect,
-                    child: _MenuRow(
-                      icon: Icons.logout_rounded,
-                      label: l10n.serverDisconnect,
-                    ),
-                  ),
-                ],
-              ),
           ],
         ),
       ),
@@ -258,8 +215,6 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
     return channels;
   }
 }
-
-enum _PanelAction { refresh, disconnect }
 
 sealed class _TreeRow {
   const _TreeRow();
@@ -465,140 +420,6 @@ class _MemberTile extends StatelessWidget {
 
 /// 已连接语音卡：只陈述状态，不放「断开语音」——TeamSpeak 没有「离开语音但不离开
 /// 频道」这个概念，真正的断开入口在频道栏菜单里。
-class _ConnectedVoiceCard extends StatelessWidget {
-  const _ConnectedVoiceCard({required this.channel});
-
-  final ChannelView channel;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final scheme = context.scheme;
-    final name = channel.name.isEmpty ? '#${channel.id}' : channel.name;
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: scheme.primaryContainer,
-        borderRadius: Radii.xxlAll,
-      ),
-      child: Row(
-        children: [
-          const _LiveDot(),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  l10n.voiceConnected,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: context.texts.bodyMedium?.copyWith(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: scheme.onPrimaryContainer,
-                  ),
-                ),
-                Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: context.texts.bodySmall?.copyWith(
-                    fontSize: 12,
-                    color: scheme.onPrimaryContainer.withValues(alpha: 0.75),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 语音连接指示点：用定时器驱动一次「扩散 + 淡出」的隐式动画。
-///
-/// 没有用 `AnimationController.repeat`：无限循环的 ticker 会让测试里的
-/// `pumpAndSettle` 永远等不到静止帧。定时器周期比动画时长长，动画一停就能
-/// 判定为静止；关闭系统动画时只保留静态圆点。
-class _LiveDot extends StatefulWidget {
-  const _LiveDot();
-
-  @override
-  State<_LiveDot> createState() => _LiveDotState();
-}
-
-class _LiveDotState extends State<_LiveDot> {
-  static const _period = Duration(milliseconds: 1400);
-  static const _pulseDuration = Duration(milliseconds: 1100);
-
-  Timer? _timer;
-  bool _pulse = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _sync();
-  }
-
-  void _sync() {
-    _timer?.cancel();
-    _timer = null;
-    _pulse = false;
-    if (MediaQuery.disableAnimationsOf(context)) {
-      return;
-    }
-    _timer = Timer.periodic(_period, _onTick);
-  }
-
-  void _onTick(Timer timer) {
-    if (!mounted) {
-      timer.cancel();
-      return;
-    }
-    setState(() => _pulse = !_pulse);
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final primary = context.scheme.primary;
-    return SizedBox(
-      width: 16,
-      height: 16,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          AnimatedContainer(
-            duration: _pulseDuration,
-            curve: Curves.easeOut,
-            width: _pulse ? 16 : 8,
-            height: _pulse ? 16 : 8,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: primary.withValues(alpha: _pulse ? 0 : 0.45),
-            ),
-          ),
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: primary),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _UserFooter extends StatelessWidget {
   const _UserFooter({
     required this.nickname,
@@ -728,16 +549,4 @@ class _IconToggle extends StatelessWidget {
       ),
     );
   }
-}
-
-class _MenuRow extends StatelessWidget {
-  const _MenuRow({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) => Row(
-    children: [Icon(icon, size: 18), const SizedBox(width: 10), Text(label)],
-  );
 }

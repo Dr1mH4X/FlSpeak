@@ -112,7 +112,6 @@
   "workspaceOpenMenu": "Open channel menu",
   "workspaceNotConnectedTitle": "Not connected",
   "workspaceNotConnectedBody": "Pick a registered server from the bar on the left, or add a new address.",
-  "workspaceRefresh": "Refresh",
   "channelExpand": "Expand",
   "channelCollapse": "Collapse",
   "channelCurrent": "You are here",
@@ -130,7 +129,6 @@
     }
   },
   "voiceEmpty": "Nobody is here yet. Be the first.",
-  "voiceConnected": "Voice connected",
   "voiceMute": "Mute",
   "voiceUnmute": "Unmute",
   "voiceDeafen": "Deafen",

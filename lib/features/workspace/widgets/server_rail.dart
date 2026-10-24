@@ -5,6 +5,7 @@ import 'package:flspeak_ffi/flspeak_ffi.dart';
 import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/monogram.dart';
 
 /// 最左侧的服务器栏：品牌标记、已登记的服务器、添加与设置。
 ///
@@ -73,7 +74,13 @@ class ServerRail extends ConsumerWidget {
                     child: _ServerTile(
                       server: server,
                       online: server.id == view.activeServerId,
+                      connected:
+                          view.connected && server.id == view.activeServerId,
                       onTap: () => runFromRail(() => onSelect(server)),
+                      onDisconnect: () => runFromRail(
+                        () =>
+                            ref.read(sessionViewProvider.notifier).disconnect(),
+                      ),
                     ),
                   );
                 },
@@ -134,12 +141,20 @@ class _ServerTile extends StatelessWidget {
   const _ServerTile({
     required this.server,
     required this.online,
+    required this.connected,
     required this.onTap,
+    required this.onDisconnect,
   });
 
   final ServerProfileView server;
+
+  /// 选中高亮：连接中/重连中也保持，锚定“当前目标”。
   final bool online;
+
+  /// 已连上：侧边栏唯一的连接状态表达（右下角状态点）+ 右键菜单的开关。
+  final bool connected;
   final VoidCallback onTap;
+  final VoidCallback onDisconnect;
 
   @override
   Widget build(BuildContext context) {
@@ -151,70 +166,105 @@ class _ServerTile extends StatelessWidget {
     final tooltip = StringBuffer(
       '${server.label}\n${server.host}:${server.port}',
     );
-    if (online) {
+    if (connected) {
       tooltip.write('\n${l10n.sessionConnected}');
     }
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Tooltip(
-        message: tooltip.toString(),
-        waitDuration: const Duration(milliseconds: 400),
-        child: Semantics(
-          button: true,
-          selected: online,
-          excludeSemantics: true,
-          label: '${server.label} · ${server.host}:${server.port}',
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: Radii.largeAll,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  AnimatedContainer(
-                    duration: MediaQuery.disableAnimationsOf(context)
-                        ? Duration.zero
-                        : const Duration(milliseconds: 160),
-                    curve: Curves.easeOutCubic,
-                    width: 56,
-                    height: 32,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: online
-                          ? scheme.primaryContainer
-                          : Colors.transparent,
-                      borderRadius: Radii.pillAll,
+      child: MenuAnchor(
+        clipBehavior: Clip.antiAlias,
+        menuChildren: [
+          MenuItemButton(
+            leadingIcon: const Icon(Icons.logout_rounded),
+            onPressed: onDisconnect,
+            child: Text(l10n.serverDisconnect),
+          ),
+        ],
+        builder: (context, menuController, child) => GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onSecondaryTapUp: connected
+              ? (details) =>
+                    menuController.open(position: details.localPosition)
+              : null,
+          child: child,
+        ),
+        child: Tooltip(
+          message: tooltip.toString(),
+          waitDuration: const Duration(milliseconds: 400),
+          child: Semantics(
+            button: true,
+            selected: online,
+            excludeSemantics: true,
+            label: '${server.label} · ${server.host}:${server.port}',
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: Radii.largeAll,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        AnimatedContainer(
+                          duration: MediaQuery.disableAnimationsOf(context)
+                              ? Duration.zero
+                              : const Duration(milliseconds: 160),
+                          curve: Curves.easeOutCubic,
+                          width: 56,
+                          height: 32,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: online
+                                ? scheme.primaryContainer
+                                : Colors.transparent,
+                            borderRadius: Radii.pillAll,
+                          ),
+                          child: Text(
+                            monogram,
+                            style: texts.labelLarge?.copyWith(
+                              color: online
+                                  ? scheme.onPrimaryContainer
+                                  : scheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        if (connected)
+                          Positioned(
+                            right: -2,
+                            bottom: -2,
+                            child: StatusDot(
+                              color: context.status.live,
+                              ringColor: scheme.surfaceContainer,
+                              size: 10,
+                            ),
+                          ),
+                      ],
                     ),
-                    child: Text(
-                      monogram,
-                      style: texts.labelLarge?.copyWith(
-                        color: online
-                            ? scheme.onPrimaryContainer
-                            : scheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
+                    const SizedBox(height: 3),
+                    SizedBox(
+                      width: 64,
+                      child: Text(
+                        server.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: texts.labelSmall?.copyWith(
+                          fontSize: 11,
+                          color: online
+                              ? scheme.onSurface
+                              : scheme.onSurfaceVariant,
+                          fontWeight: online
+                              ? FontWeight.w600
+                              : FontWeight.w500,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 3),
-                  SizedBox(
-                    width: 64,
-                    child: Text(
-                      server.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      style: texts.labelSmall?.copyWith(
-                        fontSize: 11,
-                        color: online
-                            ? scheme.onSurface
-                            : scheme.onSurfaceVariant,
-                        fontWeight: online ? FontWeight.w600 : FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

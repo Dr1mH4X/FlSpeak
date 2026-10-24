@@ -201,9 +201,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Pick a registered server from the bar on the left, or add a new address.';
 
   @override
-  String get workspaceRefresh => 'Refresh';
-
-  @override
   String get channelExpand => 'Expand';
 
   @override
@@ -240,9 +237,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get voiceEmpty => 'Nobody is here yet. Be the first.';
-
-  @override
-  String get voiceConnected => 'Voice connected';
 
   @override
   String get voiceMute => 'Mute';

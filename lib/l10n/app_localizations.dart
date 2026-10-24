@@ -434,12 +434,6 @@ abstract class AppLocalizations {
   /// **'Pick a registered server from the bar on the left, or add a new address.'**
   String get workspaceNotConnectedBody;
 
-  /// No description provided for @workspaceRefresh.
-  ///
-  /// In en, this message translates to:
-  /// **'Refresh'**
-  String get workspaceRefresh;
-
   /// No description provided for @channelExpand.
   ///
   /// In en, this message translates to:
@@ -499,12 +493,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Nobody is here yet. Be the first.'**
   String get voiceEmpty;
-
-  /// No description provided for @voiceConnected.
-  ///
-  /// In en, this message translates to:
-  /// **'Voice connected'**
-  String get voiceConnected;
 
   /// No description provided for @voiceMute.
   ///

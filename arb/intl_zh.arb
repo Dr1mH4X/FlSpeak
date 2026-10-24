@@ -112,7 +112,6 @@
   "workspaceOpenMenu": "打开频道菜单",
   "workspaceNotConnectedTitle": "未连接服务器",
   "workspaceNotConnectedBody": "从左侧服务器栏选择一台已登记的服务器，或添加新地址。",
-  "workspaceRefresh": "刷新",
   "channelExpand": "展开",
   "channelCollapse": "收起",
   "channelCurrent": "当前所在",
@@ -130,7 +129,6 @@
     }
   },
   "voiceEmpty": "现在还没有人，来当第一个吧",
-  "voiceConnected": "语音已连接",
   "voiceMute": "静音",
   "voiceUnmute": "取消静音",
   "voiceDeafen": "关闭声音",
