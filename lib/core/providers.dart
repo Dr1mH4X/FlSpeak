@@ -31,7 +31,23 @@ class SessionController extends Notifier<SessionView> {
     final session = ref.watch(coreSessionProvider);
     final subscription = session.events().listen(_onEvent);
     ref.onDispose(subscription.cancel);
+    // 初始档案在 spawn 时就广播过一次，广播通道不补发给订阅者；订阅后主动拉一遍，
+    // 否则打开应用时已保存的服务器列表要等下一次增删才会出现。
+    unawaited(_loadServers(session));
     return const SessionView();
+  }
+
+  Future<void> _loadServers(CoreSession session) async {
+    try {
+      final servers = await session.listServers();
+      if (ref.mounted) {
+        state = state.copyWith(servers: servers);
+      }
+    } on CoreError catch (error) {
+      if (ref.mounted) {
+        state = state.copyWith(notice: describeCoreError(error));
+      }
+    }
   }
 
   /// 录入服务器。返回新档案，地址被策略拒绝时返回 `null` 并把原因写进提示条。
