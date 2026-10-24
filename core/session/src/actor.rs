@@ -45,6 +45,23 @@ const MAX_TEXT_MESSAGE_BYTES: usize = 8192;
 /// 音频线程到 actor 的事件队列，溢出时丢的是语音包而不是协议命令。
 pub(crate) const AUDIO_EVENT_CAPACITY: usize = 64;
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct ChannelMetadata {
+    order: Option<u64>,
+    description: Option<String>,
+    codec: Option<i32>,
+    max_clients: Option<u16>,
+    max_clients_limited: Option<bool>,
+    password_protected: Option<bool>,
+}
+
+#[derive(Debug)]
+struct ChannelDirectory {
+    channels: Vec<ChannelView>,
+    codecs: Option<HashMap<u64, i32>>,
+    metadata_error: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 struct ConnectTarget {
     id: String,
@@ -499,6 +516,10 @@ impl Actor {
                     client_id,
                     channel_id,
                 });
+                self.subscribe_all_channels().await;
+                if let Some(client) = self.client.clone() {
+                    self.wait_for_welcome_directory(&client).await;
+                }
                 if let Err(err) = self.refresh_snapshot(true).await {
                     self.emit(SessionEvent::Log {
                         level: "warn".into(),
@@ -610,17 +631,31 @@ impl Actor {
 
     async fn list_channels(&self) -> Result<Vec<ChannelView>, SessionError> {
         let client = self.connected()?;
-        let channels = tsclient_rs::listChannels(&client)
-            .await
-            .map_err(protocol_error)?;
-        Ok(channels.into_iter().map(ChannelView::from).collect())
+        let directory = self.read_channel_directory(&client).await?;
+        if let Some(err) = directory.metadata_error {
+            self.emit(SessionEvent::Log {
+                level: "warn".into(),
+                message: format!("读取频道标志失败: {err}"),
+            });
+        }
+        Ok(directory.channels)
     }
 
     async fn list_clients(&self) -> Result<Vec<ClientView>, SessionError> {
         let client = self.connected()?;
-        let clients = tsclient_rs::listClients(&client)
-            .await
-            .map_err(protocol_error)?;
+        let clients = match tsclient_rs::listClients(&client).await {
+            Ok(clients) => clients,
+            Err(err) => {
+                // None 表示目录还没同步完，和空快照一样拿不到成员，回退到原错误。
+                let Some(snapshot) = client
+                    .directory_snapshot()
+                    .filter(|snapshot| !snapshot.clients.is_empty())
+                else {
+                    return Err(protocol_error(err));
+                };
+                snapshot.clients
+            }
+        };
         Ok(clients.into_iter().map(ClientView::from).collect())
     }
 
@@ -628,28 +663,59 @@ impl Actor {
         let Some(client) = self.client.clone() else {
             return Ok(());
         };
-        let channels = tsclient_rs::listChannels(&client)
-            .await
-            .map_err(protocol_error)?;
-        let clients = tsclient_rs::listClients(&client)
-            .await
-            .map_err(protocol_error)?;
-        let channels: Vec<ChannelView> = channels.into_iter().map(ChannelView::from).collect();
-        let clients: Vec<ClientView> = clients.into_iter().map(ClientView::from).collect();
+        let previous = self.last_snapshot.clone();
+        let mut failures = Vec::new();
 
-        let codecs = match fetch_channel_codecs(&client).await {
-            Ok(codecs) => Some(codecs),
+        let channels = match self.read_channel_directory(&client).await {
+            Ok(directory) => {
+                if let Some(err) = directory.metadata_error {
+                    self.emit(SessionEvent::Log {
+                        level: "warn".into(),
+                        message: format!("读取频道标志失败: {err}"),
+                    });
+                }
+                if let Some(codecs) = directory.codecs {
+                    self.channel_codecs = codecs;
+                }
+                directory.channels
+            }
             Err(err) => {
-                self.emit(SessionEvent::Log {
-                    level: "warn".into(),
-                    message: format!("读取频道 codec 失败: {err}"),
-                });
-                None
+                failures.push(format!("频道目录: {err}"));
+                previous
+                    .as_ref()
+                    .map(|(channels, _)| channels.clone())
+                    .unwrap_or_default()
             }
         };
-        if let Some(codecs) = codecs {
-            self.channel_codecs = codecs;
+
+        let clients = match tsclient_rs::listClients(&client).await {
+            Ok(clients) => clients.into_iter().map(ClientView::from).collect(),
+            Err(err) => {
+                let snapshot = client
+                    .directory_snapshot()
+                    .filter(|snapshot| !snapshot.clients.is_empty());
+                if let Some(snapshot) = snapshot {
+                    snapshot.clients.into_iter().map(ClientView::from).collect()
+                } else {
+                    failures.push(format!("成员列表: {err}"));
+                    previous
+                        .as_ref()
+                        .map(|(_, clients)| clients.clone())
+                        .unwrap_or_default()
+                }
+            }
+        };
+
+        if failures.len() == 2 {
+            return Err(SessionError::Protocol(failures.join("; ")));
         }
+        for failure in failures {
+            self.emit(SessionEvent::Log {
+                level: "warn".into(),
+                message: format!("刷新部分目录失败: {failure}"),
+            });
+        }
+
         let mut self_codec = self.channel_codecs.get(&self.self_channel_id).copied();
         if self_codec.is_none() && self.self_channel_id != 0 {
             match fetch_channel_codec(&client, self.self_channel_id).await {
@@ -688,6 +754,98 @@ impl Actor {
             self.emit(SessionEvent::Snapshot { channels, clients });
         }
         Ok(())
+    }
+
+    async fn subscribe_all_channels(&self) {
+        let Ok(client) = self.connected() else {
+            return;
+        };
+        if let Err(err) = client.exec_command("channelsubscribeall", 5_000).await {
+            self.emit(SessionEvent::Log {
+                level: "warn".into(),
+                message: format!("订阅全部频道失败，将只接收当前订阅范围内的成员事件: {err}"),
+            });
+        }
+    }
+
+    async fn wait_for_welcome_directory(&self, client: &Client) {
+        // 上游 0.2.0 提供事件驱动的目录就绪等待（channellistfinished）；保留旧轮询
+        // 实现的 500ms 上限，服务器迟迟不发目录时跳过等待，不阻塞连接后的初始化。
+        let _ = tokio::time::timeout(
+            Duration::from_millis(500),
+            client.wait_directory_ready(None),
+        )
+        .await;
+    }
+
+    async fn read_channel_directory(
+        &self,
+        client: &Client,
+    ) -> Result<ChannelDirectory, SessionError> {
+        let (channels, explicit_list_worked) = match tsclient_rs::listChannels(client).await {
+            Ok(channels) => (channels, true),
+            Err(err) => {
+                let Some(snapshot) = client
+                    .directory_snapshot()
+                    .filter(|snapshot| !snapshot.channels.is_empty())
+                else {
+                    return Err(protocol_error(err));
+                };
+                (snapshot.channels, false)
+            }
+        };
+        if !explicit_list_worked {
+            let codecs: HashMap<u64, i32> = channels
+                .iter()
+                .filter_map(|channel| channel.codec.map(|codec| (channel.id, codec)))
+                .collect();
+            return Ok(ChannelDirectory {
+                channels: channels
+                    .into_iter()
+                    .map(|channel| channel_view(channel, None))
+                    .collect(),
+                codecs: (!codecs.is_empty()).then_some(codecs),
+                metadata_error: None,
+            });
+        }
+        match fetch_channel_metadata(client).await {
+            Ok(metadata) => {
+                let mut codecs: HashMap<u64, i32> = metadata
+                    .iter()
+                    .filter_map(|(id, channel)| channel.codec.map(|codec| (*id, codec)))
+                    .collect();
+                codecs.extend(
+                    channels
+                        .iter()
+                        .filter_map(|channel| channel.codec.map(|codec| (channel.id, codec))),
+                );
+                Ok(ChannelDirectory {
+                    channels: channels
+                        .into_iter()
+                        .map(|channel| {
+                            let id = channel.id;
+                            channel_view(channel, metadata.get(&id))
+                        })
+                        .collect(),
+                    codecs: (!codecs.is_empty()).then_some(codecs),
+                    metadata_error: None,
+                })
+            }
+            Err(err) => {
+                let codecs: HashMap<u64, i32> = channels
+                    .iter()
+                    .filter_map(|channel| channel.codec.map(|codec| (channel.id, codec)))
+                    .collect();
+                Ok(ChannelDirectory {
+                    channels: channels
+                        .into_iter()
+                        .map(|channel| channel_view(channel, None))
+                        .collect(),
+                    codecs: (!codecs.is_empty()).then_some(codecs),
+                    metadata_error: Some(err.to_string()),
+                })
+            }
+        }
     }
 
     async fn poll_snapshot(&mut self) {
@@ -1313,29 +1471,71 @@ fn reconnect_delay(attempt: u32) -> Duration {
     }
 }
 
-async fn fetch_channel_codecs(client: &Client) -> Result<HashMap<u64, i32>, SessionError> {
+async fn fetch_channel_metadata(
+    client: &Client,
+) -> Result<HashMap<u64, ChannelMetadata>, SessionError> {
     let rows = client
-        .exec_command_with_response("channellist -codec", 5_000)
+        .exec_command_with_response("channellist -flags -codec", 5_000)
         .await
         .map_err(protocol_error)?;
-    Ok(parse_channel_codecs(&rows))
+    Ok(parse_channel_metadata(&rows))
 }
 
-fn parse_channel_codecs(rows: &[HashMap<String, String>]) -> HashMap<u64, i32> {
-    let mut codecs = HashMap::new();
+fn parse_channel_metadata(rows: &[HashMap<String, String>]) -> HashMap<u64, ChannelMetadata> {
+    let mut channels = HashMap::new();
     for row in rows {
         let Some(cid) = row.get("cid").and_then(|value| value.parse::<u64>().ok()) else {
             continue;
         };
-        let Some(codec) = row
-            .get("channel_codec")
-            .and_then(|value| value.parse::<i32>().ok())
-        else {
-            continue;
+        let max_clients_limited = match row
+            .get("channel_flag_maxclients_unlimited")
+            .map(String::as_str)
+        {
+            Some("0") => Some(true),
+            Some("1") => Some(false),
+            _ => None,
         };
-        codecs.insert(cid, codec);
+        let password_protected = match row.get("channel_flag_password").map(String::as_str) {
+            Some("0") => Some(false),
+            Some("1") => Some(true),
+            _ => None,
+        };
+        channels.insert(
+            cid,
+            ChannelMetadata {
+                order: row
+                    .get("channel_order")
+                    .and_then(|value| value.parse::<u64>().ok()),
+                description: row
+                    .get("channel_topic")
+                    .or_else(|| row.get("channel_description"))
+                    .cloned(),
+                codec: row
+                    .get("channel_codec")
+                    .and_then(|value| value.parse::<i32>().ok()),
+                max_clients: row
+                    .get("channel_maxclients")
+                    .and_then(|value| value.parse::<u16>().ok()),
+                max_clients_limited,
+                password_protected,
+            },
+        );
     }
-    codecs
+    channels
+}
+
+fn channel_view(channel: ChannelInfo, metadata: Option<&ChannelMetadata>) -> ChannelView {
+    let metadata = metadata.cloned().unwrap_or_default();
+    ChannelView {
+        id: channel.id,
+        parent_id: channel.parent_id,
+        order: metadata.order.or(Some(channel.order)),
+        name: channel.name,
+        description: metadata.description.unwrap_or(channel.description),
+        max_clients: metadata.max_clients.or(channel.max_clients),
+        max_clients_limited: metadata.max_clients_limited.or(channel.max_clients_limited),
+        password_protected: metadata.password_protected.or(channel.password_protected),
+    }
 }
 
 async fn fetch_channel_codec(
@@ -1574,17 +1774,6 @@ fn register_handlers(
             });
         }
     }));
-}
-
-impl From<ChannelInfo> for ChannelView {
-    fn from(info: ChannelInfo) -> Self {
-        Self {
-            id: info.id,
-            parent_id: info.parent_id,
-            name: info.name,
-            description: info.description,
-        }
-    }
 }
 
 impl From<ClientInfo> for ClientView {
@@ -1859,18 +2048,74 @@ mod tests {
     }
 
     #[test]
-    fn channel_codec_rows_are_parsed_and_bad_rows_skipped() {
+    fn channel_flags_codec_and_public_metadata_are_parsed() {
         let mut first = HashMap::new();
         first.insert("cid".to_string(), "7".to_string());
+        first.insert("channel_order".to_string(), "3".to_string());
+        first.insert("channel_topic".to_string(), "Welcome".to_string());
+        first.insert("channel_maxclients".to_string(), "25".to_string());
+        first.insert(
+            "channel_flag_maxclients_unlimited".to_string(),
+            "0".to_string(),
+        );
+        first.insert("channel_flag_password".to_string(), "1".to_string());
         first.insert("channel_codec".to_string(), "5".to_string());
         let mut second = HashMap::new();
         second.insert("cid".to_string(), "8".to_string());
+        second.insert(
+            "channel_flag_maxclients_unlimited".to_string(),
+            "1".to_string(),
+        );
         second.insert("channel_codec".to_string(), "not-a-number".to_string());
         let mut third = HashMap::new();
         third.insert("channel_codec".to_string(), "4".to_string());
 
-        let codecs = parse_channel_codecs(&[first, second, third]);
-        assert_eq!(codecs.get(&7), Some(&5));
-        assert_eq!(codecs.len(), 1);
+        let metadata = parse_channel_metadata(&[first, second, third]);
+        let first = metadata.get(&7).expect("first channel");
+        assert_eq!(first.order, Some(3));
+        assert_eq!(first.description.as_deref(), Some("Welcome"));
+        assert_eq!(first.codec, Some(5));
+        assert_eq!(first.max_clients, Some(25));
+        assert_eq!(first.max_clients_limited, Some(true));
+        assert_eq!(first.password_protected, Some(true));
+
+        let second = metadata.get(&8).expect("second channel");
+        assert_eq!(second.codec, None);
+        assert_eq!(second.max_clients_limited, Some(false));
+        assert_eq!(metadata.len(), 2);
+    }
+
+    #[test]
+    fn channel_view_merges_directory_rows_with_optional_flags() {
+        let channel = ChannelInfo {
+            id: 9,
+            parent_id: 2,
+            order: 1,
+            name: "Lobby".to_string(),
+            description: String::new(),
+            password_protected: None,
+            max_clients: None,
+            max_clients_limited: None,
+            codec: None,
+        };
+        let metadata = ChannelMetadata {
+            order: Some(12),
+            description: Some("Public topic".to_string()),
+            max_clients: Some(10),
+            max_clients_limited: Some(true),
+            password_protected: Some(false),
+            ..ChannelMetadata::default()
+        };
+
+        let view = channel_view(channel.clone(), Some(&metadata));
+        assert_eq!(view.order, Some(12));
+        assert_eq!(view.description, "Public topic");
+        assert_eq!(view.max_clients, Some(10));
+        assert_eq!(view.max_clients_limited, Some(true));
+        assert_eq!(view.password_protected, Some(false));
+
+        let fallback = channel_view(channel, None);
+        assert_eq!(fallback.order, Some(1));
+        assert_eq!(fallback.password_protected, None);
     }
 }

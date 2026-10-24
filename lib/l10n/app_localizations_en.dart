@@ -213,6 +213,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get channelCurrent => 'You are here';
 
   @override
+  String get channelPasswordProtected => 'Channel password required';
+
+  @override
   String get voiceTab => 'Voice';
 
   @override

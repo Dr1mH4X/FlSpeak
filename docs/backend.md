@@ -69,7 +69,7 @@ cpal 输入        cpal 输出
 ### 频道 codec
 
 TS3 的 codec 是频道属性，不是客户端全局配置。actor 在快照/移动时读取
-`channellist -codec` 或 `channelinfo cid=...` 的 `channel_codec`：
+`channellist -flags -codec` 或 `channelinfo cid=...` 的 `channel_codec`：
 
 - 4 → 单声道 `Application::Voip`，64kbps；
 - 5 → 立体声 `Application::Audio`，128kbps；
@@ -86,7 +86,11 @@ Opus 不能中途换声道数，切 codec 时 capture 线程重建 encoder。
 
 ## 频道与成员持续同步
 
-- 连接成功后 actor 拉 `channellist`、`clientlist`、`channellist -codec`，发 `Snapshot`；
+- 连接成功后 actor 先尝试 `channelsubscribeall`，再拉 `channellist`、`clientlist`、
+  `channellist -flags -codec`，发 `Snapshot`；订阅或标志读取失败只降级，不中止连接；
+- 服务端拒绝显式 `channellist` / `clientlist` 时，actor 使用 `tsclient-rs` 从欢迎包
+  和通知维护的 `directory_snapshot()`；频道顺序、主题、密码标记、人数上限与 codec
+  优先来自当前返回行，缺失时由该快照补齐；
 - 连接期间每 30 秒轮询一次，只有内容变化时才发快照；
 - 成员事件继续即时推送，Dart 用快照兜底；
 - 自己的频道以 `ClientMoved` 事件为准，收到后查 codec 并同步给音频层。

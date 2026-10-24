@@ -60,8 +60,13 @@ pub struct TextMessageView {
 pub struct ChannelView {
     pub id: u64,
     pub parent_id: u64,
+    /// TeamSpeak 的同级排序位置；频道标志不可读时为空。
+    pub order: Option<u64>,
     pub name: String,
     pub description: String,
+    pub max_clients: Option<u16>,
+    pub max_clients_limited: Option<bool>,
+    pub password_protected: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

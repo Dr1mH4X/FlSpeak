@@ -140,19 +140,34 @@ class AudioDevicesView {
 class ChannelView {
   final int id;
   final int parentId;
+  final int? order;
   final String name;
   final String description;
+  final int? maxClients;
+  final bool? maxClientsLimited;
+  final bool? passwordProtected;
 
   const ChannelView({
     required this.id,
     required this.parentId,
+    this.order,
     required this.name,
     required this.description,
+    this.maxClients,
+    this.maxClientsLimited,
+    this.passwordProtected,
   });
 
   @override
   int get hashCode =>
-      id.hashCode ^ parentId.hashCode ^ name.hashCode ^ description.hashCode;
+      id.hashCode ^
+      parentId.hashCode ^
+      order.hashCode ^
+      name.hashCode ^
+      description.hashCode ^
+      maxClients.hashCode ^
+      maxClientsLimited.hashCode ^
+      passwordProtected.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -161,8 +176,12 @@ class ChannelView {
           runtimeType == other.runtimeType &&
           id == other.id &&
           parentId == other.parentId &&
+          order == other.order &&
           name == other.name &&
-          description == other.description;
+          description == other.description &&
+          maxClients == other.maxClients &&
+          maxClientsLimited == other.maxClientsLimited &&
+          passwordProtected == other.passwordProtected;
 }
 
 class ClientView {

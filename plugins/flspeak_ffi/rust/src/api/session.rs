@@ -32,8 +32,12 @@ pub struct ServerProfileView {
 pub struct ChannelView {
     pub id: u64,
     pub parent_id: u64,
+    pub order: Option<u64>,
     pub name: String,
     pub description: String,
+    pub max_clients: Option<u16>,
+    pub max_clients_limited: Option<bool>,
+    pub password_protected: Option<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -410,8 +414,12 @@ impl From<CoreChannelView> for ChannelView {
         Self {
             id: view.id,
             parent_id: view.parent_id,
+            order: view.order,
             name: view.name,
             description: view.description,
+            max_clients: view.max_clients,
+            max_clients_limited: view.max_clients_limited,
+            password_protected: view.password_protected,
         }
     }
 }

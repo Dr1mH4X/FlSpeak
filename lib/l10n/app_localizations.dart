@@ -458,6 +458,12 @@ abstract class AppLocalizations {
   /// **'You are here'**
   String get channelCurrent;
 
+  /// No description provided for @channelPasswordProtected.
+  ///
+  /// In en, this message translates to:
+  /// **'Channel password required'**
+  String get channelPasswordProtected;
+
   /// No description provided for @voiceTab.
   ///
   /// In en, this message translates to:

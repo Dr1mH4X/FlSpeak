@@ -175,13 +175,10 @@ class SessionController extends Notifier<SessionView> {
     );
   }
 
-  /// 连接成功后拉一次频道与成员快照。
+  /// 让 Rust 重新协调频道与成员；两路数据可独立降级，由 CoreEvent 统一更新界面。
   Future<void> refresh() async {
-    final session = ref.read(coreSessionProvider);
     try {
-      final channels = await session.listChannels();
-      final clients = await session.listClients();
-      state = state.copyWith(channels: channels, clients: clients);
+      await ref.read(coreSessionProvider).requestSnapshot();
     } on CoreError catch (error) {
       state = state.copyWith(notice: describeCoreError(error));
     }

@@ -1580,13 +1580,21 @@ impl SseDecode for crate::api::session::ChannelView {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_id = <u64>::sse_decode(deserializer);
         let mut var_parentId = <u64>::sse_decode(deserializer);
+        let mut var_order = <Option<u64>>::sse_decode(deserializer);
         let mut var_name = <String>::sse_decode(deserializer);
         let mut var_description = <String>::sse_decode(deserializer);
+        let mut var_maxClients = <Option<u16>>::sse_decode(deserializer);
+        let mut var_maxClientsLimited = <Option<bool>>::sse_decode(deserializer);
+        let mut var_passwordProtected = <Option<bool>>::sse_decode(deserializer);
         return crate::api::session::ChannelView {
             id: var_id,
             parent_id: var_parentId,
+            order: var_order,
             name: var_name,
             description: var_description,
+            max_clients: var_maxClients,
+            max_clients_limited: var_maxClientsLimited,
+            password_protected: var_passwordProtected,
         };
     }
 }
@@ -1986,11 +1994,44 @@ impl SseDecode for Vec<crate::api::session::ServerProfileView> {
     }
 }
 
+impl SseDecode for Option<u64> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<u64>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<String> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<String>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<bool> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<bool>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<u16> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<u16>::sse_decode(deserializer));
         } else {
             return None;
         }
@@ -2260,8 +2301,12 @@ impl flutter_rust_bridge::IntoDart for crate::api::session::ChannelView {
         [
             self.id.into_into_dart().into_dart(),
             self.parent_id.into_into_dart().into_dart(),
+            self.order.into_into_dart().into_dart(),
             self.name.into_into_dart().into_dart(),
             self.description.into_into_dart().into_dart(),
+            self.max_clients.into_into_dart().into_dart(),
+            self.max_clients_limited.into_into_dart().into_dart(),
+            self.password_protected.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -2672,8 +2717,12 @@ impl SseEncode for crate::api::session::ChannelView {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <u64>::sse_encode(self.id, serializer);
         <u64>::sse_encode(self.parent_id, serializer);
+        <Option<u64>>::sse_encode(self.order, serializer);
         <String>::sse_encode(self.name, serializer);
         <String>::sse_encode(self.description, serializer);
+        <Option<u16>>::sse_encode(self.max_clients, serializer);
+        <Option<bool>>::sse_encode(self.max_clients_limited, serializer);
+        <Option<bool>>::sse_encode(self.password_protected, serializer);
     }
 }
 
@@ -2988,12 +3037,42 @@ impl SseEncode for Vec<crate::api::session::ServerProfileView> {
     }
 }
 
+impl SseEncode for Option<u64> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <u64>::sse_encode(value, serializer);
+        }
+    }
+}
+
 impl SseEncode for Option<String> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <String>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<bool> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <bool>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<u16> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <u16>::sse_encode(value, serializer);
         }
     }
 }

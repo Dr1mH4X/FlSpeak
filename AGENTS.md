@@ -43,8 +43,7 @@
 提交前至少跑：
 
 ```sh
-cd plugins/flspeak_ffi/rust && cargo fmt --all && cargo clippy --workspace --all-targets --all-features -- -D warnings && cargo test --workspace --all-features
-cd ../../.. && flutter analyze
+just check
 ```
 
-聚合命令见 `.agents/commands.md`。
+等价于在 `plugins/flspeak_ffi/rust` 跑 `cargo fmt --all && cargo clippy --workspace --all-targets --all-features -- -D warnings && cargo test --workspace --all-features`，再在根目录跑 `dart format lib setup.dart` 与 `flutter analyze`。没装 just 就按原始命令跑；全部任务用 `just --list` 查看，细节见 `.agents/commands.md`。

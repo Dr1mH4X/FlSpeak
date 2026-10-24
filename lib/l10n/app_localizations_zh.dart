@@ -211,6 +211,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get channelCurrent => '当前所在';
 
   @override
+  String get channelPasswordProtected => '需要频道密码';
+
+  @override
   String get voiceTab => '语音';
 
   @override

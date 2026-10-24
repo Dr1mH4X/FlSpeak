@@ -116,6 +116,7 @@
   "channelExpand": "Expand",
   "channelCollapse": "Collapse",
   "channelCurrent": "You are here",
+  "channelPasswordProtected": "Channel password required",
   "voiceTab": "Voice",
   "voiceJoin": "Join voice",
   "voiceLeave": "Leave",

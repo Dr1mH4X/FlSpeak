@@ -226,7 +226,7 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
     final rows = <_TreeRow>[];
 
     void walk(ChannelView channel, int depth) {
-      final children = view.childrenOf(channel.id);
+      final children = _sortedChannels(view.childrenOf(channel.id));
       final members = view.clientsIn(channel.id);
       final expanded =
           !_collapsed.contains(channel.id) &&
@@ -243,11 +243,19 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
       }
     }
 
-    final roots = view.rootChannels()..sort((a, b) => a.id.compareTo(b.id));
+    final roots = _sortedChannels(view.rootChannels());
     for (final root in roots) {
       walk(root, 0);
     }
     return rows;
+  }
+
+  List<ChannelView> _sortedChannels(List<ChannelView> channels) {
+    channels.sort((a, b) {
+      final byOrder = (a.order ?? a.id).compareTo(b.order ?? b.id);
+      return byOrder != 0 ? byOrder : a.id.compareTo(b.id);
+    });
+    return channels;
   }
 }
 
@@ -305,6 +313,14 @@ class _ChannelTile extends StatelessWidget {
     final foreground = selected
         ? scheme.onPrimaryContainer
         : scheme.onSurfaceVariant;
+    final capacity = channel.maxClients;
+    final capacityLimited =
+        capacity != null && channel.maxClientsLimited == true;
+    final memberLabel = capacityLimited
+        ? '$memberCount/$capacity'
+        : memberCount > 0
+        ? '$memberCount'
+        : null;
 
     return Padding(
       padding: EdgeInsets.only(left: depth * 16.0),
@@ -367,11 +383,23 @@ class _ChannelTile extends StatelessWidget {
                         ),
                       ),
                     ),
-                    if (memberCount > 0)
+                    if (channel.passwordProtected == true)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 6),
+                        child: Tooltip(
+                          message: l10n.channelPasswordProtected,
+                          child: Icon(
+                            Icons.lock_outline_rounded,
+                            size: 15,
+                            color: foreground,
+                          ),
+                        ),
+                      ),
+                    if (memberLabel != null)
                       Padding(
                         padding: const EdgeInsets.only(left: 8),
                         child: Text(
-                          '$memberCount',
+                          memberLabel,
                           style: context.texts.labelSmall?.copyWith(
                             color: foreground,
                             fontFeatures: tabularFigures,

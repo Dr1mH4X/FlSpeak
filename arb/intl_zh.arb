@@ -116,6 +116,7 @@
   "channelExpand": "展开",
   "channelCollapse": "收起",
   "channelCurrent": "当前所在",
+  "channelPasswordProtected": "需要频道密码",
   "voiceTab": "语音",
   "voiceJoin": "加入语音",
   "voiceLeave": "离开",

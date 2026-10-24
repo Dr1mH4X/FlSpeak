@@ -62,17 +62,21 @@ async fn live_connect_chain() {
     .expect("connect 不应超过 30s")
     .expect("连接失败");
 
-    assert!(matches!(
-        handle.state().await.expect("state"),
-        SessionState::Connected { .. }
-    ));
+    let SessionState::Connected { channel_id, .. } = handle.state().await.expect("state") else {
+        panic!("连接后应处于 Connected");
+    };
+    assert_ne!(channel_id, 0, "欢迎目录应恢复自己的真实频道");
     println!("connected, client_id/channel_id 已就绪");
 
-    // 很多服务器对新建身份默认不给 channellist/clientlist 权限；连接本身仍然算通过。
+    // 很多服务器拒绝显式 channellist/clientlist；actor 应回退到欢迎目录。
     match handle.list_channels().await {
         Ok(channels) => {
             println!("channels: {}", channels.len());
             assert!(!channels.is_empty(), "服务器至少应有一个频道");
+            assert!(
+                channels.iter().any(|channel| channel.order.is_some()),
+                "欢迎目录应包含频道顺序"
+            );
         }
         Err(err) => eprintln!("listChannels 被拒绝（权限不足时正常）: {err}"),
     }
