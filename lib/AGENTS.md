@@ -13,4 +13,4 @@
 - FFI 生成类型在 `plugins/flspeak_ffi/lib/src/rust/**`，同样不要手改。
 - 页面布局可以依赖 `SessionView`，但不能依赖 `CoreSession` 的内部状态。
 
-完整编码约定见 [.agents/rules.md](../.agents/rules.md)。
+编码反面见 [../docs/defensive-patterns.md](../docs/defensive-patterns.md)，开发流程与语言约定见 [../docs/development.md](../docs/development.md)。

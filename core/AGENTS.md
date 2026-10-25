@@ -16,11 +16,4 @@
 
 ## 实现约定
 
-- 错误用 `thiserror`，每层一个错误类型；跨层用 `#[from]`，不要用 `unwrap`
-  掩盖失败。
-- 公共类型字段默认 `pub`，与 tsclient-rs 的风格保持一致；内部细节才收窄。
-- Rust 单测写在模块内 `#[cfg(test)] mod tests`，不依赖网络或真实服务器。
-- 需要官方域名做测试夹具时，从 `proto::FORBIDDEN_HOST_SUFFIXES` 拼，
-  不要写字面量。
-
-完整编码约定见 [.agents/rules.md](../.agents/rules.md)。
+编码反面与错误处理见 [../docs/defensive-patterns.md](../docs/defensive-patterns.md)，测试约定见 [../docs/testing.md](../docs/testing.md)，开发流程与语言约定见 [../docs/development.md](../docs/development.md)。

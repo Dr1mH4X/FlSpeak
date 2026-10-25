@@ -75,7 +75,7 @@ Transfer* / Log / Denied / Failed
 | `voice-capture` 线程 | cpal 输入、格式转换、VAD/PTT、20ms Opus、发送节拍 |
 | `voice-playback` 线程 | cpal 输出、每说话人 jitter/解码/混音、设备格式转换 |
 
-会话线程必须独占的原因见 `.agents/notes/implemented/2026-10-08-session-actor.md`：
+会话线程必须独占的原因见 `.agents/notes/implemented/architecture/2026-10-08-session-actor.md`：
 tsclient-rs 的建连 future 不是 `Send`。
 
 ## 目录职责

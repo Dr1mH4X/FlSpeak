@@ -36,5 +36,5 @@ FlSpeak/
 
 依赖 crates.io 上的 `tsclient-rs = "0.1.5"`。上游是 teamspeak-js 的结构化移植，公共 API
 刻意与 JS 对齐，**不要把本项目的连接边界逻辑推回上游**。只有中性的、纯增量的改动才值得提 PR
-（候选见 `.agents/notes/implemented/2026-10-18-full-duplex-audio.md`）。本地要改上游时用根 `Cargo.toml` 里的
+（候选见 `.agents/notes/implemented/architecture/2026-10-18-full-duplex-audio.md`）。本地要改上游时用根 `Cargo.toml` 里的
 `[patch.crates-io]`，用完删掉，不要提交（CI 上没有那个路径）。

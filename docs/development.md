@@ -1,8 +1,6 @@
-# 命令
+# 开发流程
 
-所有命令都在仓库根目录执行，除非写明 `working-directory`。
-
-日常入口是仓库根的 `justfile`：`just`（或 `just --list`）列出全部任务；`just check` 是提交前的聚合验证，`just ci` 对齐 CI 的静态检查，`just codegen-check` 校验 FFI 生成物。本文保留原始命令，作为各任务的展开与平台细节。
+所有命令都在仓库根目录执行，除非写明工作目录。日常入口是仓库根的 `justfile`：`just`（或 `just --list`）列出全部任务，`just check` 是提交前的聚合验证，`just ci` 对齐 CI 的静态检查，`just codegen-check` 校验 FFI 生成物。本文保留原始命令，作为各任务的展开与平台细节。编码反面见 [defensive-patterns.md](defensive-patterns.md)，测试约定见 [testing.md](testing.md)。
 
 ## Rust
 
@@ -26,15 +24,8 @@ brew install pkgconf                       # 让 pkg-config 找到 /opt/homebrew
 CMAKE_POLICY_VERSION_MINIMUM=3.5 cargo test --workspace --all-features   # 或放宽 CMake 策略
 ```
 
-只跑档案/协议测试（不碰音频依赖）：
-
-```sh
-cargo test -p server -p proto
-```
-
-`session` 现在依赖 `audio` 的 `audio` feature（Opus/cpal），跑它需要 Opus 工具链。
-仓库根 `.cargo/config.toml` 已设置 `CMAKE_POLICY_VERSION_MINIMUM=3.5`；macOS 上若
-`audiopus_sys` 找不到 `pkg-config` 会走内置源码构建，装了 `pkgconf` 可以省掉这一步。
+仓库根 `.cargo/config.toml` 已设置 `CMAKE_POLICY_VERSION_MINIMUM=3.5`；`session` 依赖
+`audio` 的 `audio` feature（Opus/cpal），跑它的测试同样需要 Opus 工具链。
 
 ## FFI 绑定
 
@@ -69,38 +60,26 @@ cd plugins/flspeak_ffi && flutter analyze
 `rust-toolchain.toml` 里列的 10 个 target）。想跳过：`--dart-define` 无效，用
 `hooks.user_defines.flspeak_ffi.build_assets=false` 改 `pubspec.yaml`。
 
-## 真实服务器连接测试（手动，不走 CI）
+## 开发流程
 
-`core/session/tests/live_connect.rs` 默认 `#[ignore]`，只在显式指定时运行；它关闭音频，
-不会申请麦克风/扬声器权限：
+动手前先读完相关文件与全部需求，不盲目编辑；只修改当前任务涉及的文件，不给未改动的代码补 docstring 或类型注解，避免无谓 diff。注释只写「为什么」，不写「是什么」，且只在逻辑不清晰处添加；标识符与字符串用 ASCII，注释可以用中文。
 
-```sh
-cd plugins/flspeak_ffi/rust
-FLSPEAK_TEST_SERVER=ts.example.com \
-FLSPEAK_TEST_NICKNAME=flspeak-probe \
-cargo test -p session --test live_connect -- --ignored --nocapture
+语言约定：
+
+- Rust：公共类型字段默认 `pub`，与 tsclient-rs 的风格保持一致；内部细节才收窄。
+- Dart：业务逻辑不进 UI 层，页面只做展示与转发；文案全部走 `arb/`，不在 widget 里硬编码中文或英文。
+
+## git 约定
+
+提交用 Conventional Commits 格式，标题 ≤100 字符，描述小写开头、结尾不加句号，中文可用：
+
+```text
+feat(session): 增加频道切换命令
+fix(proto): reject look-alike official domains
+docs(boundary): 记录 SRV 与 TSDNS 的取舍
 ```
 
-注意：tsclient-rs 走 UDP 9987。`proto::resolve_target` 会先查标准 DNS 的
-`_ts3._udp.<domain>` SRV；最终目标由 `proto::client` 检查一次，DNS 查询失败时回退到档案字面地址。
-TSDNS 尚未实现。服务器对访客关闭 `channellist` 时，测试只验证连接与状态，列表调用
-会打印权限拒绝而不判失败。
-
-### 最小消息探针（后台等消息）
-
-`core/session/examples/live_probe.rs` 会保持在线，把收到的文本消息**原文**写到 stdout 和
-`/tmp/flspeak-probe.log`，用于抓 TS6 图片消息的 BBCode/URL 格式：
-
-```sh
-cd plugins/flspeak_ffi/rust
-FLSPEAK_TEST_SERVER=example.com \
-FLSPEAK_TEST_NICKNAME=flspeak-probe \
-FLSPEAK_PROBE_SECONDS=1800 \
-cargo run -p session --example live_probe
-```
-
-访客身份可能没有服务器广播权限（`insufficient client permissions`）；连接、收消息不受影响。
-停止用 Ctrl-C，或把 `FLSPEAK_PROBE_SECONDS` 设小。
+不要写 `Co-authored-by:` 署名编码代理。破坏性改动用 `!` 加 `BREAKING CHANGE:` 页脚。发版日志按这些提交归纳，规则见 [release/AGENTS.md](release/AGENTS.md)。
 
 ## 发版
 
@@ -108,7 +87,7 @@ cargo run -p session --example live_probe
 dart setup.dart macos arm64 --version 0.2.0   # 内置 flutter build + 归拢产物到 dist/
 ```
 
-CI 上打 `v*` tag 会从 tag 推导版本号，再按 7 个平台矩阵打包，见 `docs/ci-cd.md`。
+CI 上打 `v*` tag 会从 tag 推导版本号，再按 7 个平台矩阵打包。发版日志与 Release 正文见 [release/AGENTS.md](release/AGENTS.md)，发布矩阵与已知简化见 [ci-cd.md](ci-cd.md)。
 
 ## 本地改上游 tsclient-rs
 
@@ -117,3 +96,5 @@ CI 上打 `v*` tag 会从 tag 推导版本号，再按 7 个平台矩阵打包�
 [patch.crates-io]
 tsclient-rs = { path = "../tsclient-rs" }
 ```
+
+用完删掉，不要提交（CI 上没有那个路径）。上游关系的其余约定见 `.agents/project.md`。

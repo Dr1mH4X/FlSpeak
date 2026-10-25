@@ -1,4 +1,4 @@
-# FlSpeak 开发入口。`just` 列出全部任务；各命令的平台细节见 .agents/commands.md。
+# FlSpeak 开发入口。`just` 列出全部任务；各命令的平台细节见 docs/development.md。
 
 # ── 格式化（cargo 从 plugins/flspeak_ffi/rust 跑，吃锁定工具链）──
 

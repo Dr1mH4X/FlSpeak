@@ -7,10 +7,12 @@
 | 想知道 | 读 |
 | --- | --- |
 | 仓库结构与不变量 | `.agents/project.md` |
-| 怎么编译、怎么验证 | `.agents/commands.md` |
-| 写代码的规矩 | `.agents/rules.md` |
+| 怎么编译、怎么验证 | `docs/development.md` |
+| 测试怎么写、跑哪些 | `docs/testing.md` |
+| 写代码的规矩 | `docs/defensive-patterns.md` |
 | 分层与数据流 | `docs/architecture.md` |
 | 连接边界为什么长这样 | `docs/connection-boundary.md` |
+| 文档放哪、怎么写 | `docs/AGENTS.md` |
 | 已经定下的技术决策 | `.agents/notes/implemented/` |
 
 子树规则只写该目录特有的约束，不重复本文件：
@@ -23,6 +25,7 @@
 | `docs/` | `docs/AGENTS.md` |
 | `.github/` | `.github/AGENTS.md` |
 | `.agents/notes/` | `.agents/notes/AGENTS.md` |
+| `.agents/skills/` | `.agents/skills/AGENTS.md` |
 
 ## 硬规则
 
@@ -46,4 +49,4 @@
 just check
 ```
 
-等价于在 `plugins/flspeak_ffi/rust` 跑 `cargo fmt --all && cargo clippy --workspace --all-targets --all-features -- -D warnings && cargo test --workspace --all-features`，再在根目录跑 `dart format lib test setup.dart`、`flutter analyze` 与 `flutter test`。没装 just 就按原始命令跑；全部任务用 `just --list` 查看，细节见 `.agents/commands.md`。
+等价于在 `plugins/flspeak_ffi/rust` 跑 `cargo fmt --all && cargo clippy --workspace --all-targets --all-features -- -D warnings && cargo test --workspace --all-features`，再在根目录跑 `dart format lib test setup.dart`、`flutter analyze` 与 `flutter test`。没装 just 就按原始命令跑；全部任务用 `just --list` 查看，细节见 `docs/development.md`。
