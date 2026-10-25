@@ -64,7 +64,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => 1721787446;
+  int get rustContentHash => 1304705293;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -158,6 +158,11 @@ abstract class RustLibApi extends BaseApi {
   Future<void> crateApiSessionCoreSessionSetAutoReconnect({
     required CoreSession that,
     required bool enabled,
+  });
+
+  Future<void> crateApiSessionCoreSessionSetAway({
+    required CoreSession that,
+    required bool away,
   });
 
   Future<void> crateApiSessionCoreSessionSetDeafened({
@@ -859,6 +864,44 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<void> crateApiSessionCoreSessionSetAway({
+    required CoreSession that,
+    required bool away,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCoreSession(
+            that,
+            serializer,
+          );
+          sse_encode_bool(away, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 18,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_core_error,
+        ),
+        constMeta: kCrateApiSessionCoreSessionSetAwayConstMeta,
+        argValues: [that, away],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSessionCoreSessionSetAwayConstMeta =>
+      const TaskConstMeta(
+        debugName: "CoreSession_set_away",
+        argNames: ["that", "away"],
+      );
+
+  @override
   Future<void> crateApiSessionCoreSessionSetDeafened({
     required CoreSession that,
     required bool deafened,
@@ -875,7 +918,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 18,
+            funcId: 19,
             port: port_,
           );
         },
@@ -913,7 +956,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 19,
+            funcId: 20,
             port: port_,
           );
         },
@@ -951,7 +994,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 20,
+            funcId: 21,
             port: port_,
           );
         },
@@ -989,7 +1032,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 21,
+            funcId: 22,
             port: port_,
           );
         },
@@ -1023,7 +1066,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 22,
+            funcId: 23,
             port: port_,
           );
         },
@@ -1059,7 +1102,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 23,
+            funcId: 24,
             port: port_,
           );
         },
@@ -1102,7 +1145,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 24,
+            funcId: 25,
             port: port_,
           );
         },
@@ -1147,7 +1190,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 25,
+            funcId: 26,
             port: port_,
           );
         },
@@ -1303,8 +1346,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ClientView dco_decode_client_view(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 6)
-      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
     return ClientView(
       id: dco_decode_i_32(arr[0]),
       nickname: dco_decode_String(arr[1]),
@@ -1312,6 +1355,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       channelId: dco_decode_CastedPrimitive_u_64(arr[3]),
       inputMuted: dco_decode_opt_box_autoadd_bool(arr[4]),
       outputMuted: dco_decode_opt_box_autoadd_bool(arr[5]),
+      away: dco_decode_opt_box_autoadd_bool(arr[6]),
+      awayMessage: dco_decode_opt_String(arr[7]),
     );
   }
 
@@ -1381,6 +1426,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           id: dco_decode_i_32(raw[1]),
           inputMuted: dco_decode_opt_box_autoadd_bool(raw[2]),
           outputMuted: dco_decode_opt_box_autoadd_bool(raw[3]),
+          away: dco_decode_opt_box_autoadd_bool(raw[4]),
+          awayMessage: dco_decode_opt_String(raw[5]),
         );
       case 9:
         return CoreEvent_Voice(
@@ -1480,16 +1527,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   CoreVoiceState dco_decode_core_voice_state(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 7)
-      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
     return CoreVoiceState(
       muted: dco_decode_bool(arr[0]),
       deafened: dco_decode_bool(arr[1]),
-      pttMode: dco_decode_bool(arr[2]),
-      pttActive: dco_decode_bool(arr[3]),
-      inputReady: dco_decode_bool(arr[4]),
-      outputReady: dco_decode_bool(arr[5]),
-      message: dco_decode_opt_String(arr[6]),
+      away: dco_decode_bool(arr[2]),
+      pttMode: dco_decode_bool(arr[3]),
+      pttActive: dco_decode_bool(arr[4]),
+      inputReady: dco_decode_bool(arr[5]),
+      outputReady: dco_decode_bool(arr[6]),
+      message: dco_decode_opt_String(arr[7]),
     );
   }
 
@@ -1767,6 +1815,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_channelId = sse_decode_CastedPrimitive_u_64(deserializer);
     var var_inputMuted = sse_decode_opt_box_autoadd_bool(deserializer);
     var var_outputMuted = sse_decode_opt_box_autoadd_bool(deserializer);
+    var var_away = sse_decode_opt_box_autoadd_bool(deserializer);
+    var var_awayMessage = sse_decode_opt_String(deserializer);
     return ClientView(
       id: var_id,
       nickname: var_nickname,
@@ -1774,6 +1824,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       channelId: var_channelId,
       inputMuted: var_inputMuted,
       outputMuted: var_outputMuted,
+      away: var_away,
+      awayMessage: var_awayMessage,
     );
   }
 
@@ -1856,10 +1908,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         var var_id = sse_decode_i_32(deserializer);
         var var_inputMuted = sse_decode_opt_box_autoadd_bool(deserializer);
         var var_outputMuted = sse_decode_opt_box_autoadd_bool(deserializer);
+        var var_away = sse_decode_opt_box_autoadd_bool(deserializer);
+        var var_awayMessage = sse_decode_opt_String(deserializer);
         return CoreEvent_ClientUpdated(
           id: var_id,
           inputMuted: var_inputMuted,
           outputMuted: var_outputMuted,
+          away: var_away,
+          awayMessage: var_awayMessage,
         );
       case 9:
         var var_state = sse_decode_box_autoadd_core_voice_state(deserializer);
@@ -1978,6 +2034,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_muted = sse_decode_bool(deserializer);
     var var_deafened = sse_decode_bool(deserializer);
+    var var_away = sse_decode_bool(deserializer);
     var var_pttMode = sse_decode_bool(deserializer);
     var var_pttActive = sse_decode_bool(deserializer);
     var var_inputReady = sse_decode_bool(deserializer);
@@ -1986,6 +2043,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     return CoreVoiceState(
       muted: var_muted,
       deafened: var_deafened,
+      away: var_away,
       pttMode: var_pttMode,
       pttActive: var_pttActive,
       inputReady: var_inputReady,
@@ -2330,6 +2388,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_CastedPrimitive_u_64(self.channelId, serializer);
     sse_encode_opt_box_autoadd_bool(self.inputMuted, serializer);
     sse_encode_opt_box_autoadd_bool(self.outputMuted, serializer);
+    sse_encode_opt_box_autoadd_bool(self.away, serializer);
+    sse_encode_opt_String(self.awayMessage, serializer);
   }
 
   @protected
@@ -2405,11 +2465,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         id: final id,
         inputMuted: final inputMuted,
         outputMuted: final outputMuted,
+        away: final away,
+        awayMessage: final awayMessage,
       ):
         sse_encode_i_32(8, serializer);
         sse_encode_i_32(id, serializer);
         sse_encode_opt_box_autoadd_bool(inputMuted, serializer);
         sse_encode_opt_box_autoadd_bool(outputMuted, serializer);
+        sse_encode_opt_box_autoadd_bool(away, serializer);
+        sse_encode_opt_String(awayMessage, serializer);
       case CoreEvent_Voice(state: final state):
         sse_encode_i_32(9, serializer);
         sse_encode_box_autoadd_core_voice_state(state, serializer);
@@ -2519,6 +2583,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_bool(self.muted, serializer);
     sse_encode_bool(self.deafened, serializer);
+    sse_encode_bool(self.away, serializer);
     sse_encode_bool(self.pttMode, serializer);
     sse_encode_bool(self.pttActive, serializer);
     sse_encode_bool(self.inputReady, serializer);
@@ -2815,6 +2880,9 @@ class CoreSessionImpl extends RustOpaque implements CoreSession {
 
   Future<void> setAutoReconnect({required bool enabled}) => RustLib.instance.api
       .crateApiSessionCoreSessionSetAutoReconnect(that: this, enabled: enabled);
+
+  Future<void> setAway({required bool away}) => RustLib.instance.api
+      .crateApiSessionCoreSessionSetAway(that: this, away: away);
 
   Future<void> setDeafened({required bool deafened}) => RustLib.instance.api
       .crateApiSessionCoreSessionSetDeafened(that: this, deafened: deafened);

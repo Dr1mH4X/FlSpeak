@@ -124,6 +124,14 @@ class SessionController extends Notifier<SessionView> {
     }
   }
 
+  Future<void> setAway(bool away) async {
+    try {
+      await ref.read(coreSessionProvider).setAway(away: away);
+    } on CoreError catch (error) {
+      state = state.copyWith(voiceNotice: describeCoreError(error));
+    }
+  }
+
   Future<void> setPttMode(bool enabled) async {
     try {
       await ref.read(coreSessionProvider).setPttMode(enabled: enabled);
@@ -296,9 +304,11 @@ class SessionController extends Notifier<SessionView> {
                   nickname: client.nickname,
                   uid: client.uid,
                   channelId: channelId,
-                  // 移动事件不带静音标志，沿用移动前的已知值。
+                  // 移动事件不带任何标志，沿用移动前的已知值。
                   inputMuted: client.inputMuted,
                   outputMuted: client.outputMuted,
+                  away: client.away,
+                  awayMessage: client.awayMessage,
                 )
               else
                 client,
@@ -308,6 +318,8 @@ class SessionController extends Notifier<SessionView> {
         :final id,
         :final inputMuted,
         :final outputMuted,
+        :final away,
+        :final awayMessage,
       ):
         // 事件只带变化字段，null 表示本次没提，不清除已知值。
         state = current.copyWith(
@@ -321,6 +333,8 @@ class SessionController extends Notifier<SessionView> {
                   channelId: client.channelId,
                   inputMuted: inputMuted ?? client.inputMuted,
                   outputMuted: outputMuted ?? client.outputMuted,
+                  away: away ?? client.away,
+                  awayMessage: awayMessage ?? client.awayMessage,
                 )
               else
                 client,
@@ -330,6 +344,7 @@ class SessionController extends Notifier<SessionView> {
         state = current.copyWith(
           muted: voice.muted,
           deafened: voice.deafened,
+          away: voice.away,
           pttMode: voice.pttMode,
           voiceInputReady: voice.inputReady,
           voiceOutputReady: voice.outputReady,

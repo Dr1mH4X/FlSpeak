@@ -79,12 +79,17 @@ pub struct ClientView {
     pub input_muted: Option<bool>,
     /// 扬声器静音（服务器回显的 `client_output_muted`）。
     pub output_muted: Option<bool>,
+    /// 离开状态（服务器回显的 `client_away`）。
+    pub away: Option<bool>,
+    /// 离开时留下的说明文字。
+    pub away_message: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct VoiceStateView {
     pub muted: bool,
     pub deafened: bool,
+    pub away: bool,
     pub ptt_mode: bool,
     pub ptt_active: bool,
     pub input_ready: bool,
@@ -137,6 +142,8 @@ pub enum SessionEvent {
         id: i32,
         input_muted: Option<bool>,
         output_muted: Option<bool>,
+        away: Option<bool>,
+        away_message: Option<String>,
     },
     Voice(VoiceStateView),
     Speaking {
@@ -233,6 +240,10 @@ pub enum SessionCommand {
     },
     SetDeafened {
         deafened: bool,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
+    SetAway {
+        away: bool,
         reply: oneshot::Sender<Result<(), SessionError>>,
     },
     SetPttMode {
@@ -535,6 +546,12 @@ impl SessionHandle {
     pub async fn set_deafened(&self, deafened: bool) -> Result<(), SessionError> {
         let (reply, rx) = oneshot::channel();
         self.send(SessionCommand::SetDeafened { deafened, reply })?;
+        rx.await.map_err(|_| SessionError::Closed)?
+    }
+
+    pub async fn set_away(&self, away: bool) -> Result<(), SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::SetAway { away, reply })?;
         rx.await.map_err(|_| SessionError::Closed)?
     }
 

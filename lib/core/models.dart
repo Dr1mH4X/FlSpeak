@@ -66,6 +66,7 @@ class SessionView {
     this.notice,
     this.muted = false,
     this.deafened = false,
+    this.away = false,
     this.voiceInputReady = false,
     this.voiceOutputReady = false,
     this.voiceNotice,
@@ -93,6 +94,9 @@ class SessionView {
   /// 自己是否处于静音/聋听状态；由 Rust 的 Voice 事件确认。
   final bool muted;
   final bool deafened;
+
+  /// 自己是否标记了离开；只是服务器上的标志，不影响音频。
+  final bool away;
   final bool voiceInputReady;
   final bool voiceOutputReady;
 
@@ -239,6 +243,7 @@ class SessionView {
     Object? notice = _unset,
     bool? muted,
     bool? deafened,
+    bool? away,
     bool? voiceInputReady,
     bool? voiceOutputReady,
     Object? voiceNotice = _unset,
@@ -260,6 +265,7 @@ class SessionView {
     notice: identical(notice, _unset) ? this.notice : notice as String?,
     muted: muted ?? this.muted,
     deafened: deafened ?? this.deafened,
+    away: away ?? this.away,
     voiceInputReady: voiceInputReady ?? this.voiceInputReady,
     voiceOutputReady: voiceOutputReady ?? this.voiceOutputReady,
     voiceNotice: identical(voiceNotice, _unset)

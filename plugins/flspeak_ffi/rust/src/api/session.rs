@@ -50,6 +50,10 @@ pub struct ClientView {
     pub input_muted: Option<bool>,
     /// 扬声器静音（服务器回显）。
     pub output_muted: Option<bool>,
+    /// 离开状态（服务器回显）。
+    pub away: Option<bool>,
+    /// 离开时留下的说明文字。
+    pub away_message: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -66,6 +70,7 @@ pub struct CoreMessage {
 pub struct CoreVoiceState {
     pub muted: bool,
     pub deafened: bool,
+    pub away: bool,
     pub ptt_mode: bool,
     pub ptt_active: bool,
     pub input_ready: bool,
@@ -143,6 +148,8 @@ pub enum CoreEvent {
         id: i32,
         input_muted: Option<bool>,
         output_muted: Option<bool>,
+        away: Option<bool>,
+        away_message: Option<String>,
     },
     Voice {
         state: CoreVoiceState,
@@ -313,6 +320,10 @@ impl CoreSession {
         Ok(self.handle.set_deafened(deafened).await?)
     }
 
+    pub async fn set_away(&self, away: bool) -> Result<(), CoreError> {
+        Ok(self.handle.set_away(away).await?)
+    }
+
     pub async fn set_ptt_mode(&self, enabled: bool) -> Result<(), CoreError> {
         Ok(self.handle.set_ptt_mode(enabled).await?)
     }
@@ -444,6 +455,8 @@ impl From<CoreClientView> for ClientView {
             channel_id: view.channel_id,
             input_muted: view.input_muted,
             output_muted: view.output_muted,
+            away: view.away,
+            away_message: view.away_message,
         }
     }
 }
@@ -494,6 +507,7 @@ impl From<session::VoiceStateView> for CoreVoiceState {
         Self {
             muted: state.muted,
             deafened: state.deafened,
+            away: state.away,
             ptt_mode: state.ptt_mode,
             ptt_active: state.ptt_active,
             input_ready: state.input_ready,
@@ -560,10 +574,14 @@ impl From<SessionEvent> for CoreEvent {
                 id,
                 input_muted,
                 output_muted,
+                away,
+                away_message,
             } => CoreEvent::ClientUpdated {
                 id,
                 input_muted,
                 output_muted,
+                away,
+                away_message,
             },
             SessionEvent::Voice(state) => CoreEvent::Voice {
                 state: state.into(),

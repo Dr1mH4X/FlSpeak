@@ -222,6 +222,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get memberSpeakerMuted => 'Speaker muted';
 
   @override
+  String get memberAway => 'Away';
+
+  @override
+  String memberAwayWith(Object message) {
+    return 'Away: $message';
+  }
+
+  @override
+  String get voiceAway => 'Set away';
+
+  @override
+  String get voiceUnaway => 'Unset away';
+
+  @override
   String get voiceMicUnavailable => 'Microphone unavailable';
 
   @override

@@ -220,6 +220,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String get memberSpeakerMuted => '扬声器已静音';
 
   @override
+  String get memberAway => '离开';
+
+  @override
+  String memberAwayWith(Object message) {
+    return '离开：$message';
+  }
+
+  @override
+  String get voiceAway => '标记离开';
+
+  @override
+  String get voiceUnaway => '取消离开';
+
+  @override
   String get voiceMicUnavailable => '麦克风不可用';
 
   @override

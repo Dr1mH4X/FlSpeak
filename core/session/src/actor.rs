@@ -1,6 +1,6 @@
 //! 命令循环：所有协议操作在这里串行执行。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -299,6 +299,9 @@ impl Actor {
             }
             SessionCommand::SetDeafened { deafened, reply } => {
                 let _ = reply.send(self.set_deafened(deafened).await);
+            }
+            SessionCommand::SetAway { away, reply } => {
+                let _ = reply.send(self.set_away(away).await);
             }
             SessionCommand::SetPttMode { enabled, reply } => {
                 let _ = reply.send(self.set_ptt_mode(enabled));
@@ -650,20 +653,134 @@ impl Actor {
 
     async fn list_clients(&self) -> Result<Vec<ClientView>, SessionError> {
         let client = self.connected()?;
-        let clients = match tsclient_rs::listClients(&client).await {
-            Ok(clients) => clients,
+        self.read_clients(&client).await
+    }
+
+    /// 成员列表 = clientlist 与欢迎目录快照的合并，再保证自己这一行可信。
+    ///
+    /// 部分 TS6 服务器的 clientlist 行缺 `cid`（解析成 0），而欢迎目录的
+    /// `channelclientlist` 行频道是准的；反过来目录可能漏掉后来进出的成员。
+    /// 两边按 id 合并：clientlist 的标志新，目录的频道准。
+    async fn read_clients(&self, client: &Arc<Client>) -> Result<Vec<ClientView>, SessionError> {
+        let listed = tsclient_rs::listClients(client).await;
+        let directory = client
+            .directory_snapshot()
+            .map(|snapshot| snapshot.clients)
+            .unwrap_or_default();
+        let mut rows = match listed {
+            Ok(listed) => merged_clients(listed, directory),
             Err(err) => {
-                // None 表示目录还没同步完，和空快照一样拿不到成员，回退到原错误。
-                let Some(snapshot) = client
-                    .directory_snapshot()
-                    .filter(|snapshot| !snapshot.clients.is_empty())
-                else {
+                // 目录还没同步完（None 或空）时同样拿不到成员，回退到原错误。
+                if directory.is_empty() {
                     return Err(protocol_error(err));
-                };
-                snapshot.clients
+                }
+                directory.into_iter().map(ClientView::from).collect()
             }
         };
-        Ok(clients.into_iter().map(ClientView::from).collect())
+        self.ensure_self_row(client, &mut rows).await;
+        Ok(rows)
+    }
+
+    /// 自身行修补：本地已知频道时无网补齐；首次未知用 `whoami` 学习。
+    ///
+    /// TS6 服务器对推送进来的自己的行缺省 `cid`（官方客户端从别的渠道知道
+    /// 自己在哪），访客又常被拒 `clientinfo`；`whoami` 免权限且带
+    /// `client_channel_id`。补全结果由 refresh 的交叉检查写回会话状态。
+    async fn ensure_self_row(&self, client: &Arc<Client>, rows: &mut Vec<ClientView>) {
+        let Some(self_id) = self.self_client_id else {
+            return;
+        };
+        let known = rows.iter().find(|row| row.id == self_id);
+        if known.is_some_and(|row| row.channel_id != 0) {
+            return;
+        }
+        if self.self_channel_id != 0 {
+            self.patch_self_row(rows);
+            return;
+        }
+        let info = match client.exec_command_with_response("whoami", 5_000).await {
+            Ok(rows) => rows.into_iter().next().unwrap_or_default(),
+            Err(err) => {
+                // 部分服务器禁 whoami 但允许查自己，回退 clientinfo。
+                match tsclient_rs::getClientInfo(client, self_id).await {
+                    Ok(info) => info,
+                    Err(_) => {
+                        self.emit(SessionEvent::Log {
+                            level: "debug".into(),
+                            message: format!("自身行补全失败: {err}"),
+                        });
+                        return;
+                    }
+                }
+            }
+        };
+        // whoami 的键是 client_*（client_channel_id 即 cid）；clientinfo 用 cid。
+        let channel_id = info
+            .get("client_channel_id")
+            .or_else(|| info.get("cid"))
+            .and_then(|value| value.parse::<u64>().ok())
+            .filter(|value| *value != 0);
+        let Some(channel_id) = channel_id else {
+            return;
+        };
+        let view = ClientView {
+            id: self_id,
+            nickname: info
+                .get("client_nickname")
+                .map(|value| unescape_text(value))
+                .unwrap_or_default(),
+            uid: info
+                .get("client_unique_identifier")
+                .cloned()
+                .unwrap_or_default(),
+            channel_id,
+            input_muted: info
+                .get("client_input_muted")
+                .or_else(|| info.get("client_flag_input_muted"))
+                .map(|value| value == "1"),
+            output_muted: info
+                .get("client_output_muted")
+                .or_else(|| info.get("client_flag_output_muted"))
+                .map(|value| value == "1"),
+            away: info.get("client_away").map(|value| value == "1"),
+            away_message: info
+                .get("client_away_message")
+                .filter(|value| !value.is_empty())
+                .map(|value| unescape_text(value)),
+        };
+        match rows.iter_mut().find(|row| row.id == self_id) {
+            Some(row) => *row = view,
+            None => rows.push(view),
+        }
+    }
+
+    /// 已知自己频道时的无网修补：目录推送对 TS6 服务器永远给 0 频道的自己，
+    /// 用会话状态里确认过的频道与本地语音状态补齐，缺行则合成。
+    fn patch_self_row(&self, rows: &mut Vec<ClientView>) {
+        let Some(self_id) = self.self_client_id else {
+            return;
+        };
+        match rows.iter_mut().find(|row| row.id == self_id) {
+            Some(row) => {
+                if row.channel_id == 0 {
+                    row.channel_id = self.self_channel_id;
+                }
+            }
+            None => rows.push(ClientView {
+                id: self_id,
+                nickname: self
+                    .last_target
+                    .as_ref()
+                    .map(|target| target.nickname.clone())
+                    .unwrap_or_default(),
+                uid: String::new(),
+                channel_id: self.self_channel_id,
+                input_muted: Some(self.voice_state.muted || self.voice_state.deafened),
+                output_muted: Some(self.voice_state.deafened),
+                away: Some(self.voice_state.away),
+                away_message: None,
+            }),
+        }
     }
 
     async fn refresh_snapshot(&mut self, force: bool) -> Result<(), SessionError> {
@@ -695,21 +812,14 @@ impl Actor {
             }
         };
 
-        let clients = match tsclient_rs::listClients(&client).await {
-            Ok(clients) => clients.into_iter().map(ClientView::from).collect(),
+        let clients = match self.read_clients(&client).await {
+            Ok(clients) => clients,
             Err(err) => {
-                let snapshot = client
-                    .directory_snapshot()
-                    .filter(|snapshot| !snapshot.clients.is_empty());
-                if let Some(snapshot) = snapshot {
-                    snapshot.clients.into_iter().map(ClientView::from).collect()
-                } else {
-                    failures.push(format!("成员列表: {err}"));
-                    previous
-                        .as_ref()
-                        .map(|(_, clients)| clients.clone())
-                        .unwrap_or_default()
-                }
+                failures.push(format!("成员列表: {err}"));
+                previous
+                    .as_ref()
+                    .map(|(_, clients)| clients.clone())
+                    .unwrap_or_default()
             }
         };
 
@@ -742,7 +852,8 @@ impl Actor {
         if let Some(self_id) = self.self_client_id
             && let Some(me) = clients.iter().find(|client| client.id == self_id)
         {
-            if me.channel_id != self.self_channel_id {
+            // cid=0 的行说明这路数据没带频道，不能拿它重置自己的真实频道。
+            if me.channel_id != 0 && me.channel_id != self.self_channel_id {
                 self.apply_self_channel(me.channel_id, self_codec);
             } else {
                 self.apply_channel_codec(self_codec);
@@ -913,27 +1024,32 @@ impl Actor {
         Ok(())
     }
 
-    /// 把自己的静音/聋听状态上报给服务器，其他客户端才能看到标志。
+    /// 把自己的静音/聋听/离开状态上报给服务器，其他客户端才能看到标志。
     /// 本地门控已经生效，上报失败只记日志不回滚。
     async fn report_voice_flags(&self) {
         let Some(client) = self.client.clone() else {
             return;
         };
         let (input, output) = mute_flags(self.voice_state.muted, self.voice_state.deafened);
-        if let Err(err) = tsclient_rs::clientUpdate(
-            &client,
-            &[
-                ("client_input_muted", input),
-                ("client_output_muted", output),
-            ],
-        )
-        .await
-        {
+        let params = vec![
+            ("client_input_muted", input),
+            ("client_output_muted", output),
+            ("client_away", if self.voice_state.away { "1" } else { "0" }),
+        ];
+        if let Err(err) = tsclient_rs::clientUpdate(&client, &params).await {
             self.emit(SessionEvent::Log {
                 level: "warn".into(),
-                message: format!("静音状态上报失败: {err}"),
+                message: format!("状态上报失败: {err}"),
             });
         }
+    }
+
+    /// 离开只是服务器上的标志，不影响本地音频采集与播放。
+    async fn set_away(&mut self, away: bool) -> Result<(), SessionError> {
+        self.voice_state.away = away;
+        self.emit_voice_state();
+        self.report_voice_flags().await;
+        Ok(())
     }
 
     fn set_ptt_mode(&mut self, enabled: bool) -> Result<(), SessionError> {
@@ -1199,14 +1315,18 @@ impl Actor {
                 }
                 // 只有成员状态真的变了才转发；频道元数据仍由周期性的
                 // refresh_snapshot 维护，这里只替换成员并同步基线。
-                let Some((channels, old_clients)) = self.last_snapshot.as_mut() else {
+                let Some((channels, previous)) = self.last_snapshot.clone() else {
                     return;
                 };
-                if *old_clients == clients {
+                // TS6 服务器推给自己的行永远缺频道，用会话状态补齐再比较。
+                let mut clients = clients;
+                self.patch_self_row(&mut clients);
+                if previous == clients {
                     return;
                 }
-                *old_clients = clients.clone();
-                let channels = channels.clone();
+                if let Some((_, old_clients)) = self.last_snapshot.as_mut() {
+                    *old_clients = clients.clone();
+                }
                 self.emit(SessionEvent::Snapshot { channels, clients });
             }
             SessionSignal::Disconnected { epoch, message } => {
@@ -1710,6 +1830,56 @@ fn mute_flags(muted: bool, deafened: bool) -> (&'static str, &'static str) {
     )
 }
 
+/// clientlist 与欢迎目录快照按 id 合并：clientlist 的标志更新，目录的
+/// 频道更准（clientlist 在部分 TS6 服务器上缺 `cid`）。两边都有的成员
+/// 用 clientlist 行、频道取目录；只在目录里的成员原样保留。
+fn merged_clients(listed: Vec<ClientInfo>, directory: Vec<ClientInfo>) -> Vec<ClientView> {
+    let mut directory_channels: HashMap<i32, u64> = directory
+        .iter()
+        .filter(|info| info.channel_id != 0)
+        .map(|info| (info.id, info.channel_id))
+        .collect();
+    let mut rows: Vec<ClientView> = listed.into_iter().map(ClientView::from).collect();
+    for row in &mut rows {
+        if row.channel_id == 0
+            && let Some(channel_id) = directory_channels.remove(&row.id)
+        {
+            row.channel_id = channel_id;
+        }
+    }
+    let mut seen: HashSet<i32> = rows.iter().map(|row| row.id).collect();
+    for info in directory {
+        if seen.insert(info.id) {
+            rows.push(ClientView::from(info));
+        }
+    }
+    rows
+}
+
+/// TeamSpeak 转义的常用子集；上游没导出 `unescape`，clientinfo 的原始行需要它。
+fn unescape_text(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let mut chars = raw.chars();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        match chars.next() {
+            Some('s') => out.push(' '),
+            Some('p') => out.push('|'),
+            Some('/') => out.push('/'),
+            Some('\\') => out.push('\\'),
+            Some(other) => {
+                out.push('\\');
+                out.push(other);
+            }
+            None => out.push('\\'),
+        }
+    }
+    out
+}
+
 fn emit(events: &broadcast::Sender<SessionEvent>, event: SessionEvent) {
     // 没有订阅者时事件直接丢弃，actor 不因此停下。
     let _ = events.send(event);
@@ -1781,6 +1951,8 @@ fn register_handlers(
                     id: info.id,
                     input_muted: info.input_muted,
                     output_muted: info.output_muted,
+                    away: info.away,
+                    away_message: info.away_message,
                 },
             );
         }
@@ -1874,6 +2046,8 @@ impl From<ClientInfo> for ClientView {
             channel_id: info.channel_id,
             input_muted: info.input_muted,
             output_muted: info.output_muted,
+            away: info.away,
+            away_message: info.away_message,
         }
     }
 }
@@ -2069,6 +2243,52 @@ mod tests {
         // deafen 同时置两个标志，覆盖用户当前的静音选择。
         assert_eq!(mute_flags(false, true), ("1", "1"));
         assert_eq!(mute_flags(true, true), ("1", "1"));
+    }
+
+    #[test]
+    fn merged_clients_prefers_listed_flags_but_directory_channels() {
+        let listed = vec![client_info(55, 0, "x414"), client_info(61, 0, "probe")];
+        let directory = vec![client_info(55, 770, "x414")];
+        let rows = merged_clients(listed, directory);
+        assert_eq!(rows.len(), 2);
+        let x414 = rows.iter().find(|row| row.id == 55).unwrap();
+        assert_eq!(x414.channel_id, 770);
+        // 目录里没有的自己这行也保留，等 clientinfo 补频道。
+        assert_eq!(rows.iter().find(|row| row.id == 61).unwrap().channel_id, 0);
+    }
+
+    #[test]
+    fn merged_clients_keeps_directory_only_members() {
+        let directory = vec![client_info(55, 770, "x414")];
+        let rows = merged_clients(Vec::new(), directory);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].channel_id, 770);
+    }
+
+    #[test]
+    fn unescape_text_handles_common_teamseek_escapes() {
+        assert_eq!(unescape_text("Fl\\sSpeak"), "Fl Speak");
+        assert_eq!(unescape_text("a\\/b\\|c\\\\d"), "a/b|c\\d");
+        assert_eq!(unescape_text("普通\\s名字"), "普通 名字");
+        // 未知转义原样保留，尾部孤立反斜杠不吞字。
+        assert_eq!(unescape_text("a\\qb"), "a\\qb");
+        assert_eq!(unescape_text("tail\\"), "tail\\");
+    }
+
+    fn client_info(id: i32, channel_id: u64, nickname: &str) -> ClientInfo {
+        ClientInfo {
+            id,
+            nickname: nickname.to_string(),
+            uid: String::new(),
+            channel_id,
+            r#type: 0,
+            server_groups: Vec::new(),
+            away: None,
+            away_message: None,
+            input_muted: None,
+            output_muted: None,
+            channel_commander: None,
+        }
     }
 
     #[test]

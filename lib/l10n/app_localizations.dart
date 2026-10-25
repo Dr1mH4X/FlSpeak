@@ -476,6 +476,30 @@ abstract class AppLocalizations {
   /// **'Speaker muted'**
   String get memberSpeakerMuted;
 
+  /// No description provided for @memberAway.
+  ///
+  /// In en, this message translates to:
+  /// **'Away'**
+  String get memberAway;
+
+  /// No description provided for @memberAwayWith.
+  ///
+  /// In en, this message translates to:
+  /// **'Away: {message}'**
+  String memberAwayWith(Object message);
+
+  /// No description provided for @voiceAway.
+  ///
+  /// In en, this message translates to:
+  /// **'Set away'**
+  String get voiceAway;
+
+  /// No description provided for @voiceUnaway.
+  ///
+  /// In en, this message translates to:
+  /// **'Unset away'**
+  String get voiceUnaway;
+
   /// No description provided for @voiceMicUnavailable.
   ///
   /// In en, this message translates to:

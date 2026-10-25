@@ -74,6 +74,8 @@ abstract class CoreSession implements RustOpaqueInterface {
 
   Future<void> setAutoReconnect({required bool enabled});
 
+  Future<void> setAway({required bool away});
+
   Future<void> setDeafened({required bool deafened});
 
   Future<void> setMuted({required bool muted});
@@ -196,6 +198,12 @@ class ClientView {
   /// 扬声器静音（服务器回显）。
   final bool? outputMuted;
 
+  /// 离开状态（服务器回显）。
+  final bool? away;
+
+  /// 离开时留下的说明文字。
+  final String? awayMessage;
+
   const ClientView({
     required this.id,
     required this.nickname,
@@ -203,6 +211,8 @@ class ClientView {
     required this.channelId,
     this.inputMuted,
     this.outputMuted,
+    this.away,
+    this.awayMessage,
   });
 
   @override
@@ -212,7 +222,9 @@ class ClientView {
       uid.hashCode ^
       channelId.hashCode ^
       inputMuted.hashCode ^
-      outputMuted.hashCode;
+      outputMuted.hashCode ^
+      away.hashCode ^
+      awayMessage.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -224,7 +236,9 @@ class ClientView {
           uid == other.uid &&
           channelId == other.channelId &&
           inputMuted == other.inputMuted &&
-          outputMuted == other.outputMuted;
+          outputMuted == other.outputMuted &&
+          away == other.away &&
+          awayMessage == other.awayMessage;
 }
 
 @freezed
@@ -288,6 +302,8 @@ sealed class CoreEvent with _$CoreEvent {
     required int id,
     bool? inputMuted,
     bool? outputMuted,
+    bool? away,
+    String? awayMessage,
   }) = CoreEvent_ClientUpdated;
   const factory CoreEvent.voice({required CoreVoiceState state}) =
       CoreEvent_Voice;
@@ -382,6 +398,7 @@ enum CoreTransferDirection { upload, download }
 class CoreVoiceState {
   final bool muted;
   final bool deafened;
+  final bool away;
   final bool pttMode;
   final bool pttActive;
   final bool inputReady;
@@ -391,6 +408,7 @@ class CoreVoiceState {
   const CoreVoiceState({
     required this.muted,
     required this.deafened,
+    required this.away,
     required this.pttMode,
     required this.pttActive,
     required this.inputReady,
@@ -402,6 +420,7 @@ class CoreVoiceState {
   int get hashCode =>
       muted.hashCode ^
       deafened.hashCode ^
+      away.hashCode ^
       pttMode.hashCode ^
       pttActive.hashCode ^
       inputReady.hashCode ^
@@ -415,6 +434,7 @@ class CoreVoiceState {
           runtimeType == other.runtimeType &&
           muted == other.muted &&
           deafened == other.deafened &&
+          away == other.away &&
           pttMode == other.pttMode &&
           pttActive == other.pttActive &&
           inputReady == other.inputReady &&

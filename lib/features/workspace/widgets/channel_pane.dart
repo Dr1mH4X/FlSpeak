@@ -97,11 +97,14 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
             connected: view.connected,
             muted: view.muted,
             deafened: view.deafened,
+            away: view.away,
             onToggleMute: () =>
                 ref.read(sessionViewProvider.notifier).setMuted(!view.muted),
             onToggleDeafen: () => ref
                 .read(sessionViewProvider.notifier)
                 .setDeafened(!view.deafened),
+            onToggleAway: () =>
+                ref.read(sessionViewProvider.notifier).setAway(!view.away),
           ),
         ],
       ),
@@ -546,6 +549,15 @@ class _MemberTile extends StatelessWidget {
                 tooltip: l10n.memberSpeakerMuted,
                 icon: Icons.volume_off_rounded,
               ),
+            if (client.away ?? false)
+              _MemberFlag(
+                tooltip: switch (client.awayMessage) {
+                  null || '' => l10n.memberAway,
+                  final message => l10n.memberAwayWith(message),
+                },
+                icon: Icons.schedule_rounded,
+                color: scheme.primary,
+              ),
           ],
         ),
       ),
@@ -553,12 +565,15 @@ class _MemberTile extends StatelessWidget {
   }
 }
 
-/// 成员行尾的静音标志：与其他成员昵称保持间距。
+/// 成员行尾的状态标志：与其他成员昵称保持间距。
 class _MemberFlag extends StatelessWidget {
-  const _MemberFlag({required this.tooltip, required this.icon});
+  const _MemberFlag({required this.tooltip, required this.icon, this.color});
 
   final String tooltip;
   final IconData icon;
+
+  /// 静音类标志缺省用 error，离开这类中性状态换主色。
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -567,7 +582,7 @@ class _MemberFlag extends StatelessWidget {
       padding: const EdgeInsets.only(left: 6),
       child: Tooltip(
         message: tooltip,
-        child: Icon(icon, size: 14, color: scheme.error),
+        child: Icon(icon, size: 14, color: color ?? scheme.error),
       ),
     );
   }
@@ -581,16 +596,20 @@ class _UserFooter extends StatelessWidget {
     required this.connected,
     required this.muted,
     required this.deafened,
+    required this.away,
     required this.onToggleMute,
     required this.onToggleDeafen,
+    required this.onToggleAway,
   });
 
   final String nickname;
   final bool connected;
   final bool muted;
   final bool deafened;
+  final bool away;
   final VoidCallback onToggleMute;
   final VoidCallback onToggleDeafen;
+  final VoidCallback onToggleAway;
 
   @override
   Widget build(BuildContext context) {
@@ -603,8 +622,6 @@ class _UserFooter extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         child: Row(
           children: [
-            ClientAvatar(nickname: nickname, size: AvatarSize.medium),
-            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -647,6 +664,13 @@ class _UserFooter extends StatelessWidget {
               active: deafened,
               onTap: onToggleDeafen,
             ),
+            _IconToggle(
+              tooltip: away ? l10n.voiceUnaway : l10n.voiceAway,
+              icon: Icons.schedule_rounded,
+              active: away,
+              activeColor: scheme.primary,
+              onTap: onToggleAway,
+            ),
           ],
         ),
       ),
@@ -661,6 +685,7 @@ class _IconToggle extends StatelessWidget {
     required this.icon,
     required this.active,
     required this.onTap,
+    this.activeColor,
   });
 
   final String tooltip;
@@ -668,9 +693,13 @@ class _IconToggle extends StatelessWidget {
   final bool active;
   final VoidCallback onTap;
 
+  /// 激活色；静音类状态缺省用 error，离开这类中性状态换主色。
+  final Color? activeColor;
+
   @override
   Widget build(BuildContext context) {
     final scheme = context.scheme;
+    final highlight = activeColor ?? scheme.error;
     return Tooltip(
       message: tooltip,
       child: Semantics(
@@ -689,13 +718,13 @@ class _IconToggle extends StatelessWidget {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: active
-                      ? scheme.error.withValues(alpha: 0.12)
+                      ? highlight.withValues(alpha: 0.12)
                       : Colors.transparent,
                 ),
                 child: Icon(
                   icon,
                   size: 20,
-                  color: active ? scheme.error : scheme.onSurfaceVariant,
+                  color: active ? highlight : scheme.onSurfaceVariant,
                 ),
               ),
             ),
