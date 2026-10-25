@@ -60,7 +60,15 @@ extension AppSchemeOf on BuildContext {
 
 /// 圆角只有这几档，和设计稿的 Tailwind 半径一一对应。
 ///
-/// `xl` 给按钮与输入框，`xxl` 给列表与非主导航卡片，`xxxl` 给页面级卡片与对话框。
+/// `xl` 给按钮与输入框，`xxl` 给页面级卡片与列表（[HairlineCard] 家族），
+/// `xxxl` 给对话框与桌面内容面板等大容器。
+///
+/// 页面级卡片取 `xxl` 还有个物理原因：家族里最矮的卡片（添加行 ≈56 高）
+/// 显示不了超过半高（≈28）的圆角，Flutter 会把它钳制成胶囊；家族统一在
+/// `xxl`，高矮卡片才能渲染出同一条弧。
+///
+/// 圆弧刻意使用正圆弧而非连续曲率（Squircle）：桌面端惯例，且 Flutter 原生
+/// 不提供 `.continuous`；同心对齐靠数值（见 [inner]）而不是曲率形状。
 abstract final class Radii {
   static const small = 10.0;
   static const medium = 13.0;
@@ -71,6 +79,11 @@ abstract final class Radii {
 
   /// 胶囊形：频道行、标签页、头像、状态点都用它。
   static const pill = 999.0;
+
+  /// 同心圆角减法公式（Apple Concentric Corners）：嵌套元素与外层圆弧共用
+  /// 圆心时，内半径 = 外半径 − 内边距。新增嵌套圆角一律走这里，不要手写死值。
+  static double inner(double outer, double inset) =>
+      (outer - inset).clamp(0.0, outer);
 
   static BorderRadius get smallAll => BorderRadius.circular(small);
   static BorderRadius get mediumAll => BorderRadius.circular(medium);
@@ -428,8 +441,9 @@ ThemeData buildAppTheme(Brightness brightness) {
     filledButtonTheme: FilledButtonThemeData(
       style: ButtonStyle(
         minimumSize: const WidgetStatePropertyAll(Size(0, Sizes.touch)),
+        // h44 + r22 是药丸：光学对齐要求左右内边距 ≥ 半径（22）。
         padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: 16),
+          EdgeInsets.symmetric(horizontal: 22),
         ),
         shape: const WidgetStatePropertyAll(
           RoundedRectangleBorder(

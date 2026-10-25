@@ -22,7 +22,7 @@ class SettingsGroup extends StatelessWidget {
   );
 }
 
-/// 设置卡片：页面级圆角（35）加一根发丝描边，行之间共用一根发丝分隔线。
+/// 设置卡片：复用 [HairlineCard] 卡片家族，行之间共用一根发丝分隔线。
 class SettingsCard extends StatelessWidget {
   const SettingsCard({required this.children, super.key});
 
@@ -31,32 +31,17 @@ class SettingsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final border = hairlineSide(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: context.cardColor,
-        borderRadius: Radii.xxxlAll,
-        border: Border.fromBorderSide(border),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0A171D1B),
-            blurRadius: 2,
-            offset: Offset(0, 1),
-          ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Material(
-        type: MaterialType.transparency,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (var index = 0; index < children.length; index++) ...[
-              if (index > 0)
-                Divider(height: 1, thickness: 1, color: border.color),
-              children[index],
-            ],
+    return HairlineCard(
+      clip: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var index = 0; index < children.length; index++) ...[
+            if (index > 0)
+              Divider(height: 1, thickness: 1, color: border.color),
+            children[index],
           ],
-        ),
+        ],
       ),
     );
   }

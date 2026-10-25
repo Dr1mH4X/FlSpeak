@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/common.dart';
 import '../../../widgets/monogram.dart';
 
 /// 桌面端身份卡：连接页左侧的「你是谁」。
@@ -27,96 +28,85 @@ class IdentityCard extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: context.cardColor,
-        borderRadius: Radii.xxxlAll,
-        border: Border.fromBorderSide(hairlineSide(context)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0A171D1B),
-            blurRadius: 2,
-            offset: Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          IdentityAvatar(nickname: nickname, size: 64),
-          const SizedBox(height: 16),
-          Semantics(
-            header: true,
-            child: Text(
-              l10n.identityCurrent.toUpperCase(),
-              style: context.texts.labelSmall?.copyWith(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                letterSpacing: 0.9,
-                color: scheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            nickname,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: context.texts.titleLarge?.copyWith(height: 1.25),
-          ),
-          const SizedBox(height: 4),
-          if (serverCount > 0)
-            Text(
-              l10n.serversUsedBy(serverCount),
-              maxLines: 2,
-              style: context.texts.bodyMedium?.copyWith(
-                fontSize: 13,
-                color: scheme.onSurfaceVariant,
-              ),
-            ),
-          const SizedBox(height: 16),
-          OutlinedButton(
-            onPressed: onManage,
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size.fromHeight(Sizes.touch),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              foregroundColor: scheme.onSurface,
-              backgroundColor: scheme.surface,
-              textStyle: context.texts.bodyMedium?.copyWith(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            child: Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    l10n.identityManage,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  '$identityCount',
-                  style: context.texts.bodyMedium?.copyWith(
-                    fontSize: 13,
-                    color: scheme.onSurfaceVariant,
-                    fontFeatures: tabularFigures,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  size: 14,
+    return HairlineCard(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            IdentityAvatar(nickname: nickname, size: 64),
+            const SizedBox(height: 16),
+            Semantics(
+              header: true,
+              child: Text(
+                l10n.identityCurrent.toUpperCase(),
+                style: context.texts.labelSmall?.copyWith(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 0.9,
                   color: scheme.onSurfaceVariant,
                 ),
-              ],
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 4),
+            Text(
+              nickname,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: context.texts.titleLarge?.copyWith(height: 1.25),
+            ),
+            const SizedBox(height: 4),
+            if (serverCount > 0)
+              Text(
+                l10n.serversUsedBy(serverCount),
+                maxLines: 2,
+                style: context.texts.bodyMedium?.copyWith(
+                  fontSize: 13,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            const SizedBox(height: 16),
+            OutlinedButton(
+              onPressed: onManage,
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(Sizes.touch),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                foregroundColor: scheme.onSurface,
+                backgroundColor: scheme.surface,
+                textStyle: context.texts.bodyMedium?.copyWith(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      l10n.identityManage,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '$identityCount',
+                    style: context.texts.bodyMedium?.copyWith(
+                      fontSize: 13,
+                      color: scheme.onSurfaceVariant,
+                      fontFeatures: tabularFigures,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    size: 14,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -140,13 +130,8 @@ class IdentityStrip extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
 
-    return Material(
-      color: context.cardColor,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        borderRadius: Radii.xxlAll,
-        side: hairlineSide(context),
-      ),
+    return HairlineCard(
+      clip: true,
       child: InkWell(
         onTap: onManage,
         child: Padding(

@@ -339,3 +339,40 @@ class SecondaryMenu extends StatelessWidget {
     );
   }
 }
+
+/// 页面级卡片家族：cardColor + xxl(29) 圆角 + 发丝描边 + 轻投影。
+///
+/// 连接页身份卡、服务器列表、添加行与设置卡共用，圆角/描边/投影只在这里
+/// 定义一次。[clip] 给行高亮贴边的列表用——裁到圆角内，条目的可见圆角
+/// 永远属于卡片本身（同心圆角的外层裁剪做法）。
+///
+/// 圆角取 xxl 而非 xxxl：家族里最矮的成员（添加行 ≈56 高）在 35 下会被
+/// 钳制成胶囊，页面上高矮卡片就渲染不出同一条弧；半径 ≤ 最矮卡的半高，
+/// 所有卡片才能圆角对齐。
+class HairlineCard extends StatelessWidget {
+  const HairlineCard({required this.child, this.clip = false, super.key});
+
+  final Widget child;
+
+  final bool clip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: context.cardColor,
+        borderRadius: Radii.xxlAll,
+        border: Border.fromBorderSide(hairlineSide(context)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0A171D1B),
+            blurRadius: 2,
+            offset: Offset(0, 1),
+          ),
+        ],
+      ),
+      clipBehavior: clip ? Clip.antiAlias : Clip.none,
+      child: Material(type: MaterialType.transparency, child: child),
+    );
+  }
+}

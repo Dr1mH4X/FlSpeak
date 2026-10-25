@@ -47,7 +47,8 @@ class SettingsOptionRow extends StatelessWidget {
     final scheme = context.scheme;
     return InkWell(
       onTap: onTap,
-      borderRadius: Radii.xlAll,
+      // 同心圆角：面板 35 − 横向内边距 20 ≈ 16（Radii.large），取整到现有档位。
+      borderRadius: Radii.largeAll,
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 52),
         child: Padding(

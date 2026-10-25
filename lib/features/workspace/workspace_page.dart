@@ -203,7 +203,7 @@ class _ChannelHeader extends StatelessWidget {
         textScaler: scaler,
         maxLines: 1,
       )..layout();
-      tabWidth += 16 + 6 + painter.width + 24; // 图标 + 间距 + 左右内边距
+      tabWidth += 16 + 6 + painter.width + 36; // 图标 + 间距 + 左右内边距
     }
     final chrome =
         2 * (compact ? 8.0 : 24.0) +
@@ -382,8 +382,9 @@ class _TabButton extends StatelessWidget {
           onTap: onTap,
           borderRadius: Radii.pillAll,
           child: Padding(
+            // 活动胶囊 r18（22 − 4）：label 的水平内边距 ≥ 半径才光学对齐。
             padding: labeled
-                ? const EdgeInsets.symmetric(horizontal: 12)
+                ? const EdgeInsets.symmetric(horizontal: 18)
                 : EdgeInsets.zero,
             child: content,
           ),
@@ -429,7 +430,8 @@ class _IdentityBanner extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
       decoration: BoxDecoration(
         color: scheme.secondaryContainer,
-        borderRadius: Radii.mediumAll,
+        // 与 NoticeBar 一致：同为页面级横幅，圆角取同一档。
+        borderRadius: Radii.xxlAll,
       ),
       child: Row(
         children: [

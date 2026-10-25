@@ -479,45 +479,31 @@ class _ServerSection extends StatelessWidget {
         if (servers.isEmpty)
           _EmptyServers(onAdd: onAdd)
         else ...[
-          Container(
-            decoration: BoxDecoration(
-              borderRadius: Radii.xxxlAll,
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x0A171D1B),
-                  blurRadius: 2,
-                  offset: Offset(0, 1),
-                ),
-              ],
-            ),
-            child: Material(
-              color: context.cardColor,
-              clipBehavior: Clip.antiAlias,
-              shape: RoundedRectangleBorder(
-                borderRadius: Radii.xxxlAll,
-                side: hairlineSide(context),
-              ),
-              child: Column(
-                children: [
-                  for (var index = 0; index < servers.length; index++) ...[
-                    if (index > 0)
-                      Divider(
-                        height: 1,
-                        thickness: 1,
-                        color: context.hairline.withValues(alpha: 0.6),
-                      ),
-                    ServerRow(
-                      profile: servers[index],
-                      lastConnected: lastConnected[servers[index].id],
-                      connected: servers[index].id == connectedId,
-                      connecting: servers[index].id == connectingId,
-                      enabled: enabled && servers[index].id != connectingId,
-                      onTap: () => onConnect(servers[index]),
-                      onRemove: () => onRemove(servers[index]),
+          HairlineCard(
+            clip: true,
+            child: Column(
+              children: [
+                for (var index = 0; index < servers.length; index++) ...[
+                  if (index > 0)
+                    // 分隔线缩进到内容边缘：不顶到卡片圆角区，也和头像对齐。
+                    Divider(
+                      height: 1,
+                      thickness: 1,
+                      indent: 20,
+                      endIndent: 20,
+                      color: context.hairline.withValues(alpha: 0.6),
                     ),
-                  ],
+                  ServerRow(
+                    profile: servers[index],
+                    lastConnected: lastConnected[servers[index].id],
+                    connected: servers[index].id == connectedId,
+                    connecting: servers[index].id == connectingId,
+                    enabled: enabled && servers[index].id != connectingId,
+                    onTap: () => onConnect(servers[index]),
+                    onRemove: () => onRemove(servers[index]),
+                  ),
                 ],
-              ),
+              ],
             ),
           ),
           const SizedBox(height: 12),
@@ -541,11 +527,11 @@ class _EmptyServers extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: context.cardColor.withValues(alpha: 0.5),
-        borderRadius: Radii.xxxlAll,
+        borderRadius: Radii.xxlAll,
       ),
       child: DashedBorder(
         color: context.hairline,
-        radius: Radii.xxxl,
+        radius: Radii.xxl,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
           child: Column(
@@ -597,54 +583,45 @@ class _AddServerRow extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
 
-    return Material(
-      color: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: Radii.xxlAll),
-      clipBehavior: Clip.antiAlias,
-      child: DashedBorder(
-        color: context.hairline,
-        radius: Radii.xxl,
-        child: InkWell(
-          onTap: onTap,
-          hoverColor: scheme.surfaceContainer.withValues(alpha: 0.6),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            child: Row(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: scheme.surfaceContainer,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.add_rounded,
-                    size: 18,
-                    color: scheme.primary,
-                  ),
+    return HairlineCard(
+      clip: true,
+      child: InkWell(
+        onTap: onTap,
+        hoverColor: scheme.surfaceContainer.withValues(alpha: 0.6),
+        child: Padding(
+          // 内容缩进与服务器行（20）对齐，+ 圆钮和头像落在同一条线上。
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainer,
+                  shape: BoxShape.circle,
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    l10n.serverAdd,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: context.texts.bodyMedium?.copyWith(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
+                child: Icon(Icons.add_rounded, size: 18, color: scheme.primary),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  l10n.serverAdd,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.texts.bodyMedium?.copyWith(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
-                const SizedBox(width: 8),
-                Icon(
-                  Icons.arrow_forward_rounded,
-                  size: 16,
-                  color: scheme.onSurfaceVariant,
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                Icons.arrow_forward_rounded,
+                size: 16,
+                color: scheme.onSurfaceVariant,
+              ),
+            ],
           ),
         ),
       ),

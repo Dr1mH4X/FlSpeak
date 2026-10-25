@@ -248,8 +248,10 @@ class _ChatPaneState extends State<ChatPane> {
                             enabledBorder: InputBorder.none,
                             focusedBorder: InputBorder.none,
                             disabledBorder: InputBorder.none,
+                            // 文本距弧边的总内边距 = 容器 8 + 22 = 30，
+                            // 与有效圆角半径（60 高钳制后的 30）光学对齐。
                             contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 8,
+                              horizontal: 22,
                               vertical: 11,
                             ),
                           ),

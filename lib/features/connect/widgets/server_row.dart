@@ -76,7 +76,8 @@ class _ServerRowState extends State<ServerRow> {
               child: Opacity(
                 opacity: active ? 1 : 0.5,
                 child: Padding(
-                  padding: EdgeInsets.fromLTRB(narrow ? 12 : 16, 12, 4, 12),
+                  // 与身份卡的内容缩进（20）对齐，两卡头像才能落在同一条线上。
+                  padding: EdgeInsets.fromLTRB(narrow ? 16 : 20, 12, 20, 12),
                   child: Row(
                     children: [
                       ServerMonogram(
@@ -161,7 +162,6 @@ class _ServerRowState extends State<ServerRow> {
                               : scheme.onSurfaceVariant.withValues(alpha: 0.5),
                         ),
                       ),
-                      const SizedBox(width: 4),
                     ],
                   ),
                 ),

@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 
-/// 服务器磁贴：颜色由档案 id 稳定散列而来，连接态用右下角的状态点表达。
+/// 服务器磁贴：圆形，颜色由档案 id 稳定散列而来，连接态用右下角的状态点表达。
 ///
-/// 这是界面上唯一使用饱和色的功能性图形——扫一眼就能在同一批服务器之间认出彼此。
-/// 色相与 `refer/components/login/monogram.tsx` 共用一张表。
+/// 与身份头像同形（圆），靠颜色语义区分——身份用主色实底，服务器用各自
+/// 的散列色，扫一眼就能在同一批服务器之间认出彼此。色相与
+/// `refer/components/login/monogram.tsx` 共用一张表。
 class ServerMonogram extends StatelessWidget {
   const ServerMonogram({
     required this.id,
@@ -35,7 +36,7 @@ class ServerMonogram extends StatelessWidget {
           DecoratedBox(
             decoration: BoxDecoration(
               color: background,
-              borderRadius: BorderRadius.circular(size * 0.3),
+              shape: BoxShape.circle,
             ),
             child: Center(
               child: Text(
@@ -66,7 +67,7 @@ class ServerMonogram extends StatelessWidget {
   }
 }
 
-/// 身份头像：圆形、主色实底，和方形彩色服务器磁贴刻意区分。
+/// 身份头像：主色实底圆形；与服务器磁贴同形，靠颜色语义区分（主色 vs 散列色）。
 class IdentityAvatar extends StatelessWidget {
   const IdentityAvatar({required this.nickname, this.size = 64, super.key});
 
