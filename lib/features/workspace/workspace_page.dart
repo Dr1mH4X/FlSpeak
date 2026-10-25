@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/channel_display.dart';
 import '../../core/models.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_localizations.dart';
@@ -53,7 +54,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
       children: [
         _ChannelHeader(
           compact: compact,
-          channelName: channel?.name,
+          channelName: channel == null ? null : channelDisplayName(channel),
           selected: _tab,
           onChanged: (tab) => setState(() => _tab = tab),
         ),
@@ -136,7 +137,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
       case _MainTab.chat:
         return ChatPane(
           key: ValueKey(channel.id),
-          channelName: channel.name,
+          channelName: channelDisplayName(channel),
           messages: view.visibleMessages(channelId: channel.id),
           scope: view.chatScope,
           canSendChannel: view.selfChannelId == channel.id,
@@ -219,7 +220,6 @@ class _ChannelHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final scheme = context.scheme;
     final horizontal = compact ? 8.0 : 24.0;
     final hasChannel = channelName != null;
 
@@ -245,12 +245,6 @@ class _ChannelHeader extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                 ],
-                Icon(
-                  Icons.tag_rounded,
-                  size: 20,
-                  color: scheme.onSurfaceVariant,
-                ),
-                const SizedBox(width: 6),
                 Expanded(
                   child: Semantics(
                     header: true,

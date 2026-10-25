@@ -262,9 +262,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatScopeServer => '整个服务器';
 
   @override
-  String get chatNoChannel => '先进入一个频道再发送频道消息。';
-
-  @override
   String get chatUnsupportedImage => '不支持的图片格式';
 
   @override

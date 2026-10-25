@@ -152,7 +152,6 @@
   "chatScopeTitle": "Send to",
   "chatScopeChannel": "This channel",
   "chatScopeServer": "Whole server",
-  "chatNoChannel": "Join a channel before sending channel messages.",
   "chatUnsupportedImage": "Unsupported image format",
   "chatImageLoading": "Loading image…",
   "chatImageLoadFailed": "Image failed to load",

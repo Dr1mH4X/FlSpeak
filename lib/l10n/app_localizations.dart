@@ -548,12 +548,6 @@ abstract class AppLocalizations {
   /// **'Whole server'**
   String get chatScopeServer;
 
-  /// No description provided for @chatNoChannel.
-  ///
-  /// In en, this message translates to:
-  /// **'Join a channel before sending channel messages.'**
-  String get chatNoChannel;
-
   /// No description provided for @chatUnsupportedImage.
   ///
   /// In en, this message translates to:

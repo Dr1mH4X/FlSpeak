@@ -152,7 +152,6 @@
   "chatScopeTitle": "发送范围",
   "chatScopeChannel": "本频道",
   "chatScopeServer": "整个服务器",
-  "chatNoChannel": "先进入一个频道再发送频道消息。",
   "chatUnsupportedImage": "不支持的图片格式",
   "chatImageLoading": "正在加载图片…",
   "chatImageLoadFailed": "图片加载失败",

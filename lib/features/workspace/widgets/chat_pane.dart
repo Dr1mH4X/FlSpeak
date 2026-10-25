@@ -89,7 +89,7 @@ class _ChatPaneState extends State<ChatPane> {
 
   void _send() {
     final text = _input.text.trim();
-    if (text.isEmpty || !_canSend || widget.busy) {
+    if (text.isEmpty || widget.busy) {
       return;
     }
     _input.clear();
@@ -157,7 +157,9 @@ class _ChatPaneState extends State<ChatPane> {
             },
           ),
         ),
-        _buildComposer(context, l10n),
+        // 没进入频道（且不是服务器广播范围）时连发送框一起收起，
+        // 此处没有可投递的目标。
+        if (_canSend) _buildComposer(context, l10n),
       ],
     );
   }
@@ -171,115 +173,75 @@ class _ChatPaneState extends State<ChatPane> {
     final target = scope == ChatScope.server
         ? l10n.chatScopeServer
         : widget.channelName;
-    final showNoChannel = scope == ChatScope.channel && !widget.canSendChannel;
 
     return Padding(
       padding: EdgeInsets.fromLTRB(horizontal, 8, horizontal, bottom),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: _contentMaxWidth),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (showNoChannel)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.info_outline_rounded,
-                        size: 16,
-                        color: scheme.onSurfaceVariant,
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainer,
+              borderRadius: BorderRadius.circular(Radii.xxxl),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                _ScopeButton(scope: scope, onChanged: widget.onScopeChanged),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Focus(
+                    canRequestFocus: false,
+                    skipTraversal: true,
+                    onKeyEvent: _handleKeyEvent,
+                    child: TextField(
+                      controller: _input,
+                      focusNode: _focus,
+                      minLines: 1,
+                      maxLines: 5,
+                      keyboardType: TextInputType.multiline,
+                      style: texts.bodyMedium?.copyWith(
+                        color: scheme.onSurface,
                       ),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          l10n.chatNoChannel,
-                          style: texts.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
+                      decoration: InputDecoration(
+                        hintText: l10n.chatComposerHintTo(target),
+                        hintStyle: texts.bodyMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                        filled: false,
+                        isDense: true,
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        disabledBorder: InputBorder.none,
+                        // 文本距弧边的总内边距 = 容器 8 + 22 = 30，
+                        // 与有效圆角半径（60 高钳制后的 30）光学对齐。
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 22,
+                          vertical: 11,
                         ),
                       ),
-                    ],
+                    ),
                   ),
                 ),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainer,
-                  borderRadius: BorderRadius.circular(Radii.xxxl),
+                const SizedBox(width: 4),
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _input,
+                  builder: (context, value, child) => IconButton.filled(
+                    tooltip: l10n.chatSend,
+                    onPressed: !widget.busy && value.text.trim().isNotEmpty
+                        ? _send
+                        : null,
+                    style: IconButton.styleFrom(
+                      minimumSize: const Size(Sizes.touch, Sizes.touch),
+                      shape: const CircleBorder(),
+                    ),
+                    icon: const Icon(Icons.send_rounded, size: 20),
+                  ),
                 ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    _ScopeButton(
-                      scope: scope,
-                      onChanged: widget.onScopeChanged,
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Focus(
-                        canRequestFocus: false,
-                        skipTraversal: true,
-                        onKeyEvent: _handleKeyEvent,
-                        child: TextField(
-                          controller: _input,
-                          focusNode: _focus,
-                          enabled: _canSend,
-                          minLines: 1,
-                          maxLines: 5,
-                          keyboardType: TextInputType.multiline,
-                          style: texts.bodyMedium?.copyWith(
-                            color: scheme.onSurface,
-                          ),
-                          decoration: InputDecoration(
-                            hintText: l10n.chatComposerHintTo(
-                              target == l10n.chatScopeServer
-                                  ? target
-                                  : '#$target',
-                            ),
-                            hintStyle: texts.bodyMedium?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
-                            filled: false,
-                            isDense: true,
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            disabledBorder: InputBorder.none,
-                            // 文本距弧边的总内边距 = 容器 8 + 22 = 30，
-                            // 与有效圆角半径（60 高钳制后的 30）光学对齐。
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 22,
-                              vertical: 11,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    ValueListenableBuilder<TextEditingValue>(
-                      valueListenable: _input,
-                      builder: (context, value, child) => IconButton.filled(
-                        tooltip: l10n.chatSend,
-                        onPressed:
-                            _canSend &&
-                                !widget.busy &&
-                                value.text.trim().isNotEmpty
-                            ? _send
-                            : null,
-                        style: IconButton.styleFrom(
-                          minimumSize: const Size(Sizes.touch, Sizes.touch),
-                          shape: const CircleBorder(),
-                        ),
-                        icon: const Icon(Icons.send_rounded, size: 20),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -311,7 +273,7 @@ class _ScopeButton extends StatelessWidget {
             onChanged(server ? ChatScope.channel : ChatScope.server),
         iconSize: 20,
         icon: Icon(
-          server ? Icons.public_rounded : Icons.tag_rounded,
+          server ? Icons.public_rounded : Icons.chat_bubble_outline_rounded,
           color: scheme.onSurfaceVariant,
         ),
       ),
@@ -336,7 +298,7 @@ class _Welcome extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            l10n.chatWelcomeTitle('#$channelName'),
+            l10n.chatWelcomeTitle(channelName),
             style: texts.headlineSmall?.copyWith(
               fontSize: 24,
               fontWeight: FontWeight.w500,

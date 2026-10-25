@@ -265,9 +265,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatScopeServer => 'Whole server';
 
   @override
-  String get chatNoChannel => 'Join a channel before sending channel messages.';
-
-  @override
   String get chatUnsupportedImage => 'Unsupported image format';
 
   @override
