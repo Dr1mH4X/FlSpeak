@@ -54,8 +54,9 @@ flutter_rust_bridge_codegen generate      # 需要 flutter_rust_bridge_codegen 2
 ```sh
 flutter pub get
 flutter gen-l10n                          # 改了 arb/ 之后（pub get 也会触发）
-dart format lib setup.dart
+dart format lib test setup.dart
 flutter analyze --no-fatal-infos
+flutter test                              # Dart 单测（test/）
 ```
 
 `plugins/flspeak_ffi` 单独分析：

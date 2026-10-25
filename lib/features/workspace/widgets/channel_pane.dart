@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
+import '../../../core/channel_display.dart';
 import '../../../core/models.dart';
 import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
@@ -163,7 +164,12 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
       itemBuilder: (context, index) {
         final row = rows[index];
         return switch (row) {
-          _ChannelRow(:final channel, :final depth, :final expanded) =>
+          _ChannelRow(
+            :final channel,
+            :final depth,
+            :final expanded,
+            :final spacer,
+          ) =>
             _ChannelTile(
               channel: channel,
               depth: depth,
@@ -180,6 +186,7 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
                   view.connected &&
                   !view.busy &&
                   view.selfChannelId != channel.id,
+              spacer: spacer,
             ),
           _MemberRow(:final client, :final depth) => _MemberTile(
             client: client,
@@ -198,12 +205,23 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
     final rows = <_TreeRow>[];
 
     void walk(ChannelView channel, int depth) {
-      final children = _sortedChannels(view.childrenOf(channel.id));
+      // spacer 只改变名字的画法：行高、选中与加入都和普通频道一致（官方
+      // 客户端里双击装饰频道同样能进入房间），装饰行不提供折叠。
+      final spacer = parseChannelSpacer(channel.name);
+      final children = view.orderedChildrenOf(channel.id);
       final members = view.clientsIn(channel.id);
       final expanded =
-          !_collapsed.contains(channel.id) &&
-          (members.isNotEmpty || children.isNotEmpty);
-      rows.add(_ChannelRow(channel: channel, depth: depth, expanded: expanded));
+          spacer != null ||
+          (!_collapsed.contains(channel.id) &&
+              (members.isNotEmpty || children.isNotEmpty));
+      rows.add(
+        _ChannelRow(
+          channel: channel,
+          depth: depth,
+          expanded: expanded,
+          spacer: spacer,
+        ),
+      );
       if (!expanded) {
         return;
       }
@@ -215,19 +233,10 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
       }
     }
 
-    final roots = _sortedChannels(view.rootChannels());
-    for (final root in roots) {
+    for (final root in view.orderedRootChannels()) {
       walk(root, 0);
     }
     return rows;
-  }
-
-  List<ChannelView> _sortedChannels(List<ChannelView> channels) {
-    channels.sort((a, b) {
-      final byOrder = (a.order ?? a.id).compareTo(b.order ?? b.id);
-      return byOrder != 0 ? byOrder : a.id.compareTo(b.id);
-    });
-    return channels;
   }
 }
 
@@ -240,11 +249,13 @@ class _ChannelRow extends _TreeRow {
     required this.channel,
     required this.depth,
     required this.expanded,
+    this.spacer,
   });
 
   final ChannelView channel;
   final int depth;
   final bool expanded;
+  final ChannelSpacer? spacer;
 }
 
 class _MemberRow extends _TreeRow {
@@ -266,6 +277,7 @@ class _ChannelTile extends StatelessWidget {
     required this.onSelect,
     required this.onJoin,
     required this.canJoin,
+    this.spacer,
   });
 
   final ChannelView channel;
@@ -281,11 +293,15 @@ class _ChannelTile extends StatelessWidget {
   final VoidCallback onJoin;
   final bool canJoin;
 
+  /// 非 null 表示这是 spacer 频道：行高与点击、加入行为和普通频道一致，
+  /// 只有名字区域换成装饰画法。
+  final ChannelSpacer? spacer;
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
-    final name = channel.name.isEmpty ? '#${channel.id}' : channel.name;
+    final name = channelDisplayName(channel);
     final foreground = selected
         ? scheme.onPrimaryContainer
         : scheme.onSurfaceVariant;
@@ -325,82 +341,156 @@ class _ChannelTile extends StatelessWidget {
                 height: 48,
                 child: Padding(
                   padding: const EdgeInsets.only(right: 14),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 32,
-                        child: hasContent
-                            ? Tooltip(
-                                message: expanded
-                                    ? l10n.channelCollapse
-                                    : l10n.channelExpand,
-                                child: InkWell(
-                                  onTap: onToggle,
-                                  customBorder: const CircleBorder(),
-                                  child: SizedBox(
-                                    width: 32,
-                                    height: 40,
-                                    child: Icon(
-                                      expanded
-                                          ? Icons.keyboard_arrow_down_rounded
-                                          : Icons.keyboard_arrow_right_rounded,
-                                      size: 20,
-                                      color: foreground,
-                                    ),
+                  child: spacer == null
+                      ? Row(
+                          children: [
+                            SizedBox(
+                              width: 32,
+                              child: hasContent
+                                  ? Tooltip(
+                                      message: expanded
+                                          ? l10n.channelCollapse
+                                          : l10n.channelExpand,
+                                      child: InkWell(
+                                        onTap: onToggle,
+                                        customBorder: const CircleBorder(),
+                                        child: SizedBox(
+                                          width: 32,
+                                          height: 40,
+                                          child: Icon(
+                                            expanded
+                                                ? Icons
+                                                      .keyboard_arrow_down_rounded
+                                                : Icons
+                                                      .keyboard_arrow_right_rounded,
+                                            size: 20,
+                                            color: foreground,
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: context.texts.bodyMedium?.copyWith(
+                                  fontSize: 14,
+                                  color: selected
+                                      ? scheme.onPrimaryContainer
+                                      : scheme.onSurfaceVariant,
+                                  fontWeight: selected
+                                      ? FontWeight.w500
+                                      : FontWeight.w400,
+                                ),
+                              ),
+                            ),
+                            if (channel.passwordProtected == true)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 6),
+                                child: Tooltip(
+                                  message: l10n.channelPasswordProtected,
+                                  child: Icon(
+                                    Icons.lock_outline_rounded,
+                                    size: 15,
+                                    color: foreground,
                                   ),
                                 ),
-                              )
-                            : null,
-                      ),
-                      Icon(Icons.tag_rounded, size: 20, color: foreground),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: context.texts.bodyMedium?.copyWith(
-                            fontSize: 14,
-                            color: selected
-                                ? scheme.onPrimaryContainer
-                                : scheme.onSurfaceVariant,
-                            fontWeight: selected
-                                ? FontWeight.w500
-                                : FontWeight.w400,
-                          ),
-                        ),
-                      ),
-                      if (channel.passwordProtected == true)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 6),
-                          child: Tooltip(
-                            message: l10n.channelPasswordProtected,
-                            child: Icon(
-                              Icons.lock_outline_rounded,
-                              size: 15,
-                              color: foreground,
-                            ),
-                          ),
-                        ),
-                      if (memberLabel != null)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 8),
-                          child: Text(
-                            memberLabel,
-                            style: context.texts.labelSmall?.copyWith(
-                              color: foreground,
-                              fontFeatures: tabularFigures,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
+                              ),
+                            if (memberLabel != null)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 8),
+                                child: Text(
+                                  memberLabel,
+                                  style: context.texts.labelSmall?.copyWith(
+                                    color: foreground,
+                                    fontFeatures: tabularFigures,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        )
+                      : _spacerBody(context, foreground),
                 ),
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  /// 官方 spacer 行不带频道图标、人数与折叠箭头，只有装饰内容本身；
+  /// 颜色跟随行的前景（选中时用胶囊上的对比色）。
+  Widget _spacerBody(BuildContext context, Color foreground) {
+    final scheme = context.scheme;
+    if (spacer!.isLine) {
+      // 官方按字符画线（_ 实线 / - 虚线 / . 点线），这里统一用一条分隔线表达。
+      return Align(child: Container(height: 1, color: scheme.outlineVariant));
+    }
+    if (spacer!.text.isEmpty) {
+      // 纯前缀的空 spacer 在官方里占一个空行，不写任何内容。
+      return const SizedBox.shrink();
+    }
+    final style = context.texts.bodySmall?.copyWith(
+      fontSize: 13,
+      color: foreground,
+    );
+    if (spacer!.align == SpacerAlign.fill) {
+      return _FillSpacerText(text: spacer!.text, style: style);
+    }
+    return Align(
+      alignment: switch (spacer!.align) {
+        SpacerAlign.left => AlignmentDirectional.centerStart,
+        SpacerAlign.center => AlignmentDirectional.center,
+        SpacerAlign.right => AlignmentDirectional.centerEnd,
+        // fill 在上面单独处理，这里只为穷尽。
+        SpacerAlign.fill => AlignmentDirectional.center,
+      },
+      child: Text(
+        spacer!.text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: style,
+      ),
+    );
+  }
+}
+
+/// `[*spacer]` 的官方语义：把文本当单元重复铺满整行；只放完整单元，行尾不留半截。
+class _FillSpacerText extends StatelessWidget {
+  const _FillSpacerText({required this.text, required this.style});
+
+  final String text;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final painter = TextPainter(
+          text: TextSpan(text: text, style: style),
+          textDirection: Directionality.of(context),
+          maxLines: 1,
+        )..layout();
+        final unitWidth = painter.width;
+        painter.dispose();
+        if (unitWidth <= 0 || !constraints.maxWidth.isFinite) {
+          return const SizedBox.shrink();
+        }
+        final repeat = (constraints.maxWidth / unitWidth).floor();
+        return Align(
+          child: Text(
+            text * (repeat < 1 ? 1 : repeat),
+            maxLines: 1,
+            overflow: TextOverflow.clip,
+            style: style,
+          ),
+        );
+      },
     );
   }
 }

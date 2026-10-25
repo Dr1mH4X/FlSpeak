@@ -1,5 +1,7 @@
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
+import 'channel_display.dart';
+
 /// 文字消息的投递范围，由协议里的 `targetMode` 归一化而来。
 enum ChatScope {
   direct(1),
@@ -177,6 +179,12 @@ class SessionView {
 
   List<ChannelView> childrenOf(int parentId) =>
       channels.where((channel) => channel.parentId == parentId).toList();
+
+  /// 同上两个查询，但按 `channel_order` 链表语义排成展示顺序。
+  List<ChannelView> orderedRootChannels() => orderSiblings(rootChannels());
+
+  List<ChannelView> orderedChildrenOf(int parentId) =>
+      orderSiblings(childrenOf(parentId));
 
   List<ClientView> clientsIn(int channelId) =>
       clients.where((client) => client.channelId == channelId).toList();

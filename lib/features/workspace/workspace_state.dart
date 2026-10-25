@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/channel_display.dart';
 import '../../core/providers.dart';
 
 /// 用户在频道树里点开的频道，连同当时的服务器，避免换服务器后误用同号频道。
@@ -34,6 +35,10 @@ final activeChannelIdProvider = Provider<int?>((ref) {
   if (self != null && view.channelById(self) != null) {
     return self;
   }
-  final roots = view.rootChannels();
+  // 兜底频道要挑用户真能进入的：spacer 是装饰频道，不参与选中；
+  // 用排序后的顺序，保证「第一个」和树里展示的第一个一致。
+  final roots = view.orderedRootChannels().where(
+    (channel) => parseChannelSpacer(channel.name) == null,
+  );
   return roots.isEmpty ? null : roots.first.id;
 });
