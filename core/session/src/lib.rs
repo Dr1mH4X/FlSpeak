@@ -131,6 +131,13 @@ pub enum SessionEvent {
         id: i32,
         channel_id: u64,
     },
+    /// 某个客户端（含自己）的服务器标志变了；`notifyclientupdated` 只带
+    /// 变化字段，`None` 表示「本次没提」，不是「清除」。
+    ClientUpdated {
+        id: i32,
+        input_muted: Option<bool>,
+        output_muted: Option<bool>,
+    },
     Voice(VoiceStateView),
     Speaking {
         client_ids: Vec<i32>,

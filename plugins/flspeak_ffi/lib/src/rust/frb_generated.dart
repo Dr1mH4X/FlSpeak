@@ -1377,48 +1377,54 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           channelId: dco_decode_CastedPrimitive_u_64(raw[2]),
         );
       case 8:
+        return CoreEvent_ClientUpdated(
+          id: dco_decode_i_32(raw[1]),
+          inputMuted: dco_decode_opt_box_autoadd_bool(raw[2]),
+          outputMuted: dco_decode_opt_box_autoadd_bool(raw[3]),
+        );
+      case 9:
         return CoreEvent_Voice(
           state: dco_decode_box_autoadd_core_voice_state(raw[1]),
         );
-      case 9:
+      case 10:
         return CoreEvent_Speaking(
           clientIds: dco_decode_list_prim_i_32_strict(raw[1]),
         );
-      case 10:
-        return CoreEvent_SelfSpeaking(speaking: dco_decode_bool(raw[1]));
       case 11:
+        return CoreEvent_SelfSpeaking(speaking: dco_decode_bool(raw[1]));
+      case 12:
         return CoreEvent_IdentityUpgrade(
           from: dco_decode_i_32(raw[1]),
           to: dco_decode_i_32(raw[2]),
         );
-      case 12:
-        return CoreEvent_IdentityUpgraded(level: dco_decode_i_32(raw[1]));
       case 13:
+        return CoreEvent_IdentityUpgraded(level: dco_decode_i_32(raw[1]));
+      case 14:
         return CoreEvent_TransferStarted(
           id: dco_decode_CastedPrimitive_u_64(raw[1]),
           direction: dco_decode_core_transfer_direction(raw[2]),
           remotePath: dco_decode_String(raw[3]),
           total: dco_decode_CastedPrimitive_u_64(raw[4]),
         );
-      case 14:
+      case 15:
         return CoreEvent_TransferProgress(
           id: dco_decode_CastedPrimitive_u_64(raw[1]),
           transferred: dco_decode_CastedPrimitive_u_64(raw[2]),
           total: dco_decode_CastedPrimitive_u_64(raw[3]),
         );
-      case 15:
+      case 16:
         return CoreEvent_TransferFinished(
           id: dco_decode_CastedPrimitive_u_64(raw[1]),
           error: dco_decode_opt_String(raw[2]),
         );
-      case 16:
+      case 17:
         return CoreEvent_Log(
           level: dco_decode_String(raw[1]),
           message: dco_decode_String(raw[2]),
         );
-      case 17:
-        return CoreEvent_Denied(message: dco_decode_String(raw[1]));
       case 18:
+        return CoreEvent_Denied(message: dco_decode_String(raw[1]));
+      case 19:
         return CoreEvent_Failed(message: dco_decode_String(raw[1]));
       default:
         throw Exception("unreachable");
@@ -1847,22 +1853,31 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         var var_channelId = sse_decode_CastedPrimitive_u_64(deserializer);
         return CoreEvent_ClientMoved(id: var_id, channelId: var_channelId);
       case 8:
+        var var_id = sse_decode_i_32(deserializer);
+        var var_inputMuted = sse_decode_opt_box_autoadd_bool(deserializer);
+        var var_outputMuted = sse_decode_opt_box_autoadd_bool(deserializer);
+        return CoreEvent_ClientUpdated(
+          id: var_id,
+          inputMuted: var_inputMuted,
+          outputMuted: var_outputMuted,
+        );
+      case 9:
         var var_state = sse_decode_box_autoadd_core_voice_state(deserializer);
         return CoreEvent_Voice(state: var_state);
-      case 9:
+      case 10:
         var var_clientIds = sse_decode_list_prim_i_32_strict(deserializer);
         return CoreEvent_Speaking(clientIds: var_clientIds);
-      case 10:
+      case 11:
         var var_speaking = sse_decode_bool(deserializer);
         return CoreEvent_SelfSpeaking(speaking: var_speaking);
-      case 11:
+      case 12:
         var var_from = sse_decode_i_32(deserializer);
         var var_to = sse_decode_i_32(deserializer);
         return CoreEvent_IdentityUpgrade(from: var_from, to: var_to);
-      case 12:
+      case 13:
         var var_level = sse_decode_i_32(deserializer);
         return CoreEvent_IdentityUpgraded(level: var_level);
-      case 13:
+      case 14:
         var var_id = sse_decode_CastedPrimitive_u_64(deserializer);
         var var_direction = sse_decode_core_transfer_direction(deserializer);
         var var_remotePath = sse_decode_String(deserializer);
@@ -1873,7 +1888,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           remotePath: var_remotePath,
           total: var_total,
         );
-      case 14:
+      case 15:
         var var_id = sse_decode_CastedPrimitive_u_64(deserializer);
         var var_transferred = sse_decode_CastedPrimitive_u_64(deserializer);
         var var_total = sse_decode_CastedPrimitive_u_64(deserializer);
@@ -1882,18 +1897,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           transferred: var_transferred,
           total: var_total,
         );
-      case 15:
+      case 16:
         var var_id = sse_decode_CastedPrimitive_u_64(deserializer);
         var var_error = sse_decode_opt_String(deserializer);
         return CoreEvent_TransferFinished(id: var_id, error: var_error);
-      case 16:
+      case 17:
         var var_level = sse_decode_String(deserializer);
         var var_message = sse_decode_String(deserializer);
         return CoreEvent_Log(level: var_level, message: var_message);
-      case 17:
+      case 18:
         var var_message = sse_decode_String(deserializer);
         return CoreEvent_Denied(message: var_message);
-      case 18:
+      case 19:
         var var_message = sse_decode_String(deserializer);
         return CoreEvent_Failed(message: var_message);
       default:
@@ -2386,21 +2401,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_i_32(7, serializer);
         sse_encode_i_32(id, serializer);
         sse_encode_CastedPrimitive_u_64(channelId, serializer);
-      case CoreEvent_Voice(state: final state):
+      case CoreEvent_ClientUpdated(
+        id: final id,
+        inputMuted: final inputMuted,
+        outputMuted: final outputMuted,
+      ):
         sse_encode_i_32(8, serializer);
+        sse_encode_i_32(id, serializer);
+        sse_encode_opt_box_autoadd_bool(inputMuted, serializer);
+        sse_encode_opt_box_autoadd_bool(outputMuted, serializer);
+      case CoreEvent_Voice(state: final state):
+        sse_encode_i_32(9, serializer);
         sse_encode_box_autoadd_core_voice_state(state, serializer);
       case CoreEvent_Speaking(clientIds: final clientIds):
-        sse_encode_i_32(9, serializer);
+        sse_encode_i_32(10, serializer);
         sse_encode_list_prim_i_32_strict(clientIds, serializer);
       case CoreEvent_SelfSpeaking(speaking: final speaking):
-        sse_encode_i_32(10, serializer);
+        sse_encode_i_32(11, serializer);
         sse_encode_bool(speaking, serializer);
       case CoreEvent_IdentityUpgrade(from: final from, to: final to):
-        sse_encode_i_32(11, serializer);
+        sse_encode_i_32(12, serializer);
         sse_encode_i_32(from, serializer);
         sse_encode_i_32(to, serializer);
       case CoreEvent_IdentityUpgraded(level: final level):
-        sse_encode_i_32(12, serializer);
+        sse_encode_i_32(13, serializer);
         sse_encode_i_32(level, serializer);
       case CoreEvent_TransferStarted(
         id: final id,
@@ -2408,7 +2432,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         remotePath: final remotePath,
         total: final total,
       ):
-        sse_encode_i_32(13, serializer);
+        sse_encode_i_32(14, serializer);
         sse_encode_CastedPrimitive_u_64(id, serializer);
         sse_encode_core_transfer_direction(direction, serializer);
         sse_encode_String(remotePath, serializer);
@@ -2418,23 +2442,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         transferred: final transferred,
         total: final total,
       ):
-        sse_encode_i_32(14, serializer);
+        sse_encode_i_32(15, serializer);
         sse_encode_CastedPrimitive_u_64(id, serializer);
         sse_encode_CastedPrimitive_u_64(transferred, serializer);
         sse_encode_CastedPrimitive_u_64(total, serializer);
       case CoreEvent_TransferFinished(id: final id, error: final error):
-        sse_encode_i_32(15, serializer);
+        sse_encode_i_32(16, serializer);
         sse_encode_CastedPrimitive_u_64(id, serializer);
         sse_encode_opt_String(error, serializer);
       case CoreEvent_Log(level: final level, message: final message):
-        sse_encode_i_32(16, serializer);
+        sse_encode_i_32(17, serializer);
         sse_encode_String(level, serializer);
         sse_encode_String(message, serializer);
       case CoreEvent_Denied(message: final message):
-        sse_encode_i_32(17, serializer);
+        sse_encode_i_32(18, serializer);
         sse_encode_String(message, serializer);
       case CoreEvent_Failed(message: final message):
-        sse_encode_i_32(18, serializer);
+        sse_encode_i_32(19, serializer);
         sse_encode_String(message, serializer);
     }
   }

@@ -137,6 +137,13 @@ pub enum CoreEvent {
         id: i32,
         channel_id: u64,
     },
+    /// 某个客户端（含自己）的服务器标志变化；null 表示本次事件没提到，
+    /// 不是清除。
+    ClientUpdated {
+        id: i32,
+        input_muted: Option<bool>,
+        output_muted: Option<bool>,
+    },
     Voice {
         state: CoreVoiceState,
     },
@@ -549,6 +556,15 @@ impl From<SessionEvent> for CoreEvent {
             SessionEvent::ClientMoved { id, channel_id } => {
                 CoreEvent::ClientMoved { id, channel_id }
             }
+            SessionEvent::ClientUpdated {
+                id,
+                input_muted,
+                output_muted,
+            } => CoreEvent::ClientUpdated {
+                id,
+                input_muted,
+                output_muted,
+            },
             SessionEvent::Voice(state) => CoreEvent::Voice {
                 state: state.into(),
             },

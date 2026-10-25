@@ -296,6 +296,31 @@ class SessionController extends Notifier<SessionView> {
                   nickname: client.nickname,
                   uid: client.uid,
                   channelId: channelId,
+                  // 移动事件不带静音标志，沿用移动前的已知值。
+                  inputMuted: client.inputMuted,
+                  outputMuted: client.outputMuted,
+                )
+              else
+                client,
+          ],
+        );
+      case CoreEvent_ClientUpdated(
+        :final id,
+        :final inputMuted,
+        :final outputMuted,
+      ):
+        // 事件只带变化字段，null 表示本次没提，不清除已知值。
+        state = current.copyWith(
+          clients: [
+            for (final client in current.clients)
+              if (client.id == id)
+                ClientView(
+                  id: client.id,
+                  nickname: client.nickname,
+                  uid: client.uid,
+                  channelId: client.channelId,
+                  inputMuted: inputMuted ?? client.inputMuted,
+                  outputMuted: outputMuted ?? client.outputMuted,
                 )
               else
                 client,

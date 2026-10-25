@@ -281,6 +281,14 @@ sealed class CoreEvent with _$CoreEvent {
     required int id,
     required int channelId,
   }) = CoreEvent_ClientMoved;
+
+  /// 某个客户端（含自己）的服务器标志变化；null 表示本次事件没提到，
+  /// 不是清除。
+  const factory CoreEvent.clientUpdated({
+    required int id,
+    bool? inputMuted,
+    bool? outputMuted,
+  }) = CoreEvent_ClientUpdated;
   const factory CoreEvent.voice({required CoreVoiceState state}) =
       CoreEvent_Voice;
   const factory CoreEvent.speaking({required Int32List clientIds}) =

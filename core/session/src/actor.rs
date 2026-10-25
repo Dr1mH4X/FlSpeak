@@ -295,10 +295,10 @@ impl Actor {
                 let _ = reply.send(self.refresh_snapshot(true).await);
             }
             SessionCommand::SetMuted { muted, reply } => {
-                let _ = reply.send(self.set_muted(muted));
+                let _ = reply.send(self.set_muted(muted).await);
             }
             SessionCommand::SetDeafened { deafened, reply } => {
-                let _ = reply.send(self.set_deafened(deafened));
+                let _ = reply.send(self.set_deafened(deafened).await);
             }
             SessionCommand::SetPttMode { enabled, reply } => {
                 let _ = reply.send(self.set_ptt_mode(enabled));
@@ -532,6 +532,8 @@ impl Actor {
                     });
                 }
                 self.start_voice();
+                // 服务器端自己的标志在（重）连后是重置过的，把本地状态重新同步。
+                self.report_voice_flags().await;
                 self.emit_voice_state();
                 self.emit_history().await;
                 Ok(())
@@ -879,7 +881,7 @@ impl Actor {
         }
     }
 
-    fn set_muted(&mut self, muted: bool) -> Result<(), SessionError> {
+    async fn set_muted(&mut self, muted: bool) -> Result<(), SessionError> {
         if self.audio_enabled {
             self.voice.set_muted(muted)?;
         }
@@ -891,10 +893,11 @@ impl Actor {
             }
         }
         self.emit_voice_state();
+        self.report_voice_flags().await;
         Ok(())
     }
 
-    fn set_deafened(&mut self, deafened: bool) -> Result<(), SessionError> {
+    async fn set_deafened(&mut self, deafened: bool) -> Result<(), SessionError> {
         if self.audio_enabled {
             self.voice.set_deafened(deafened)?;
         }
@@ -906,7 +909,31 @@ impl Actor {
             }
         }
         self.emit_voice_state();
+        self.report_voice_flags().await;
         Ok(())
+    }
+
+    /// 把自己的静音/聋听状态上报给服务器，其他客户端才能看到标志。
+    /// 本地门控已经生效，上报失败只记日志不回滚。
+    async fn report_voice_flags(&self) {
+        let Some(client) = self.client.clone() else {
+            return;
+        };
+        let (input, output) = mute_flags(self.voice_state.muted, self.voice_state.deafened);
+        if let Err(err) = tsclient_rs::clientUpdate(
+            &client,
+            &[
+                ("client_input_muted", input),
+                ("client_output_muted", output),
+            ],
+        )
+        .await
+        {
+            self.emit(SessionEvent::Log {
+                level: "warn".into(),
+                message: format!("静音状态上报失败: {err}"),
+            });
+        }
     }
 
     fn set_ptt_mode(&mut self, enabled: bool) -> Result<(), SessionError> {
@@ -1674,6 +1701,15 @@ fn now_millis() -> u64 {
         .unwrap_or(0)
 }
 
+/// 官方客户端的标志语义：deafen 同时置 input 与 output，解除 deafen 后
+/// input 恢复用户自己的静音选择。
+fn mute_flags(muted: bool, deafened: bool) -> (&'static str, &'static str) {
+    (
+        if muted || deafened { "1" } else { "0" },
+        if deafened { "1" } else { "0" },
+    )
+}
+
 fn emit(events: &broadcast::Sender<SessionEvent>, event: SessionEvent) {
     // 没有订阅者时事件直接丢弃，actor 不因此停下。
     let _ = events.send(event);
@@ -1729,6 +1765,24 @@ fn register_handlers(
         }
         if let ProtocolEvent::ClientLeave(info) = event {
             emit(&channel, SessionEvent::ClientLeft { id: info.id });
+        }
+    }));
+
+    let channel = events.clone();
+    let live = Arc::clone(&current);
+    client.on_client_updated(Arc::new(move |event: ProtocolEvent| {
+        if live.load(Ordering::Relaxed) != epoch {
+            return;
+        }
+        if let ProtocolEvent::ClientUpdated(info) = event {
+            emit(
+                &channel,
+                SessionEvent::ClientUpdated {
+                    id: info.id,
+                    input_muted: info.input_muted,
+                    output_muted: info.output_muted,
+                },
+            );
         }
     }));
 
@@ -2007,6 +2061,15 @@ impl AsyncWrite for ProgressWriter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mute_flags_follow_official_deafen_semantics() {
+        assert_eq!(mute_flags(false, false), ("0", "0"));
+        assert_eq!(mute_flags(true, false), ("1", "0"));
+        // deafen 同时置两个标志，覆盖用户当前的静音选择。
+        assert_eq!(mute_flags(false, true), ("1", "1"));
+        assert_eq!(mute_flags(true, true), ("1", "1"));
+    }
 
     #[test]
     fn short_text_message_is_sent_as_one_chunk() {

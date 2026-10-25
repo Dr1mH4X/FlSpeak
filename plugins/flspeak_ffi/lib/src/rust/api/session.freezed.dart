@@ -536,7 +536,7 @@ extension CoreEventPatterns on CoreEvent {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( CoreEvent_State value)?  state,TResult Function( CoreEvent_Servers value)?  servers,TResult Function( CoreEvent_Snapshot value)?  snapshot,TResult Function( CoreEvent_History value)?  history,TResult Function( CoreEvent_TextMessage value)?  textMessage,TResult Function( CoreEvent_ClientJoined value)?  clientJoined,TResult Function( CoreEvent_ClientLeft value)?  clientLeft,TResult Function( CoreEvent_ClientMoved value)?  clientMoved,TResult Function( CoreEvent_Voice value)?  voice,TResult Function( CoreEvent_Speaking value)?  speaking,TResult Function( CoreEvent_SelfSpeaking value)?  selfSpeaking,TResult Function( CoreEvent_IdentityUpgrade value)?  identityUpgrade,TResult Function( CoreEvent_IdentityUpgraded value)?  identityUpgraded,TResult Function( CoreEvent_TransferStarted value)?  transferStarted,TResult Function( CoreEvent_TransferProgress value)?  transferProgress,TResult Function( CoreEvent_TransferFinished value)?  transferFinished,TResult Function( CoreEvent_Log value)?  log,TResult Function( CoreEvent_Denied value)?  denied,TResult Function( CoreEvent_Failed value)?  failed,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( CoreEvent_State value)?  state,TResult Function( CoreEvent_Servers value)?  servers,TResult Function( CoreEvent_Snapshot value)?  snapshot,TResult Function( CoreEvent_History value)?  history,TResult Function( CoreEvent_TextMessage value)?  textMessage,TResult Function( CoreEvent_ClientJoined value)?  clientJoined,TResult Function( CoreEvent_ClientLeft value)?  clientLeft,TResult Function( CoreEvent_ClientMoved value)?  clientMoved,TResult Function( CoreEvent_ClientUpdated value)?  clientUpdated,TResult Function( CoreEvent_Voice value)?  voice,TResult Function( CoreEvent_Speaking value)?  speaking,TResult Function( CoreEvent_SelfSpeaking value)?  selfSpeaking,TResult Function( CoreEvent_IdentityUpgrade value)?  identityUpgrade,TResult Function( CoreEvent_IdentityUpgraded value)?  identityUpgraded,TResult Function( CoreEvent_TransferStarted value)?  transferStarted,TResult Function( CoreEvent_TransferProgress value)?  transferProgress,TResult Function( CoreEvent_TransferFinished value)?  transferFinished,TResult Function( CoreEvent_Log value)?  log,TResult Function( CoreEvent_Denied value)?  denied,TResult Function( CoreEvent_Failed value)?  failed,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case CoreEvent_State() when state != null:
@@ -547,7 +547,8 @@ return history(_that);case CoreEvent_TextMessage() when textMessage != null:
 return textMessage(_that);case CoreEvent_ClientJoined() when clientJoined != null:
 return clientJoined(_that);case CoreEvent_ClientLeft() when clientLeft != null:
 return clientLeft(_that);case CoreEvent_ClientMoved() when clientMoved != null:
-return clientMoved(_that);case CoreEvent_Voice() when voice != null:
+return clientMoved(_that);case CoreEvent_ClientUpdated() when clientUpdated != null:
+return clientUpdated(_that);case CoreEvent_Voice() when voice != null:
 return voice(_that);case CoreEvent_Speaking() when speaking != null:
 return speaking(_that);case CoreEvent_SelfSpeaking() when selfSpeaking != null:
 return selfSpeaking(_that);case CoreEvent_IdentityUpgrade() when identityUpgrade != null:
@@ -576,7 +577,7 @@ return failed(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( CoreEvent_State value)  state,required TResult Function( CoreEvent_Servers value)  servers,required TResult Function( CoreEvent_Snapshot value)  snapshot,required TResult Function( CoreEvent_History value)  history,required TResult Function( CoreEvent_TextMessage value)  textMessage,required TResult Function( CoreEvent_ClientJoined value)  clientJoined,required TResult Function( CoreEvent_ClientLeft value)  clientLeft,required TResult Function( CoreEvent_ClientMoved value)  clientMoved,required TResult Function( CoreEvent_Voice value)  voice,required TResult Function( CoreEvent_Speaking value)  speaking,required TResult Function( CoreEvent_SelfSpeaking value)  selfSpeaking,required TResult Function( CoreEvent_IdentityUpgrade value)  identityUpgrade,required TResult Function( CoreEvent_IdentityUpgraded value)  identityUpgraded,required TResult Function( CoreEvent_TransferStarted value)  transferStarted,required TResult Function( CoreEvent_TransferProgress value)  transferProgress,required TResult Function( CoreEvent_TransferFinished value)  transferFinished,required TResult Function( CoreEvent_Log value)  log,required TResult Function( CoreEvent_Denied value)  denied,required TResult Function( CoreEvent_Failed value)  failed,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( CoreEvent_State value)  state,required TResult Function( CoreEvent_Servers value)  servers,required TResult Function( CoreEvent_Snapshot value)  snapshot,required TResult Function( CoreEvent_History value)  history,required TResult Function( CoreEvent_TextMessage value)  textMessage,required TResult Function( CoreEvent_ClientJoined value)  clientJoined,required TResult Function( CoreEvent_ClientLeft value)  clientLeft,required TResult Function( CoreEvent_ClientMoved value)  clientMoved,required TResult Function( CoreEvent_ClientUpdated value)  clientUpdated,required TResult Function( CoreEvent_Voice value)  voice,required TResult Function( CoreEvent_Speaking value)  speaking,required TResult Function( CoreEvent_SelfSpeaking value)  selfSpeaking,required TResult Function( CoreEvent_IdentityUpgrade value)  identityUpgrade,required TResult Function( CoreEvent_IdentityUpgraded value)  identityUpgraded,required TResult Function( CoreEvent_TransferStarted value)  transferStarted,required TResult Function( CoreEvent_TransferProgress value)  transferProgress,required TResult Function( CoreEvent_TransferFinished value)  transferFinished,required TResult Function( CoreEvent_Log value)  log,required TResult Function( CoreEvent_Denied value)  denied,required TResult Function( CoreEvent_Failed value)  failed,}){
 final _that = this;
 switch (_that) {
 case CoreEvent_State():
@@ -587,7 +588,8 @@ return history(_that);case CoreEvent_TextMessage():
 return textMessage(_that);case CoreEvent_ClientJoined():
 return clientJoined(_that);case CoreEvent_ClientLeft():
 return clientLeft(_that);case CoreEvent_ClientMoved():
-return clientMoved(_that);case CoreEvent_Voice():
+return clientMoved(_that);case CoreEvent_ClientUpdated():
+return clientUpdated(_that);case CoreEvent_Voice():
 return voice(_that);case CoreEvent_Speaking():
 return speaking(_that);case CoreEvent_SelfSpeaking():
 return selfSpeaking(_that);case CoreEvent_IdentityUpgrade():
@@ -612,7 +614,7 @@ return failed(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( CoreEvent_State value)?  state,TResult? Function( CoreEvent_Servers value)?  servers,TResult? Function( CoreEvent_Snapshot value)?  snapshot,TResult? Function( CoreEvent_History value)?  history,TResult? Function( CoreEvent_TextMessage value)?  textMessage,TResult? Function( CoreEvent_ClientJoined value)?  clientJoined,TResult? Function( CoreEvent_ClientLeft value)?  clientLeft,TResult? Function( CoreEvent_ClientMoved value)?  clientMoved,TResult? Function( CoreEvent_Voice value)?  voice,TResult? Function( CoreEvent_Speaking value)?  speaking,TResult? Function( CoreEvent_SelfSpeaking value)?  selfSpeaking,TResult? Function( CoreEvent_IdentityUpgrade value)?  identityUpgrade,TResult? Function( CoreEvent_IdentityUpgraded value)?  identityUpgraded,TResult? Function( CoreEvent_TransferStarted value)?  transferStarted,TResult? Function( CoreEvent_TransferProgress value)?  transferProgress,TResult? Function( CoreEvent_TransferFinished value)?  transferFinished,TResult? Function( CoreEvent_Log value)?  log,TResult? Function( CoreEvent_Denied value)?  denied,TResult? Function( CoreEvent_Failed value)?  failed,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( CoreEvent_State value)?  state,TResult? Function( CoreEvent_Servers value)?  servers,TResult? Function( CoreEvent_Snapshot value)?  snapshot,TResult? Function( CoreEvent_History value)?  history,TResult? Function( CoreEvent_TextMessage value)?  textMessage,TResult? Function( CoreEvent_ClientJoined value)?  clientJoined,TResult? Function( CoreEvent_ClientLeft value)?  clientLeft,TResult? Function( CoreEvent_ClientMoved value)?  clientMoved,TResult? Function( CoreEvent_ClientUpdated value)?  clientUpdated,TResult? Function( CoreEvent_Voice value)?  voice,TResult? Function( CoreEvent_Speaking value)?  speaking,TResult? Function( CoreEvent_SelfSpeaking value)?  selfSpeaking,TResult? Function( CoreEvent_IdentityUpgrade value)?  identityUpgrade,TResult? Function( CoreEvent_IdentityUpgraded value)?  identityUpgraded,TResult? Function( CoreEvent_TransferStarted value)?  transferStarted,TResult? Function( CoreEvent_TransferProgress value)?  transferProgress,TResult? Function( CoreEvent_TransferFinished value)?  transferFinished,TResult? Function( CoreEvent_Log value)?  log,TResult? Function( CoreEvent_Denied value)?  denied,TResult? Function( CoreEvent_Failed value)?  failed,}){
 final _that = this;
 switch (_that) {
 case CoreEvent_State() when state != null:
@@ -623,7 +625,8 @@ return history(_that);case CoreEvent_TextMessage() when textMessage != null:
 return textMessage(_that);case CoreEvent_ClientJoined() when clientJoined != null:
 return clientJoined(_that);case CoreEvent_ClientLeft() when clientLeft != null:
 return clientLeft(_that);case CoreEvent_ClientMoved() when clientMoved != null:
-return clientMoved(_that);case CoreEvent_Voice() when voice != null:
+return clientMoved(_that);case CoreEvent_ClientUpdated() when clientUpdated != null:
+return clientUpdated(_that);case CoreEvent_Voice() when voice != null:
 return voice(_that);case CoreEvent_Speaking() when speaking != null:
 return speaking(_that);case CoreEvent_SelfSpeaking() when selfSpeaking != null:
 return selfSpeaking(_that);case CoreEvent_IdentityUpgrade() when identityUpgrade != null:
@@ -651,7 +654,7 @@ return failed(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( CoreSessionState state)?  state,TResult Function( List<ServerProfileView> profiles)?  servers,TResult Function( List<ChannelView> channels,  List<ClientView> clients)?  snapshot,TResult Function( List<CoreMessage> messages)?  history,TResult Function( String from,  String fromUid,  String message,  int targetMode,  int targetId,  int at)?  textMessage,TResult Function( int id,  String nickname,  String uid,  int channelId)?  clientJoined,TResult Function( int id)?  clientLeft,TResult Function( int id,  int channelId)?  clientMoved,TResult Function( CoreVoiceState state)?  voice,TResult Function( Int32List clientIds)?  speaking,TResult Function( bool speaking)?  selfSpeaking,TResult Function( int from,  int to)?  identityUpgrade,TResult Function( int level)?  identityUpgraded,TResult Function( int id,  CoreTransferDirection direction,  String remotePath,  int total)?  transferStarted,TResult Function( int id,  int transferred,  int total)?  transferProgress,TResult Function( int id,  String? error)?  transferFinished,TResult Function( String level,  String message)?  log,TResult Function( String message)?  denied,TResult Function( String message)?  failed,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( CoreSessionState state)?  state,TResult Function( List<ServerProfileView> profiles)?  servers,TResult Function( List<ChannelView> channels,  List<ClientView> clients)?  snapshot,TResult Function( List<CoreMessage> messages)?  history,TResult Function( String from,  String fromUid,  String message,  int targetMode,  int targetId,  int at)?  textMessage,TResult Function( int id,  String nickname,  String uid,  int channelId)?  clientJoined,TResult Function( int id)?  clientLeft,TResult Function( int id,  int channelId)?  clientMoved,TResult Function( int id,  bool? inputMuted,  bool? outputMuted)?  clientUpdated,TResult Function( CoreVoiceState state)?  voice,TResult Function( Int32List clientIds)?  speaking,TResult Function( bool speaking)?  selfSpeaking,TResult Function( int from,  int to)?  identityUpgrade,TResult Function( int level)?  identityUpgraded,TResult Function( int id,  CoreTransferDirection direction,  String remotePath,  int total)?  transferStarted,TResult Function( int id,  int transferred,  int total)?  transferProgress,TResult Function( int id,  String? error)?  transferFinished,TResult Function( String level,  String message)?  log,TResult Function( String message)?  denied,TResult Function( String message)?  failed,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case CoreEvent_State() when state != null:
 return state(_that.state);case CoreEvent_Servers() when servers != null:
@@ -661,7 +664,8 @@ return history(_that.messages);case CoreEvent_TextMessage() when textMessage != 
 return textMessage(_that.from,_that.fromUid,_that.message,_that.targetMode,_that.targetId,_that.at);case CoreEvent_ClientJoined() when clientJoined != null:
 return clientJoined(_that.id,_that.nickname,_that.uid,_that.channelId);case CoreEvent_ClientLeft() when clientLeft != null:
 return clientLeft(_that.id);case CoreEvent_ClientMoved() when clientMoved != null:
-return clientMoved(_that.id,_that.channelId);case CoreEvent_Voice() when voice != null:
+return clientMoved(_that.id,_that.channelId);case CoreEvent_ClientUpdated() when clientUpdated != null:
+return clientUpdated(_that.id,_that.inputMuted,_that.outputMuted);case CoreEvent_Voice() when voice != null:
 return voice(_that.state);case CoreEvent_Speaking() when speaking != null:
 return speaking(_that.clientIds);case CoreEvent_SelfSpeaking() when selfSpeaking != null:
 return selfSpeaking(_that.speaking);case CoreEvent_IdentityUpgrade() when identityUpgrade != null:
@@ -690,7 +694,7 @@ return failed(_that.message);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( CoreSessionState state)  state,required TResult Function( List<ServerProfileView> profiles)  servers,required TResult Function( List<ChannelView> channels,  List<ClientView> clients)  snapshot,required TResult Function( List<CoreMessage> messages)  history,required TResult Function( String from,  String fromUid,  String message,  int targetMode,  int targetId,  int at)  textMessage,required TResult Function( int id,  String nickname,  String uid,  int channelId)  clientJoined,required TResult Function( int id)  clientLeft,required TResult Function( int id,  int channelId)  clientMoved,required TResult Function( CoreVoiceState state)  voice,required TResult Function( Int32List clientIds)  speaking,required TResult Function( bool speaking)  selfSpeaking,required TResult Function( int from,  int to)  identityUpgrade,required TResult Function( int level)  identityUpgraded,required TResult Function( int id,  CoreTransferDirection direction,  String remotePath,  int total)  transferStarted,required TResult Function( int id,  int transferred,  int total)  transferProgress,required TResult Function( int id,  String? error)  transferFinished,required TResult Function( String level,  String message)  log,required TResult Function( String message)  denied,required TResult Function( String message)  failed,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( CoreSessionState state)  state,required TResult Function( List<ServerProfileView> profiles)  servers,required TResult Function( List<ChannelView> channels,  List<ClientView> clients)  snapshot,required TResult Function( List<CoreMessage> messages)  history,required TResult Function( String from,  String fromUid,  String message,  int targetMode,  int targetId,  int at)  textMessage,required TResult Function( int id,  String nickname,  String uid,  int channelId)  clientJoined,required TResult Function( int id)  clientLeft,required TResult Function( int id,  int channelId)  clientMoved,required TResult Function( int id,  bool? inputMuted,  bool? outputMuted)  clientUpdated,required TResult Function( CoreVoiceState state)  voice,required TResult Function( Int32List clientIds)  speaking,required TResult Function( bool speaking)  selfSpeaking,required TResult Function( int from,  int to)  identityUpgrade,required TResult Function( int level)  identityUpgraded,required TResult Function( int id,  CoreTransferDirection direction,  String remotePath,  int total)  transferStarted,required TResult Function( int id,  int transferred,  int total)  transferProgress,required TResult Function( int id,  String? error)  transferFinished,required TResult Function( String level,  String message)  log,required TResult Function( String message)  denied,required TResult Function( String message)  failed,}) {final _that = this;
 switch (_that) {
 case CoreEvent_State():
 return state(_that.state);case CoreEvent_Servers():
@@ -700,7 +704,8 @@ return history(_that.messages);case CoreEvent_TextMessage():
 return textMessage(_that.from,_that.fromUid,_that.message,_that.targetMode,_that.targetId,_that.at);case CoreEvent_ClientJoined():
 return clientJoined(_that.id,_that.nickname,_that.uid,_that.channelId);case CoreEvent_ClientLeft():
 return clientLeft(_that.id);case CoreEvent_ClientMoved():
-return clientMoved(_that.id,_that.channelId);case CoreEvent_Voice():
+return clientMoved(_that.id,_that.channelId);case CoreEvent_ClientUpdated():
+return clientUpdated(_that.id,_that.inputMuted,_that.outputMuted);case CoreEvent_Voice():
 return voice(_that.state);case CoreEvent_Speaking():
 return speaking(_that.clientIds);case CoreEvent_SelfSpeaking():
 return selfSpeaking(_that.speaking);case CoreEvent_IdentityUpgrade():
@@ -725,7 +730,7 @@ return failed(_that.message);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( CoreSessionState state)?  state,TResult? Function( List<ServerProfileView> profiles)?  servers,TResult? Function( List<ChannelView> channels,  List<ClientView> clients)?  snapshot,TResult? Function( List<CoreMessage> messages)?  history,TResult? Function( String from,  String fromUid,  String message,  int targetMode,  int targetId,  int at)?  textMessage,TResult? Function( int id,  String nickname,  String uid,  int channelId)?  clientJoined,TResult? Function( int id)?  clientLeft,TResult? Function( int id,  int channelId)?  clientMoved,TResult? Function( CoreVoiceState state)?  voice,TResult? Function( Int32List clientIds)?  speaking,TResult? Function( bool speaking)?  selfSpeaking,TResult? Function( int from,  int to)?  identityUpgrade,TResult? Function( int level)?  identityUpgraded,TResult? Function( int id,  CoreTransferDirection direction,  String remotePath,  int total)?  transferStarted,TResult? Function( int id,  int transferred,  int total)?  transferProgress,TResult? Function( int id,  String? error)?  transferFinished,TResult? Function( String level,  String message)?  log,TResult? Function( String message)?  denied,TResult? Function( String message)?  failed,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( CoreSessionState state)?  state,TResult? Function( List<ServerProfileView> profiles)?  servers,TResult? Function( List<ChannelView> channels,  List<ClientView> clients)?  snapshot,TResult? Function( List<CoreMessage> messages)?  history,TResult? Function( String from,  String fromUid,  String message,  int targetMode,  int targetId,  int at)?  textMessage,TResult? Function( int id,  String nickname,  String uid,  int channelId)?  clientJoined,TResult? Function( int id)?  clientLeft,TResult? Function( int id,  int channelId)?  clientMoved,TResult? Function( int id,  bool? inputMuted,  bool? outputMuted)?  clientUpdated,TResult? Function( CoreVoiceState state)?  voice,TResult? Function( Int32List clientIds)?  speaking,TResult? Function( bool speaking)?  selfSpeaking,TResult? Function( int from,  int to)?  identityUpgrade,TResult? Function( int level)?  identityUpgraded,TResult? Function( int id,  CoreTransferDirection direction,  String remotePath,  int total)?  transferStarted,TResult? Function( int id,  int transferred,  int total)?  transferProgress,TResult? Function( int id,  String? error)?  transferFinished,TResult? Function( String level,  String message)?  log,TResult? Function( String message)?  denied,TResult? Function( String message)?  failed,}) {final _that = this;
 switch (_that) {
 case CoreEvent_State() when state != null:
 return state(_that.state);case CoreEvent_Servers() when servers != null:
@@ -735,7 +740,8 @@ return history(_that.messages);case CoreEvent_TextMessage() when textMessage != 
 return textMessage(_that.from,_that.fromUid,_that.message,_that.targetMode,_that.targetId,_that.at);case CoreEvent_ClientJoined() when clientJoined != null:
 return clientJoined(_that.id,_that.nickname,_that.uid,_that.channelId);case CoreEvent_ClientLeft() when clientLeft != null:
 return clientLeft(_that.id);case CoreEvent_ClientMoved() when clientMoved != null:
-return clientMoved(_that.id,_that.channelId);case CoreEvent_Voice() when voice != null:
+return clientMoved(_that.id,_that.channelId);case CoreEvent_ClientUpdated() when clientUpdated != null:
+return clientUpdated(_that.id,_that.inputMuted,_that.outputMuted);case CoreEvent_Voice() when voice != null:
 return voice(_that.state);case CoreEvent_Speaking() when speaking != null:
 return speaking(_that.clientIds);case CoreEvent_SelfSpeaking() when selfSpeaking != null:
 return selfSpeaking(_that.speaking);case CoreEvent_IdentityUpgrade() when identityUpgrade != null:
@@ -1345,6 +1351,78 @@ class _$CoreEvent_ClientMovedCopyWithImpl<$Res>
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as int,channelId: null == channelId ? _self.channelId : channelId // ignore: cast_nullable_to_non_nullable
 as int,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class CoreEvent_ClientUpdated extends CoreEvent {
+  const CoreEvent_ClientUpdated({required this.id, this.inputMuted, this.outputMuted}): super._();
+  
+
+ final  int id;
+ final  bool? inputMuted;
+ final  bool? outputMuted;
+
+/// Create a copy of CoreEvent
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$CoreEvent_ClientUpdatedCopyWith<CoreEvent_ClientUpdated> get copyWith => _$CoreEvent_ClientUpdatedCopyWithImpl<CoreEvent_ClientUpdated>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is CoreEvent_ClientUpdated&&(identical(other.id, id) || other.id == id)&&(identical(other.inputMuted, inputMuted) || other.inputMuted == inputMuted)&&(identical(other.outputMuted, outputMuted) || other.outputMuted == outputMuted));
+}
+
+
+@override
+int get hashCode {
+    return Object.hash(runtimeType,id,inputMuted,outputMuted);
+}
+
+@override
+String toString() {
+    return 'CoreEvent.clientUpdated(id: $id, inputMuted: $inputMuted, outputMuted: $outputMuted)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $CoreEvent_ClientUpdatedCopyWith<$Res> implements $CoreEventCopyWith<$Res> {
+  factory $CoreEvent_ClientUpdatedCopyWith(CoreEvent_ClientUpdated value, $Res Function(CoreEvent_ClientUpdated) _then) = _$CoreEvent_ClientUpdatedCopyWithImpl;
+@useResult
+$Res call({
+ int id, bool? inputMuted, bool? outputMuted
+});
+
+
+
+
+}
+/// @nodoc
+class _$CoreEvent_ClientUpdatedCopyWithImpl<$Res>
+    implements $CoreEvent_ClientUpdatedCopyWith<$Res> {
+  _$CoreEvent_ClientUpdatedCopyWithImpl(this._self, this._then);
+
+  final CoreEvent_ClientUpdated _self;
+  final $Res Function(CoreEvent_ClientUpdated) _then;
+
+/// Create a copy of CoreEvent
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? id = null,Object? inputMuted = freezed,Object? outputMuted = freezed,}) {
+  return _then(CoreEvent_ClientUpdated(
+id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
+as int,inputMuted: freezed == inputMuted ? _self.inputMuted : inputMuted // ignore: cast_nullable_to_non_nullable
+as bool?,outputMuted: freezed == outputMuted ? _self.outputMuted : outputMuted // ignore: cast_nullable_to_non_nullable
+as bool?,
   ));
 }
 
