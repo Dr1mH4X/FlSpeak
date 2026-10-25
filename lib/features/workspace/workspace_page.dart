@@ -12,10 +12,9 @@ import '../../widgets/common.dart';
 import 'widgets/chat_pane.dart';
 import 'widgets/media_grid.dart';
 import 'widgets/media_viewer.dart';
-import 'widgets/voice_view.dart';
 import 'workspace_state.dart';
 
-/// 主区域：频道标题 + 消息 / 媒体 / 语音三个视图，以及未连接时的下一步。
+/// 主区域：频道标题 + 消息 / 媒体两个视图，以及未连接时的下一步。
 class WorkspacePage extends ConsumerStatefulWidget {
   const WorkspacePage({super.key});
 
@@ -23,7 +22,7 @@ class WorkspacePage extends ConsumerStatefulWidget {
   ConsumerState<WorkspacePage> createState() => _WorkspacePageState();
 }
 
-enum _MainTab { chat, media, voice }
+enum _MainTab { chat, media }
 
 class _WorkspacePageState extends ConsumerState<WorkspacePage> {
   _MainTab _tab = _MainTab.chat;
@@ -65,6 +64,12 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
                 .read(sessionViewProvider.notifier)
                 .cancelIdentityUpgrade,
           ),
+        _VoiceAlerts(
+          view: view,
+          onDismissNotice: ref
+              .read(sessionViewProvider.notifier)
+              .dismissVoiceNotice,
+        ),
         Expanded(child: _buildBody(context, l10n, view, channel)),
       ],
     );
@@ -128,41 +133,6 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
           onOpen: (index) =>
               showMediaViewer(context, urls: urls, initialIndex: index),
         );
-      case _MainTab.voice:
-        final lastChannelId = view.lastChannelId;
-        final canRejoinLast =
-            view.connected &&
-            lastChannelId != null &&
-            lastChannelId != view.selfChannelId &&
-            view.channelById(lastChannelId) != null;
-        return VoiceView(
-          channelName: channel.name,
-          members: view.clientsIn(channel.id),
-          joined: view.selfChannelId == channel.id,
-          busy: view.busy,
-          muted: view.muted,
-          deafened: view.deafened,
-          inputReady: view.voiceInputReady,
-          outputReady: view.voiceOutputReady,
-          speaking: view.speaking,
-          selfSpeaking: view.selfSpeaking,
-          pttMode: view.pttMode,
-          pttActive: view.pttActive,
-          voiceNotice: view.voiceNotice,
-          canRejoinLast: canRejoinLast,
-          onJoin: () => controller.joinChannel(channel.id),
-          onToggleMute: () => controller.setMuted(!view.muted),
-          onToggleDeafen: () => controller.setDeafened(!view.deafened),
-          onTogglePttMode: () => controller.setPttMode(!view.pttMode),
-          onPttDown: () => controller.setPttActive(true),
-          onPttUp: () => controller.setPttActive(false),
-          onRejoinLast: () {
-            if (lastChannelId != null) {
-              controller.joinChannel(lastChannelId);
-            }
-          },
-          onDismissVoiceNotice: controller.dismissVoiceNotice,
-        );
       case _MainTab.chat:
         return ChatPane(
           key: ValueKey(channel.id),
@@ -196,11 +166,6 @@ List<_TabSpec> _tabSpecs(AppLocalizations l10n) => [
     tab: _MainTab.media,
     label: l10n.chatTabMedia,
     icon: Icons.photo_library_outlined,
-  ),
-  _TabSpec(
-    tab: _MainTab.voice,
-    label: l10n.voiceTab,
-    icon: Icons.mic_none_rounded,
   ),
 ];
 
@@ -393,11 +358,11 @@ class _TabButton extends StatelessWidget {
         : Icon(spec.icon, size: 18, color: foreground);
 
     // 36 高的视觉胶囊包在 44 高的落点里：原型是 h-9，触屏最小落点要 44。
+    // 点击响应（水波纹）画在胶囊自己的 Material 上，跟胶囊一样大；
+    // 外圈 4px 只扩大落点，不画反馈。
     final pill = Container(
       height: 36,
       width: labeled ? null : 36,
-      padding: labeled ? const EdgeInsets.symmetric(horizontal: 12) : null,
-      alignment: Alignment.center,
       decoration: active
           ? BoxDecoration(
               color: context.cardColor,
@@ -411,19 +376,28 @@ class _TabButton extends StatelessWidget {
               ],
             )
           : null,
-      child: content,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: Radii.pillAll,
+          child: Padding(
+            padding: labeled
+                ? const EdgeInsets.symmetric(horizontal: 12)
+                : EdgeInsets.zero,
+            child: content,
+          ),
+        ),
+      ),
     );
 
-    final button = Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: Radii.pillAll,
-        child: SizedBox(
-          height: Sizes.touch,
-          width: labeled ? null : Sizes.touch,
-          child: Center(child: pill),
-        ),
+    final button = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: SizedBox(
+        height: Sizes.touch,
+        width: labeled ? null : Sizes.touch,
+        child: Center(child: pill),
       ),
     );
 
@@ -474,6 +448,92 @@ class _IdentityBanner extends StatelessWidget {
             ),
           ),
           TextButton(onPressed: onCancel, child: Text(l10n.identityCancel)),
+        ],
+      ),
+    );
+  }
+}
+
+/// 语音提示：设备不可用 chip 与语音错误条，任何页签下都可见。
+class _VoiceAlerts extends StatelessWidget {
+  const _VoiceAlerts({required this.view, required this.onDismissNotice});
+
+  final SessionView view;
+  final VoidCallback onDismissNotice;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!view.connected) {
+      return const SizedBox.shrink();
+    }
+    final l10n = AppLocalizations.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (!view.voiceInputReady || !view.voiceOutputReady)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (!view.voiceInputReady)
+                  _DeviceChip(
+                    icon: Icons.mic_off_rounded,
+                    label: l10n.voiceMicUnavailable,
+                  ),
+                if (!view.voiceOutputReady)
+                  _DeviceChip(
+                    icon: Icons.volume_off_rounded,
+                    label: l10n.voiceSpeakerUnavailable,
+                  ),
+              ],
+            ),
+          ),
+        if (view.voiceNotice != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: NoticeBar(
+              message: view.voiceNotice!,
+              dismissTooltip: l10n.commonClose,
+              onDismiss: onDismissNotice,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// 设备不可用的状态 chip。
+class _DeviceChip extends StatelessWidget {
+  const _DeviceChip({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.scheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: scheme.error.withValues(alpha: 0.10),
+        borderRadius: Radii.pillAll,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: scheme.error),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: scheme.error),
+            ),
+          ),
         ],
       ),
     );

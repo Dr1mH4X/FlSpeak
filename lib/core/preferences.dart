@@ -35,6 +35,7 @@ class SessionPreferences {
     this.lastConnected = const <String, DateTime>{},
     this.locale,
     this.theme = AppThemePreference.system,
+    this.pttHotkey,
   });
 
   /// 没有设置过昵称时的默认值。
@@ -53,16 +54,24 @@ class SessionPreferences {
 
   final AppThemePreference theme;
 
+  /// 按住说话快捷键：Flutter `LogicalKeyboardKey.keyId`，`null` 表示未设置。
+  /// keyId 跨平台稳定，注册到系统时再按平台换算成原生键码。
+  final int? pttHotkey;
+
   SessionPreferences copyWith({
     String? nickname,
     Map<String, DateTime>? lastConnected,
     Object? locale = _unset,
     AppThemePreference? theme,
+    Object? pttHotkey = _unset,
   }) => SessionPreferences(
     nickname: nickname ?? this.nickname,
     lastConnected: lastConnected ?? this.lastConnected,
     locale: identical(locale, _unset) ? this.locale : locale as String?,
     theme: theme ?? this.theme,
+    pttHotkey: identical(pttHotkey, _unset)
+        ? this.pttHotkey
+        : pttHotkey as int?,
   );
 
   Map<String, Object?> toJson() => {
@@ -74,6 +83,7 @@ class SessionPreferences {
     },
     'locale': locale,
     'theme': theme.id,
+    'pttHotkey': pttHotkey,
   };
 
   static SessionPreferences fromJson(Map<String, Object?> json) {
@@ -91,6 +101,7 @@ class SessionPreferences {
     final rawNickname = json['nickname'];
     final nickname = rawNickname is String ? rawNickname.trim() : '';
     final rawLocale = json['locale'];
+    final rawPttHotkey = json['pttHotkey'];
     return SessionPreferences(
       nickname: nickname.isEmpty || nickname == _legacyFallbackNickname
           ? fallbackNickname
@@ -98,6 +109,7 @@ class SessionPreferences {
       lastConnected: lastConnected,
       locale: rawLocale is String && rawLocale.isNotEmpty ? rawLocale : null,
       theme: AppThemePreference.fromId(json['theme']),
+      pttHotkey: rawPttHotkey is int ? rawPttHotkey : null,
     );
   }
 }

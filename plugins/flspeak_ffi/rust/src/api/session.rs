@@ -46,6 +46,10 @@ pub struct ClientView {
     pub nickname: String,
     pub uid: String,
     pub channel_id: u64,
+    /// 麦克风静音（服务器回显）；目录快照没带标志时为 null。
+    pub input_muted: Option<bool>,
+    /// 扬声器静音（服务器回显）。
+    pub output_muted: Option<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -431,6 +435,8 @@ impl From<CoreClientView> for ClientView {
             nickname: view.nickname,
             uid: view.uid,
             channel_id: view.channel_id,
+            input_muted: view.input_muted,
+            output_muted: view.output_muted,
         }
     }
 }

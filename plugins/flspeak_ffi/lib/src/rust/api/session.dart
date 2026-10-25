@@ -190,16 +190,29 @@ class ClientView {
   final String uid;
   final int channelId;
 
+  /// 麦克风静音（服务器回显）；目录快照没带标志时为 null。
+  final bool? inputMuted;
+
+  /// 扬声器静音（服务器回显）。
+  final bool? outputMuted;
+
   const ClientView({
     required this.id,
     required this.nickname,
     required this.uid,
     required this.channelId,
+    this.inputMuted,
+    this.outputMuted,
   });
 
   @override
   int get hashCode =>
-      id.hashCode ^ nickname.hashCode ^ uid.hashCode ^ channelId.hashCode;
+      id.hashCode ^
+      nickname.hashCode ^
+      uid.hashCode ^
+      channelId.hashCode ^
+      inputMuted.hashCode ^
+      outputMuted.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -209,7 +222,9 @@ class ClientView {
           id == other.id &&
           nickname == other.nickname &&
           uid == other.uid &&
-          channelId == other.channelId;
+          channelId == other.channelId &&
+          inputMuted == other.inputMuted &&
+          outputMuted == other.outputMuted;
 }
 
 @freezed

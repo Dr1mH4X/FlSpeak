@@ -1303,13 +1303,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ClientView dco_decode_client_view(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
     return ClientView(
       id: dco_decode_i_32(arr[0]),
       nickname: dco_decode_String(arr[1]),
       uid: dco_decode_String(arr[2]),
       channelId: dco_decode_CastedPrimitive_u_64(arr[3]),
+      inputMuted: dco_decode_opt_box_autoadd_bool(arr[4]),
+      outputMuted: dco_decode_opt_box_autoadd_bool(arr[5]),
     );
   }
 
@@ -1757,11 +1759,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_nickname = sse_decode_String(deserializer);
     var var_uid = sse_decode_String(deserializer);
     var var_channelId = sse_decode_CastedPrimitive_u_64(deserializer);
+    var var_inputMuted = sse_decode_opt_box_autoadd_bool(deserializer);
+    var var_outputMuted = sse_decode_opt_box_autoadd_bool(deserializer);
     return ClientView(
       id: var_id,
       nickname: var_nickname,
       uid: var_uid,
       channelId: var_channelId,
+      inputMuted: var_inputMuted,
+      outputMuted: var_outputMuted,
     );
   }
 
@@ -2307,6 +2313,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.nickname, serializer);
     sse_encode_String(self.uid, serializer);
     sse_encode_CastedPrimitive_u_64(self.channelId, serializer);
+    sse_encode_opt_box_autoadd_bool(self.inputMuted, serializer);
+    sse_encode_opt_box_autoadd_bool(self.outputMuted, serializer);
   }
 
   @protected

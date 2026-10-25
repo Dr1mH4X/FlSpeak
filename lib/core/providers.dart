@@ -227,18 +227,9 @@ class SessionController extends Notifier<SessionView> {
             clients: const [],
             speaking: const {},
             selfSpeaking: false,
-            pttActive: false,
             identityUpgradeTarget: null,
             busy: false,
           ),
-          CoreSessionState_Connected(:final channelId) when channelId != 0 =>
-            current.copyWith(
-              state: next,
-              // 自动重连会回到服务器默认频道，不能覆盖断线前的“上次频道”。
-              lastChannelId: current.reconnecting
-                  ? current.lastChannelId
-                  : channelId,
-            ),
           _ => current.copyWith(state: next),
         };
       case CoreEvent_Servers(:final profiles):
@@ -296,7 +287,6 @@ class SessionController extends Notifier<SessionView> {
           clients: current.clients.where((client) => client.id != id).toList(),
         );
       case CoreEvent_ClientMoved(:final id, :final channelId):
-        final selfMoved = id == current.selfClientId && channelId != 0;
         state = current.copyWith(
           clients: [
             for (final client in current.clients)
@@ -310,14 +300,12 @@ class SessionController extends Notifier<SessionView> {
               else
                 client,
           ],
-          lastChannelId: selfMoved ? channelId : current.lastChannelId,
         );
       case CoreEvent_Voice(state: final voice):
         state = current.copyWith(
           muted: voice.muted,
           deafened: voice.deafened,
           pttMode: voice.pttMode,
-          pttActive: voice.pttActive,
           voiceInputReady: voice.inputReady,
           voiceOutputReady: voice.outputReady,
           voiceNotice: voice.message,
@@ -395,6 +383,14 @@ class PreferencesController extends Notifier<SessionPreferences> {
       return;
     }
     _update(state.copyWith(theme: theme));
+  }
+
+  /// `null` 表示清除按住说话快捷键。
+  void setPttHotkey(int? keyId) {
+    if (keyId == state.pttHotkey) {
+      return;
+    }
+    _update(state.copyWith(pttHotkey: keyId));
   }
 
   void markConnected(String serverId, DateTime at) {

@@ -25,19 +25,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get commonDone => '完成';
 
   @override
-  String get commonMore => '更多';
-
-  @override
   String get commonCopy => '复制';
 
   @override
   String get commonCopied => '已复制';
-
-  @override
-  String get commonSave => '保存';
-
-  @override
-  String get commonRemove => '移除';
 
   @override
   String get connectTitle => '连接服务器';
@@ -205,30 +196,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get channelCollapse => '收起';
 
   @override
-  String get channelCurrent => '当前所在';
-
-  @override
   String get channelPasswordProtected => '需要频道密码';
 
   @override
-  String get voiceTab => '语音';
-
-  @override
-  String get voiceJoin => '加入语音';
-
-  @override
-  String get voiceLeave => '离开';
-
-  @override
-  String get voiceDisconnect => '断开语音';
-
-  @override
-  String voiceMembersCount(int count) {
-    return '$count 人正在语音中';
-  }
-
-  @override
-  String get voiceEmpty => '现在还没有人，来当第一个吧';
+  String get channelJoinMenu => '加入频道';
 
   @override
   String get voiceMute => '静音';
@@ -243,10 +214,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get voiceUndeafen => '取消闭麦';
 
   @override
-  String get voiceSelfOnline => '在线';
+  String get memberMicMuted => '麦克风已静音';
 
   @override
-  String get memberMuted => '已静音';
+  String get memberSpeakerMuted => '扬声器已静音';
 
   @override
   String get voiceMicUnavailable => '麦克风不可用';
@@ -258,27 +229,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String voiceReconnectingAttempt(int attempt) {
     return '正在重连（第 $attempt 次）…';
   }
-
-  @override
-  String get voiceModeVad => '语音激活';
-
-  @override
-  String get voiceModePtt => '按住说话';
-
-  @override
-  String get voicePushToTalk => '按住说话';
-
-  @override
-  String get voicePushToTalkHint => '松开停止发送';
-
-  @override
-  String get voiceSelfSpeaking => '正在发送';
-
-  @override
-  String get voiceRejoinLast => '回到上次频道';
-
-  @override
-  String get chatTitle => '聊天';
 
   @override
   String get chatTabMessages => '消息';
@@ -312,21 +262,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatScopeServer => '整个服务器';
 
   @override
-  String get chatEmptyChannel => '本频道还没有消息。';
-
-  @override
-  String get chatEmptyServer => '服务器上还没有广播消息。';
-
-  @override
   String get chatNoChannel => '先进入一个频道再发送频道消息。';
-
-  @override
-  String get chatAddMedia => '添加图片或视频';
-
-  @override
-  String chatRemoveAttachment(String name) {
-    return '移除 $name';
-  }
 
   @override
   String get chatUnsupportedImage => '不支持的图片格式';
@@ -347,19 +283,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatDirectTag => '私聊';
 
   @override
-  String get chatWelcomeServerTitle => '整个服务器';
-
-  @override
-  String get chatWelcomeServerBody => '这里显示服务器广播消息，所有人都能看到。';
-
-  @override
   String get mediaEmpty => '这个频道还没有图片或视频';
 
   @override
   String get mediaViewerTitle => '媒体浏览';
-
-  @override
-  String get mediaDownload => '下载';
 
   @override
   String get mediaPrevious => '上一个';
@@ -408,6 +335,24 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsPttModeDesc => '关闭时使用语音激活';
+
+  @override
+  String get settingsPttHotkey => '按住说话快捷键';
+
+  @override
+  String get settingsPttHotkeyNone => '未设置';
+
+  @override
+  String get settingsPttHotkeyRecordTitle => '录制快捷键';
+
+  @override
+  String get settingsPttHotkeyRecordHint => '按下任意键…（Esc 取消）';
+
+  @override
+  String get settingsPttHotkeyUnsupported => '该按键不支持，请换一个。';
+
+  @override
+  String get settingsPttHotkeyClear => '清除';
 
   @override
   String get settingsInputDevice => '麦克风';

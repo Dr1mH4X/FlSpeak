@@ -292,3 +292,50 @@ class _ModalPanel extends StatelessWidget {
     );
   }
 }
+
+/// 全应用唯一的二级（弹出）菜单实现，所有弹出菜单都走这里，保证行为一致。
+///
+/// - 右键菜单：[openOnSecondaryTap] 为 true 时在触发点弹出；[enabled] 为
+///   false 不响应右键（比如未连接的服务器、自己已在的频道）。
+/// - 按钮打开：[openOnSecondaryTap] 保持 false，[builder] 里拿到控制器，
+///   由子组件决定打开时机（比如「更多」按钮）。
+class SecondaryMenu extends StatelessWidget {
+  const SecondaryMenu({
+    required this.items,
+    required this.builder,
+    this.openOnSecondaryTap = false,
+    this.enabled = true,
+    super.key,
+  });
+
+  /// 菜单项，一般是 [MenuItemButton]。
+  final List<Widget> items;
+
+  /// 菜单锚定的内容；[MenuController] 供子组件按需打开菜单。
+  final Widget Function(BuildContext context, MenuController controller)
+  builder;
+
+  final bool openOnSecondaryTap;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    return MenuAnchor(
+      clipBehavior: Clip.antiAlias,
+      menuChildren: items,
+      builder: (context, controller, child) {
+        final content = builder(context, controller);
+        if (!openOnSecondaryTap) {
+          return content;
+        }
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onSecondaryTapUp: enabled
+              ? (details) => controller.open(position: details.localPosition)
+              : null,
+          child: content,
+        );
+      },
+    );
+  }
+}

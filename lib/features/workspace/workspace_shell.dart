@@ -13,10 +13,11 @@ import '../../widgets/common.dart';
 import 'widgets/channel_pane.dart';
 import 'widgets/server_rail.dart';
 
-/// 工作区外壳：左侧服务器栏 + 频道栏，右侧内容卡片。
+/// 工作区外壳：左侧服务器栏 + 频道栏 + 主内容区，三栏通边铺满窗口。
 ///
-/// 宽度达到 [Breakpoints.compact] 时两栏固定展开；更窄时收进抽屉，
-/// 主区域占满宽度。设置入口属于服务器栏（左下角），不在频道栏底部。
+/// 窗口圆角完全交给操作系统按系统偏好处理，应用不再自绘外框和留边；
+/// 更窄时两栏收进抽屉，主区域占满宽度。设置入口属于服务器栏（左下角），
+/// 不在频道栏底部。
 class WorkspaceShell extends ConsumerWidget {
   const WorkspaceShell({
     required this.location,
@@ -112,12 +113,7 @@ class WorkspaceShell extends ConsumerWidget {
           children: [
             rail,
             SizedBox(width: Sizes.channelPanel, child: panel),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(0, 8, 8, 8),
-                child: surface,
-              ),
-            ),
+            Expanded(child: surface),
           ],
         ),
       ),
@@ -125,7 +121,7 @@ class WorkspaceShell extends ConsumerWidget {
   }
 }
 
-/// 右侧主内容卡片：桌面端浮在页面底色上，窄屏铺满。
+/// 右侧主内容区：三栏之一，与窗口通边；窄屏铺满。
 class _MainSurface extends StatelessWidget {
   const _MainSurface({
     required this.compact,
@@ -150,8 +146,6 @@ class _MainSurface extends StatelessWidget {
           : context.isDark
           ? scheme.surfaceContainer
           : scheme.surfaceContainerLowest.withValues(alpha: 0.6),
-      borderRadius: compact ? null : Radii.xxxlAll,
-      clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

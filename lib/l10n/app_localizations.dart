@@ -128,12 +128,6 @@ abstract class AppLocalizations {
   /// **'Done'**
   String get commonDone;
 
-  /// No description provided for @commonMore.
-  ///
-  /// In en, this message translates to:
-  /// **'More'**
-  String get commonMore;
-
   /// No description provided for @commonCopy.
   ///
   /// In en, this message translates to:
@@ -145,18 +139,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Copied'**
   String get commonCopied;
-
-  /// No description provided for @commonSave.
-  ///
-  /// In en, this message translates to:
-  /// **'Save'**
-  String get commonSave;
-
-  /// No description provided for @commonRemove.
-  ///
-  /// In en, this message translates to:
-  /// **'Remove'**
-  String get commonRemove;
 
   /// No description provided for @connectTitle.
   ///
@@ -446,53 +428,17 @@ abstract class AppLocalizations {
   /// **'Collapse'**
   String get channelCollapse;
 
-  /// No description provided for @channelCurrent.
-  ///
-  /// In en, this message translates to:
-  /// **'You are here'**
-  String get channelCurrent;
-
   /// No description provided for @channelPasswordProtected.
   ///
   /// In en, this message translates to:
   /// **'Channel password required'**
   String get channelPasswordProtected;
 
-  /// No description provided for @voiceTab.
+  /// No description provided for @channelJoinMenu.
   ///
   /// In en, this message translates to:
-  /// **'Voice'**
-  String get voiceTab;
-
-  /// No description provided for @voiceJoin.
-  ///
-  /// In en, this message translates to:
-  /// **'Join voice'**
-  String get voiceJoin;
-
-  /// No description provided for @voiceLeave.
-  ///
-  /// In en, this message translates to:
-  /// **'Leave'**
-  String get voiceLeave;
-
-  /// No description provided for @voiceDisconnect.
-  ///
-  /// In en, this message translates to:
-  /// **'Leave voice'**
-  String get voiceDisconnect;
-
-  /// No description provided for @voiceMembersCount.
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =1{1 person in voice} other{{count} people in voice}}'**
-  String voiceMembersCount(int count);
-
-  /// No description provided for @voiceEmpty.
-  ///
-  /// In en, this message translates to:
-  /// **'Nobody is here yet. Be the first.'**
-  String get voiceEmpty;
+  /// **'Join channel'**
+  String get channelJoinMenu;
 
   /// No description provided for @voiceMute.
   ///
@@ -518,17 +464,17 @@ abstract class AppLocalizations {
   /// **'Undeafen'**
   String get voiceUndeafen;
 
-  /// No description provided for @voiceSelfOnline.
+  /// No description provided for @memberMicMuted.
   ///
   /// In en, this message translates to:
-  /// **'Online'**
-  String get voiceSelfOnline;
+  /// **'Microphone muted'**
+  String get memberMicMuted;
 
-  /// No description provided for @memberMuted.
+  /// No description provided for @memberSpeakerMuted.
   ///
   /// In en, this message translates to:
-  /// **'Muted'**
-  String get memberMuted;
+  /// **'Speaker muted'**
+  String get memberSpeakerMuted;
 
   /// No description provided for @voiceMicUnavailable.
   ///
@@ -547,48 +493,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Reconnecting (attempt {attempt})…'**
   String voiceReconnectingAttempt(int attempt);
-
-  /// No description provided for @voiceModeVad.
-  ///
-  /// In en, this message translates to:
-  /// **'Voice activation'**
-  String get voiceModeVad;
-
-  /// No description provided for @voiceModePtt.
-  ///
-  /// In en, this message translates to:
-  /// **'Push to talk'**
-  String get voiceModePtt;
-
-  /// No description provided for @voicePushToTalk.
-  ///
-  /// In en, this message translates to:
-  /// **'Push to talk'**
-  String get voicePushToTalk;
-
-  /// No description provided for @voicePushToTalkHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Release to stop sending'**
-  String get voicePushToTalkHint;
-
-  /// No description provided for @voiceSelfSpeaking.
-  ///
-  /// In en, this message translates to:
-  /// **'Sending'**
-  String get voiceSelfSpeaking;
-
-  /// No description provided for @voiceRejoinLast.
-  ///
-  /// In en, this message translates to:
-  /// **'Rejoin last channel'**
-  String get voiceRejoinLast;
-
-  /// No description provided for @chatTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Chat'**
-  String get chatTitle;
 
   /// No description provided for @chatTabMessages.
   ///
@@ -644,35 +548,11 @@ abstract class AppLocalizations {
   /// **'Whole server'**
   String get chatScopeServer;
 
-  /// No description provided for @chatEmptyChannel.
-  ///
-  /// In en, this message translates to:
-  /// **'No messages in this channel yet.'**
-  String get chatEmptyChannel;
-
-  /// No description provided for @chatEmptyServer.
-  ///
-  /// In en, this message translates to:
-  /// **'No server-wide messages yet.'**
-  String get chatEmptyServer;
-
   /// No description provided for @chatNoChannel.
   ///
   /// In en, this message translates to:
   /// **'Join a channel before sending channel messages.'**
   String get chatNoChannel;
-
-  /// No description provided for @chatAddMedia.
-  ///
-  /// In en, this message translates to:
-  /// **'Add image or video'**
-  String get chatAddMedia;
-
-  /// No description provided for @chatRemoveAttachment.
-  ///
-  /// In en, this message translates to:
-  /// **'Remove {name}'**
-  String chatRemoveAttachment(String name);
 
   /// No description provided for @chatUnsupportedImage.
   ///
@@ -710,18 +590,6 @@ abstract class AppLocalizations {
   /// **'Direct'**
   String get chatDirectTag;
 
-  /// No description provided for @chatWelcomeServerTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Whole server'**
-  String get chatWelcomeServerTitle;
-
-  /// No description provided for @chatWelcomeServerBody.
-  ///
-  /// In en, this message translates to:
-  /// **'Server-wide messages appear here, visible to everyone.'**
-  String get chatWelcomeServerBody;
-
   /// No description provided for @mediaEmpty.
   ///
   /// In en, this message translates to:
@@ -733,12 +601,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Media viewer'**
   String get mediaViewerTitle;
-
-  /// No description provided for @mediaDownload.
-  ///
-  /// In en, this message translates to:
-  /// **'Download'**
-  String get mediaDownload;
 
   /// No description provided for @mediaPrevious.
   ///
@@ -835,6 +697,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'When off, voice activation is used'**
   String get settingsPttModeDesc;
+
+  /// No description provided for @settingsPttHotkey.
+  ///
+  /// In en, this message translates to:
+  /// **'Push-to-talk hotkey'**
+  String get settingsPttHotkey;
+
+  /// No description provided for @settingsPttHotkeyNone.
+  ///
+  /// In en, this message translates to:
+  /// **'Not set'**
+  String get settingsPttHotkeyNone;
+
+  /// No description provided for @settingsPttHotkeyRecordTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Record hotkey'**
+  String get settingsPttHotkeyRecordTitle;
+
+  /// No description provided for @settingsPttHotkeyRecordHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Press any key… (Esc to cancel)'**
+  String get settingsPttHotkeyRecordHint;
+
+  /// No description provided for @settingsPttHotkeyUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'This key is not supported. Try another one.'**
+  String get settingsPttHotkeyUnsupported;
+
+  /// No description provided for @settingsPttHotkeyClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get settingsPttHotkeyClear;
 
   /// No description provided for @settingsInputDevice.
   ///

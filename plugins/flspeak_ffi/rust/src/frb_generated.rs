@@ -1606,11 +1606,15 @@ impl SseDecode for crate::api::session::ClientView {
         let mut var_nickname = <String>::sse_decode(deserializer);
         let mut var_uid = <String>::sse_decode(deserializer);
         let mut var_channelId = <u64>::sse_decode(deserializer);
+        let mut var_inputMuted = <Option<bool>>::sse_decode(deserializer);
+        let mut var_outputMuted = <Option<bool>>::sse_decode(deserializer);
         return crate::api::session::ClientView {
             id: var_id,
             nickname: var_nickname,
             uid: var_uid,
             channel_id: var_channelId,
+            input_muted: var_inputMuted,
+            output_muted: var_outputMuted,
         };
     }
 }
@@ -2330,6 +2334,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::session::ClientView {
             self.nickname.into_into_dart().into_dart(),
             self.uid.into_into_dart().into_dart(),
             self.channel_id.into_into_dart().into_dart(),
+            self.input_muted.into_into_dart().into_dart(),
+            self.output_muted.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -2733,6 +2739,8 @@ impl SseEncode for crate::api::session::ClientView {
         <String>::sse_encode(self.nickname, serializer);
         <String>::sse_encode(self.uid, serializer);
         <u64>::sse_encode(self.channel_id, serializer);
+        <Option<bool>>::sse_encode(self.input_muted, serializer);
+        <Option<bool>>::sse_encode(self.output_muted, serializer);
     }
 }
 

@@ -5,6 +5,7 @@ import 'package:flspeak_ffi/flspeak_ffi.dart';
 import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/common.dart';
 import '../../../widgets/monogram.dart';
 
 /// 最左侧的服务器栏：品牌标记、已登记的服务器、添加与设置。
@@ -172,24 +173,17 @@ class _ServerTile extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: MenuAnchor(
-        clipBehavior: Clip.antiAlias,
-        menuChildren: [
+      child: SecondaryMenu(
+        enabled: connected,
+        openOnSecondaryTap: true,
+        items: [
           MenuItemButton(
             leadingIcon: const Icon(Icons.logout_rounded),
             onPressed: onDisconnect,
             child: Text(l10n.serverDisconnect),
           ),
         ],
-        builder: (context, menuController, child) => GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onSecondaryTapUp: connected
-              ? (details) =>
-                    menuController.open(position: details.localPosition)
-              : null,
-          child: child,
-        ),
-        child: Tooltip(
+        builder: (context, menuController) => Tooltip(
           message: tooltip.toString(),
           waitDuration: const Duration(milliseconds: 400),
           child: Semantics(

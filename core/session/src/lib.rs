@@ -75,6 +75,10 @@ pub struct ClientView {
     pub nickname: String,
     pub uid: String,
     pub channel_id: u64,
+    /// 麦克风静音（服务器回显的 `client_input_muted`）；快照没带该标志时为空。
+    pub input_muted: Option<bool>,
+    /// 扬声器静音（服务器回显的 `client_output_muted`）。
+    pub output_muted: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

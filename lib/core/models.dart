@@ -70,8 +70,6 @@ class SessionView {
     this.speaking = const <int>{},
     this.selfSpeaking = false,
     this.pttMode = false,
-    this.pttActive = false,
-    this.lastChannelId,
     this.identityUpgradeTarget,
   });
 
@@ -106,10 +104,6 @@ class SessionView {
   final bool selfSpeaking;
 
   final bool pttMode;
-  final bool pttActive;
-
-  /// 本次连接最后待过的频道；断线后保留，用于“回到上次频道”。
-  final int? lastChannelId;
 
   /// 非空表示正在提升身份等级，值为目标等级。
   final int? identityUpgradeTarget;
@@ -243,8 +237,6 @@ class SessionView {
     Set<int>? speaking,
     bool? selfSpeaking,
     bool? pttMode,
-    bool? pttActive,
-    Object? lastChannelId = _unset,
     Object? identityUpgradeTarget = _unset,
   }) => SessionView(
     state: state ?? this.state,
@@ -268,10 +260,6 @@ class SessionView {
     speaking: speaking ?? this.speaking,
     selfSpeaking: selfSpeaking ?? this.selfSpeaking,
     pttMode: pttMode ?? this.pttMode,
-    pttActive: pttActive ?? this.pttActive,
-    lastChannelId: identical(lastChannelId, _unset)
-        ? this.lastChannelId
-        : lastChannelId as int?,
     identityUpgradeTarget: identical(identityUpgradeTarget, _unset)
         ? this.identityUpgradeTarget
         : identityUpgradeTarget as int?,

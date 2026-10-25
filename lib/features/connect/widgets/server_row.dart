@@ -3,10 +3,11 @@ import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/common.dart';
 import '../../../widgets/monogram.dart';
 import 'relative_time.dart';
 
-/// 连接页的一行服务器：整行是主落点，右侧「更多」只放「从列表移除」。
+/// 连接页的一行服务器：整行是主落点，右键弹统一的二级菜单放「从列表移除」。
 ///
 /// 连接中整行变暗（除了正在连接的那行），避免用户连点两个目标。
 class ServerRow extends StatefulWidget {
@@ -53,150 +54,120 @@ class _ServerRowState extends State<ServerRow> {
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: ColoredBox(
-        color: connected
-            ? scheme.primaryContainer.withValues(alpha: 0.3)
-            : Colors.transparent,
-        child: Row(
-          children: [
-            Expanded(
-              child: Semantics(
-                button: true,
-                enabled: active,
-                child: InkWell(
-                  onTap: widget.enabled ? widget.onTap : null,
-                  hoverColor: scheme.surfaceContainer.withValues(alpha: 0.7),
-                  child: Opacity(
-                    opacity: active ? 1 : 0.5,
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(narrow ? 12 : 16, 12, 4, 12),
-                      child: Row(
-                        children: [
-                          ServerMonogram(
-                            id: widget.profile.id,
-                            label: widget.profile.label,
-                            host: widget.profile.host,
-                            size: 44,
-                            online: connected,
-                          ),
-                          SizedBox(width: narrow ? 12 : 16),
-                          Expanded(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  widget.profile.label,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: texts.titleMedium,
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '${widget.profile.host}:${widget.profile.port}',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: texts.bodySmall?.copyWith(
-                                    color: scheme.onSurfaceVariant,
-                                    fontFeatures: tabularFigures,
-                                  ),
-                                ),
-                              ],
+      child: SecondaryMenu(
+        openOnSecondaryTap: true,
+        items: [
+          MenuItemButton(
+            leadingIcon: const Icon(Icons.delete_outline_rounded),
+            onPressed: connected ? null : widget.onRemove,
+            child: Text(l10n.serverRemoveFromList),
+          ),
+        ],
+        builder: (context, menuController) => ColoredBox(
+          color: connected
+              ? scheme.primaryContainer.withValues(alpha: 0.3)
+              : Colors.transparent,
+          child: Semantics(
+            button: true,
+            enabled: active,
+            child: InkWell(
+              onTap: widget.enabled ? widget.onTap : null,
+              hoverColor: scheme.surfaceContainer.withValues(alpha: 0.7),
+              child: Opacity(
+                opacity: active ? 1 : 0.5,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(narrow ? 12 : 16, 12, 4, 12),
+                  child: Row(
+                    children: [
+                      ServerMonogram(
+                        id: widget.profile.id,
+                        label: widget.profile.label,
+                        host: widget.profile.host,
+                        size: 44,
+                        online: connected,
+                      ),
+                      SizedBox(width: narrow ? 12 : 16),
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              widget.profile.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: texts.titleMedium,
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          if (widget.connecting)
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const SizedBox.square(
-                                  dimension: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  l10n.sessionConnecting,
-                                  style: texts.labelMedium?.copyWith(
-                                    fontSize: 12,
-                                    color: scheme.primary,
-                                  ),
-                                ),
-                              ],
-                            )
-                          else if (connected)
-                            _ConnectedChip(label: l10n.sessionConnected)
-                          else if (showLastConnected)
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 160),
-                              child: Text(
-                                lastConnectedLabel(
-                                  context,
-                                  widget.lastConnected,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: texts.bodySmall?.copyWith(
-                                  color: scheme.onSurfaceVariant,
-                                  fontFeatures: tabularFigures,
-                                ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${widget.profile.host}:${widget.profile.port}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: texts.bodySmall?.copyWith(
+                                color: scheme.onSurfaceVariant,
+                                fontFeatures: tabularFigures,
                               ),
                             ),
-                          const SizedBox(width: 6),
-                          AnimatedContainer(
-                            duration: animations,
-                            transform: Matrix4.translationValues(
-                              _hovered && active ? 2 : 0,
-                              0,
-                              0,
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      if (widget.connecting)
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const SizedBox.square(
+                              dimension: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
                             ),
-                            child: Icon(
-                              Icons.arrow_forward_rounded,
-                              size: 18,
-                              color: connected
-                                  ? scheme.primary
-                                  : scheme.onSurfaceVariant.withValues(
-                                      alpha: 0.5,
-                                    ),
+                            const SizedBox(width: 6),
+                            Text(
+                              l10n.sessionConnecting,
+                              style: texts.labelMedium?.copyWith(
+                                fontSize: 12,
+                                color: scheme.primary,
+                              ),
+                            ),
+                          ],
+                        )
+                      else if (connected)
+                        _ConnectedChip(label: l10n.sessionConnected)
+                      else if (showLastConnected)
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 160),
+                          child: Text(
+                            lastConnectedLabel(context, widget.lastConnected),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: texts.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                              fontFeatures: tabularFigures,
                             ),
                           ),
-                          const SizedBox(width: 4),
-                        ],
+                        ),
+                      const SizedBox(width: 6),
+                      AnimatedContainer(
+                        duration: animations,
+                        transform: Matrix4.translationValues(
+                          _hovered && active ? 2 : 0,
+                          0,
+                          0,
+                        ),
+                        child: Icon(
+                          Icons.arrow_forward_rounded,
+                          size: 18,
+                          color: connected
+                              ? scheme.primary
+                              : scheme.onSurfaceVariant.withValues(alpha: 0.5),
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 4),
+                    ],
                   ),
                 ),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.only(right: 4),
-              child: SizedBox(
-                width: Sizes.touch,
-                height: Sizes.touch,
-                child: MenuAnchor(
-                  clipBehavior: Clip.antiAlias,
-                  menuChildren: [
-                    MenuItemButton(
-                      leadingIcon: const Icon(Icons.delete_outline_rounded),
-                      onPressed: connected ? null : widget.onRemove,
-                      child: Text(l10n.serverRemoveFromList),
-                    ),
-                  ],
-                  builder: (context, controller, child) => IconButton(
-                    tooltip: l10n.commonMore,
-                    onPressed: () => controller.open(),
-                    padding: EdgeInsets.zero,
-                    iconSize: 20,
-                    icon: Icon(
-                      Icons.more_horiz_rounded,
-                      color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

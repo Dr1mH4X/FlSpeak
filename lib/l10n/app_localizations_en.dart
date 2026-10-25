@@ -25,19 +25,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get commonDone => 'Done';
 
   @override
-  String get commonMore => 'More';
-
-  @override
   String get commonCopy => 'Copy';
 
   @override
   String get commonCopied => 'Copied';
-
-  @override
-  String get commonSave => 'Save';
-
-  @override
-  String get commonRemove => 'Remove';
 
   @override
   String get connectTitle => 'Connect to a server';
@@ -207,36 +198,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get channelCollapse => 'Collapse';
 
   @override
-  String get channelCurrent => 'You are here';
-
-  @override
   String get channelPasswordProtected => 'Channel password required';
 
   @override
-  String get voiceTab => 'Voice';
-
-  @override
-  String get voiceJoin => 'Join voice';
-
-  @override
-  String get voiceLeave => 'Leave';
-
-  @override
-  String get voiceDisconnect => 'Leave voice';
-
-  @override
-  String voiceMembersCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count people in voice',
-      one: '1 person in voice',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get voiceEmpty => 'Nobody is here yet. Be the first.';
+  String get channelJoinMenu => 'Join channel';
 
   @override
   String get voiceMute => 'Mute';
@@ -251,10 +216,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get voiceUndeafen => 'Undeafen';
 
   @override
-  String get voiceSelfOnline => 'Online';
+  String get memberMicMuted => 'Microphone muted';
 
   @override
-  String get memberMuted => 'Muted';
+  String get memberSpeakerMuted => 'Speaker muted';
 
   @override
   String get voiceMicUnavailable => 'Microphone unavailable';
@@ -266,27 +231,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String voiceReconnectingAttempt(int attempt) {
     return 'Reconnecting (attempt $attempt)…';
   }
-
-  @override
-  String get voiceModeVad => 'Voice activation';
-
-  @override
-  String get voiceModePtt => 'Push to talk';
-
-  @override
-  String get voicePushToTalk => 'Push to talk';
-
-  @override
-  String get voicePushToTalkHint => 'Release to stop sending';
-
-  @override
-  String get voiceSelfSpeaking => 'Sending';
-
-  @override
-  String get voiceRejoinLast => 'Rejoin last channel';
-
-  @override
-  String get chatTitle => 'Chat';
 
   @override
   String get chatTabMessages => 'Messages';
@@ -321,21 +265,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatScopeServer => 'Whole server';
 
   @override
-  String get chatEmptyChannel => 'No messages in this channel yet.';
-
-  @override
-  String get chatEmptyServer => 'No server-wide messages yet.';
-
-  @override
   String get chatNoChannel => 'Join a channel before sending channel messages.';
-
-  @override
-  String get chatAddMedia => 'Add image or video';
-
-  @override
-  String chatRemoveAttachment(String name) {
-    return 'Remove $name';
-  }
 
   @override
   String get chatUnsupportedImage => 'Unsupported image format';
@@ -357,20 +287,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatDirectTag => 'Direct';
 
   @override
-  String get chatWelcomeServerTitle => 'Whole server';
-
-  @override
-  String get chatWelcomeServerBody =>
-      'Server-wide messages appear here, visible to everyone.';
-
-  @override
   String get mediaEmpty => 'No images or videos in this channel yet';
 
   @override
   String get mediaViewerTitle => 'Media viewer';
-
-  @override
-  String get mediaDownload => 'Download';
 
   @override
   String get mediaPrevious => 'Previous';
@@ -419,6 +339,25 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsPttModeDesc => 'When off, voice activation is used';
+
+  @override
+  String get settingsPttHotkey => 'Push-to-talk hotkey';
+
+  @override
+  String get settingsPttHotkeyNone => 'Not set';
+
+  @override
+  String get settingsPttHotkeyRecordTitle => 'Record hotkey';
+
+  @override
+  String get settingsPttHotkeyRecordHint => 'Press any key… (Esc to cancel)';
+
+  @override
+  String get settingsPttHotkeyUnsupported =>
+      'This key is not supported. Try another one.';
+
+  @override
+  String get settingsPttHotkeyClear => 'Clear';
 
   @override
   String get settingsInputDevice => 'Microphone';

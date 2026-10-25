@@ -59,6 +59,11 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
       widget.onChannelSelected?.call();
     }
 
+    // 双击/右键加入频道：TS 里换频道就是移动到该频道的语音房间。
+    void join(ChannelView channel) {
+      ref.read(sessionViewProvider.notifier).joinChannel(channel.id);
+    }
+
     return Material(
       color: context.isDark
           ? scheme.surfaceContainerLow
@@ -80,6 +85,7 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
                     activeId,
                     toggle,
                     select,
+                    join,
                   ),
                 ),
               ],
@@ -136,6 +142,7 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
     int? activeId,
     void Function(ChannelView channel, bool expanded) onToggle,
     void Function(ChannelView channel) onSelect,
+    void Function(ChannelView channel) onJoin,
   ) {
     final rows = _flatten(view);
     if (rows.isEmpty) {
@@ -168,11 +175,19 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
                   view.childrenOf(channel.id).isNotEmpty,
               onToggle: () => onToggle(channel, expanded),
               onSelect: () => onSelect(channel),
+              onJoin: () => onJoin(channel),
+              canJoin:
+                  view.connected &&
+                  !view.busy &&
+                  view.selfChannelId != channel.id,
             ),
           _MemberRow(:final client, :final depth) => _MemberTile(
             client: client,
             depth: depth,
-            speaking: view.speaking.contains(client.id),
+            // 服务器不回显自己的声音，自己说话由 SelfSpeaking 事件单独表达。
+            speaking:
+                view.speaking.contains(client.id) ||
+                (client.id == view.selfClientId && view.selfSpeaking),
           ),
         };
       },
@@ -249,6 +264,8 @@ class _ChannelTile extends StatelessWidget {
     required this.hasContent,
     required this.onToggle,
     required this.onSelect,
+    required this.onJoin,
+    required this.canJoin,
   });
 
   final ChannelView channel;
@@ -259,6 +276,10 @@ class _ChannelTile extends StatelessWidget {
   final bool hasContent;
   final VoidCallback onToggle;
   final VoidCallback onSelect;
+
+  /// 双击或右键菜单加入；已在频道里、未连接或命令进行中时不可用。
+  final VoidCallback onJoin;
+  final bool canJoin;
 
   @override
   Widget build(BuildContext context) {
@@ -279,89 +300,101 @@ class _ChannelTile extends StatelessWidget {
 
     return Padding(
       padding: EdgeInsets.only(left: depth * 16.0),
-      child: Semantics(
-        button: true,
-        selected: selected,
-        child: Material(
-          color: selected ? scheme.primaryContainer : Colors.transparent,
-          borderRadius: Radii.pillAll,
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: onSelect,
+      child: SecondaryMenu(
+        enabled: canJoin,
+        openOnSecondaryTap: true,
+        items: [
+          MenuItemButton(
+            leadingIcon: const Icon(Icons.login_rounded, size: 18),
+            onPressed: canJoin ? onJoin : null,
+            child: Text(l10n.channelJoinMenu),
+          ),
+        ],
+        builder: (context, menuController) => Semantics(
+          button: true,
+          selected: selected,
+          child: Material(
+            color: selected ? scheme.primaryContainer : Colors.transparent,
             borderRadius: Radii.pillAll,
-            child: SizedBox(
-              height: 48,
-              child: Padding(
-                padding: const EdgeInsets.only(right: 14),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 32,
-                      child: hasContent
-                          ? Tooltip(
-                              message: expanded
-                                  ? l10n.channelCollapse
-                                  : l10n.channelExpand,
-                              child: InkWell(
-                                onTap: onToggle,
-                                customBorder: const CircleBorder(),
-                                child: SizedBox(
-                                  width: 32,
-                                  height: 40,
-                                  child: Icon(
-                                    expanded
-                                        ? Icons.keyboard_arrow_down_rounded
-                                        : Icons.keyboard_arrow_right_rounded,
-                                    size: 20,
-                                    color: foreground,
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: onSelect,
+              onDoubleTap: canJoin ? onJoin : null,
+              borderRadius: Radii.pillAll,
+              child: SizedBox(
+                height: 48,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 14),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 32,
+                        child: hasContent
+                            ? Tooltip(
+                                message: expanded
+                                    ? l10n.channelCollapse
+                                    : l10n.channelExpand,
+                                child: InkWell(
+                                  onTap: onToggle,
+                                  customBorder: const CircleBorder(),
+                                  child: SizedBox(
+                                    width: 32,
+                                    height: 40,
+                                    child: Icon(
+                                      expanded
+                                          ? Icons.keyboard_arrow_down_rounded
+                                          : Icons.keyboard_arrow_right_rounded,
+                                      size: 20,
+                                      color: foreground,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            )
-                          : null,
-                    ),
-                    Icon(Icons.tag_rounded, size: 20, color: foreground),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: context.texts.bodyMedium?.copyWith(
-                          fontSize: 14,
-                          color: selected
-                              ? scheme.onPrimaryContainer
-                              : scheme.onSurfaceVariant,
-                          fontWeight: selected
-                              ? FontWeight.w500
-                              : FontWeight.w400,
-                        ),
+                              )
+                            : null,
                       ),
-                    ),
-                    if (channel.passwordProtected == true)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 6),
-                        child: Tooltip(
-                          message: l10n.channelPasswordProtected,
-                          child: Icon(
-                            Icons.lock_outline_rounded,
-                            size: 15,
-                            color: foreground,
-                          ),
-                        ),
-                      ),
-                    if (memberLabel != null)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 8),
+                      Icon(Icons.tag_rounded, size: 20, color: foreground),
+                      const SizedBox(width: 10),
+                      Expanded(
                         child: Text(
-                          memberLabel,
-                          style: context.texts.labelSmall?.copyWith(
-                            color: foreground,
-                            fontFeatures: tabularFigures,
+                          name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: context.texts.bodyMedium?.copyWith(
+                            fontSize: 14,
+                            color: selected
+                                ? scheme.onPrimaryContainer
+                                : scheme.onSurfaceVariant,
+                            fontWeight: selected
+                                ? FontWeight.w500
+                                : FontWeight.w400,
                           ),
                         ),
                       ),
-                  ],
+                      if (channel.passwordProtected == true)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 6),
+                          child: Tooltip(
+                            message: l10n.channelPasswordProtected,
+                            child: Icon(
+                              Icons.lock_outline_rounded,
+                              size: 15,
+                              color: foreground,
+                            ),
+                          ),
+                        ),
+                      if (memberLabel != null)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8),
+                          child: Text(
+                            memberLabel,
+                            style: context.texts.labelSmall?.copyWith(
+                              color: foreground,
+                              fontFeatures: tabularFigures,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -385,6 +418,7 @@ class _MemberTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
 
     return Padding(
@@ -411,8 +445,39 @@ class _MemberTile extends StatelessWidget {
                 ),
               ),
             ),
+            // 服务器回显的设备状态：快照没带标志（null）时不显示。
+            if (client.inputMuted ?? false)
+              _MemberFlag(
+                tooltip: l10n.memberMicMuted,
+                icon: Icons.mic_off_rounded,
+              ),
+            if (client.outputMuted ?? false)
+              _MemberFlag(
+                tooltip: l10n.memberSpeakerMuted,
+                icon: Icons.volume_off_rounded,
+              ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// 成员行尾的静音标志：与其他成员昵称保持间距。
+class _MemberFlag extends StatelessWidget {
+  const _MemberFlag({required this.tooltip, required this.icon});
+
+  final String tooltip;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.scheme;
+    return Padding(
+      padding: const EdgeInsets.only(left: 6),
+      child: Tooltip(
+        message: tooltip,
+        child: Icon(icon, size: 14, color: scheme.error),
       ),
     );
   }

@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/global_hotkey.dart';
+import '../../core/hotkey_codes.dart';
 import '../../core/models.dart';
 import '../../core/preferences.dart';
 import '../../core/providers.dart';
@@ -43,6 +45,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final audioSelection = ref.watch(audioSelectionProvider);
     final storePath = ref.watch(storePathProvider);
     final compact = context.isCompact;
+    final pttHotkeyKey = preferences.pttHotkey == null
+        ? null
+        : LogicalKeyboardKey.findKeyByKeyId(preferences.pttHotkey!);
 
     final sections = <Widget>[
       SettingsGroup(
@@ -79,6 +84,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             onTap: () => unawaited(
               ref.read(sessionViewProvider.notifier).setPttMode(!view.pttMode),
             ),
+          ),
+          SettingsRow(
+            icon: Icons.keyboard_rounded,
+            title: l10n.settingsPttHotkey,
+            subtitle: pttHotkeyKey == null
+                ? l10n.settingsPttHotkeyNone
+                : pttHotkeyDisplayName(pttHotkeyKey),
+            onTap: () => unawaited(_pickPttHotkey()),
           ),
           SettingsRow(
             icon: Icons.mic_none_rounded,
@@ -232,6 +245,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     }
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(l10n.commonCopied)));
+  }
+
+  Future<void> _pickPttHotkey() async {
+    final l10n = AppLocalizations.of(context);
+    final currentKeyId = ref.read(preferencesProvider).pttHotkey;
+    // 录制期间先注销：macOS 的 Carbon 热键在系统层吞按键，不注销就录不到同一个键。
+    await const GlobalHotkey().unregister();
+    if (!mounted) {
+      return;
+    }
+    await showAppModal<void>(
+      context,
+      title: l10n.settingsPttHotkeyRecordTitle,
+      builder: (context) => _PttHotkeyRecorder(currentKeyId: currentKeyId),
+    );
+    // 面板里保存/清除都会写偏好，app 层的偏好监听负责重新注册；取消（偏好
+    // 没变）时把原绑定注册回去。
+    if (ref.read(preferencesProvider).pttHotkey == currentKeyId) {
+      await const GlobalHotkey().registerByKeyId(currentKeyId);
+    }
   }
 
   Widget _about(AppLocalizations l10n) {
@@ -406,3 +439,148 @@ String _themeLabel(AppLocalizations l10n, AppThemePreference theme) =>
       AppThemePreference.light => l10n.settingsThemeLight,
       AppThemePreference.dark => l10n.settingsThemeDark,
     };
+
+/// 快捷键录制面板：按下任意受支持的键即保存并关闭，Esc 取消。
+///
+/// 裸修饰键和平台换不出原生键码的键都会被拒，提示换一个。
+class _PttHotkeyRecorder extends ConsumerStatefulWidget {
+  const _PttHotkeyRecorder({required this.currentKeyId});
+
+  final int? currentKeyId;
+
+  @override
+  ConsumerState<_PttHotkeyRecorder> createState() => _PttHotkeyRecorderState();
+}
+
+class _PttHotkeyRecorderState extends ConsumerState<_PttHotkeyRecorder> {
+  // LogicalKeyboardKey 重写了 ==，只能放非 const 集合。
+  static final _modifiers = <LogicalKeyboardKey>{
+    LogicalKeyboardKey.shift,
+    LogicalKeyboardKey.shiftLeft,
+    LogicalKeyboardKey.shiftRight,
+    LogicalKeyboardKey.control,
+    LogicalKeyboardKey.controlLeft,
+    LogicalKeyboardKey.controlRight,
+    LogicalKeyboardKey.alt,
+    LogicalKeyboardKey.altLeft,
+    LogicalKeyboardKey.altRight,
+    LogicalKeyboardKey.meta,
+    LogicalKeyboardKey.metaLeft,
+    LogicalKeyboardKey.metaRight,
+    LogicalKeyboardKey.fn,
+  };
+
+  final _focus = FocusNode();
+  String? _error;
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    super.dispose();
+  }
+
+  KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent || event is KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      Navigator.of(context).pop();
+      return KeyEventResult.handled;
+    }
+    final key = event.logicalKey;
+    if (_modifiers.contains(key) || !isSupportedPttHotkey(key)) {
+      setState(
+        () =>
+            _error = AppLocalizations.of(context).settingsPttHotkeyUnsupported,
+      );
+      return KeyEventResult.handled;
+    }
+    ref.read(preferencesProvider.notifier).setPttHotkey(key.keyId);
+    Navigator.of(context).pop();
+    return KeyEventResult.handled;
+  }
+
+  void _clear() {
+    ref.read(preferencesProvider.notifier).setPttHotkey(null);
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final scheme = context.scheme;
+    final currentKey = widget.currentKeyId == null
+        ? null
+        : LogicalKeyboardKey.findKeyByKeyId(widget.currentKeyId!);
+
+    return Focus(
+      focusNode: _focus,
+      autofocus: true,
+      onKeyEvent: _handleKey,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (currentKey != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                children: [
+                  Text(
+                    l10n.settingsPttHotkey,
+                    style: context.texts.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    pttHotkeyDisplayName(currentKey),
+                    style: context.texts.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.keyboard_rounded,
+                  size: 20,
+                  color: scheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    l10n.settingsPttHotkeyRecordHint,
+                    style: context.texts.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                _error!,
+                style: context.texts.bodySmall?.copyWith(color: scheme.error),
+              ),
+            ),
+          if (widget.currentKeyId != null)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: _clear,
+                child: Text(l10n.settingsPttHotkeyClear),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}

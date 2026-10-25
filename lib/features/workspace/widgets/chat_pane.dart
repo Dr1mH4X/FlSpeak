@@ -285,6 +285,8 @@ class _ChatPaneState extends State<ChatPane> {
   }
 }
 
+/// 发送范围按钮：图标表示当前范围（# 是本频道，地球是整个服务器），点击
+/// 直接切换，没有二级菜单。
 class _ScopeButton extends StatelessWidget {
   const _ScopeButton({required this.scope, required this.onChanged});
 
@@ -299,28 +301,16 @@ class _ScopeButton extends StatelessWidget {
 
     return SizedBox.square(
       dimension: Sizes.touch,
-      child: MenuAnchor(
-        clipBehavior: Clip.antiAlias,
-        menuChildren: [
-          CheckboxMenuButton(
-            value: scope == ChatScope.channel,
-            onChanged: (_) => onChanged(ChatScope.channel),
-            child: Text(l10n.chatScopeChannel),
-          ),
-          CheckboxMenuButton(
-            value: scope == ChatScope.server,
-            onChanged: (_) => onChanged(ChatScope.server),
-            child: Text(l10n.chatScopeServer),
-          ),
-        ],
-        builder: (context, controller, child) => IconButton(
-          tooltip: l10n.chatScopeTitle,
-          onPressed: () => controller.open(),
-          iconSize: 20,
-          icon: Icon(
-            server ? Icons.public_rounded : Icons.tag_rounded,
-            color: scheme.onSurfaceVariant,
-          ),
+      child: IconButton(
+        tooltip:
+            '${l10n.chatScopeTitle} · '
+            '${server ? l10n.chatScopeServer : l10n.chatScopeChannel}',
+        onPressed: () =>
+            onChanged(server ? ChatScope.channel : ChatScope.server),
+        iconSize: 20,
+        icon: Icon(
+          server ? Icons.public_rounded : Icons.tag_rounded,
+          color: scheme.onSurfaceVariant,
         ),
       ),
     );

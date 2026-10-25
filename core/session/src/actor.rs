@@ -79,6 +79,11 @@ pub(crate) enum SessionSignal {
         id: i32,
         channel_id: u64,
     },
+    /// 目录快照（0.2.1 起目录一变就发）：携带最新的成员状态，含静音标志。
+    Snapshot {
+        epoch: u64,
+        clients: Vec<ClientView>,
+    },
     Disconnected {
         epoch: u64,
         message: String,
@@ -1161,6 +1166,22 @@ impl Actor {
                     self.on_self_moved(channel_id).await;
                 }
             }
+            SessionSignal::Snapshot { epoch, clients } => {
+                if epoch != self.connection_epoch {
+                    return;
+                }
+                // 只有成员状态真的变了才转发；频道元数据仍由周期性的
+                // refresh_snapshot 维护，这里只替换成员并同步基线。
+                let Some((channels, old_clients)) = self.last_snapshot.as_mut() else {
+                    return;
+                };
+                if *old_clients == clients {
+                    return;
+                }
+                *old_clients = clients.clone();
+                let channels = channels.clone();
+                self.emit(SessionEvent::Snapshot { channels, clients });
+            }
             SessionSignal::Disconnected { epoch, message } => {
                 if epoch == self.connection_epoch {
                     self.on_connection_lost(message, true).await;
@@ -1736,6 +1757,20 @@ fn register_handlers(
 
     let channel = signals.clone();
     let live = Arc::clone(&current);
+    client.on_directory_snapshot(Arc::new(move |event: ProtocolEvent| {
+        if live.load(Ordering::Relaxed) != epoch {
+            return;
+        }
+        if let ProtocolEvent::DirectorySnapshot(snapshot) = event {
+            let _ = channel.send(SessionSignal::Snapshot {
+                epoch,
+                clients: snapshot.clients.into_iter().map(ClientView::from).collect(),
+            });
+        }
+    }));
+
+    let channel = signals.clone();
+    let live = Arc::clone(&current);
     client.on_disconnected(Arc::new(move |event: ProtocolEvent| {
         if live.load(Ordering::Relaxed) != epoch {
             return;
@@ -1783,6 +1818,8 @@ impl From<ClientInfo> for ClientView {
             nickname: info.nickname,
             uid: info.uid,
             channel_id: info.channel_id,
+            input_muted: info.input_muted,
+            output_muted: info.output_muted,
         }
     }
 }
