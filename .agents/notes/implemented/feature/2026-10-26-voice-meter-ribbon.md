@@ -1,0 +1,42 @@
+# Agent Note: 用户卡电平条与可选声源
+
+Status: implemented
+
+## Problem
+
+频道栏底部的用户卡同时显示昵称与「已连接 / 未连接」，还要放麦克风、耳机、离开三个开关。它占掉了整块背景，却只在重复别处已有的身份与连接信息；语音客户端最有价值的实时信息「现在有没有声音」反而没有位置。
+
+Material 3 没有现成的音频可视化组件。界面需要一条跟随真实电平的波形，并且让用户在设置里选择波形跟随本端麦克风还是远端接收到的音频。
+
+## Decision
+
+- 用户卡删除昵称与连接状态两行，只保留三个 44px 开关；68px 高的整张卡作为电平条画布，开关右对齐。
+- 自绘 `VoiceActivityRibbon`：24 个历史样本、每 100ms 一个；3px 圆角竖条，静止 3px 高、`primary` 10% 不透明，有声音时条高 3–22px、透明度 0.10–0.34。静止不做常驻呼吸动画。
+- Rust 采集线程与播放线程分别对原始样本、混音样本计算 RMS，经 -60–0dB 映射、噪声门与一阶平滑后共享 0–1 标量；播放线程每 100ms 合成一条 `AudioEvent::Levels { mic, received }`。音频样本仍然不跨 FFI。
+- `SessionController` 把电平写进独立的 `StreamController`，不写 `SessionView`；`voiceLevelsProvider` 只让电平条重建。断开时主动清零，避免停在最后一帧。
+- 偏好项 `voiceMeterSource` 只有 `microphone` / `received` 两档，默认麦克风；设置的「语音」分组用单选弹层切换，切换不需要重连。
+- 整机系统音频回环（ScreenCaptureKit / WASAPI loopback）不实现，设置里不出现第三项。
+
+## Alternatives considered
+
+- **只用 `selfSpeaking` / `speaking` 布尔值**：能区分「有人在说」，但两路声源看起来一样，也无法表达音量；放弃。
+- **把电平塞进 `SessionView`**：10Hz 的字段变化会让频道树与聊天页一起重建；放弃。
+- **新增独立 FFI 电平流**：隔离更彻底，但每 100ms 一条小事件符合音频边界笔记预留的聚合指标通道；先用现有事件流，未来需要多频段再拆。
+- **整机系统音频回环采集**：需要平台权限、新的采集路径和三平台实现，用户已明确删除该选项。
+- **M3 播放器式音频卡**：封面、进度、播放控件对应的是媒体播放，本应用没有可播放内容；放弃。
+- **引入可视化库**：依赖面大于一条自绘 ribbon，且难以完全贴合现有 M3 token；放弃。
+- **在 Dart 侧做 FFT**：必须先拿到音频帧，直接违反音频边界；放弃。
+
+## Consequences
+
+- 波形是 10Hz 聚合电平，能表达有没有声音和大致响度，做不到逐帧波形或频段分析。
+- 电平事件是既有会话事件流的一部分；10Hz 是该通道新增的上限，不是新的 FFI 接口。
+- 用户卡不再承担身份展示；昵称与连接状态分别由别处（设置、频道头、服务器栏）承担。
+- 切换声源只改本地偏好，Rust 始终同时计算两路电平。
+
+## Testing
+
+- `core/audio/src/level.rs` 覆盖 RMS、dB 映射、噪声门、平滑与 10Hz 节流。
+- `lib/features/workspace/widgets/channel_pane_test.dart` 断言用户卡只有电平条和三个控制开关。
+- `lib/features/workspace/widgets/channel_pane_resizer_test.dart` 覆盖 `voiceMeterSource` 的偏好读写与缺省值。
+- `docs/audio.md` 与音频边界笔记同步说明聚合电平事件。

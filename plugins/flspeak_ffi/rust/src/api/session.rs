@@ -160,6 +160,11 @@ pub enum CoreEvent {
     SelfSpeaking {
         speaking: bool,
     },
+    /// 本端采集与远端混音电平（0–1），≤10Hz。
+    Levels {
+        mic: f64,
+        received: f64,
+    },
     IdentityUpgrade {
         from: i32,
         to: i32,
@@ -588,6 +593,10 @@ impl From<SessionEvent> for CoreEvent {
             },
             SessionEvent::Speaking { client_ids } => CoreEvent::Speaking { client_ids },
             SessionEvent::SelfSpeaking { speaking } => CoreEvent::SelfSpeaking { speaking },
+            SessionEvent::Levels { mic, received } => CoreEvent::Levels {
+                mic: mic as f64,
+                received: received as f64,
+            },
             SessionEvent::IdentityUpgrade { from, to } => CoreEvent::IdentityUpgrade { from, to },
             SessionEvent::IdentityUpgraded { level } => CoreEvent::IdentityUpgraded { level },
             SessionEvent::TransferStarted {

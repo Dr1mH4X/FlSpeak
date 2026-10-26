@@ -6,6 +6,7 @@ import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import 'models.dart';
 import 'preferences.dart';
+import 'voice_levels.dart';
 
 /// 在 `main()` 里用真实句柄覆盖；测试里用假的实现覆盖。
 final coreSessionProvider = Provider<CoreSession>(
@@ -22,15 +23,26 @@ final sessionViewProvider = NotifierProvider<SessionController, SessionView>(
   SessionController.new,
 );
 
+/// 电平独立成流：10Hz 的更新只让电平条重建，不碰整个 `SessionView`。
+final voiceLevelsProvider = StreamProvider<VoiceLevels>((ref) {
+  return ref.watch(sessionViewProvider.notifier).levels;
+});
+
 class SessionController extends Notifier<SessionView> {
   /// 只保留本次会话的消息；上限防止长时间挂着时无限增长。
   static const _messageLimit = 500;
+
+  final _levels = StreamController<VoiceLevels>.broadcast();
+  VoiceLevels _latestLevels = VoiceLevels.silent;
+
+  Stream<VoiceLevels> get levels => _levels.stream;
 
   @override
   SessionView build() {
     final session = ref.watch(coreSessionProvider);
     final subscription = session.events().listen(_onEvent);
     ref.onDispose(subscription.cancel);
+    ref.onDispose(_levels.close);
     // 初始档案在 spawn 时就广播过一次，广播通道不补发给订阅者；订阅后主动拉一遍，
     // 否则打开应用时已保存的服务器列表要等下一次增删才会出现。
     unawaited(_loadServers(session));
@@ -231,6 +243,12 @@ class SessionController extends Notifier<SessionView> {
     final current = state;
     switch (event) {
       case CoreEvent_State(state: final next):
+        if (next is CoreSessionState_Disconnected) {
+          // 采集/播放随断开停止，电平流不会再来新样本；主动清零，
+          // 避免重连前停留在最后一帧。
+          _latestLevels = VoiceLevels.silent;
+          _levels.add(_latestLevels);
+        }
         state = switch (next) {
           CoreSessionState_Disconnected() => current.copyWith(
             state: next,
@@ -358,6 +376,9 @@ class SessionController extends Notifier<SessionView> {
         state = current.copyWith(speaking: clientIds.toSet());
       case CoreEvent_SelfSpeaking(:final speaking):
         state = current.copyWith(selfSpeaking: speaking);
+      case CoreEvent_Levels(:final mic, :final received):
+        _latestLevels = VoiceLevels(mic: mic, received: received);
+        _levels.add(_latestLevels);
       case CoreEvent_IdentityUpgrade(:final to):
         state = current.copyWith(
           identityUpgradeTarget: to,
@@ -443,6 +464,13 @@ class PreferencesController extends Notifier<SessionPreferences> {
       return;
     }
     _update(state.copyWith(channelPanelWidth: width));
+  }
+
+  void setVoiceMeterSource(VoiceMeterSource source) {
+    if (source == state.voiceMeterSource) {
+      return;
+    }
+    _update(state.copyWith(voiceMeterSource: source));
   }
 
   void markConnected(String serverId, DateTime at) {

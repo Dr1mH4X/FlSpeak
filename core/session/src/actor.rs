@@ -1508,6 +1508,9 @@ impl Actor {
             AudioEvent::SelfSpeaking { speaking } => {
                 self.emit(SessionEvent::SelfSpeaking { speaking });
             }
+            AudioEvent::Levels { mic, received } => {
+                self.emit(SessionEvent::Levels { mic, received });
+            }
             AudioEvent::CaptureState {
                 ready,
                 ptt_mode,

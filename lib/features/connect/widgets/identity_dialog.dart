@@ -165,7 +165,6 @@ class _IdentityDialogContentState extends State<_IdentityDialogContent> {
         ),
         const SizedBox(width: 4),
         IconButton(
-          tooltip: l10n.identityRename,
           onPressed: _startEditing,
           iconSize: 16,
           color: scheme.onSurfaceVariant,
@@ -174,7 +173,7 @@ class _IdentityDialogContentState extends State<_IdentityDialogContent> {
             maximumSize: const Size(Sizes.touch, Sizes.touch),
             padding: EdgeInsets.zero,
           ),
-          icon: const Icon(Icons.edit_rounded),
+          icon: Icon(Icons.edit_rounded, semanticLabel: l10n.identityRename),
         ),
       ],
     );
@@ -212,7 +211,6 @@ class _IdentityDialogContentState extends State<_IdentityDialogContent> {
           ),
         ),
         IconButton(
-          tooltip: l10n.identitySave,
           onPressed: _commit,
           iconSize: 16,
           color: scheme.primary,
@@ -221,10 +219,9 @@ class _IdentityDialogContentState extends State<_IdentityDialogContent> {
             maximumSize: const Size(Sizes.touch, Sizes.touch),
             padding: EdgeInsets.zero,
           ),
-          icon: const Icon(Icons.check_rounded),
+          icon: Icon(Icons.check_rounded, semanticLabel: l10n.identitySave),
         ),
         IconButton(
-          tooltip: l10n.identityCancel,
           onPressed: _cancelEditing,
           iconSize: 16,
           color: scheme.onSurfaceVariant,
@@ -233,7 +230,7 @@ class _IdentityDialogContentState extends State<_IdentityDialogContent> {
             maximumSize: const Size(Sizes.touch, Sizes.touch),
             padding: EdgeInsets.zero,
           ),
-          icon: const Icon(Icons.close_rounded),
+          icon: Icon(Icons.close_rounded, semanticLabel: l10n.identityCancel),
         ),
       ],
     );

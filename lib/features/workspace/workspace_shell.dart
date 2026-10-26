@@ -7,7 +7,7 @@ import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/providers.dart';
-import '../../l10n/app_localizations.dart';
+
 import '../../router.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common.dart';
@@ -163,7 +163,6 @@ class _MainSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
 
     return Material(
@@ -180,11 +179,7 @@ class _MainSurface extends StatelessWidget {
           if (notice != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-              child: NoticeBar(
-                message: notice!,
-                dismissTooltip: l10n.commonClose,
-                onDismiss: onDismissNotice,
-              ),
+              child: NoticeBar(message: notice!, onDismiss: onDismissNotice),
             ),
           Expanded(child: child),
         ],

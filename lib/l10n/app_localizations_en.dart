@@ -191,9 +191,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get channelPaneResize => 'Resize channel pane';
 
   @override
-  String get channelPaneResizeHint => 'Drag to resize, double-click to reset';
-
-  @override
   String get voiceMute => 'Mute';
 
   @override
@@ -324,9 +321,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsTheme => 'Appearance';
 
   @override
-  String get settingsThemeDesc => 'System, light or dark';
-
-  @override
   String get settingsThemeSystem => 'System';
 
   @override
@@ -337,9 +331,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsPttMode => 'Push to talk';
-
-  @override
-  String get settingsPttModeDesc => 'When off, voice activation is used';
 
   @override
   String get settingsPttHotkey => 'Push-to-talk hotkey';
@@ -367,6 +358,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsOutputDevice => 'Speaker';
 
   @override
+  String get settingsVoiceMeter => 'Audio display';
+
+  @override
+  String get settingsVoiceMeterMic => 'My microphone';
+
+  @override
+  String get settingsVoiceMeterReceived => 'Received audio';
+
+  @override
   String get settingsDeviceDefault => 'System default';
 
   @override
@@ -377,10 +377,4 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsStorePath => 'Storage directory';
-
-  @override
-  String get settingsStorePathDesc => 'Where profiles and preferences live';
-
-  @override
-  String get settingsAboutTagline => 'Self-hosted TeamSpeak client';
 }

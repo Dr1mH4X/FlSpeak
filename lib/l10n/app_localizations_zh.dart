@@ -190,9 +190,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get channelPaneResize => '调整频道栏宽度';
 
   @override
-  String get channelPaneResizeHint => '拖动调整宽度，双击恢复默认';
-
-  @override
   String get voiceMute => '静音';
 
   @override
@@ -321,9 +318,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsTheme => '外观';
 
   @override
-  String get settingsThemeDesc => '跟随系统、浅色或深色';
-
-  @override
   String get settingsThemeSystem => '跟随系统';
 
   @override
@@ -334,9 +328,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsPttMode => '按住说话';
-
-  @override
-  String get settingsPttModeDesc => '关闭时使用语音激活';
 
   @override
   String get settingsPttHotkey => '按住说话快捷键';
@@ -363,6 +354,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsOutputDevice => '扬声器';
 
   @override
+  String get settingsVoiceMeter => '音频显示';
+
+  @override
+  String get settingsVoiceMeterMic => '自己麦克风';
+
+  @override
+  String get settingsVoiceMeterReceived => '接收到的音频';
+
+  @override
   String get settingsDeviceDefault => '系统默认';
 
   @override
@@ -373,10 +373,4 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsStorePath => '存储目录';
-
-  @override
-  String get settingsStorePathDesc => '服务器档案与偏好文件的位置';
-
-  @override
-  String get settingsAboutTagline => '自托管 TeamSpeak 客户端';
 }

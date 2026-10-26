@@ -112,7 +112,6 @@ class ConnectHeader extends StatelessWidget {
             ],
             if (!desktop)
               IconButton(
-                tooltip: l10n.settingsTitle,
                 onPressed: onSettings,
                 iconSize: 20,
                 color: scheme.onSurfaceVariant,
@@ -121,7 +120,10 @@ class ConnectHeader extends StatelessWidget {
                   maximumSize: const Size(Sizes.touch, Sizes.touch),
                   padding: EdgeInsets.zero,
                 ),
-                icon: const Icon(Icons.settings_rounded),
+                icon: Icon(
+                  Icons.settings_rounded,
+                  semanticLabel: l10n.settingsTitle,
+                ),
               ),
           ],
         ),

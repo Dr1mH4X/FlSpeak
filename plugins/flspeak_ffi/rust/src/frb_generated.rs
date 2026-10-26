@@ -1822,6 +1822,14 @@ impl SseDecode for crate::api::session::CoreEvent {
                 };
             }
             12 => {
+                let mut var_mic = <f64>::sse_decode(deserializer);
+                let mut var_received = <f64>::sse_decode(deserializer);
+                return crate::api::session::CoreEvent::Levels {
+                    mic: var_mic,
+                    received: var_received,
+                };
+            }
+            13 => {
                 let mut var_from = <i32>::sse_decode(deserializer);
                 let mut var_to = <i32>::sse_decode(deserializer);
                 return crate::api::session::CoreEvent::IdentityUpgrade {
@@ -1829,11 +1837,11 @@ impl SseDecode for crate::api::session::CoreEvent {
                     to: var_to,
                 };
             }
-            13 => {
+            14 => {
                 let mut var_level = <i32>::sse_decode(deserializer);
                 return crate::api::session::CoreEvent::IdentityUpgraded { level: var_level };
             }
-            14 => {
+            15 => {
                 let mut var_id = <u64>::sse_decode(deserializer);
                 let mut var_direction =
                     <crate::api::session::CoreTransferDirection>::sse_decode(deserializer);
@@ -1846,7 +1854,7 @@ impl SseDecode for crate::api::session::CoreEvent {
                     total: var_total,
                 };
             }
-            15 => {
+            16 => {
                 let mut var_id = <u64>::sse_decode(deserializer);
                 let mut var_transferred = <u64>::sse_decode(deserializer);
                 let mut var_total = <u64>::sse_decode(deserializer);
@@ -1856,7 +1864,7 @@ impl SseDecode for crate::api::session::CoreEvent {
                     total: var_total,
                 };
             }
-            16 => {
+            17 => {
                 let mut var_id = <u64>::sse_decode(deserializer);
                 let mut var_error = <Option<String>>::sse_decode(deserializer);
                 return crate::api::session::CoreEvent::TransferFinished {
@@ -1864,7 +1872,7 @@ impl SseDecode for crate::api::session::CoreEvent {
                     error: var_error,
                 };
             }
-            17 => {
+            18 => {
                 let mut var_level = <String>::sse_decode(deserializer);
                 let mut var_message = <String>::sse_decode(deserializer);
                 return crate::api::session::CoreEvent::Log {
@@ -1872,13 +1880,13 @@ impl SseDecode for crate::api::session::CoreEvent {
                     message: var_message,
                 };
             }
-            18 => {
+            19 => {
                 let mut var_message = <String>::sse_decode(deserializer);
                 return crate::api::session::CoreEvent::Denied {
                     message: var_message,
                 };
             }
-            19 => {
+            20 => {
                 let mut var_message = <String>::sse_decode(deserializer);
                 return crate::api::session::CoreEvent::Failed {
                     message: var_message,
@@ -1978,6 +1986,13 @@ impl SseDecode for crate::api::session::CoreVoiceState {
             output_ready: var_outputReady,
             message: var_message,
         };
+    }
+}
+
+impl SseDecode for f64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_f64::<NativeEndian>().unwrap()
     }
 }
 
@@ -2549,14 +2564,20 @@ impl flutter_rust_bridge::IntoDart for crate::api::session::CoreEvent {
             crate::api::session::CoreEvent::SelfSpeaking { speaking } => {
                 [11.into_dart(), speaking.into_into_dart().into_dart()].into_dart()
             }
-            crate::api::session::CoreEvent::IdentityUpgrade { from, to } => [
+            crate::api::session::CoreEvent::Levels { mic, received } => [
                 12.into_dart(),
+                mic.into_into_dart().into_dart(),
+                received.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::api::session::CoreEvent::IdentityUpgrade { from, to } => [
+                13.into_dart(),
                 from.into_into_dart().into_dart(),
                 to.into_into_dart().into_dart(),
             ]
             .into_dart(),
             crate::api::session::CoreEvent::IdentityUpgraded { level } => {
-                [13.into_dart(), level.into_into_dart().into_dart()].into_dart()
+                [14.into_dart(), level.into_into_dart().into_dart()].into_dart()
             }
             crate::api::session::CoreEvent::TransferStarted {
                 id,
@@ -2564,7 +2585,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::session::CoreEvent {
                 remote_path,
                 total,
             } => [
-                14.into_dart(),
+                15.into_dart(),
                 id.into_into_dart().into_dart(),
                 direction.into_into_dart().into_dart(),
                 remote_path.into_into_dart().into_dart(),
@@ -2576,29 +2597,29 @@ impl flutter_rust_bridge::IntoDart for crate::api::session::CoreEvent {
                 transferred,
                 total,
             } => [
-                15.into_dart(),
+                16.into_dart(),
                 id.into_into_dart().into_dart(),
                 transferred.into_into_dart().into_dart(),
                 total.into_into_dart().into_dart(),
             ]
             .into_dart(),
             crate::api::session::CoreEvent::TransferFinished { id, error } => [
-                16.into_dart(),
+                17.into_dart(),
                 id.into_into_dart().into_dart(),
                 error.into_into_dart().into_dart(),
             ]
             .into_dart(),
             crate::api::session::CoreEvent::Log { level, message } => [
-                17.into_dart(),
+                18.into_dart(),
                 level.into_into_dart().into_dart(),
                 message.into_into_dart().into_dart(),
             ]
             .into_dart(),
             crate::api::session::CoreEvent::Denied { message } => {
-                [18.into_dart(), message.into_into_dart().into_dart()].into_dart()
+                [19.into_dart(), message.into_into_dart().into_dart()].into_dart()
             }
             crate::api::session::CoreEvent::Failed { message } => {
-                [19.into_dart(), message.into_into_dart().into_dart()].into_dart()
+                [20.into_dart(), message.into_into_dart().into_dart()].into_dart()
             }
             _ => {
                 unimplemented!("");
@@ -2956,13 +2977,18 @@ impl SseEncode for crate::api::session::CoreEvent {
                 <i32>::sse_encode(11, serializer);
                 <bool>::sse_encode(speaking, serializer);
             }
-            crate::api::session::CoreEvent::IdentityUpgrade { from, to } => {
+            crate::api::session::CoreEvent::Levels { mic, received } => {
                 <i32>::sse_encode(12, serializer);
+                <f64>::sse_encode(mic, serializer);
+                <f64>::sse_encode(received, serializer);
+            }
+            crate::api::session::CoreEvent::IdentityUpgrade { from, to } => {
+                <i32>::sse_encode(13, serializer);
                 <i32>::sse_encode(from, serializer);
                 <i32>::sse_encode(to, serializer);
             }
             crate::api::session::CoreEvent::IdentityUpgraded { level } => {
-                <i32>::sse_encode(13, serializer);
+                <i32>::sse_encode(14, serializer);
                 <i32>::sse_encode(level, serializer);
             }
             crate::api::session::CoreEvent::TransferStarted {
@@ -2971,7 +2997,7 @@ impl SseEncode for crate::api::session::CoreEvent {
                 remote_path,
                 total,
             } => {
-                <i32>::sse_encode(14, serializer);
+                <i32>::sse_encode(15, serializer);
                 <u64>::sse_encode(id, serializer);
                 <crate::api::session::CoreTransferDirection>::sse_encode(direction, serializer);
                 <String>::sse_encode(remote_path, serializer);
@@ -2982,27 +3008,27 @@ impl SseEncode for crate::api::session::CoreEvent {
                 transferred,
                 total,
             } => {
-                <i32>::sse_encode(15, serializer);
+                <i32>::sse_encode(16, serializer);
                 <u64>::sse_encode(id, serializer);
                 <u64>::sse_encode(transferred, serializer);
                 <u64>::sse_encode(total, serializer);
             }
             crate::api::session::CoreEvent::TransferFinished { id, error } => {
-                <i32>::sse_encode(16, serializer);
+                <i32>::sse_encode(17, serializer);
                 <u64>::sse_encode(id, serializer);
                 <Option<String>>::sse_encode(error, serializer);
             }
             crate::api::session::CoreEvent::Log { level, message } => {
-                <i32>::sse_encode(17, serializer);
+                <i32>::sse_encode(18, serializer);
                 <String>::sse_encode(level, serializer);
                 <String>::sse_encode(message, serializer);
             }
             crate::api::session::CoreEvent::Denied { message } => {
-                <i32>::sse_encode(18, serializer);
+                <i32>::sse_encode(19, serializer);
                 <String>::sse_encode(message, serializer);
             }
             crate::api::session::CoreEvent::Failed { message } => {
-                <i32>::sse_encode(19, serializer);
+                <i32>::sse_encode(20, serializer);
                 <String>::sse_encode(message, serializer);
             }
             _ => {
@@ -3081,6 +3107,13 @@ impl SseEncode for crate::api::session::CoreVoiceState {
         <bool>::sse_encode(self.input_ready, serializer);
         <bool>::sse_encode(self.output_ready, serializer);
         <Option<String>>::sse_encode(self.message, serializer);
+    }
+}
+
+impl SseEncode for f64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_f64::<NativeEndian>(self).unwrap();
     }
 }
 

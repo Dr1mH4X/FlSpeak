@@ -4,6 +4,7 @@
 //! 两条线程之间没有共享锁，控制命令走独立的有界通道，语音包走另一条有界通道。
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, TrySendError, sync_channel};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -13,6 +14,7 @@ use crate::capture::{CapturePipeline, VoicePacer};
 use crate::convert::FormatConverter;
 use crate::device::{CaptureStream, PlaybackStream, start_capture, start_playback};
 use crate::format::{FRAME_MS, OPUS_STEREO};
+use crate::level::{LevelMeter, MeterClock, rms};
 use crate::playback::{MIX_FRAME_MS, PlaybackPipeline, VoiceFrame};
 
 const CONTROL_CAPACITY: usize = 64;
@@ -36,6 +38,11 @@ pub enum AudioEvent {
     /// 本端 VAD/PTT 是否在发送，低频。
     SelfSpeaking {
         speaking: bool,
+    },
+    /// 本端采集与远端混音电平（0–1），≤10Hz。
+    Levels {
+        mic: f32,
+        received: f32,
     },
     /// 远端活跃说话人集合变化。
     Talkers {
@@ -105,19 +112,22 @@ impl VoiceEngine {
         let (capture, capture_rx) = sync_channel(CONTROL_CAPACITY);
         let (playback, playback_rx) = sync_channel(CONTROL_CAPACITY);
         let (incoming, incoming_rx) = sync_channel(INCOMING_CAPACITY);
+        // capture 线程写入、playback 线程按 10Hz 读出并合成一个事件。
+        let mic_level = Arc::new(AtomicU32::new(0));
 
         let capture_thread = thread::Builder::new()
             .name("voice-capture".into())
             .spawn({
                 let sink = Arc::clone(&sink);
-                move || capture_loop(capture_rx, sink)
+                let mic_level = Arc::clone(&mic_level);
+                move || capture_loop(capture_rx, sink, mic_level)
             })
             .map_err(|err| AudioError::Engine(err.to_string()))?;
         let playback_thread = thread::Builder::new()
             .name("voice-playback".into())
             .spawn({
                 let sink = Arc::clone(&sink);
-                move || playback_loop(playback_rx, incoming_rx, sink)
+                move || playback_loop(playback_rx, incoming_rx, sink, mic_level)
             })
             .map_err(|err| AudioError::Engine(err.to_string()))?;
 
@@ -229,7 +239,16 @@ fn send_error<T>(err: TrySendError<T>) -> AudioError {
     }
 }
 
-fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink) {
+fn store_level(slot: &AtomicU32, level: f32) {
+    let scaled = (level.clamp(0.0, 1.0) * 1000.0) as u32;
+    slot.store(scaled, Ordering::Relaxed);
+}
+
+fn load_level(slot: &AtomicU32) -> f32 {
+    slot.load(Ordering::Relaxed) as f32 / 1000.0
+}
+
+fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, mic_level: Arc<AtomicU32>) {
     let mut pipeline = match CapturePipeline::new(crate::format::VOICE_CODEC) {
         Ok(pipeline) => pipeline,
         Err(err) => {
@@ -248,6 +267,7 @@ fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink) {
     let mut speaking = false;
     let mut pacer = VoicePacer::default();
     let mut raw = Vec::new();
+    let mut mic_meter = LevelMeter::default();
     let mut next_frame = Instant::now();
     let tick = Duration::from_millis(IO_TICK_MS);
 
@@ -298,6 +318,14 @@ fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink) {
                 });
             }
         }
+
+        let mic = if stream.is_some() && pipeline.is_capturing() {
+            mic_meter.update(rms(&raw))
+        } else {
+            mic_meter.silence()
+        };
+        // 只是共享给 playback 线程合成事件；跨 FFI 的频率由那边控制。
+        store_level(&mic_level, mic);
 
         match pipeline.take_packet() {
             Ok(Some(packet)) => {
@@ -466,12 +494,15 @@ fn playback_loop(
     commands: Receiver<PlaybackCommand>,
     incoming: Receiver<PlaybackCommand>,
     sink: EventSink,
+    mic_level: Arc<AtomicU32>,
 ) {
     let mut pipeline = PlaybackPipeline::new();
     let mut stream: Option<PlaybackStream> = None;
     let mut converter: Option<FormatConverter> = None;
     let mut next_tick = Instant::now();
     let mut last_talkers: Vec<i32> = Vec::new();
+    let mut received_meter = LevelMeter::default();
+    let mut received_clock = MeterClock::default();
 
     loop {
         let now = Instant::now();
@@ -515,6 +546,17 @@ fn playback_loop(
             }
 
             let tick = pipeline.tick(now, crate::playback::MIX_SAMPLES_PER_CHANNEL);
+            let received_level = if stream.is_some() && !tick.talkers.is_empty() {
+                received_meter.update(rms(&tick.samples))
+            } else {
+                received_meter.silence()
+            };
+            if received_clock.due(now) {
+                sink(AudioEvent::Levels {
+                    mic: load_level(&mic_level),
+                    received: received_level,
+                });
+            }
             if tick.talkers != last_talkers {
                 last_talkers = tick.talkers.clone();
                 sink(AudioEvent::Talkers {

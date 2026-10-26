@@ -134,4 +134,19 @@ void main() {
     expect(SessionPreferences.fromJson(prefs.toJson()).channelPanelWidth, 321);
     expect(SessionPreferences.fromJson(const {}).channelPanelWidth, isNull);
   });
+
+  test('音频显示声源随 preferences 一起读写', () {
+    const prefs = SessionPreferences(
+      nickname: 'n',
+      voiceMeterSource: VoiceMeterSource.received,
+    );
+    expect(
+      SessionPreferences.fromJson(prefs.toJson()).voiceMeterSource,
+      VoiceMeterSource.received,
+    );
+    expect(
+      SessionPreferences.fromJson(const {}).voiceMeterSource,
+      VoiceMeterSource.microphone,
+    );
+  });
 }

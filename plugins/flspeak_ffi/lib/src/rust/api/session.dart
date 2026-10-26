@@ -311,6 +311,12 @@ sealed class CoreEvent with _$CoreEvent {
       CoreEvent_Speaking;
   const factory CoreEvent.selfSpeaking({required bool speaking}) =
       CoreEvent_SelfSpeaking;
+
+  /// 本端采集与远端混音电平（0–1），≤10Hz。
+  const factory CoreEvent.levels({
+    required double mic,
+    required double received,
+  }) = CoreEvent_Levels;
   const factory CoreEvent.identityUpgrade({
     required int from,
     required int to,

@@ -152,6 +152,11 @@ pub enum SessionEvent {
     SelfSpeaking {
         speaking: bool,
     },
+    /// 本端采集与远端混音电平（0–1），≤10Hz。
+    Levels {
+        mic: f32,
+        received: f32,
+    },
     IdentityUpgrade {
         from: i32,
         to: i32,

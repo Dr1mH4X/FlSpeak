@@ -192,6 +192,11 @@ impl CapturePipeline {
         self.speaking && !self.muted
     }
 
+    /// 采集链路是否真的在收样本：静音、聋听或未启动时电平应归零。
+    pub fn is_capturing(&self) -> bool {
+        self.enabled && !self.muted && !self.deafened
+    }
+
     /// 追加设备原生格式的采集样本。
     pub fn push_capture(&mut self, samples: &[f32], source: AudioFormat) {
         if !self.enabled || samples.is_empty() {

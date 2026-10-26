@@ -416,12 +416,6 @@ abstract class AppLocalizations {
   /// **'Resize channel pane'**
   String get channelPaneResize;
 
-  /// No description provided for @channelPaneResizeHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Drag to resize, double-click to reset'**
-  String get channelPaneResizeHint;
-
   /// No description provided for @voiceMute.
   ///
   /// In en, this message translates to:
@@ -662,12 +656,6 @@ abstract class AppLocalizations {
   /// **'Appearance'**
   String get settingsTheme;
 
-  /// No description provided for @settingsThemeDesc.
-  ///
-  /// In en, this message translates to:
-  /// **'System, light or dark'**
-  String get settingsThemeDesc;
-
   /// No description provided for @settingsThemeSystem.
   ///
   /// In en, this message translates to:
@@ -691,12 +679,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Push to talk'**
   String get settingsPttMode;
-
-  /// No description provided for @settingsPttModeDesc.
-  ///
-  /// In en, this message translates to:
-  /// **'When off, voice activation is used'**
-  String get settingsPttModeDesc;
 
   /// No description provided for @settingsPttHotkey.
   ///
@@ -746,6 +728,24 @@ abstract class AppLocalizations {
   /// **'Speaker'**
   String get settingsOutputDevice;
 
+  /// No description provided for @settingsVoiceMeter.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio display'**
+  String get settingsVoiceMeter;
+
+  /// No description provided for @settingsVoiceMeterMic.
+  ///
+  /// In en, this message translates to:
+  /// **'My microphone'**
+  String get settingsVoiceMeterMic;
+
+  /// No description provided for @settingsVoiceMeterReceived.
+  ///
+  /// In en, this message translates to:
+  /// **'Received audio'**
+  String get settingsVoiceMeterReceived;
+
   /// No description provided for @settingsDeviceDefault.
   ///
   /// In en, this message translates to:
@@ -769,18 +769,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Storage directory'**
   String get settingsStorePath;
-
-  /// No description provided for @settingsStorePathDesc.
-  ///
-  /// In en, this message translates to:
-  /// **'Where profiles and preferences live'**
-  String get settingsStorePathDesc;
-
-  /// No description provided for @settingsAboutTagline.
-  ///
-  /// In en, this message translates to:
-  /// **'Self-hosted TeamSpeak client'**
-  String get settingsAboutTagline;
 }
 
 class _AppLocalizationsDelegate

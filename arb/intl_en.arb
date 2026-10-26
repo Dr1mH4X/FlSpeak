@@ -111,7 +111,7 @@
   "channelPasswordProtected": "Channel password required",
   "channelJoinMenu": "Join channel",
   "channelPaneResize": "Resize channel pane",
-  "channelPaneResizeHint": "Drag to resize, double-click to reset",
+  
   "voiceMute": "Mute",
   "voiceUnmute": "Unmute",
   "voiceDeafen": "Deafen",
@@ -173,12 +173,10 @@
   "settingsLanguage": "Language",
   "settingsLanguageSystem": "System",
   "settingsTheme": "Appearance",
-  "settingsThemeDesc": "System, light or dark",
   "settingsThemeSystem": "System",
   "settingsThemeLight": "Light",
   "settingsThemeDark": "Dark",
   "settingsPttMode": "Push to talk",
-  "settingsPttModeDesc": "When off, voice activation is used",
   "settingsPttHotkey": "Push-to-talk hotkey",
   "settingsPttHotkeyNone": "Not set",
   "settingsPttHotkeyRecordTitle": "Record hotkey",
@@ -187,10 +185,11 @@
   "settingsPttHotkeyClear": "Clear",
   "settingsInputDevice": "Microphone",
   "settingsOutputDevice": "Speaker",
+  "settingsVoiceMeter": "Audio display",
+  "settingsVoiceMeterMic": "My microphone",
+  "settingsVoiceMeterReceived": "Received audio",
   "settingsDeviceDefault": "System default",
   "settingsAudioUnavailable": "Audio devices unavailable",
   "settingsAudioLoading": "Reading audio devices…",
-  "settingsStorePath": "Storage directory",
-  "settingsStorePathDesc": "Where profiles and preferences live",
-  "settingsAboutTagline": "Self-hosted TeamSpeak client"
+  "settingsStorePath": "Storage directory"
 }

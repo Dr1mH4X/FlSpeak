@@ -112,40 +112,36 @@ class _ChannelPaneResizerState extends ConsumerState<ChannelPaneResizer> {
           decreasedValue: '${_clamp(width - ChannelPaneResizer.step).round()}',
           onIncrease: () => _nudge(ChannelPaneResizer.step),
           onDecrease: () => _nudge(-ChannelPaneResizer.step),
-          child: Tooltip(
-            message: l10n.channelPaneResizeHint,
-            child: MouseRegion(
-              cursor: SystemMouseCursors.resizeColumn,
-              onEnter: (_) => setState(() => _hovered = true),
-              onExit: (_) => setState(() => _hovered = false),
-              child: GestureDetector(
-                key: ChannelPaneResizer.handleKey,
-                behavior: HitTestBehavior.opaque,
-                // 分隔条贴在频道栏右侧：向右拖就是加宽频道栏。
-                onHorizontalDragStart: (_) => setState(() => _dragging = width),
-                onHorizontalDragUpdate: (details) => setState(
-                  () => _dragging = _clamp(_width + details.delta.dx),
-                ),
-                onHorizontalDragEnd: (_) => _endDrag(),
-                onHorizontalDragCancel: _endDrag,
-                onDoubleTap: _reset,
-                child: SizedBox(
-                  width: ChannelPaneResizer.handleWidth,
-                  child: Center(
-                    // 指针靠近时才浮出的握把：告诉用户这里可以拖，
-                    // 静止画面里不画任何线。
-                    child: AnimatedContainer(
-                      key: ChannelPaneResizer.gripKey,
-                      duration: duration,
-                      curve: Motion.effectsDefaultCurve,
-                      width: dragging ? 4 : 3,
-                      height: dragging ? 48 : (_hovered ? 32 : 0),
-                      decoration: BoxDecoration(
-                        color: scheme.primary.withValues(
-                          alpha: dragging ? 1 : 0.72,
-                        ),
-                        borderRadius: Radii.pillAll,
+          child: MouseRegion(
+            cursor: SystemMouseCursors.resizeColumn,
+            onEnter: (_) => setState(() => _hovered = true),
+            onExit: (_) => setState(() => _hovered = false),
+            child: GestureDetector(
+              key: ChannelPaneResizer.handleKey,
+              behavior: HitTestBehavior.opaque,
+              // 分隔条贴在频道栏右侧：向右拖就是加宽频道栏。
+              onHorizontalDragStart: (_) => setState(() => _dragging = width),
+              onHorizontalDragUpdate: (details) =>
+                  setState(() => _dragging = _clamp(_width + details.delta.dx)),
+              onHorizontalDragEnd: (_) => _endDrag(),
+              onHorizontalDragCancel: _endDrag,
+              onDoubleTap: _reset,
+              child: SizedBox(
+                width: ChannelPaneResizer.handleWidth,
+                child: Center(
+                  // 指针靠近时才浮出的握把：告诉用户这里可以拖，
+                  // 静止画面里不画任何线。
+                  child: AnimatedContainer(
+                    key: ChannelPaneResizer.gripKey,
+                    duration: duration,
+                    curve: Motion.effectsDefaultCurve,
+                    width: dragging ? 4 : 3,
+                    height: dragging ? 48 : (_hovered ? 32 : 0),
+                    decoration: BoxDecoration(
+                      color: scheme.primary.withValues(
+                        alpha: dragging ? 1 : 0.72,
                       ),
+                      borderRadius: Radii.pillAll,
                     ),
                   ),
                 ),

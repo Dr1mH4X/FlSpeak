@@ -28,7 +28,6 @@ class LoginRail extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(bottom: 16),
             child: IconButton(
-              tooltip: l10n.settingsTitle,
               onPressed: onSettings,
               iconSize: 20,
               color: scheme.onSurfaceVariant,
@@ -37,7 +36,10 @@ class LoginRail extends StatelessWidget {
                 maximumSize: const Size(Sizes.touch, Sizes.touch),
                 padding: EdgeInsets.zero,
               ),
-              icon: const Icon(Icons.settings_rounded),
+              icon: Icon(
+                Icons.settings_rounded,
+                semanticLabel: l10n.settingsTitle,
+              ),
             ),
           ),
         ],

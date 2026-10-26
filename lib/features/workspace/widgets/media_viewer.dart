@@ -130,13 +130,16 @@ class _MediaViewerState extends State<MediaViewer> {
                 child: Row(
                   children: [
                     IconButton(
-                      tooltip: l10n.commonClose,
                       onPressed: _close,
                       style: IconButton.styleFrom(
                         minimumSize: const Size(Sizes.touch, Sizes.touch),
                         foregroundColor: _viewerForeground,
                       ),
-                      icon: const Icon(Icons.close_rounded, size: 24),
+                      icon: Icon(
+                        Icons.close_rounded,
+                        size: 24,
+                        semanticLabel: l10n.commonClose,
+                      ),
                     ),
                     const SizedBox(width: 4),
                     Expanded(
@@ -198,7 +201,7 @@ class _MediaViewerState extends State<MediaViewer> {
                       bottom: 0,
                       child: Center(
                         child: _ViewerNavButton(
-                          tooltip: l10n.mediaPrevious,
+                          label: l10n.mediaPrevious,
                           icon: Icons.chevron_left_rounded,
                           onPressed: () => _goTo(_index - 1),
                         ),
@@ -211,7 +214,7 @@ class _MediaViewerState extends State<MediaViewer> {
                       bottom: 0,
                       child: Center(
                         child: _ViewerNavButton(
-                          tooltip: l10n.mediaNext,
+                          label: l10n.mediaNext,
                           icon: Icons.chevron_right_rounded,
                           onPressed: () => _goTo(_index + 1),
                         ),
@@ -286,12 +289,12 @@ class _ViewerImage extends StatelessWidget {
 
 class _ViewerNavButton extends StatelessWidget {
   const _ViewerNavButton({
-    required this.tooltip,
+    required this.label,
     required this.icon,
     required this.onPressed,
   });
 
-  final String tooltip;
+  final String label;
   final IconData icon;
   final VoidCallback onPressed;
 
@@ -304,14 +307,13 @@ class _ViewerNavButton extends StatelessWidget {
       child: SizedBox.square(
         dimension: 48,
         child: IconButton(
-          tooltip: tooltip,
           onPressed: onPressed,
           padding: EdgeInsets.zero,
           style: IconButton.styleFrom(
             foregroundColor: _viewerForeground,
             minimumSize: const Size(48, 48),
           ),
-          icon: Icon(icon, size: 26),
+          icon: Icon(icon, size: 26, semanticLabel: label),
         ),
       ),
     );

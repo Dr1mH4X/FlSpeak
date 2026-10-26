@@ -57,6 +57,13 @@ on_voice_data ──有界通道──> playback 线程
   避免多人同时说话硬削顶。
 - deafen 清空解码状态并输出静音；mute/deafen 都会阻止上行。
 
+## 电平
+
+- capture 与 playback 线程各自对采集样本、远端混音算 RMS，经 -60–0dB 映射、噪声门与
+  一阶平滑后，由 playback 线程以 ≤10Hz 合成一条 `Levels { mic, received }` 事件。
+- 事件只带两个 0–1 标量，不携带音频样本；Dart 用独立流接收，避免 10Hz 重建整个会话状态。
+- 静音、聋听、没有输出流或没有活跃说话人时电平归零。
+
 ## 失败语义
 
 - 设备打开失败只发 `Voice` 事件并保持连接；聊天、频道、文件传输继续可用。
@@ -68,6 +75,7 @@ on_voice_data ──有界通道──> playback 线程
 - `convert`：直通、单声道↔立体声、24k↔48k、分块边界连续。
 - `capture`：分帧编码、VAD、PTT、mute/deafen、codec 重建、缓冲水位、pacer。
 - `playback`：目标延迟、突发预缓冲、PLC、deafen、坏包、混音削波、说话人淡出。
+- `level`：RMS、dB 映射与噪声门、平滑、10Hz 节流。
 - 设备与真实服务器不在单测里碰；真机/真服务器验证由人工完成。
 
 ## 依赖与构建
@@ -97,4 +105,5 @@ cargo test -p server -p proto
 - 没有降噪、AGC、去混响；VAD 是能量阈值，机械键盘会误触发。
 - 没有真正的语音重排序/去重/精确丢包检测。上游候选改动是给 `VoiceData` 加
   `packet_id`；拿到序号后只需替换 jitter buffer，不动混音层。
-- 不传本地电平/波形；`Speaking` 只在活跃集合变化时发低频事件。
+- 界面只收 ≤10Hz 的聚合电平（本端麦克风、远端混音）；不传音频样本或逐帧波形。
+  `Speaking` 只在活跃集合变化时发低频事件。

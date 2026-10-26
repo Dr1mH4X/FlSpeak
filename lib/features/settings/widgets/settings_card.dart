@@ -53,7 +53,6 @@ class SettingsRow extends StatelessWidget {
     required this.icon,
     required this.title,
     this.subtitle,
-    this.description,
     this.subtitleColor,
     this.trailing,
     this.onTap,
@@ -64,11 +63,8 @@ class SettingsRow extends StatelessWidget {
   final IconData icon;
   final String title;
 
-  /// 当前值，例如昵称、当前语言、当前设备名。
+  /// 当前值，例如昵称、当前语言、当前设备名。设置行不承载解释文案。
   final String? subtitle;
-
-  /// 补充说明，例如「连接服务器时使用的昵称」。
-  final String? description;
 
   /// 副标题上色；连接状态用语义色，其余保持中性。
   final Color? subtitleColor;
@@ -88,23 +84,6 @@ class SettingsRow extends StatelessWidget {
     final foreground = destructive ? scheme.error : scheme.onSurface;
     final secondary = scheme.onSurfaceVariant;
 
-    final lines = <Widget>[
-      if (subtitle != null)
-        Text(
-          subtitle!,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: texts.bodySmall?.copyWith(color: subtitleColor ?? secondary),
-        ),
-      if (description != null)
-        Text(
-          description!,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: texts.bodySmall?.copyWith(color: secondary),
-        ),
-    ];
-
     // M3 list item：ink/hover/semantics 交给 ListTile，样式仍由主题与
     // 这里的显式样式锁住，保持卡片里的行高节奏。
     return ListTile(
@@ -122,17 +101,15 @@ class SettingsRow extends StatelessWidget {
           color: foreground,
         ),
       ),
-      subtitle: lines.isEmpty
+      subtitle: subtitle == null
           ? null
-          : Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (var index = 0; index < lines.length; index++) ...[
-                  if (index > 0) const SizedBox(height: 2),
-                  lines[index],
-                ],
-              ],
+          : Text(
+              subtitle!,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: texts.bodySmall?.copyWith(
+                color: subtitleColor ?? secondary,
+              ),
             ),
       trailing:
           trailing ??

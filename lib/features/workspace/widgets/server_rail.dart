@@ -82,9 +82,8 @@ class ServerRail extends ConsumerWidget {
               // 空槽位：与服务器磁贴同几何（48 / r16），不描边、不填充，
               // 识别落在 20px 的 + 图标上（rail 上 5.24:1 / 9.31:1）。
               child: IconButton(
-                tooltip: l10n.serverAdd,
                 onPressed: () => runFromRail(onAdd),
-                icon: const Icon(Icons.add_rounded),
+                icon: Icon(Icons.add_rounded, semanticLabel: l10n.serverAdd),
                 style: ButtonStyle(
                   // 键盘焦点仍需可见：2px primary 环，未聚焦时同宽全透明。
                   side: WidgetStateProperty.resolveWith(
@@ -126,7 +125,6 @@ class ServerRail extends ConsumerWidget {
               // 设置是常驻 chrome，不是「选中的东西」：无底色，交互只走
               // state layer，与连接页 LoginRail 的同一个按钮同形。
               child: IconButton(
-                tooltip: l10n.settingsTitle,
                 onPressed: () => runFromRail(onSettings),
                 iconSize: 20,
                 color: scheme.onSurfaceVariant,
@@ -136,7 +134,10 @@ class ServerRail extends ConsumerWidget {
                   padding: EdgeInsets.zero,
                   overlayColor: scheme.onSurfaceVariant,
                 ),
-                icon: const Icon(Icons.settings_rounded),
+                icon: Icon(
+                  Icons.settings_rounded,
+                  semanticLabel: l10n.settingsTitle,
+                ),
               ),
             ),
           ],
@@ -172,11 +173,11 @@ class _ServerTile extends StatelessWidget {
     final texts = context.texts;
     final monogram = serverMonogram(server.label, server.host);
 
-    final tooltip = StringBuffer(
-      '${server.label}\n${server.host}:${server.port}',
+    final semanticsLabel = StringBuffer(
+      '${server.label} · ${server.host}:${server.port}',
     );
     if (connected) {
-      tooltip.write('\n${l10n.sessionConnected}');
+      semanticsLabel.write(' · ${l10n.sessionConnected}');
     }
 
     return Padding(
@@ -191,82 +192,76 @@ class _ServerTile extends StatelessWidget {
             child: Text(l10n.serverDisconnect),
           ),
         ],
-        builder: (context, menuController) => Tooltip(
-          message: tooltip.toString(),
-          waitDuration: const Duration(milliseconds: 400),
-          child: Semantics(
-            button: true,
-            selected: online,
-            excludeSemantics: true,
-            label: '${server.label} · ${server.host}:${server.port}',
-            child: InkWell(
-              onTap: onTap,
-              borderRadius: Radii.largeAll,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        AnimatedContainer(
-                          duration: MediaQuery.disableAnimationsOf(context)
-                              ? Duration.zero
-                              : Motion.effectsFast,
-                          curve: Motion.effectsFastCurve,
-                          width: 56,
-                          height: 32,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: online
-                                ? scheme.primaryContainer
-                                : Colors.transparent,
-                            borderRadius: Radii.pillAll,
-                          ),
-                          child: Text(
-                            monogram,
-                            style: texts.labelLarge?.copyWith(
-                              color: online
-                                  ? scheme.onPrimaryContainer
-                                  : scheme.onSurfaceVariant,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        if (connected)
-                          Positioned(
-                            right: -2,
-                            bottom: -2,
-                            child: StatusDot(
-                              color: context.status.live,
-                              ringColor: scheme.surfaceContainer,
-                              size: 10,
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 3),
-                    SizedBox(
-                      width: 64,
-                      child: Text(
-                        server.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                        style: texts.labelSmall?.copyWith(
-                          fontSize: 11,
+        builder: (context, menuController) => Semantics(
+          button: true,
+          selected: online,
+          excludeSemantics: true,
+          label: semanticsLabel.toString(),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: Radii.largeAll,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      AnimatedContainer(
+                        duration: MediaQuery.disableAnimationsOf(context)
+                            ? Duration.zero
+                            : Motion.effectsFast,
+                        curve: Motion.effectsFastCurve,
+                        width: 56,
+                        height: 32,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
                           color: online
-                              ? scheme.onSurface
-                              : scheme.onSurfaceVariant,
-                          fontWeight: online
-                              ? FontWeight.w600
-                              : FontWeight.w500,
+                              ? scheme.primaryContainer
+                              : Colors.transparent,
+                          borderRadius: Radii.pillAll,
+                        ),
+                        child: Text(
+                          monogram,
+                          style: texts.labelLarge?.copyWith(
+                            color: online
+                                ? scheme.onPrimaryContainer
+                                : scheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
+                      if (connected)
+                        Positioned(
+                          right: -2,
+                          bottom: -2,
+                          child: StatusDot(
+                            color: context.status.live,
+                            ringColor: scheme.surfaceContainer,
+                            size: 10,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  SizedBox(
+                    width: 64,
+                    child: Text(
+                      server.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: texts.labelSmall?.copyWith(
+                        fontSize: 11,
+                        color: online
+                            ? scheme.onSurface
+                            : scheme.onSurfaceVariant,
+                        fontWeight: online ? FontWeight.w600 : FontWeight.w500,
+                      ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),

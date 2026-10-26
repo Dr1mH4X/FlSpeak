@@ -234,7 +234,6 @@ class _ChatPaneState extends State<ChatPane> {
                 ValueListenableBuilder<TextEditingValue>(
                   valueListenable: _input,
                   builder: (context, value, child) => IconButton.filled(
-                    tooltip: l10n.chatSend,
                     onPressed: !widget.busy && value.text.trim().isNotEmpty
                         ? _send
                         : null,
@@ -242,7 +241,11 @@ class _ChatPaneState extends State<ChatPane> {
                       minimumSize: const Size(Sizes.touch, Sizes.touch),
                       shape: const CircleBorder(),
                     ),
-                    icon: const Icon(Icons.send_rounded, size: 20),
+                    icon: Icon(
+                      Icons.send_rounded,
+                      size: 20,
+                      semanticLabel: l10n.chatSend,
+                    ),
                   ),
                 ),
               ],
@@ -267,19 +270,20 @@ class _ScopeButton extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
     final server = scope == ChatScope.server;
+    final label =
+        '${l10n.chatScopeTitle} · '
+        '${server ? l10n.chatScopeServer : l10n.chatScopeChannel}';
 
     return SizedBox.square(
       dimension: Sizes.touch,
       child: IconButton(
-        tooltip:
-            '${l10n.chatScopeTitle} · '
-            '${server ? l10n.chatScopeServer : l10n.chatScopeChannel}',
         onPressed: () =>
             onChanged(server ? ChatScope.channel : ChatScope.server),
         iconSize: 20,
         icon: Icon(
           server ? Icons.public_rounded : Icons.chat_bubble_rounded,
           color: scheme.onSurfaceVariant,
+          semanticLabel: label,
         ),
       ),
     );

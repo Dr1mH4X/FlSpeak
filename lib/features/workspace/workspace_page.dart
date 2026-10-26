@@ -207,7 +207,7 @@ class _ChannelHeader extends StatelessWidget {
   final String? channelName;
   final TabController tabController;
 
-  /// 三个页签的文字宽度随语言和字号变化；放不下时退回「图标 + tooltip」，
+  /// 三个页签的文字宽度随语言和字号变化；放不下时退回「图标 + 语义标签」，
   /// 否则英文长标签或放大字号会把标题挤成零宽。
   bool _tabsFit(
     BuildContext context,
@@ -260,12 +260,15 @@ class _ChannelHeader extends StatelessWidget {
               children: [
                 if (compact) ...[
                   IconButton(
-                    tooltip: l10n.workspaceOpenMenu,
                     onPressed: () => Scaffold.of(context).openDrawer(),
                     style: IconButton.styleFrom(
                       minimumSize: const Size(Sizes.touch, Sizes.touch),
                     ),
-                    icon: const Icon(Icons.menu_rounded, size: 24),
+                    icon: Icon(
+                      Icons.menu_rounded,
+                      size: 24,
+                      semanticLabel: l10n.workspaceOpenMenu,
+                    ),
                   ),
                   const SizedBox(width: 8),
                 ],
@@ -338,7 +341,7 @@ class _ViewTabs extends StatelessWidget {
                       Text(tab.label, maxLines: 1),
                     ],
                   )
-                : Tooltip(message: tab.label, child: Icon(tab.icon, size: 18)),
+                : Icon(tab.icon, size: 18, semanticLabel: tab.label),
           ),
       ],
     );
@@ -427,7 +430,7 @@ class _VoiceAlerts extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
             child: NoticeBar(
               message: view.voiceNotice!,
-              dismissTooltip: l10n.commonClose,
+
               onDismiss: onDismissNotice,
             ),
           ),

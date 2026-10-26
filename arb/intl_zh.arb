@@ -111,7 +111,7 @@
   "channelPasswordProtected": "需要频道密码",
   "channelJoinMenu": "加入频道",
   "channelPaneResize": "调整频道栏宽度",
-  "channelPaneResizeHint": "拖动调整宽度，双击恢复默认",
+  
   "voiceMute": "静音",
   "voiceUnmute": "取消静音",
   "voiceDeafen": "关闭声音",
@@ -173,12 +173,10 @@
   "settingsLanguage": "语言",
   "settingsLanguageSystem": "跟随系统",
   "settingsTheme": "外观",
-  "settingsThemeDesc": "跟随系统、浅色或深色",
   "settingsThemeSystem": "跟随系统",
   "settingsThemeLight": "浅色",
   "settingsThemeDark": "深色",
   "settingsPttMode": "按住说话",
-  "settingsPttModeDesc": "关闭时使用语音激活",
   "settingsPttHotkey": "按住说话快捷键",
   "settingsPttHotkeyNone": "未设置",
   "settingsPttHotkeyRecordTitle": "录制快捷键",
@@ -187,10 +185,11 @@
   "settingsPttHotkeyClear": "清除",
   "settingsInputDevice": "麦克风",
   "settingsOutputDevice": "扬声器",
+  "settingsVoiceMeter": "音频显示",
+  "settingsVoiceMeterMic": "自己麦克风",
+  "settingsVoiceMeterReceived": "接收到的音频",
   "settingsDeviceDefault": "系统默认",
   "settingsAudioUnavailable": "音频设备不可用",
   "settingsAudioLoading": "正在读取音频设备…",
-  "settingsStorePath": "存储目录",
-  "settingsStorePathDesc": "服务器档案与偏好文件的位置",
-  "settingsAboutTagline": "自托管 TeamSpeak 客户端"
+  "settingsStorePath": "存储目录"
 }

@@ -545,14 +545,6 @@ ThemeData buildAppTheme(Brightness brightness) {
         borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xxxl)),
       ),
     ),
-    tooltipTheme: TooltipThemeData(
-      waitDuration: const Duration(milliseconds: 500),
-      textStyle: text.bodySmall?.copyWith(color: scheme.onInverseSurface),
-      decoration: BoxDecoration(
-        color: scheme.inverseSurface,
-        borderRadius: Radii.mediumAll,
-      ),
-    ),
     snackBarTheme: SnackBarThemeData(
       behavior: SnackBarBehavior.floating,
       backgroundColor: scheme.inverseSurface,

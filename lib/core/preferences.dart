@@ -24,6 +24,25 @@ enum AppThemePreference {
   }
 }
 
+/// 用户卡电平条跟随的音频源。JSON 存稳定字符串，改枚举名不毁旧文件。
+enum VoiceMeterSource {
+  microphone('microphone'),
+  received('received');
+
+  const VoiceMeterSource(this.id);
+
+  final String id;
+
+  static VoiceMeterSource fromId(Object? value) {
+    for (final source in values) {
+      if (source.id == value) {
+        return source;
+      }
+    }
+    return VoiceMeterSource.microphone;
+  }
+}
+
 /// 昵称、最近连接时间与界面偏好。
 ///
 /// 这是界面元数据，不是身份私钥：私钥始终只由 Rust 读写。等后端把身份模型
@@ -37,6 +56,7 @@ class SessionPreferences {
     this.theme = AppThemePreference.system,
     this.pttHotkey,
     this.channelPanelWidth,
+    this.voiceMeterSource = VoiceMeterSource.microphone,
   });
 
   /// 没有设置过昵称时的默认值。
@@ -62,6 +82,8 @@ class SessionPreferences {
   /// 频道栏宽度（逻辑像素）；`null` 表示用默认宽度。
   final double? channelPanelWidth;
 
+  final VoiceMeterSource voiceMeterSource;
+
   SessionPreferences copyWith({
     String? nickname,
     Map<String, DateTime>? lastConnected,
@@ -69,6 +91,7 @@ class SessionPreferences {
     AppThemePreference? theme,
     Object? pttHotkey = _unset,
     Object? channelPanelWidth = _unset,
+    VoiceMeterSource? voiceMeterSource,
   }) => SessionPreferences(
     nickname: nickname ?? this.nickname,
     lastConnected: lastConnected ?? this.lastConnected,
@@ -80,6 +103,7 @@ class SessionPreferences {
     channelPanelWidth: identical(channelPanelWidth, _unset)
         ? this.channelPanelWidth
         : channelPanelWidth as double?,
+    voiceMeterSource: voiceMeterSource ?? this.voiceMeterSource,
   );
 
   Map<String, Object?> toJson() => {
@@ -93,6 +117,7 @@ class SessionPreferences {
     'theme': theme.id,
     'pttHotkey': pttHotkey,
     'channelPanelWidth': channelPanelWidth,
+    'voiceMeterSource': voiceMeterSource.id,
   };
 
   static SessionPreferences fromJson(Map<String, Object?> json) {
@@ -124,6 +149,7 @@ class SessionPreferences {
       channelPanelWidth: rawPanelWidth is num && rawPanelWidth.isFinite
           ? rawPanelWidth.toDouble()
           : null,
+      voiceMeterSource: VoiceMeterSource.fromId(json['voiceMeterSource']),
     );
   }
 }

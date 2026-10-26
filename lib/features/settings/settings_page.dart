@@ -63,7 +63,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             icon: Icons.palette_rounded,
             title: l10n.settingsTheme,
             subtitle: _themeLabel(l10n, preferences.theme),
-            description: l10n.settingsThemeDesc,
             onTap: () => unawaited(_pickTheme(preferences.theme)),
           ),
         ],
@@ -74,7 +73,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           SettingsRow(
             icon: Icons.record_voice_over_rounded,
             title: l10n.settingsPttMode,
-            description: l10n.settingsPttModeDesc,
             trailing: Switch(
               value: view.pttMode,
               onChanged: (enabled) => unawaited(
@@ -109,6 +107,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               _pickAudioDevice(selection: audioSelection, output: true),
             ),
           ),
+          SettingsRow(
+            icon: Icons.graphic_eq_rounded,
+            title: l10n.settingsVoiceMeter,
+            subtitle: _voiceMeterLabel(l10n, preferences.voiceMeterSource),
+            onTap: () =>
+                unawaited(_pickVoiceMeter(preferences.voiceMeterSource)),
+          ),
         ],
       ),
       SettingsGroup(
@@ -118,11 +123,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             icon: Icons.folder_rounded,
             title: l10n.settingsStorePath,
             subtitle: storePath,
-            description: l10n.settingsStorePathDesc,
             trailing: IconButton(
-              tooltip: l10n.commonCopy,
               onPressed: () => unawaited(_copyStorePath(storePath)),
-              icon: const Icon(Icons.copy_rounded, size: 18),
+              icon: Icon(
+                Icons.copy_rounded,
+                size: 18,
+                semanticLabel: l10n.commonCopy,
+              ),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints.tightFor(width: 44, height: 44),
             ),
@@ -184,6 +191,21 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     ref
         .read(preferencesProvider.notifier)
         .setLocale(code.isEmpty ? null : code);
+  }
+
+  Future<void> _pickVoiceMeter(VoiceMeterSource current) async {
+    final l10n = AppLocalizations.of(context);
+    final source = await showSettingsOptions<VoiceMeterSource>(
+      context,
+      title: l10n.settingsVoiceMeter,
+      options: VoiceMeterSource.values,
+      current: current,
+      labelBuilder: (context, value) => _voiceMeterLabel(l10n, value),
+    );
+    if (source == null) {
+      return;
+    }
+    ref.read(preferencesProvider.notifier).setVoiceMeterSource(source);
   }
 
   Future<void> _pickTheme(AppThemePreference current) async {
@@ -268,25 +290,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Widget _about(AppLocalizations l10n) {
-    final scheme = context.scheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(l10n.appName, style: context.texts.titleMedium),
-          const SizedBox(height: 2),
-          Text(
-            l10n.settingsAboutTagline,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: context.texts.bodySmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
+      child: Text(l10n.appName, style: context.texts.titleMedium),
     );
   }
 }
@@ -310,10 +316,13 @@ class _SettingsTopBar extends StatelessWidget {
             child: Row(
               children: [
                 IconButton(
-                  tooltip: MaterialLocalizations.of(context).backButtonTooltip,
                   onPressed: onBack,
                   iconSize: 20,
-                  icon: const Icon(Icons.arrow_back_rounded),
+                  icon: Icon(
+                    Icons.arrow_back_rounded,
+                    semanticLabel: MaterialLocalizations.of(context)
+                        .backButtonTooltip,
+                  ),
                 ),
                 const SizedBox(width: 4),
                 Expanded(
@@ -417,6 +426,12 @@ String _themeLabel(AppLocalizations l10n, AppThemePreference theme) =>
       AppThemePreference.system => l10n.settingsThemeSystem,
       AppThemePreference.light => l10n.settingsThemeLight,
       AppThemePreference.dark => l10n.settingsThemeDark,
+    };
+
+String _voiceMeterLabel(AppLocalizations l10n, VoiceMeterSource source) =>
+    switch (source) {
+      VoiceMeterSource.microphone => l10n.settingsVoiceMeterMic,
+      VoiceMeterSource.received => l10n.settingsVoiceMeterReceived,
     };
 
 /// 快捷键录制面板：按下任意受支持的键即保存并关闭，Esc 取消。

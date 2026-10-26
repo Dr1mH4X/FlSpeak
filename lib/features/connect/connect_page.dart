@@ -458,7 +458,6 @@ class _ServerSection extends StatelessWidget {
                       ),
                     )
                   : IconButton.outlined(
-                      tooltip: l10n.serverAdd,
                       onPressed: onAdd,
                       iconSize: 18,
                       style: IconButton.styleFrom(
@@ -466,7 +465,10 @@ class _ServerSection extends StatelessWidget {
                         maximumSize: const Size(Sizes.touch, Sizes.touch),
                         padding: EdgeInsets.zero,
                       ),
-                      icon: const Icon(Icons.add_rounded),
+                      icon: Icon(
+                        Icons.add_rounded,
+                        semanticLabel: l10n.serverAdd,
+                      ),
                     ),
           ],
         ),
@@ -483,7 +485,7 @@ class _ServerSection extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 16),
                   child: NoticeBar(
                     message: notice!,
-                    dismissTooltip: l10n.commonClose,
+
                     onDismiss: onDismissNotice,
                   ),
                 ),

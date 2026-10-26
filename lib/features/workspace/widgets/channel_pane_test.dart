@@ -6,6 +6,7 @@ import 'package:flspeak/core/models.dart';
 import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/features/workspace/workspace_state.dart';
 import 'package:flspeak/features/workspace/widgets/channel_pane.dart';
+import 'package:flspeak/features/workspace/widgets/voice_activity_ribbon.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:flutter/gestures.dart';
@@ -88,6 +89,17 @@ ProviderContainer _container(WidgetTester tester) =>
     ProviderScope.containerOf(tester.element(find.byType(ChannelPanel)));
 
 void main() {
+  testWidgets('底部用户卡只留控制按钮与电平条', (tester) async {
+    await _pumpPane(tester, _view([_channel(1, name: '大厅')]));
+
+    expect(find.byType(VoiceActivityRibbon), findsOneWidget);
+    expect(find.text('Connected'), findsNothing);
+    expect(find.text('Offline'), findsNothing);
+    expect(find.byIcon(Icons.mic_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.headphones_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.schedule_rounded), findsOneWidget);
+  });
+
   testWidgets('spacer 行与普通频道同尺寸，且点击/选中行为一致', (tester) async {
     final view = _view(
       [

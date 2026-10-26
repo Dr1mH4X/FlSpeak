@@ -14,6 +14,7 @@ import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
 import '../../../widgets/monogram.dart';
 import '../workspace_state.dart';
+import 'voice_activity_ribbon.dart';
 
 /// 频道栏：服务器身份、统一的频道树、当前用户。
 ///
@@ -47,9 +48,6 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
     final scheme = context.scheme;
     final view = ref.watch(sessionViewProvider);
     final activeId = ref.watch(activeChannelIdProvider);
-    final String nickname =
-        view.selfClient?.nickname ??
-        ref.watch(preferencesProvider.select((prefs) => prefs.nickname));
 
     void select(ChannelView channel) {
       ref
@@ -138,8 +136,6 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
             ),
           ),
           _UserFooter(
-            nickname: nickname,
-            connected: view.connected,
             muted: view.muted,
             deafened: view.deafened,
             away: view.away,
@@ -376,13 +372,12 @@ class _ChannelTile extends StatelessWidget {
                                 if (channel.passwordProtected == true)
                                   Padding(
                                     padding: const EdgeInsets.only(left: 6),
-                                    child: Tooltip(
-                                      message: l10n.channelPasswordProtected,
-                                      child: Icon(
-                                        Icons.lock_rounded,
-                                        size: 15,
-                                        color: foreground,
-                                      ),
+                                    child: Icon(
+                                      Icons.lock_rounded,
+                                      size: 15,
+                                      color: foreground,
+                                      semanticLabel:
+                                          l10n.channelPasswordProtected,
                                     ),
                                   ),
                               ],
@@ -514,17 +509,17 @@ class _MemberTile extends StatelessWidget {
             // 服务器回显的设备状态：快照没带标志（null）时不显示。
             if (client.inputMuted ?? false)
               _MemberFlag(
-                tooltip: l10n.memberMicMuted,
+                label: l10n.memberMicMuted,
                 icon: Icons.mic_off_rounded,
               ),
             if (client.outputMuted ?? false)
               _MemberFlag(
-                tooltip: l10n.memberSpeakerMuted,
+                label: l10n.memberSpeakerMuted,
                 icon: Icons.volume_off_rounded,
               ),
             if (client.away ?? false)
               _MemberFlag(
-                tooltip: switch (client.awayMessage) {
+                label: switch (client.awayMessage) {
                   null || '' => l10n.memberAway,
                   final message => l10n.memberAwayWith(message),
                 },
@@ -540,9 +535,9 @@ class _MemberTile extends StatelessWidget {
 
 /// 成员行尾的状态标志：与其他成员昵称保持间距。
 class _MemberFlag extends StatelessWidget {
-  const _MemberFlag({required this.tooltip, required this.icon, this.color});
+  const _MemberFlag({required this.label, required this.icon, this.color});
 
-  final String tooltip;
+  final String label;
   final IconData icon;
 
   /// 静音类标志缺省用 error，离开这类中性状态换主色。
@@ -553,20 +548,21 @@ class _MemberFlag extends StatelessWidget {
     final scheme = context.scheme;
     return Padding(
       padding: const EdgeInsets.only(left: 6),
-      child: Tooltip(
-        message: tooltip,
-        child: Icon(icon, size: 14, color: color ?? scheme.error),
+      child: Icon(
+        icon,
+        size: 14,
+        color: color ?? scheme.error,
+        semanticLabel: label,
       ),
     );
   }
 }
 
-/// 已连接语音卡：只陈述状态，不放「断开语音」——TeamSpeak 没有「离开语音但不离开
-/// 频道」这个概念，真正的断开入口在频道栏菜单里。
+/// 语音卡：背景是所选声源的电平历史，前景只留三个控制开关。
+///
+/// 昵称与连接状态不再占这张卡；真正的断开入口在服务器栏的右键菜单里。
 class _UserFooter extends StatelessWidget {
   const _UserFooter({
-    required this.nickname,
-    required this.connected,
     required this.muted,
     required this.deafened,
     required this.away,
@@ -575,8 +571,6 @@ class _UserFooter extends StatelessWidget {
     required this.onToggleAway,
   });
 
-  final String nickname;
-  final bool connected;
   final bool muted;
   final bool deafened;
   final bool away;
@@ -591,59 +585,41 @@ class _UserFooter extends StatelessWidget {
 
     return Material(
       color: scheme.surfaceContainer,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
+      child: SizedBox(
+        height: 68,
+        child: Stack(
+          fit: StackFit.expand,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
+            const VoiceActivityRibbon(),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  Text(
-                    nickname,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: context.texts.bodyMedium?.copyWith(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
+                  _IconToggle(
+                    label: muted ? l10n.voiceUnmute : l10n.voiceMute,
+                    icon: muted ? Icons.mic_off_rounded : Icons.mic_rounded,
+                    active: muted,
+                    onTap: onToggleMute,
                   ),
-                  Text(
-                    connected
-                        ? l10n.sessionConnected
-                        : l10n.sessionDisconnected,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: context.texts.bodySmall?.copyWith(
-                      fontSize: 12,
-                      color: scheme.onSurfaceVariant,
-                    ),
+                  _IconToggle(
+                    label: deafened ? l10n.voiceUndeafen : l10n.voiceDeafen,
+                    icon: deafened
+                        ? Icons.headset_off_rounded
+                        : Icons.headphones_rounded,
+                    active: deafened,
+                    onTap: onToggleDeafen,
+                  ),
+                  _IconToggle(
+                    label: away ? l10n.voiceUnaway : l10n.voiceAway,
+                    icon: Icons.schedule_rounded,
+                    active: away,
+                    activeContainer: scheme.primaryContainer,
+                    activeOnContainer: scheme.onPrimaryContainer,
+                    onTap: onToggleAway,
                   ),
                 ],
               ),
-            ),
-            _IconToggle(
-              tooltip: muted ? l10n.voiceUnmute : l10n.voiceMute,
-              icon: muted ? Icons.mic_off_rounded : Icons.mic_rounded,
-              active: muted,
-              onTap: onToggleMute,
-            ),
-            _IconToggle(
-              tooltip: deafened ? l10n.voiceUndeafen : l10n.voiceDeafen,
-              icon: deafened
-                  ? Icons.headset_off_rounded
-                  : Icons.headphones_rounded,
-              active: deafened,
-              onTap: onToggleDeafen,
-            ),
-            _IconToggle(
-              tooltip: away ? l10n.voiceUnaway : l10n.voiceAway,
-              icon: Icons.schedule_rounded,
-              active: away,
-              activeContainer: scheme.primaryContainer,
-              activeOnContainer: scheme.onPrimaryContainer,
-              onTap: onToggleAway,
             ),
           ],
         ),
@@ -655,7 +631,7 @@ class _UserFooter extends StatelessWidget {
 /// 静音/闭麦开关：视觉圆点 36，落点撑到 44（触摸目标下限）。
 class _IconToggle extends StatelessWidget {
   const _IconToggle({
-    required this.tooltip,
+    required this.label,
     required this.icon,
     required this.active,
     required this.onTap,
@@ -663,7 +639,7 @@ class _IconToggle extends StatelessWidget {
     this.activeOnContainer,
   });
 
-  final String tooltip;
+  final String label;
   final IconData icon;
   final bool active;
   final VoidCallback onTap;
@@ -679,34 +655,32 @@ class _IconToggle extends StatelessWidget {
     final scheme = context.scheme;
     final activeBackground = activeContainer ?? scheme.errorContainer;
     final activeForeground = activeOnContainer ?? scheme.onErrorContainer;
-    return Tooltip(
-      message: tooltip,
-      child: Semantics(
-        button: true,
-        toggled: active,
-        child: InkWell(
-          onTap: onTap,
-          customBorder: const CircleBorder(),
-          child: SizedBox(
-            width: Sizes.touch,
-            height: Sizes.touch,
-            child: Center(
-              child: AnimatedContainer(
-                width: 36,
-                height: 36,
-                duration: MediaQuery.disableAnimationsOf(context)
-                    ? Duration.zero
-                    : Motion.effectsFast,
-                curve: Motion.effectsDefaultCurve,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: active ? activeBackground : Colors.transparent,
-                ),
-                child: Icon(
-                  icon,
-                  size: 20,
-                  color: active ? activeForeground : scheme.onSurfaceVariant,
-                ),
+    return Semantics(
+      label: label,
+      button: true,
+      toggled: active,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: SizedBox(
+          width: Sizes.touch,
+          height: Sizes.touch,
+          child: Center(
+            child: AnimatedContainer(
+              width: 36,
+              height: 36,
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : Motion.effectsFast,
+              curve: Motion.effectsDefaultCurve,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: active ? activeBackground : Colors.transparent,
+              ),
+              child: Icon(
+                icon,
+                size: 20,
+                color: active ? activeForeground : scheme.onSurfaceVariant,
               ),
             ),
           ),

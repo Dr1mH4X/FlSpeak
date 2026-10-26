@@ -7,15 +7,9 @@ import '../theme/app_theme.dart';
 /// 底色用 errorContainer / 前景用 onErrorContainer（M3 语义对）：透明度
 /// 叠色在暗色下发浊，正文对比度也不稳。
 class NoticeBar extends StatelessWidget {
-  const NoticeBar({
-    required this.message,
-    required this.dismissTooltip,
-    required this.onDismiss,
-    super.key,
-  });
+  const NoticeBar({required this.message, required this.onDismiss, super.key});
 
   final String message;
-  final String dismissTooltip;
   final VoidCallback onDismiss;
 
   @override
@@ -52,12 +46,15 @@ class NoticeBar extends StatelessWidget {
             width: 32,
             height: 24,
             child: IconButton(
-              tooltip: dismissTooltip,
               iconSize: 14,
               padding: EdgeInsets.zero,
               color: scheme.onErrorContainer,
               onPressed: onDismiss,
-              icon: const Icon(Icons.close_rounded),
+              icon: Icon(
+                Icons.close_rounded,
+                semanticLabel: MaterialLocalizations.of(context)
+                    .closeButtonTooltip,
+              ),
             ),
           ),
         ],
@@ -266,11 +263,14 @@ class _ModalPanel extends StatelessWidget {
                 ),
               ),
               IconButton(
-                tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
                 onPressed: () => Navigator.of(context).maybePop(),
                 iconSize: 20,
                 color: scheme.onSurfaceVariant,
-                icon: const Icon(Icons.close_rounded),
+                icon: Icon(
+                  Icons.close_rounded,
+                  semanticLabel: MaterialLocalizations.of(context)
+                      .closeButtonTooltip,
+                ),
               ),
             ],
           ),
