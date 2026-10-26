@@ -2268,7 +2268,8 @@ mod tests {
     #[test]
     fn unescape_text_handles_common_teamseek_escapes() {
         assert_eq!(unescape_text("Fl\\sSpeak"), "Fl Speak");
-        assert_eq!(unescape_text("a\\/b\\|c\\\\d"), "a/b|c\\d");
+        // \| 不是转义序列（管道走 \p），按未知转义原样保留。
+        assert_eq!(unescape_text("a\\/b\\|c\\\\d"), "a/b\\|c\\d");
         assert_eq!(unescape_text("普通\\s名字"), "普通 名字");
         // 未知转义原样保留，尾部孤立反斜杠不吞字。
         assert_eq!(unescape_text("a\\qb"), "a\\qb");
