@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
 
-/// 连接页左侧窄栏：顶部是应用标识，底部只放设置。
+/// 连接页左侧窄栏：只有底部设置入口。
 ///
 /// 这里刻意不放删除/退出类操作——连接页不是工作区，底部每多一个破坏性
 /// 入口都在赌误触。
@@ -24,24 +24,6 @@ class LoginRail extends StatelessWidget {
       color: scheme.surfaceContainer,
       child: Column(
         children: [
-          const SizedBox(height: 16),
-          Tooltip(
-            message: l10n.appName,
-            child: Container(
-              width: Sizes.railTile,
-              height: Sizes.railTile,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: scheme.primary,
-                borderRadius: BorderRadius.circular(Radii.large),
-              ),
-              child: Icon(
-                Icons.graphic_eq_rounded,
-                size: 24,
-                color: scheme.onPrimary,
-              ),
-            ),
-          ),
           const Spacer(),
           Padding(
             padding: const EdgeInsets.only(bottom: 16),

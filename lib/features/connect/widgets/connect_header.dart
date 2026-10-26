@@ -4,7 +4,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
 
-/// 连接页顶栏：桌面端显示连接状态，窄屏显示应用标识。
+/// 连接页顶栏：桌面端显示连接状态，窄屏显示应用名。
 ///
 /// 「返回工作区」只在已连接时出现，避免未连接时给出一个进不去的入口。
 class ConnectHeader extends StatelessWidget {
@@ -65,21 +65,6 @@ class ConnectHeader extends StatelessWidget {
                 ),
               ),
             ] else ...[
-              Container(
-                width: 36,
-                height: 36,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: scheme.primary,
-                  borderRadius: BorderRadius.circular(Radii.xl),
-                ),
-                child: Icon(
-                  Icons.graphic_eq_rounded,
-                  size: 20,
-                  color: scheme.onPrimary,
-                ),
-              ),
-              const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   l10n.appName,

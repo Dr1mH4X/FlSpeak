@@ -9,14 +9,14 @@ import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
 import '../../../widgets/monogram.dart';
 
-/// 最左侧的服务器栏：品牌标记、已登记的服务器、添加与设置。
+/// 最左侧的服务器栏：已登记的服务器、添加与设置。
 ///
-/// 宽度固定 80：它是全局导航，不参与内容区的伸缩；品牌标记与设置按钮上下夹住
-/// 服务器列表，扫视顺序稳定。设置放在最底部是用户明确要求的位置
+/// 宽度固定 80：它是全局导航，不参与内容区的伸缩；服务器列表从顶部开始，
+/// 设置按钮压在底部，扫视顺序稳定。设置放在最底部是用户明确要求的位置
 /// （`设置按钮移动到左下角`），这样频道栏底部就留给了语音状态。
 ///
 /// 两个工具入口都不占面：添加与设置都是透明的图标按钮，交互只在状态层上
-/// 表达。rail 的实心重量留给品牌标记和选中的服务器，投影一处也不画。
+/// 表达。rail 的实心重量留给选中的服务器，投影一处也不画。
 class ServerRail extends ConsumerWidget {
   const ServerRail({
     required this.onSelect,
@@ -51,23 +51,6 @@ class ServerRail extends ConsumerWidget {
         child: Column(
           children: [
             const SizedBox(height: 16),
-            Tooltip(
-              message: l10n.appName,
-              child: Container(
-                width: Sizes.railTile,
-                height: Sizes.railTile,
-                decoration: BoxDecoration(
-                  color: scheme.primary,
-                  borderRadius: Radii.largeAll,
-                ),
-                child: Icon(
-                  Icons.graphic_eq_rounded,
-                  size: 26,
-                  color: scheme.onPrimary,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
             Expanded(
               child: ListView.builder(
                 // 底部 12 把最后一个服务器与下面的添加槽位分开：列表结束 /
@@ -95,7 +78,7 @@ class ServerRail extends ConsumerWidget {
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              // 空槽位：与品牌标记同几何（48 / r16），不描边、不填充，
+              // 空槽位：与服务器磁贴同几何（48 / r16），不描边、不填充，
               // 识别落在 20px 的 + 图标上（rail 上 5.24:1 / 9.31:1）。
               child: IconButton(
                 tooltip: l10n.serverAdd,

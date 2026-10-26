@@ -271,39 +271,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final scheme = context.scheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: scheme.primaryContainer,
-              borderRadius: Radii.mediumAll,
-            ),
-            child: Icon(
-              Icons.graphic_eq_rounded,
-              size: 22,
-              color: scheme.onPrimaryContainer,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(l10n.appName, style: context.texts.titleMedium),
-                const SizedBox(height: 2),
-                Text(
-                  l10n.settingsAboutTagline,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: context.texts.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
+          Text(l10n.appName, style: context.texts.titleMedium),
+          const SizedBox(height: 2),
+          Text(
+            l10n.settingsAboutTagline,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: context.texts.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
             ),
           ),
         ],
