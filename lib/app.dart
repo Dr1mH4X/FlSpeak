@@ -11,6 +11,7 @@ import 'core/window_chrome.dart';
 import 'l10n/app_localizations.dart';
 import 'router.dart';
 import 'theme/app_theme.dart';
+import 'widgets/notice_host.dart';
 
 class TsClientApp extends ConsumerStatefulWidget {
   const TsClientApp({super.key});
@@ -121,8 +122,14 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
       },
       theme: buildAppTheme(Brightness.light),
       darkTheme: buildAppTheme(Brightness.dark),
-      builder: (context, child) =>
-          _WindowBackgroundSync(child: child ?? const SizedBox.shrink()),
+      builder: (context, child) => _WindowBackgroundSync(
+        child: Stack(
+          children: [
+            child ?? const SizedBox.shrink(),
+            const Positioned(top: 0, right: 0, child: NoticeHost()),
+          ],
+        ),
+      ),
       routerConfig: router,
     );
   }

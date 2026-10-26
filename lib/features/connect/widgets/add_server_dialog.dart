@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
+import '../../../core/models.dart';
 import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_motion.dart';
@@ -126,23 +127,28 @@ class _AddServerFormState extends ConsumerState<_AddServerForm> {
     setState(() => _error = null);
 
     final label = _label.text.trim();
-    final profile = await ref
-        .read(sessionViewProvider.notifier)
-        .addServer(
-          label: label.isEmpty ? _hostOf(address) : label,
-          address: address,
-        );
-    widget.submitting.value = false;
-    if (!mounted) {
-      return;
-    }
-    if (profile == null) {
+    final ServerProfileView profile;
+    try {
+      profile = await ref
+          .read(sessionViewProvider.notifier)
+          .addServer(
+            label: label.isEmpty ? _hostOf(address) : label,
+            address: address,
+          );
+    } on CoreError catch (error) {
+      widget.submitting.value = false;
+      if (!mounted) {
+        return;
+      }
       setState(() {
         _submitting = false;
-        _error =
-            ref.read(sessionViewProvider).notice ?? l10n.serverInvalidAddress;
+        _error = describeCoreError(error);
       });
       _addressFocus.requestFocus();
+      return;
+    }
+    widget.submitting.value = false;
+    if (!mounted) {
       return;
     }
     Navigator.of(context).pop(profile);

@@ -60,7 +60,7 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
     }
 
     _pendingServerId = profile.id;
-    await ref
+    final ok = await ref
         .read(sessionViewProvider.notifier)
         .connect(
           id: profile.id,
@@ -81,7 +81,7 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
       }
       return;
     }
-    if (next.notice != null ||
+    if (!ok ||
         (next.activeServerId != null && next.activeServerId != profile.id)) {
       _pendingServerId = null;
     }
@@ -134,7 +134,7 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
             context.go(AppRoutes.workspace);
           }
         });
-      } else if (next.notice != null ||
+      } else if ((previous != null && next.failureSeq != previous.failureSeq) ||
           (next.activeServerId != null && next.activeServerId != pending)) {
         // 只有明确的失败/换目标才放掉连接中状态；busy 结束不等于连上。
         _pendingServerId = null;
@@ -167,8 +167,6 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
       connectedId: connectedId,
       connectingId: connectingId,
       enabled: !busy && !view.busy,
-      notice: view.notice,
-      onDismissNotice: ref.read(sessionViewProvider.notifier).dismissNotice,
       onAdd: _openAddServer,
       onConnect: _connect,
       onRemove: _removeServer,
@@ -245,8 +243,10 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
     );
 
     if (desktop) {
+      // 面板与 8px 沟槽同色，避免沟槽在暗色面板四周形成一圈近黑边框。
+      final panelColor = context.cardColor;
       return Scaffold(
-        backgroundColor: scheme.surface,
+        backgroundColor: panelColor,
         body: Stack(
           children: [
             glow,
@@ -259,9 +259,9 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(0, 8, 8, 8),
                       child: Material(
-                        // 不透明面板：半透明会让顶部光晕透进来，暗色下与
-                        // 8px 沟槽糊成一片；与工作区面板的做法对齐。
-                        color: context.cardColor,
+                        // 不透明面板：半透明会让顶部光晕透进来；与工作区
+                        // 面板的做法对齐。
+                        color: panelColor,
                         borderRadius: Radii.xxxlAll,
                         clipBehavior: Clip.antiAlias,
                         child: Column(
@@ -375,8 +375,6 @@ class _ServerSection extends StatelessWidget {
     required this.connectedId,
     required this.connectingId,
     required this.enabled,
-    required this.notice,
-    required this.onDismissNotice,
     required this.onAdd,
     required this.onConnect,
     required this.onRemove,
@@ -387,8 +385,6 @@ class _ServerSection extends StatelessWidget {
   final String? connectedId;
   final String? connectingId;
   final bool enabled;
-  final String? notice;
-  final VoidCallback onDismissNotice;
   final VoidCallback onAdd;
   final ValueChanged<ServerProfileView> onConnect;
   final ValueChanged<ServerProfileView> onRemove;
@@ -471,24 +467,6 @@ class _ServerSection extends StatelessWidget {
                       ),
                     ),
           ],
-        ),
-        // 通知条平滑展开/收起：出现与消失不再挤压布局。
-        AnimatedSize(
-          duration: MediaQuery.disableAnimationsOf(context)
-              ? Duration.zero
-              : Motion.effectsFast,
-          curve: Motion.effectsFastCurve,
-          alignment: Alignment.topCenter,
-          child: notice == null
-              ? const SizedBox(width: double.infinity)
-              : Padding(
-                  padding: const EdgeInsets.only(top: 16),
-                  child: NoticeBar(
-                    message: notice!,
-
-                    onDismiss: onDismissNotice,
-                  ),
-                ),
         ),
         const SizedBox(height: 16),
         if (servers.isEmpty)

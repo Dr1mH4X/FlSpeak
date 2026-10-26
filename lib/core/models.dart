@@ -63,13 +63,12 @@ class SessionView {
     this.activeServerId,
     this.chatScope = ChatScope.channel,
     this.busy = false,
-    this.notice,
+    this.failureSeq = 0,
     this.muted = false,
     this.deafened = false,
     this.away = false,
     this.voiceInputReady = false,
     this.voiceOutputReady = false,
-    this.voiceNotice,
     this.speaking = const <int>{},
     this.selfSpeaking = false,
     this.pttMode = false,
@@ -89,7 +88,9 @@ class SessionView {
   final ChatScope chatScope;
 
   final bool busy;
-  final String? notice;
+
+  /// 连接失败或被拒事件的序号。只给连接页判断等待状态，不渲染。
+  final int failureSeq;
 
   /// 自己是否处于静音/聋听状态；由 Rust 的 Voice 事件确认。
   final bool muted;
@@ -99,9 +100,6 @@ class SessionView {
   final bool away;
   final bool voiceInputReady;
   final bool voiceOutputReady;
-
-  /// 音频设备或编解码错误。与聊天提示条分开，避免互相覆盖。
-  final String? voiceNotice;
 
   /// 当前正在说话的客户端 id。只在集合变化时由 Rust 推送。
   final Set<int> speaking;
@@ -240,13 +238,12 @@ class SessionView {
     Object? activeServerId = _unset,
     ChatScope? chatScope,
     bool? busy,
-    Object? notice = _unset,
+    int? failureSeq,
     bool? muted,
     bool? deafened,
     bool? away,
     bool? voiceInputReady,
     bool? voiceOutputReady,
-    Object? voiceNotice = _unset,
     Set<int>? speaking,
     bool? selfSpeaking,
     bool? pttMode,
@@ -262,15 +259,12 @@ class SessionView {
         : activeServerId as String?,
     chatScope: chatScope ?? this.chatScope,
     busy: busy ?? this.busy,
-    notice: identical(notice, _unset) ? this.notice : notice as String?,
+    failureSeq: failureSeq ?? this.failureSeq,
     muted: muted ?? this.muted,
     deafened: deafened ?? this.deafened,
     away: away ?? this.away,
     voiceInputReady: voiceInputReady ?? this.voiceInputReady,
     voiceOutputReady: voiceOutputReady ?? this.voiceOutputReady,
-    voiceNotice: identical(voiceNotice, _unset)
-        ? this.voiceNotice
-        : voiceNotice as String?,
     speaking: speaking ?? this.speaking,
     selfSpeaking: selfSpeaking ?? this.selfSpeaking,
     pttMode: pttMode ?? this.pttMode,

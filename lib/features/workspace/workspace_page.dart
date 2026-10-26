@@ -90,12 +90,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
                 .read(sessionViewProvider.notifier)
                 .cancelIdentityUpgrade,
           ),
-        _VoiceAlerts(
-          view: view,
-          onDismissNotice: ref
-              .read(sessionViewProvider.notifier)
-              .dismissVoiceNotice,
-        ),
+        _VoiceAlerts(view: view),
         Expanded(
           // 视图替换走 crossfade（M3 effects default）：同一容器内换内容
           // 不做位移，避免整块内容跳来跳去。
@@ -363,7 +358,7 @@ class _IdentityBanner extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
       decoration: BoxDecoration(
         color: scheme.secondaryContainer,
-        // 与 NoticeBar 一致：同为页面级横幅，圆角取同一档。
+        // 与页面级横幅同一档圆角。
         borderRadius: Radii.xxlAll,
       ),
       child: Row(
@@ -389,12 +384,11 @@ class _IdentityBanner extends StatelessWidget {
   }
 }
 
-/// 语音提示：设备不可用 chip 与语音错误条，任何页签下都可见。
+/// 语音设备状态 chip，任何页签下都可见。瞬时语音错误走右上角提示。
 class _VoiceAlerts extends StatelessWidget {
-  const _VoiceAlerts({required this.view, required this.onDismissNotice});
+  const _VoiceAlerts({required this.view});
 
   final SessionView view;
-  final VoidCallback onDismissNotice;
 
   @override
   Widget build(BuildContext context) {
@@ -423,15 +417,6 @@ class _VoiceAlerts extends StatelessWidget {
                     label: l10n.voiceSpeakerUnavailable,
                   ),
               ],
-            ),
-          ),
-        if (view.voiceNotice != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: NoticeBar(
-              message: view.voiceNotice!,
-
-              onDismiss: onDismissNotice,
             ),
           ),
       ],

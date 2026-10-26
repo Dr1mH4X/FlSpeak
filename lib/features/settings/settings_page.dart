@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/global_hotkey.dart';
 import '../../core/hotkey_codes.dart';
 import '../../core/models.dart';
+import '../../core/notices.dart';
 import '../../core/preferences.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_localizations.dart';
@@ -254,8 +255,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(describeCoreError(error))));
+      ref.read(noticeCenterProvider.notifier).show(describeCoreError(error));
     }
   }
 
@@ -265,8 +265,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     if (!mounted) {
       return;
     }
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(l10n.commonCopied)));
+    ref
+        .read(noticeCenterProvider.notifier)
+        .show(l10n.commonCopied, tone: NoticeTone.info);
   }
 
   Future<void> _pickPttHotkey() async {

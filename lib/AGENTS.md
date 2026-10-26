@@ -12,6 +12,10 @@
 - `lib/l10n/**` 是生成物，不要手改；改 `arb/` 后重跑 `flutter gen-l10n`。
 - FFI 生成类型在 `plugins/flspeak_ffi/lib/src/rust/**`，同样不要手改。
 - 页面布局可以依赖 `SessionView`，但不能依赖 `CoreSession` 的内部状态。
+- 页面级瞬时错误与提示统一走 `lib/core/notices.dart` 的 `NoticeCenter`，由
+  `lib/widgets/notice_host.dart` 在右上角渲染；不要在页面或卡片里自建错误横幅，
+  也不要用 `SnackBar`。字段校验留在输入框旁，持久状态（设备不可用 chip、身份提升
+  横幅）留在页面上。
 - Dart 单测与被测文件同目录（`foo.dart` 旁 `foo_test.dart`），靠 `just test` 跑；仓库根不设 `test/`，`flutter test` 的默认扫描目录因此用不上。
 - 设置页的文案规则见 [features/settings/AGENTS.md](features/settings/AGENTS.md)。
 

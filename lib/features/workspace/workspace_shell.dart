@@ -10,7 +10,6 @@ import '../../core/providers.dart';
 
 import '../../router.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/common.dart';
 import 'widgets/channel_pane.dart';
 import 'widgets/channel_pane_resizer.dart';
 import 'widgets/server_rail.dart';
@@ -34,7 +33,6 @@ class WorkspaceShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = context.scheme;
     final view = ref.watch(sessionViewProvider);
-    final notice = view.notice;
     final width = MediaQuery.sizeOf(context).width;
     final compact = width < Breakpoints.compact;
     final panelColor = context.isDark
@@ -87,12 +85,7 @@ class WorkspaceShell extends ConsumerWidget {
       onDisconnect: () => unawaited(disconnect()),
     );
     final panel = ChannelPanel(onChannelSelected: selectChannel);
-    final surface = _MainSurface(
-      compact: compact,
-      notice: notice,
-      onDismissNotice: ref.read(sessionViewProvider.notifier).dismissNotice,
-      child: child,
-    );
+    final surface = _MainSurface(compact: compact, child: child);
 
     if (compact) {
       return Scaffold(
@@ -149,17 +142,10 @@ class WorkspaceShell extends ConsumerWidget {
 
 /// 右侧主内容区：三栏之一，与窗口通边；窄屏铺满。
 class _MainSurface extends StatelessWidget {
-  const _MainSurface({
-    required this.compact,
-    required this.child,
-    required this.notice,
-    required this.onDismissNotice,
-  });
+  const _MainSurface({required this.compact, required this.child});
 
   final bool compact;
   final Widget child;
-  final String? notice;
-  final VoidCallback onDismissNotice;
 
   @override
   Widget build(BuildContext context) {
@@ -173,17 +159,7 @@ class _MainSurface extends StatelessWidget {
           : context.isDark
           ? scheme.surfaceContainer
           : scheme.surfaceContainerLowest,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (notice != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-              child: NoticeBar(message: notice!, onDismiss: onDismissNotice),
-            ),
-          Expanded(child: child),
-        ],
-      ),
+      child: child,
     );
   }
 }

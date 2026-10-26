@@ -545,17 +545,6 @@ ThemeData buildAppTheme(Brightness brightness) {
         borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xxxl)),
       ),
     ),
-    snackBarTheme: SnackBarThemeData(
-      behavior: SnackBarBehavior.floating,
-      backgroundColor: scheme.inverseSurface,
-      contentTextStyle: text.bodyMedium?.copyWith(
-        color: scheme.onInverseSurface,
-      ),
-      shape: RoundedRectangleBorder(borderRadius: Radii.xxlAll),
-      insetPadding: const EdgeInsets.all(16),
-      // M3 snackbar 的档位是 6。
-      elevation: 6,
-    ),
     scrollbarTheme: ScrollbarThemeData(
       thickness: const WidgetStatePropertyAll(8),
       radius: const Radius.circular(4),

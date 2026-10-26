@@ -2,67 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 
-/// 提示条：策略拒绝与协议失败都走这里，就近显示而不是弹窗打断。
-///
-/// 底色用 errorContainer / 前景用 onErrorContainer（M3 语义对）：透明度
-/// 叠色在暗色下发浊，正文对比度也不稳。
-class NoticeBar extends StatelessWidget {
-  const NoticeBar({required this.message, required this.onDismiss, super.key});
-
-  final String message;
-  final VoidCallback onDismiss;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
-      decoration: BoxDecoration(
-        color: scheme.errorContainer,
-        borderRadius: Radii.xxlAll,
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Icon(
-              Icons.wifi_off_rounded,
-              size: 16,
-              color: scheme.onErrorContainer,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: SelectableText(
-              message,
-              style: context.texts.bodySmall?.copyWith(
-                color: scheme.onErrorContainer,
-              ),
-            ),
-          ),
-          SizedBox(
-            width: 32,
-            height: 24,
-            child: IconButton(
-              iconSize: 14,
-              padding: EdgeInsets.zero,
-              color: scheme.onErrorContainer,
-              onPressed: onDismiss,
-              icon: Icon(
-                Icons.close_rounded,
-                semanticLabel: MaterialLocalizations.of(context)
-                    .closeButtonTooltip,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 /// 空状态是行动邀请：说清楚现在缺什么、下一步点哪里。
 ///
 /// 标题可选——调用方已经有标题时不必再写一遍。
