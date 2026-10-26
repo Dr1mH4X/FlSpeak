@@ -136,7 +136,7 @@ static void hotkey_method_call_cb(FlMethodChannel* channel, FlMethodCall* call,
       result != nullptr
           ? FL_METHOD_RESPONSE(fl_method_success_response_new(result))
           : FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
-  if (!fl_method_call_respond(call, response, nullptr, nullptr)) {
+  if (!fl_method_call_respond(call, response, nullptr)) {
     g_warning("flspeak/global_hotkey: 回应方法调用失败");
   }
 }
@@ -206,9 +206,9 @@ static void my_application_activate(GApplication* application) {
   // 由 Dart 侧退回应用内按键。
   FlEngine* engine = fl_view_get_engine(view);
   self->hotkey_codec = FL_METHOD_CODEC(fl_standard_method_codec_new());
-  self->hotkey_channel =
-      fl_method_channel_new(engine, "flspeak/global_hotkey",
-                            self->hotkey_codec);
+  self->hotkey_channel = fl_method_channel_new(
+      fl_engine_get_binary_messenger(engine), "flspeak/global_hotkey",
+      self->hotkey_codec);
   fl_method_channel_set_method_call_handler(self->hotkey_channel,
                                             hotkey_method_call_cb, self,
                                             nullptr);
