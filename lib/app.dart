@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/global_hotkey.dart';
 import 'core/preferences.dart';
 import 'core/providers.dart';
+import 'core/window_chrome.dart';
 import 'l10n/app_localizations.dart';
 import 'router.dart';
 import 'theme/app_theme.dart';
@@ -120,7 +121,43 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
       },
       theme: buildAppTheme(Brightness.light),
       darkTheme: buildAppTheme(Brightness.dark),
+      builder: (context, child) =>
+          _WindowBackgroundSync(child: child ?? const SizedBox.shrink()),
       routerConfig: router,
     );
   }
+}
+
+/// 把当前主题的 surface 色报给原生窗口：macOS 的标题栏与圆角边缘底色
+/// 跟随主题切换，其余平台没有原生实现，调用被静默忽略。
+class _WindowBackgroundSync extends StatefulWidget {
+  const _WindowBackgroundSync({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_WindowBackgroundSync> createState() => _WindowBackgroundSyncState();
+}
+
+class _WindowBackgroundSyncState extends State<_WindowBackgroundSync> {
+  static const _chrome = WindowChrome();
+
+  Color? _reported;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final color = Theme.of(context).colorScheme.surface;
+    if (color == _reported) {
+      return;
+    }
+    _reported = color;
+    // 平台通道不在 build 里发；首帧与主题切换各报一次就够。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_chrome.setBackground(color.toARGB32()));
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

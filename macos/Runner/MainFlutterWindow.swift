@@ -13,16 +13,47 @@ class MainFlutterWindow: NSWindow {
   private var hotkeyEventHandler: EventHandlerRef?
   private var hotkeyChannel: FlutterMethodChannel?
 
+  /// Flutter 主题的 surface 色。窗口底色与标题栏跟随主题，
+  /// 圆角边缘不再露出系统默认的 windowBackgroundColor。
+  private var windowChannel: FlutterMethodChannel?
+
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
     self.contentViewController = flutterViewController
     self.setFrame(windowFrame, display: true)
+    self.titlebarAppearsTransparent = true
 
     RegisterGeneratedPlugins(registry: flutterViewController)
     setupGlobalHotkey(flutterViewController)
+    setupWindowChannel(flutterViewController)
 
     super.awakeFromNib()
+  }
+
+  private func setupWindowChannel(_ controller: FlutterViewController) {
+    windowChannel = FlutterMethodChannel(
+      name: "flspeak/window",
+      binaryMessenger: controller.engine.binaryMessenger)
+
+    windowChannel?.setMethodCallHandler { [weak self] call, result in
+      switch call.method {
+      case "setBackgroundColor":
+        guard let self = self, let argb = call.arguments as? Int else {
+          result(false)
+          return
+        }
+        let value = UInt32(bitPattern: Int32(truncatingIfNeeded: argb))
+        self.backgroundColor = NSColor(
+          srgbRed: CGFloat((value >> 16) & 0xFF) / 255.0,
+          green: CGFloat((value >> 8) & 0xFF) / 255.0,
+          blue: CGFloat(value & 0xFF) / 255.0,
+          alpha: CGFloat((value >> 24) & 0xFF) / 255.0)
+        result(true)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
   }
 
   private func setupGlobalHotkey(_ controller: FlutterViewController) {
