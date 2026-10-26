@@ -23,4 +23,8 @@ add_definitions(-DAPPLICATION_ID="${APPLICATION_ID}")
 target_link_libraries(${BINARY_NAME} PRIVATE flutter)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK)
 
+# 全局热键直接调用 XGrabKey/XUngrabKey 等 Xlib 符号；GTK 的公开链接项不带 libX11。
+pkg_check_modules(X11 REQUIRED IMPORTED_TARGET x11)
+target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::X11)
+
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")

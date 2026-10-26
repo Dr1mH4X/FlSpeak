@@ -58,11 +58,21 @@ jobs:
         if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build libgtk-3-dev libopus-dev libasound2-dev
+          sudo apt-get install -y ninja-build libgtk-3-dev libx11-dev libopus-dev libasound2-dev
 
       - name: Enable git long paths (Windows)
         if: matrix.platform == 'windows'
         run: git config --global core.longpaths true
+
+      # native assets 钩子在 %LOCALAPPDATA%\Temp 下编译，audiopus_sys 的 CMake
+      # 中间文件会顶到 260 字符上限；换到短路径的 TEMP 后整条路径留出余量。
+      - name: Use short temp directory (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path $env:RUNNER_TEMP | Out-Null
+          "TEMP=$env:RUNNER_TEMP" >> $env:GITHUB_ENV
+          "TMP=$env:RUNNER_TEMP" >> $env:GITHUB_ENV
 
       - name: Install dependencies
         run: flutter pub get
