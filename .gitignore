@@ -37,12 +37,7 @@ local.properties
 /captures/
 GeneratedPluginRegistrant.java
 
-# iOS / macOS
-ios/Pods/
-ios/.symlinks/
-ios/Flutter/Flutter.framework
-ios/Flutter/Flutter.podspec
-ios/Flutter/ephemeral/
+# macOS
 macos/Pods/
 macos/Flutter/ephemeral/
 **/xcuserdata/
