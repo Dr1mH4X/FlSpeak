@@ -69,10 +69,10 @@ void FlutterWindow::HandleHotkeyCall(
   if (call.method_name() == "register") {
     // Dart 侧只传小整数，正常落 int32；int64 分支兜底。
     int64_t code = -1;
-    if (const auto* value = std::get_if<int32_t>(call.arguments())) {
-      code = *value;
-    } else if (const auto* value = std::get_if<int64_t>(call.arguments())) {
-      code = *value;
+    if (const auto* int32_value = std::get_if<int32_t>(call.arguments())) {
+      code = *int32_value;
+    } else if (const auto* int64_value = std::get_if<int64_t>(call.arguments())) {
+      code = *int64_value;
     }
     bool ok = code >= 0 && code <= 0xFFFFFFFF &&
               keyboard_hook_.Start(static_cast<uint32_t>(code),
