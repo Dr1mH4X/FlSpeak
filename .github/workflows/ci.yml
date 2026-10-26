@@ -76,6 +76,42 @@ jobs:
       - name: Analyze
         run: flutter analyze --no-fatal-infos
 
+  dart-test:
+    name: Dart tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # `flutter test` 会跑 native assets 钩子，等于把 Rust 再编一遍：音频依赖与
+      # cargo 缓存都按 rust 作业那一套准备，否则用例起不来。缓存单列一份 key，
+      # 不和 rust 作业互相覆盖。
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: dart-test
+          workspaces: plugins/flspeak_ffi/rust
+          cache-directories: .dart_tool/hooks_runner
+
+      - name: Install audio build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake pkg-config libopus-dev libasound2-dev
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # 用例与被测文件同目录，`flutter test` 的默认 test/ 目录用不上。
+      - name: Test
+        run: flutter test lib
+
   plugins:
     name: Plugins
     runs-on: ubuntu-latest

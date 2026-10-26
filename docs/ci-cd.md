@@ -6,6 +6,7 @@
 | --- | --- |
 | `rust` | `cargo fmt --check`、`clippy -D warnings`、`cargo test`（`--all-features`，含音频） |
 | `dart` | `dart format --output=none --set-exit-if-changed lib setup.dart`、`flutter analyze` |
+| `dart-test` | `flutter test lib`（用例与实现同目录）；`flutter test` 会触发 native assets 钩子，因此它也装 Rust 音频依赖并缓存 cargo 与钩子产物 |
 | `plugins` | 重跑 `flutter_rust_bridge_codegen generate` 并用 `git diff` 校验生成物一致；再分析插件 |
 | `desktop` | linux / windows / macos 各跑一次 `flutter build <platform> --debug`，验证 native assets 钩子能编出 Rust |
 | `android` | 装 NDK 后 `flutter build apk --debug` |
@@ -71,4 +72,5 @@ CMAKE_POLICY_VERSION_MINIMUM=3.5 cargo test --workspace --all-features
 # Dart
 cd ../../..
 flutter pub get && flutter analyze --no-fatal-infos
+flutter test lib          # 会先编 native assets（Rust），故需要上面那组音频依赖
 ```

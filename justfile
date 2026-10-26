@@ -102,7 +102,7 @@ setup platform arch version:
 check: fmt rust-clippy rust-test analyze test
 
 # 对齐 CI 的静态检查，只读不落盘；生成物一致性另跑 just codegen-check
-ci: fmt-check rust-clippy rust-test analyze analyze-plugin
+ci: fmt-check rust-clippy rust-test analyze analyze-plugin test
 
 # 清理构建产物
 clean:
