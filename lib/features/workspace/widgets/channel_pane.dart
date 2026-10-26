@@ -31,9 +31,6 @@ class ChannelPanel extends ConsumerStatefulWidget {
 }
 
 class _ChannelPanelState extends ConsumerState<ChannelPanel> {
-  /// 记录被折叠的频道，新出现的频道默认展开。
-  final _collapsed = <int>{};
-
   /// 上一次点击的频道、点下去之前的高亮位置与双击判定窗口。按 `channelId`
   /// 比对，而不是按行位置，因为 `ListView.builder` 会按位置复用行。
   ({int channelId, SelectedChannel? fallback, Timer timer})? _pendingTap;
@@ -53,16 +50,6 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
     final String nickname =
         view.selfClient?.nickname ??
         ref.watch(preferencesProvider.select((prefs) => prefs.nickname));
-
-    void toggle(ChannelView channel, bool expanded) {
-      setState(() {
-        if (expanded) {
-          _collapsed.add(channel.id);
-        } else {
-          _collapsed.remove(channel.id);
-        }
-      });
-    }
 
     void select(ChannelView channel) {
       ref
@@ -143,7 +130,6 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
                     l10n,
                     view,
                     activeId,
-                    toggle,
                     tap,
                     joinFromMenu,
                   ),
@@ -203,7 +189,6 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
     AppLocalizations l10n,
     SessionView view,
     int? activeId,
-    void Function(ChannelView channel, bool expanded) onToggle,
     void Function(ChannelView channel) onTap,
     // 菜单通道的加入：回退位置由调用方按当时的选中补齐。
     void Function(ChannelView channel) onJoin,
@@ -227,22 +212,11 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
       itemBuilder: (context, index) {
         final row = rows[index];
         return switch (row) {
-          _ChannelRow(
-            :final channel,
-            :final depth,
-            :final expanded,
-            :final spacer,
-          ) =>
+          _ChannelRow(:final channel, :final depth, :final spacer) =>
             _ChannelTile(
               channel: channel,
               depth: depth,
               selected: channel.id == activeId,
-              memberCount: view.clientsIn(channel.id).length,
-              expanded: expanded,
-              hasContent:
-                  view.clientsIn(channel.id).isNotEmpty ||
-                  view.childrenOf(channel.id).isNotEmpty,
-              onToggle: () => onToggle(channel, expanded),
               onTap: () => onTap(channel),
               onJoin: () => onJoin(channel),
               canJoin: _canJoin(view, channel),
@@ -266,25 +240,11 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
 
     void walk(ChannelView channel, int depth) {
       // spacer 只改变名字的画法：行高、选中与加入都和普通频道一致（官方
-      // 客户端里双击装饰频道同样能进入房间），装饰行不提供折叠。
+      // 客户端里双击装饰频道同样能进入房间）。
       final spacer = parseChannelSpacer(channel.name);
       final children = view.orderedChildrenOf(channel.id);
       final members = view.clientsIn(channel.id);
-      final expanded =
-          spacer != null ||
-          (!_collapsed.contains(channel.id) &&
-              (members.isNotEmpty || children.isNotEmpty));
-      rows.add(
-        _ChannelRow(
-          channel: channel,
-          depth: depth,
-          expanded: expanded,
-          spacer: spacer,
-        ),
-      );
-      if (!expanded) {
-        return;
-      }
+      rows.add(_ChannelRow(channel: channel, depth: depth, spacer: spacer));
       for (final member in members) {
         rows.add(_MemberRow(client: member, depth: depth + 1));
       }
@@ -309,16 +269,10 @@ bool _canJoin(SessionView view, ChannelView channel) =>
     view.connected && !view.busy && view.selfChannelId != channel.id;
 
 class _ChannelRow extends _TreeRow {
-  const _ChannelRow({
-    required this.channel,
-    required this.depth,
-    required this.expanded,
-    this.spacer,
-  });
+  const _ChannelRow({required this.channel, required this.depth, this.spacer});
 
   final ChannelView channel;
   final int depth;
-  final bool expanded;
   final ChannelSpacer? spacer;
 }
 
@@ -334,10 +288,6 @@ class _ChannelTile extends StatelessWidget {
     required this.channel,
     required this.depth,
     required this.selected,
-    required this.memberCount,
-    required this.expanded,
-    required this.hasContent,
-    required this.onToggle,
     required this.onTap,
     required this.onJoin,
     required this.canJoin,
@@ -347,10 +297,6 @@ class _ChannelTile extends StatelessWidget {
   final ChannelView channel;
   final int depth;
   final bool selected;
-  final int memberCount;
-  final bool expanded;
-  final bool hasContent;
-  final VoidCallback onToggle;
 
   /// 单击：只换主区域展示的频道；双击由父级按点击间隔判定后另外加入。
   final VoidCallback onTap;
@@ -371,14 +317,6 @@ class _ChannelTile extends StatelessWidget {
     final foreground = selected
         ? scheme.onPrimaryContainer
         : scheme.onSurfaceVariant;
-    final capacity = channel.maxClients;
-    final capacityLimited =
-        capacity != null && channel.maxClientsLimited == true;
-    final memberLabel = capacityLimited
-        ? '$memberCount/$capacity'
-        : memberCount > 0
-        ? '$memberCount'
-        : null;
 
     return Padding(
       padding: EdgeInsets.only(left: depth * 16.0),
@@ -415,85 +353,40 @@ class _ChannelTile extends StatelessWidget {
                   child: Padding(
                     padding: const EdgeInsets.only(right: 14),
                     child: spacer == null
-                        ? Row(
-                            children: [
-                              SizedBox(
-                                width: 32,
-                                child: hasContent
-                                    ? Tooltip(
-                                        message: expanded
-                                            ? l10n.channelCollapse
-                                            : l10n.channelExpand,
-                                        child: InkWell(
-                                          onTap: onToggle,
-                                          customBorder: const CircleBorder(),
-                                          child: SizedBox(
-                                            width: 32,
-                                            height: 40,
-                                            // 单图标旋转表达折叠方向：比两个
-                                            // 字形硬切多一层空间连续性。
-                                            child: AnimatedRotation(
-                                              turns: expanded ? 0 : 0.25,
-                                              duration:
-                                                  MediaQuery.disableAnimationsOf(
-                                                    context,
-                                                  )
-                                                  ? Duration.zero
-                                                  : Motion.spatialFast,
-                                              curve: Motion.spatialCurve,
-                                              child: Icon(
-                                                Icons
-                                                    .keyboard_arrow_down_rounded,
-                                                size: 20,
-                                                color: foreground,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      )
-                                    : null,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: context.texts.bodyMedium?.copyWith(
-                                    fontSize: 14,
-                                    color: selected
-                                        ? scheme.onPrimaryContainer
-                                        : scheme.onSurfaceVariant,
-                                    fontWeight: selected
-                                        ? FontWeight.w500
-                                        : FontWeight.w400,
-                                  ),
-                                ),
-                              ),
-                              if (channel.passwordProtected == true)
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 6),
-                                  child: Tooltip(
-                                    message: l10n.channelPasswordProtected,
-                                    child: Icon(
-                                      Icons.lock_rounded,
-                                      size: 15,
-                                      color: foreground,
-                                    ),
-                                  ),
-                                ),
-                              if (memberLabel != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 8),
+                        ? Padding(
+                            padding: const EdgeInsets.only(left: 12),
+                            child: Row(
+                              children: [
+                                Expanded(
                                   child: Text(
-                                    memberLabel,
-                                    style: context.texts.labelSmall?.copyWith(
-                                      color: foreground,
-                                      fontFeatures: tabularFigures,
+                                    name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: context.texts.bodyMedium?.copyWith(
+                                      fontSize: 14,
+                                      color: selected
+                                          ? scheme.onPrimaryContainer
+                                          : scheme.onSurfaceVariant,
+                                      fontWeight: selected
+                                          ? FontWeight.w500
+                                          : FontWeight.w400,
                                     ),
                                   ),
                                 ),
-                            ],
+                                if (channel.passwordProtected == true)
+                                  Padding(
+                                    padding: const EdgeInsets.only(left: 6),
+                                    child: Tooltip(
+                                      message: l10n.channelPasswordProtected,
+                                      child: Icon(
+                                        Icons.lock_rounded,
+                                        size: 15,
+                                        color: foreground,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
                           )
                         : _spacerBody(context, foreground),
                   ),
@@ -506,7 +399,7 @@ class _ChannelTile extends StatelessWidget {
     );
   }
 
-  /// 官方 spacer 行不带频道图标、人数与折叠箭头，只有装饰内容本身；
+  /// 官方 spacer 行不带频道图标，只有装饰内容本身；
   /// 颜色跟随行的前景（选中时用胶囊上的对比色）。
   Widget _spacerBody(BuildContext context, Color foreground) {
     final scheme = context.scheme;
