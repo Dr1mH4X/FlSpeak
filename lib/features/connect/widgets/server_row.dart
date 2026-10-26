@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../../../l10n/app_localizations.dart';
+import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
 import '../../../widgets/monogram.dart';
@@ -47,9 +48,10 @@ class _ServerRowState extends State<ServerRow> {
     // 640 以下把「上次连接」让位给服务器名，否则窄屏只剩省略号。
     final narrow = MediaQuery.sizeOf(context).width < 640;
     final showLastConnected = !narrow;
+    // M3 effects default：行状态（高亮、整行降透明度）都是颜色/透明度动画。
     final animations = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
-        : const Duration(milliseconds: 200);
+        : Motion.effectsDefault;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -58,12 +60,14 @@ class _ServerRowState extends State<ServerRow> {
         openOnSecondaryTap: true,
         items: [
           MenuItemButton(
-            leadingIcon: const Icon(Icons.delete_outline_rounded),
+            leadingIcon: const Icon(Icons.delete_rounded),
             onPressed: connected ? null : widget.onRemove,
             child: Text(l10n.serverRemoveFromList),
           ),
         ],
-        builder: (context, menuController) => ColoredBox(
+        builder: (context, menuController) => AnimatedContainer(
+          duration: animations,
+          curve: Motion.effectsDefaultCurve,
           color: connected
               ? scheme.primaryContainer.withValues(alpha: 0.3)
               : Colors.transparent,
@@ -72,8 +76,11 @@ class _ServerRowState extends State<ServerRow> {
             enabled: active,
             child: InkWell(
               onTap: widget.enabled ? widget.onTap : null,
-              hoverColor: scheme.surfaceContainer.withValues(alpha: 0.7),
-              child: Opacity(
+              // M3 state layer：hover 是 onSurface 8%，不再自定底色。
+              hoverColor: scheme.onSurface.withValues(alpha: 0.08),
+              child: AnimatedOpacity(
+                duration: animations,
+                curve: Motion.effectsDefaultCurve,
                 opacity: active ? 1 : 0.5,
                 child: Padding(
                   // 与身份卡的内容缩进（20）对齐，两卡头像才能落在同一条线上。
@@ -147,8 +154,13 @@ class _ServerRowState extends State<ServerRow> {
                           ),
                         ),
                       const SizedBox(width: 6),
+                      // hover 反馈按 M3 归到 effects fast：nudge 只有 2px，
+                      // 用 slow 的 spatial 档反而拖沓。
                       AnimatedContainer(
-                        duration: animations,
+                        duration: MediaQuery.disableAnimationsOf(context)
+                            ? Duration.zero
+                            : Motion.effectsFast,
+                        curve: Motion.effectsFastCurve,
                         transform: Matrix4.translationValues(
                           _hovered && active ? 2 : 0,
                           0,
@@ -159,7 +171,7 @@ class _ServerRowState extends State<ServerRow> {
                           size: 18,
                           color: connected
                               ? scheme.primary
-                              : scheme.onSurfaceVariant.withValues(alpha: 0.5),
+                              : scheme.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -187,11 +199,13 @@ class _ConnectedChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: context.cardColor,
         borderRadius: Radii.pillAll,
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
-            color: Color(0x14000000),
+            color: scheme.shadow.withValues(
+              alpha: context.isDark ? 0.24 : 0.08,
+            ),
             blurRadius: 2,
-            offset: Offset(0, 1),
+            offset: const Offset(0, 1),
           ),
         ],
       ),

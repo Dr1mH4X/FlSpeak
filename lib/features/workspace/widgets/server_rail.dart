@@ -4,6 +4,7 @@ import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
 import '../../../widgets/monogram.dart';
@@ -94,7 +95,8 @@ class ServerRail extends ConsumerWidget {
                 child: Material(
                   color: context.cardColor,
                   elevation: 1,
-                  shadowColor: scheme.onSurface.withValues(alpha: 0.14),
+                  // 投影色交回 scheme.shadow，暗色下才画得出来。
+                  shadowColor: scheme.shadow,
                   borderRadius: Radii.largeAll,
                   clipBehavior: Clip.antiAlias,
                   child: InkWell(
@@ -205,8 +207,8 @@ class _ServerTile extends StatelessWidget {
                         AnimatedContainer(
                           duration: MediaQuery.disableAnimationsOf(context)
                               ? Duration.zero
-                              : const Duration(milliseconds: 160),
-                          curve: Curves.easeOutCubic,
+                              : Motion.effectsFast,
+                          curve: Motion.effectsFastCurve,
                           width: 56,
                           height: 32,
                           alignment: Alignment.center,

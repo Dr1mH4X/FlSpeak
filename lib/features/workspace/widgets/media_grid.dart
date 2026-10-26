@@ -22,7 +22,7 @@ class MediaGrid extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              Icons.photo_library_outlined,
+              Icons.photo_library_rounded,
               size: 40,
               color: context.scheme.onSurfaceVariant,
             ),
@@ -121,7 +121,7 @@ class _TilePlaceholder extends StatelessWidget {
                 ),
               )
             : Icon(
-                Icons.broken_image_outlined,
+                Icons.broken_image_rounded,
                 size: 24,
                 color: scheme.onSurfaceVariant,
               ),

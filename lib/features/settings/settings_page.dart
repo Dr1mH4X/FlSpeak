@@ -60,7 +60,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             onTap: () => unawaited(_pickLanguage(preferences.locale)),
           ),
           SettingsRow(
-            icon: Icons.palette_outlined,
+            icon: Icons.palette_rounded,
             title: l10n.settingsTheme,
             subtitle: _themeLabel(l10n, preferences.theme),
             description: l10n.settingsThemeDesc,
@@ -72,7 +72,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         title: l10n.settingsVoice,
         children: [
           SettingsRow(
-            icon: Icons.record_voice_over_outlined,
+            icon: Icons.record_voice_over_rounded,
             title: l10n.settingsPttMode,
             description: l10n.settingsPttModeDesc,
             trailing: Switch(
@@ -94,7 +94,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             onTap: () => unawaited(_pickPttHotkey()),
           ),
           SettingsRow(
-            icon: Icons.mic_none_rounded,
+            icon: Icons.mic_rounded,
             title: l10n.settingsInputDevice,
             subtitle: audioSelection.inputName ?? l10n.settingsDeviceDefault,
             onTap: () => unawaited(
@@ -102,7 +102,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ),
           ),
           SettingsRow(
-            icon: Icons.volume_up_outlined,
+            icon: Icons.volume_up_rounded,
             title: l10n.settingsOutputDevice,
             subtitle: audioSelection.outputName ?? l10n.settingsDeviceDefault,
             onTap: () => unawaited(
@@ -115,7 +115,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         title: l10n.settingsData,
         children: [
           SettingsRow(
-            icon: Icons.folder_outlined,
+            icon: Icons.folder_rounded,
             title: l10n.settingsStorePath,
             subtitle: storePath,
             description: l10n.settingsStorePathDesc,

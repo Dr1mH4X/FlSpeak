@@ -4,6 +4,7 @@ import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
 
@@ -37,29 +38,38 @@ Future<ServerProfileView?> showAddServerDialog(BuildContext context) {
               ),
               FilledButton(
                 onPressed: busy ? null : () => formKey.currentState?.submit(),
-                child: busy
-                    ? Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox.square(
-                            dimension: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: scheme.onPrimary,
+                child: AnimatedSwitcher(
+                  duration: MediaQuery.disableAnimationsOf(context)
+                      ? Duration.zero
+                      : Motion.effectsFast,
+                  switchInCurve: Motion.effectsFastCurve,
+                  switchOutCurve: Motion.effectsFastCurve.flipped,
+                  child: busy
+                      ? Row(
+                          key: const ValueKey('busy'),
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox.square(
+                              dimension: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: scheme.onPrimary,
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(l10n.serverAddAndConnecting),
-                        ],
-                      )
-                    : Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(l10n.serverAddAndConnect),
-                          const SizedBox(width: 8),
-                          const Icon(Icons.arrow_forward_rounded, size: 16),
-                        ],
-                      ),
+                            const SizedBox(width: 8),
+                            Text(l10n.serverAddAndConnecting),
+                          ],
+                        )
+                      : Row(
+                          key: const ValueKey('idle'),
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(l10n.serverAddAndConnect),
+                            const SizedBox(width: 8),
+                            const Icon(Icons.arrow_forward_rounded, size: 16),
+                          ],
+                        ),
+                ),
               ),
             ],
           ),

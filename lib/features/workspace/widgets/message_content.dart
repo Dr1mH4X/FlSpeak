@@ -178,10 +178,13 @@ class _Palette {
 
   factory _Palette.of(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return _Palette(
       link: scheme.primary,
       codeBackground: scheme.surfaceContainerHighest,
-      highlight: const Color(0x66FFD54F),
+      // ==mark== 高亮：亮色沿用琥珀 40% 叠底（正文是深色，对比足够）；
+      // 暗色下浅字浅底会崩，换成深琥珀实底，onSurface 对比仍在 7:1 以上。
+      highlight: isDark ? const Color(0xFF514714) : const Color(0x66FFD54F),
       spoilerBackground: scheme.surfaceContainerHighest,
       muted: scheme.onSurfaceVariant,
       outline: scheme.outlineVariant,
@@ -977,7 +980,7 @@ class _AttachmentCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.image_outlined, color: scheme.onSurfaceVariant),
+          Icon(Icons.image_rounded, color: scheme.onSurfaceVariant),
           const SizedBox(width: 10),
           Expanded(
             child: Column(

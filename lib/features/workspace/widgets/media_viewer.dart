@@ -263,7 +263,7 @@ class _ViewerImage extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(
-                Icons.broken_image_outlined,
+                Icons.broken_image_rounded,
                 size: 40,
                 color: _viewerMutedForeground,
               ),

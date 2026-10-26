@@ -141,11 +141,13 @@ class _MainSurface extends StatelessWidget {
     final scheme = context.scheme;
 
     return Material(
+      // 三个分支都是实色面板：亮色半透明白在浅色底上会发灰，也和暗色
+      // 分支的观感不一致。
       color: compact
           ? scheme.surface
           : context.isDark
           ? scheme.surfaceContainer
-          : scheme.surfaceContainerLowest.withValues(alpha: 0.6),
+          : scheme.surfaceContainerLowest,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

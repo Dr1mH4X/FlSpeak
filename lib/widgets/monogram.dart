@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_motion.dart';
 import '../theme/app_theme.dart';
 
 /// 服务器磁贴：圆形，颜色由档案 id 稳定散列而来，连接态用右下角的状态点表达。
@@ -129,14 +130,22 @@ class MemberAvatar extends StatelessWidget {
     final scheme = context.scheme;
     final ringColor = onSurface ? context.cardColor : context.pageColor;
 
-    final avatar = Container(
+    // 说话描边用透明边占位过渡：边框出现/消失不再挤动布局，也不瞬跳。
+    final avatar = AnimatedContainer(
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : Motion.effectsFast,
+      curve: Motion.effectsDefaultCurve,
       width: size,
       height: size,
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: scheme.primaryContainer,
         shape: BoxShape.circle,
-        border: speaking ? Border.all(color: scheme.primary, width: 2) : null,
+        border: Border.all(
+          color: speaking ? scheme.primary : Colors.transparent,
+          width: 2,
+        ),
       ),
       child: Text(
         label,

@@ -88,68 +88,59 @@ class SettingsRow extends StatelessWidget {
     final foreground = destructive ? scheme.error : scheme.onSurface;
     final secondary = scheme.onSurfaceVariant;
 
-    final content = ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: 56),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Icon(icon, size: 20, color: destructive ? scheme.error : secondary),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: texts.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w500,
-                      color: foreground,
-                    ),
-                  ),
-                  if (subtitle != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        subtitle!,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: texts.bodySmall?.copyWith(
-                          color: subtitleColor ?? secondary,
-                        ),
-                      ),
-                    ),
-                  if (description != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        description!,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: texts.bodySmall?.copyWith(color: secondary),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            if (trailing != null) ...[
-              const SizedBox(width: 12),
-              trailing!,
-            ] else if (onTap != null) ...[
-              const SizedBox(width: 8),
-              Icon(Icons.chevron_right_rounded, size: 18, color: secondary),
-            ],
-          ],
+    final lines = <Widget>[
+      if (subtitle != null)
+        Text(
+          subtitle!,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: texts.bodySmall?.copyWith(color: subtitleColor ?? secondary),
+        ),
+      if (description != null)
+        Text(
+          description!,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: texts.bodySmall?.copyWith(color: secondary),
+        ),
+    ];
+
+    // M3 list item：ink/hover/semantics 交给 ListTile，样式仍由主题与
+    // 这里的显式样式锁住，保持卡片里的行高节奏。
+    return ListTile(
+      leading: Icon(
+        icon,
+        size: 20,
+        color: destructive ? scheme.error : secondary,
+      ),
+      title: Text(
+        title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: texts.titleMedium?.copyWith(
+          fontWeight: FontWeight.w500,
+          color: foreground,
         ),
       ),
+      subtitle: lines.isEmpty
+          ? null
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var index = 0; index < lines.length; index++) ...[
+                  if (index > 0) const SizedBox(height: 2),
+                  lines[index],
+                ],
+              ],
+            ),
+      trailing:
+          trailing ??
+          (onTap != null
+              ? Icon(Icons.chevron_right_rounded, size: 18, color: secondary)
+              : null),
+      onTap: onTap,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
     );
-
-    if (onTap == null) {
-      return content;
-    }
-    return InkWell(onTap: onTap, child: content);
   }
 }

@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 
 /// 提示条：策略拒绝与协议失败都走这里，就近显示而不是弹窗打断。
+///
+/// 底色用 errorContainer / 前景用 onErrorContainer（M3 语义对）：透明度
+/// 叠色在暗色下发浊，正文对比度也不稳。
 class NoticeBar extends StatelessWidget {
   const NoticeBar({
     required this.message,
@@ -22,7 +25,7 @@ class NoticeBar extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
       decoration: BoxDecoration(
-        color: scheme.error.withValues(alpha: 0.10),
+        color: scheme.errorContainer,
         borderRadius: Radii.xxlAll,
       ),
       child: Row(
@@ -30,13 +33,19 @@ class NoticeBar extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.only(top: 2),
-            child: Icon(Icons.wifi_off_rounded, size: 16, color: scheme.error),
+            child: Icon(
+              Icons.wifi_off_rounded,
+              size: 16,
+              color: scheme.onErrorContainer,
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
             child: SelectableText(
               message,
-              style: context.texts.bodySmall?.copyWith(color: scheme.error),
+              style: context.texts.bodySmall?.copyWith(
+                color: scheme.onErrorContainer,
+              ),
             ),
           ),
           SizedBox(
@@ -46,7 +55,7 @@ class NoticeBar extends StatelessWidget {
               tooltip: dismissTooltip,
               iconSize: 14,
               padding: EdgeInsets.zero,
-              color: scheme.error,
+              color: scheme.onErrorContainer,
               onPressed: onDismiss,
               icon: const Icon(Icons.close_rounded),
             ),
@@ -134,14 +143,10 @@ class SectionLabel extends StatelessWidget {
   );
 }
 
-/// 页面级卡片描边：浅色下靠细线，深色下靠面阶。
-BoxBorder? cardBorder(BuildContext context) => Border.fromBorderSide(
-  BorderSide(
-    color: context.isDark
-        ? context.scheme.outlineVariant.withValues(alpha: 0.35)
-        : context.scheme.outlineVariant.withValues(alpha: 0.7),
-  ),
-);
+/// 页面级卡片描边：与 [hairlineSide] 同源，浅色靠细线，深色 outlineVariant
+/// 全色（M3 divider 规范）。
+BoxBorder? cardBorder(BuildContext context) =>
+    Border.fromBorderSide(hairlineSide(context));
 
 /// 对话框 / 底部抽屉的统一外壳。
 ///
@@ -168,8 +173,8 @@ Future<T?> showAppModal<T>(
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: false,
-      backgroundColor: context.scheme.surfaceContainerLow,
-      barrierColor: context.scheme.onSurface.withValues(alpha: 0.35),
+      // M3 scrim：scrim 色压 32%，亮暗主题各自成立。
+      barrierColor: context.scheme.scrim.withValues(alpha: 0.32),
       constraints: BoxConstraints(
         maxHeight: MediaQuery.sizeOf(context).height * 0.92,
       ),
@@ -185,10 +190,9 @@ Future<T?> showAppModal<T>(
 
   return showDialog<T>(
     context: context,
-    barrierColor: context.scheme.onSurface.withValues(alpha: 0.35),
+    barrierColor: context.scheme.scrim.withValues(alpha: 0.32),
+    // 底色与形状交给 dialogTheme（surfaceContainerHigh + xxxl）。
     builder: (context) => Dialog(
-      backgroundColor: context.scheme.surfaceContainerLow,
-      surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: Radii.xxxlAll,
         side: BorderSide(color: context.scheme.outlineVariant),
@@ -363,11 +367,14 @@ class HairlineCard extends StatelessWidget {
         color: context.cardColor,
         borderRadius: Radii.xxlAll,
         border: Border.fromBorderSide(hairlineSide(context)),
-        boxShadow: const [
+        // 投影走 scheme.shadow：亮色 4% 维持原观感，暗色提到 20% 才可见。
+        boxShadow: [
           BoxShadow(
-            color: Color(0x0A171D1B),
+            color: context.scheme.shadow.withValues(
+              alpha: context.isDark ? 0.20 : 0.04,
+            ),
             blurRadius: 2,
-            offset: Offset(0, 1),
+            offset: const Offset(0, 1),
           ),
         ],
       ),

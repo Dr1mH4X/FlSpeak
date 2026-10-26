@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../l10n/app_localizations.dart';
+import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
 
 /// 连接页顶栏：桌面端显示连接状态，窄屏显示应用标识。
@@ -30,7 +31,7 @@ class ConnectHeader extends StatelessWidget {
     final scheme = context.scheme;
     final animations = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
-        : const Duration(milliseconds: 200);
+        : Motion.effectsDefault;
 
     return SizedBox(
       height: Sizes.header,
@@ -43,6 +44,7 @@ class ConnectHeader extends StatelessWidget {
             if (desktop) ...[
               AnimatedContainer(
                 duration: animations,
+                curve: Motion.effectsDefaultCurve,
                 width: 8,
                 height: 8,
                 decoration: BoxDecoration(
@@ -134,7 +136,7 @@ class ConnectHeader extends StatelessWidget {
                   maximumSize: const Size(Sizes.touch, Sizes.touch),
                   padding: EdgeInsets.zero,
                 ),
-                icon: const Icon(Icons.settings_outlined),
+                icon: const Icon(Icons.settings_rounded),
               ),
           ],
         ),

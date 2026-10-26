@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/models.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/monogram.dart';
 import 'media_viewer.dart';
@@ -80,8 +81,8 @@ class _ChatPaneState extends State<ChatPane> {
       } else {
         _scroll.animateTo(
           target,
-          duration: const Duration(milliseconds: 240),
-          curve: Curves.easeOutCubic,
+          duration: Motion.effectsFast,
+          curve: Motion.effectsFastCurve,
         );
       }
     });
@@ -182,7 +183,11 @@ class _ChatPaneState extends State<ChatPane> {
           child: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: scheme.surfaceContainer,
+              // 暗色主面板本身就是 surfaceContainer，输入条往上一级
+              // （Highest）才浮得出来；亮色维持原状。
+              color: context.isDark
+                  ? scheme.surfaceContainerHighest
+                  : scheme.surfaceContainer,
               borderRadius: BorderRadius.circular(Radii.xxxl),
             ),
             child: Row(
@@ -273,7 +278,7 @@ class _ScopeButton extends StatelessWidget {
             onChanged(server ? ChatScope.channel : ChatScope.server),
         iconSize: 20,
         icon: Icon(
-          server ? Icons.public_rounded : Icons.chat_bubble_outline_rounded,
+          server ? Icons.public_rounded : Icons.chat_bubble_rounded,
           color: scheme.onSurfaceVariant,
         ),
       ),
@@ -330,13 +335,14 @@ class _MessageRow extends StatefulWidget {
 
 class _MessageRowState extends State<_MessageRow>
     with SingleTickerProviderStateMixin {
+  // 入场是位移+淡入：位移按 M3 spatial fast 档，曲线带轻微回弹。
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 260),
+    duration: Motion.spatialFast,
   );
   late final CurvedAnimation _curve = CurvedAnimation(
     parent: _controller,
-    curve: Curves.easeOutCubic,
+    curve: Motion.spatialCurve,
   );
 
   @override

@@ -7,6 +7,7 @@ import '../../core/models.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../router.dart';
+import '../../theme/app_motion.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common.dart';
 import 'widgets/add_server_dialog.dart';
@@ -258,7 +259,9 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(0, 8, 8, 8),
                       child: Material(
-                        color: context.cardColor.withValues(alpha: 0.6),
+                        // 不透明面板：半透明会让顶部光晕透进来，暗色下与
+                        // 8px 沟槽糊成一片；与工作区面板的做法对齐。
+                        color: context.cardColor,
                         borderRadius: Radii.xxxlAll,
                         clipBehavior: Clip.antiAlias,
                         child: Column(
@@ -467,43 +470,61 @@ class _ServerSection extends StatelessWidget {
                     ),
           ],
         ),
-        if (notice != null) ...[
-          const SizedBox(height: 16),
-          NoticeBar(
-            message: notice!,
-            dismissTooltip: l10n.commonClose,
-            onDismiss: onDismissNotice,
-          ),
-        ],
+        // 通知条平滑展开/收起：出现与消失不再挤压布局。
+        AnimatedSize(
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : Motion.effectsFast,
+          curve: Motion.effectsFastCurve,
+          alignment: Alignment.topCenter,
+          child: notice == null
+              ? const SizedBox(width: double.infinity)
+              : Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: NoticeBar(
+                    message: notice!,
+                    dismissTooltip: l10n.commonClose,
+                    onDismiss: onDismissNotice,
+                  ),
+                ),
+        ),
         const SizedBox(height: 16),
         if (servers.isEmpty)
           _EmptyServers(onAdd: onAdd)
         else ...[
-          HairlineCard(
-            clip: true,
-            child: Column(
-              children: [
-                for (var index = 0; index < servers.length; index++) ...[
-                  if (index > 0)
-                    // 分隔线缩进到内容边缘：不顶到卡片圆角区，也和头像对齐。
-                    Divider(
-                      height: 1,
-                      thickness: 1,
-                      indent: 20,
-                      endIndent: 20,
-                      color: context.hairline.withValues(alpha: 0.6),
+          // 卡片高度随服务器的增删走 spatial fast：列表重排不再瞬跳。
+          AnimatedSize(
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : Motion.spatialFast,
+            curve: Motion.spatialCurve,
+            alignment: Alignment.topCenter,
+            child: HairlineCard(
+              clip: true,
+              child: Column(
+                children: [
+                  for (var index = 0; index < servers.length; index++) ...[
+                    if (index > 0)
+                      // 分隔线缩进到内容边缘：不顶到卡片圆角区，也和头像对齐。
+                      Divider(
+                        height: 1,
+                        thickness: 1,
+                        indent: 20,
+                        endIndent: 20,
+                        color: hairlineSide(context).color,
+                      ),
+                    ServerRow(
+                      profile: servers[index],
+                      lastConnected: lastConnected[servers[index].id],
+                      connected: servers[index].id == connectedId,
+                      connecting: servers[index].id == connectingId,
+                      enabled: enabled && servers[index].id != connectingId,
+                      onTap: () => onConnect(servers[index]),
+                      onRemove: () => onRemove(servers[index]),
                     ),
-                  ServerRow(
-                    profile: servers[index],
-                    lastConnected: lastConnected[servers[index].id],
-                    connected: servers[index].id == connectedId,
-                    connecting: servers[index].id == connectingId,
-                    enabled: enabled && servers[index].id != connectingId,
-                    onTap: () => onConnect(servers[index]),
-                    onRemove: () => onRemove(servers[index]),
-                  ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
           const SizedBox(height: 12),
@@ -526,7 +547,9 @@ class _EmptyServers extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: context.cardColor.withValues(alpha: 0.5),
+        // 实色：透明叠底在暗色下与页面底板糊在一起，虚线描边才是空态的
+        // 视觉信号。
+        color: context.cardColor,
         borderRadius: Radii.xxlAll,
       ),
       child: DashedBorder(
@@ -546,7 +569,7 @@ class _EmptyServers extends StatelessWidget {
                   borderRadius: Radii.xxlAll,
                 ),
                 child: Icon(
-                  Icons.dns_outlined,
+                  Icons.dns_rounded,
                   size: 22,
                   color: scheme.onPrimaryContainer,
                 ),
@@ -587,7 +610,8 @@ class _AddServerRow extends StatelessWidget {
       clip: true,
       child: InkWell(
         onTap: onTap,
-        hoverColor: scheme.surfaceContainer.withValues(alpha: 0.6),
+        // M3 state layer：onSurface 8%。
+        hoverColor: scheme.onSurface.withValues(alpha: 0.08),
         child: Padding(
           // 内容缩进与服务器行（20）对齐，+ 圆钮和头像落在同一条线上。
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),

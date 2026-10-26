@@ -8,6 +8,7 @@ import '../../core/models.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../router.dart';
+import '../../theme/app_motion.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common.dart';
 import 'widgets/chat_pane.dart';
@@ -25,8 +26,31 @@ class WorkspacePage extends ConsumerStatefulWidget {
 
 enum _MainTab { chat, media }
 
-class _WorkspacePageState extends ConsumerState<WorkspacePage> {
+class _WorkspacePageState extends ConsumerState<WorkspacePage>
+    with SingleTickerProviderStateMixin {
+  // M3 primary tabs：页签状态由 TabController 持有，指示器动画随组件自带。
+  late final TabController _tabController = TabController(
+    length: 2,
+    vsync: this,
+  )..addListener(_handleTabChanged);
   _MainTab _tab = _MainTab.chat;
+
+  void _handleTabChanged() {
+    if (_tabController.indexIsChanging) {
+      return;
+    }
+    final tab = _MainTab.values[_tabController.index];
+    if (tab != _tab) {
+      setState(() => _tab = tab);
+    }
+  }
+
+  @override
+  void dispose() {
+    _tabController.removeListener(_handleTabChanged);
+    _tabController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,12 +60,16 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
 
     // 换频道时回到消息页，和原型一致；延迟一帧避免在构建期触发 setState。
     ref.listen<int?>(activeChannelIdProvider, (previous, next) {
-      if (previous == next || _tab == _MainTab.chat) {
+      if (previous == next || _tabController.index == 0) {
         return;
       }
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _tab != _MainTab.chat) {
-          setState(() => _tab = _MainTab.chat);
+        if (mounted && _tabController.index != 0) {
+          if (MediaQuery.disableAnimationsOf(context)) {
+            _tabController.index = 0;
+          } else {
+            _tabController.animateTo(0);
+          }
         }
       });
     });
@@ -55,8 +83,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
         _ChannelHeader(
           compact: compact,
           channelName: channel == null ? null : channelDisplayName(channel),
-          selected: _tab,
-          onChanged: (tab) => setState(() => _tab = tab),
+          tabController: _tabController,
         ),
         if (view.identityUpgradeTarget != null)
           _IdentityBanner(
@@ -71,7 +98,21 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
               .read(sessionViewProvider.notifier)
               .dismissVoiceNotice,
         ),
-        Expanded(child: _buildBody(context, l10n, view, channel)),
+        Expanded(
+          // 视图替换走 crossfade（M3 effects default）：同一容器内换内容
+          // 不做位移，避免整块内容跳来跳去。
+          child: AnimatedSwitcher(
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : Motion.effectsDefault,
+            switchInCurve: Motion.effectsDefaultCurve,
+            switchOutCurve: Motion.effectsDefaultCurve.flipped,
+            child: KeyedSubtree(
+              key: ValueKey(_tab),
+              child: _buildBody(context, l10n, view, channel),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -118,7 +159,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
 
     if (channel == null) {
       return EmptyState(
-        icon: Icons.forum_outlined,
+        icon: Icons.forum_rounded,
         body: l10n.workspaceNoChannels,
       );
     }
@@ -161,12 +202,12 @@ List<_TabSpec> _tabSpecs(AppLocalizations l10n) => [
   _TabSpec(
     tab: _MainTab.chat,
     label: l10n.chatTabMessages,
-    icon: Icons.chat_bubble_outline_rounded,
+    icon: Icons.chat_bubble_rounded,
   ),
   _TabSpec(
     tab: _MainTab.media,
     label: l10n.chatTabMedia,
-    icon: Icons.photo_library_outlined,
+    icon: Icons.photo_library_rounded,
   ),
 ];
 
@@ -174,14 +215,12 @@ class _ChannelHeader extends StatelessWidget {
   const _ChannelHeader({
     required this.compact,
     required this.channelName,
-    required this.selected,
-    required this.onChanged,
+    required this.tabController,
   });
 
   final bool compact;
   final String? channelName;
-  final _MainTab selected;
-  final ValueChanged<_MainTab> onChanged;
+  final TabController tabController;
 
   /// 三个页签的文字宽度随语言和字号变化；放不下时退回「图标 + tooltip」，
   /// 否则英文长标签或放大字号会把标题挤成零宽。
@@ -196,7 +235,7 @@ class _ChannelHeader extends StatelessWidget {
     );
     final direction = Directionality.of(context);
     final scaler = MediaQuery.textScalerOf(context);
-    var tabWidth = 8.0; // 胶囊内边距 4 * 2
+    var tabWidth = 0.0;
     for (final tab in tabs) {
       final painter = TextPainter(
         text: TextSpan(text: tab.label, style: style),
@@ -263,9 +302,8 @@ class _ChannelHeader extends StatelessWidget {
                   const SizedBox(width: 6),
                   _ViewTabs(
                     tabs: tabs,
-                    selected: selected,
+                    controller: tabController,
                     labeled: labeledTabs,
-                    onChanged: onChanged,
                   ),
                 ],
               ],
@@ -277,134 +315,47 @@ class _ChannelHeader extends StatelessWidget {
   }
 }
 
+/// 频道头里的视图切换：M3 primary tabs（`TabBar`）。
+///
+/// 之前是手写的胶囊按钮组；segmented button 在 M3 Expressive 里已不再
+/// 推荐，替代的 connected button group 在 Flutter 上不可用，primary tabs
+/// 是同级视图切换的规范组件，指示器动画与语义由组件自带。
 class _ViewTabs extends StatelessWidget {
   const _ViewTabs({
     required this.tabs,
-    required this.selected,
+    required this.controller,
     required this.labeled,
-    required this.onChanged,
   });
 
   final List<_TabSpec> tabs;
-  final _MainTab selected;
+  final TabController controller;
   final bool labeled;
-  final ValueChanged<_MainTab> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      decoration: BoxDecoration(
-        color: context.scheme.surfaceContainer,
-        borderRadius: Radii.pillAll,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final tab in tabs)
-            _TabButton(
-              spec: tab,
-              active: selected == tab.tab,
-              labeled: labeled,
-              onTap: () => onChanged(tab.tab),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TabButton extends StatelessWidget {
-  const _TabButton({
-    required this.spec,
-    required this.active,
-    required this.labeled,
-    required this.onTap,
-  });
-
-  final _TabSpec spec;
-  final bool active;
-  final bool labeled;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    final foreground = active ? scheme.onSurface : scheme.onSurfaceVariant;
-
-    final content = labeled
-        ? Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(spec.icon, size: 16, color: foreground),
-              const SizedBox(width: 6),
-              Text(
-                spec.label,
-                maxLines: 1,
-                style: context.texts.labelMedium?.copyWith(
-                  fontSize: 13,
-                  fontWeight: active ? FontWeight.w600 : FontWeight.w500,
-                  color: foreground,
-                ),
-              ),
-            ],
-          )
-        : Icon(spec.icon, size: 18, color: foreground);
-
-    // 36 高的视觉胶囊包在 44 高的落点里：原型是 h-9，触屏最小落点要 44。
-    // 点击响应（水波纹）画在胶囊自己的 Material 上，跟胶囊一样大；
-    // 外圈 4px 只扩大落点，不画反馈。
-    final pill = Container(
-      height: 36,
-      width: labeled ? null : 36,
-      decoration: active
-          ? BoxDecoration(
-              color: context.cardColor,
-              borderRadius: Radii.pillAll,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.12),
-                  blurRadius: 3,
-                  offset: const Offset(0, 1),
-                ),
-              ],
-            )
-          : null,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: Radii.pillAll,
-          child: Padding(
-            // 活动胶囊 r18（22 − 4）：label 的水平内边距 ≥ 半径才光学对齐。
-            padding: labeled
-                ? const EdgeInsets.symmetric(horizontal: 18)
-                : EdgeInsets.zero,
-            child: content,
+    return TabBar(
+      controller: controller,
+      isScrollable: true,
+      // M3 scrollable tabs 的默认对齐：首签偏移一个 tab 边距。
+      tabAlignment: TabAlignment.startOffset,
+      // 频道头只有 64 高，页签压到 40 贴标题基线。
+      splashBorderRadius: Radii.pillAll,
+      tabs: [
+        for (final tab in tabs)
+          Tab(
+            height: 40,
+            child: labeled
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(tab.icon, size: 16),
+                      const SizedBox(width: 6),
+                      Text(tab.label, maxLines: 1),
+                    ],
+                  )
+                : Tooltip(message: tab.label, child: Icon(tab.icon, size: 18)),
           ),
-        ),
-      ),
-    );
-
-    final button = GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: SizedBox(
-        height: Sizes.touch,
-        width: labeled ? null : Sizes.touch,
-        child: Center(child: pill),
-      ),
-    );
-
-    final child = labeled
-        ? button
-        : Tooltip(message: spec.label, child: button);
-    return Semantics(
-      button: true,
-      selected: active,
-      label: labeled ? null : spec.label,
-      excludeSemantics: !labeled,
-      child: child,
+      ],
     );
   }
 }
@@ -430,7 +381,7 @@ class _IdentityBanner extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            Icons.workspace_premium_outlined,
+            Icons.workspace_premium_rounded,
             size: 18,
             color: scheme.onSecondaryContainer,
           ),
@@ -513,13 +464,14 @@ class _DeviceChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: scheme.error.withValues(alpha: 0.10),
+        // container 语义对：透明度叠底在暗色下发浊，正文对比不稳。
+        color: scheme.errorContainer,
         borderRadius: Radii.pillAll,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: scheme.error),
+          Icon(icon, size: 14, color: scheme.onErrorContainer),
           const SizedBox(width: 6),
           Flexible(
             child: Text(
@@ -527,7 +479,7 @@ class _DeviceChip extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.bodySmall
-                  ?.copyWith(color: scheme.error),
+                  ?.copyWith(color: scheme.onErrorContainer),
             ),
           ),
         ],

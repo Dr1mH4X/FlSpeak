@@ -58,8 +58,11 @@ class _ServerPreview extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainer.withValues(alpha: 0.7),
+        // 对话框已是 surfaceContainerHigh，预览卡往下沉一级并描边才分得开；
+        // 半透明叠底在暗色下会糊在一起。
+        color: scheme.surfaceContainerLow,
         borderRadius: Radii.xxlAll,
+        border: Border.fromBorderSide(hairlineSide(context)),
       ),
       child: Row(
         children: [

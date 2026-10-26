@@ -139,12 +139,13 @@ abstract final class Sizes {
   static const railTile = 48.0;
 }
 
-/// 页面级容器的描边：浅色下一根很淡的线，深色下几乎不画。
+/// 页面级容器的描边：浅色下一根很淡的线，深色按 M3 divider 规范用
+/// outlineVariant 全色——暗色下再压透明度就真的看不见了。
 BorderSide hairlineSide(BuildContext context) {
   final scheme = context.scheme;
   return BorderSide(
     color: context.isDark
-        ? scheme.outlineVariant.withValues(alpha: 0.5)
+        ? scheme.outlineVariant
         : scheme.outlineVariant.withValues(alpha: 0.7),
   );
 }
@@ -314,6 +315,8 @@ ColorScheme _scheme(Brightness brightness) {
       secondaryContainer: const Color(0xFF2A3330),
       onSecondaryContainer: const Color(0xFFDCE5E1),
       surface: const Color(0xFF0E1513),
+      surfaceDim: const Color(0xFF090F0E),
+      surfaceBright: const Color(0xFF343B39),
       surfaceContainerLowest: const Color(0xFF090F0E),
       surfaceContainerLow: const Color(0xFF151C1A),
       surfaceContainer: const Color(0xFF1A211F),
@@ -329,6 +332,10 @@ ColorScheme _scheme(Brightness brightness) {
       onErrorContainer: const Color(0xFFFFDAD6),
       inverseSurface: const Color(0xFFDEE4E1),
       onInverseSurface: const Color(0xFF2B3230),
+      // 面板底色已由 surfaceContainer 家族分层，M3 的 elevation tint 一律关掉。
+      surfaceTint: Colors.transparent,
+      shadow: Colors.black,
+      scrim: Colors.black,
     );
   }
 
@@ -340,6 +347,8 @@ ColorScheme _scheme(Brightness brightness) {
     secondaryContainer: const Color(0xFFDCE5E2),
     onSecondaryContainer: const Color(0xFF151D1B),
     surface: const Color(0xFFF4FBF8),
+    surfaceDim: const Color(0xFFD5DBD9),
+    surfaceBright: const Color(0xFFF4FBF8),
     surfaceContainerLowest: const Color(0xFFFFFFFF),
     surfaceContainerLow: const Color(0xFFFFFFFF),
     surfaceContainer: const Color(0xFFE9EFEC),
@@ -355,6 +364,9 @@ ColorScheme _scheme(Brightness brightness) {
     onErrorContainer: const Color(0xFF410002),
     inverseSurface: const Color(0xFF2B3230),
     onInverseSurface: const Color(0xFFEAF1EE),
+    surfaceTint: Colors.transparent,
+    shadow: Colors.black,
+    scrim: Colors.black,
   );
 }
 
@@ -409,15 +421,18 @@ ThemeData buildAppTheme(Brightness brightness) {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: scheme.surfaceContainerLowest,
+      // M3 filled field 的容器色是 surfaceContainerHighest；暗色下再往下取
+      // 面阶（旧值 lowest）会在面板上沉积成一整块死黑。
+      fillColor: scheme.surfaceContainerHighest,
+      hoverColor: scheme.onSurface.withValues(alpha: 0.08),
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       border: OutlineInputBorder(
         borderRadius: Radii.xlAll,
-        borderSide: BorderSide(color: scheme.outline),
+        borderSide: BorderSide(color: scheme.outlineVariant),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: Radii.xlAll,
-        borderSide: BorderSide(color: scheme.outline),
+        borderSide: BorderSide(color: scheme.outlineVariant),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: Radii.xlAll,
@@ -432,9 +447,7 @@ ThemeData buildAppTheme(Brightness brightness) {
         borderSide: BorderSide(color: scheme.error, width: 2),
       ),
       labelStyle: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-      hintStyle: text.bodyMedium?.copyWith(
-        color: scheme.onSurfaceVariant.withValues(alpha: 0.8),
-      ),
+      hintStyle: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
       helperStyle: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
       errorStyle: text.bodySmall?.copyWith(color: scheme.error),
     ),
@@ -493,28 +506,25 @@ ThemeData buildAppTheme(Brightness brightness) {
         side: focusRing,
       ),
     ),
-    segmentedButtonTheme: SegmentedButtonThemeData(
-      style: ButtonStyle(
-        textStyle: WidgetStatePropertyAll(text.labelMedium),
-        padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        ),
-        shape: WidgetStatePropertyAll(Radii.xlShape),
-        side: WidgetStatePropertyAll(BorderSide(color: scheme.outline)),
-        backgroundColor: WidgetStateProperty.resolveWith(
-          (states) => states.contains(WidgetState.selected)
-              ? scheme.primaryContainer
-              : scheme.surfaceContainerLow,
-        ),
-        foregroundColor: WidgetStateProperty.resolveWith(
-          (states) => states.contains(WidgetState.selected)
-              ? scheme.onPrimaryContainer
-              : scheme.onSurfaceVariant,
-        ),
+    // M3 primary tabs：指示器取 primary、标签取 titleSmall；选中态文字
+    // onSurface、未选中 onSurfaceVariant。应用把它放在频道头里当视图切换，
+    // 底部分隔线交给外层容器画，这里关掉。
+    tabBarTheme: TabBarThemeData(
+      labelColor: scheme.onSurface,
+      unselectedLabelColor: scheme.onSurfaceVariant,
+      labelStyle: text.titleSmall,
+      unselectedLabelStyle: text.titleSmall,
+      indicatorColor: scheme.primary,
+      indicatorSize: TabBarIndicatorSize.label,
+      dividerColor: Colors.transparent,
+      overlayColor: WidgetStatePropertyAll(
+        scheme.onSurface.withValues(alpha: 0.08),
       ),
     ),
     dialogTheme: DialogThemeData(
-      backgroundColor: scheme.surfaceContainerLow,
+      // M3 dialog 的容器色是 surfaceContainerHigh，比旧的 Low 在暗色下多
+      // 一级分离。
+      backgroundColor: scheme.surfaceContainerHigh,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: Radii.xxxlAll),
       titleTextStyle: text.titleLarge,
@@ -543,7 +553,8 @@ ThemeData buildAppTheme(Brightness brightness) {
       ),
       shape: RoundedRectangleBorder(borderRadius: Radii.xxlAll),
       insetPadding: const EdgeInsets.all(16),
-      elevation: 4,
+      // M3 snackbar 的档位是 6。
+      elevation: 6,
     ),
     scrollbarTheme: ScrollbarThemeData(
       thickness: const WidgetStatePropertyAll(8),
@@ -564,7 +575,8 @@ ThemeData buildAppTheme(Brightness brightness) {
       style: MenuStyle(
         backgroundColor: WidgetStatePropertyAll(scheme.surfaceContainerLow),
         surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
-        elevation: const WidgetStatePropertyAll(8.0),
+        // M3 menu 的档位是 3（level 2），8 是旧 M2 值。
+        elevation: const WidgetStatePropertyAll(3.0),
         shape: WidgetStatePropertyAll(Radii.xxlShape),
         padding: const WidgetStatePropertyAll(EdgeInsets.zero),
       ),

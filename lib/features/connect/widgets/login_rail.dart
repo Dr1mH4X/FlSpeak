@@ -55,7 +55,7 @@ class LoginRail extends StatelessWidget {
                 maximumSize: const Size(Sizes.touch, Sizes.touch),
                 padding: EdgeInsets.zero,
               ),
-              icon: const Icon(Icons.settings_outlined),
+              icon: const Icon(Icons.settings_rounded),
             ),
           ),
         ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../l10n/app_localizations.dart';
+import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
 import '../../../widgets/monogram.dart';
@@ -93,11 +94,27 @@ class _IdentityDialogContentState extends State<_IdentityDialogContent> {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: scheme.primaryContainer.withValues(alpha: 0.25),
+        // 不透明 container 对：透明度叠底在暗色下发闷，正文对比也随底色漂。
+        color: scheme.secondaryContainer,
         borderRadius: Radii.xxlAll,
-        border: Border.all(color: scheme.primary.withValues(alpha: 0.4)),
+        border: Border.all(color: scheme.outlineVariant),
       ),
-      child: _editing ? _buildEditor(context, l10n) : _buildRow(context, l10n),
+      child: AnimatedSwitcher(
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : Motion.effectsFast,
+        switchInCurve: Motion.effectsFastCurve,
+        switchOutCurve: Motion.effectsFastCurve.flipped,
+        child: _editing
+            ? KeyedSubtree(
+                key: const ValueKey('identity-editor'),
+                child: _buildEditor(context, l10n),
+              )
+            : KeyedSubtree(
+                key: const ValueKey('identity-row'),
+                child: _buildRow(context, l10n),
+              ),
+      ),
     );
   }
 
@@ -157,7 +174,7 @@ class _IdentityDialogContentState extends State<_IdentityDialogContent> {
             maximumSize: const Size(Sizes.touch, Sizes.touch),
             padding: EdgeInsets.zero,
           ),
-          icon: const Icon(Icons.edit_outlined),
+          icon: const Icon(Icons.edit_rounded),
         ),
       ],
     );
