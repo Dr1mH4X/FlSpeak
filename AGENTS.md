@@ -49,4 +49,4 @@
 just check
 ```
 
-等价于在 `plugins/flspeak_ffi/rust` 跑 `cargo fmt --all && cargo clippy --workspace --all-targets --all-features -- -D warnings && cargo test --workspace --all-features`，再在根目录跑 `dart format lib test setup.dart`、`flutter analyze` 与 `flutter test`。没装 just 就按原始命令跑；全部任务用 `just --list` 查看，细节见 `docs/development.md`。
+等价于在 `plugins/flspeak_ffi/rust` 跑 `cargo fmt --all && cargo clippy --workspace --all-targets --all-features -- -D warnings && cargo test --workspace --all-features`，再在根目录跑 `dart format lib setup.dart` 与 `flutter analyze`。没装 just 就按原始命令跑；全部任务用 `just --list` 查看，细节见 `docs/development.md`。

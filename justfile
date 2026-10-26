@@ -6,13 +6,13 @@
 [group('fmt')]
 fmt:
     cd plugins/flspeak_ffi/rust && cargo fmt --all
-    dart format lib test setup.dart
+    dart format lib setup.dart
 
 # 只检查格式，不落盘（CI 同款）
 [group('fmt')]
 fmt-check:
     cd plugins/flspeak_ffi/rust && cargo fmt --all -- --check
-    dart format --output=none --set-exit-if-changed lib test setup.dart
+    dart format --output=none --set-exit-if-changed lib setup.dart
 
 # ── Rust（从 plugins/flspeak_ffi/rust 跑，吃锁定工具链）──
 
@@ -74,11 +74,6 @@ l10n:
 analyze:
     flutter analyze --no-fatal-infos
 
-# Dart 单测（test/）
-[group('flutter')]
-test:
-    flutter test
-
 [group('flutter')]
 [working-directory: 'plugins/flspeak_ffi']
 analyze-plugin:
@@ -99,7 +94,7 @@ setup platform arch version:
 # ── 聚合 ────────────────────────────────────────────────────────────────────
 
 # 提交前全量验证（AGENTS.md「验证」一节）
-check: fmt rust-clippy rust-test analyze test
+check: fmt rust-clippy rust-test analyze
 
 # 对齐 CI 的静态检查，只读不落盘；生成物一致性另跑 just codegen-check
 ci: fmt-check rust-clippy rust-test analyze analyze-plugin

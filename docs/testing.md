@@ -8,7 +8,7 @@ Rust 单测与实现同文件，为 `#[cfg(test)] mod tests { use super::*; }` �
 - 断言只用 `assert!` / `assert_eq!`
 - 不依赖网络与真实服务器；需要官方域名做测试夹具时，从 `core/proto` 的 `FORBIDDEN_HOST_SUFFIXES` 拼，不要写字面量
 
-Dart 单测在仓库根 `test/`，用 `flutter test` 运行。
+Dart 侧不设单测目录：界面改动靠 `flutter analyze` 与 `just run` 手动验证。
 
 ## 测试范围选择
 
