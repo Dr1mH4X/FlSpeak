@@ -192,16 +192,16 @@ class AppLocalizationsEn extends AppLocalizations {
       'Pick a registered server from the bar on the left, or add a new address.';
 
   @override
-  String get channelExpand => 'Expand';
-
-  @override
-  String get channelCollapse => 'Collapse';
-
-  @override
   String get channelPasswordProtected => 'Channel password required';
 
   @override
   String get channelJoinMenu => 'Join channel';
+
+  @override
+  String get channelPaneResize => 'Resize channel pane';
+
+  @override
+  String get channelPaneResizeHint => 'Drag to resize, double-click to reset';
 
   @override
   String get voiceMute => 'Mute';

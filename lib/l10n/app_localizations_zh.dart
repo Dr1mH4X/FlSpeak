@@ -190,16 +190,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get workspaceNotConnectedBody => '从左侧服务器栏选择一台已登记的服务器，或添加新地址。';
 
   @override
-  String get channelExpand => '展开';
-
-  @override
-  String get channelCollapse => '收起';
-
-  @override
   String get channelPasswordProtected => '需要频道密码';
 
   @override
   String get channelJoinMenu => '加入频道';
+
+  @override
+  String get channelPaneResize => '调整频道栏宽度';
+
+  @override
+  String get channelPaneResizeHint => '拖动调整宽度，双击恢复默认';
 
   @override
   String get voiceMute => '静音';

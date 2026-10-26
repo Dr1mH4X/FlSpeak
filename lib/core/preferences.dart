@@ -36,6 +36,7 @@ class SessionPreferences {
     this.locale,
     this.theme = AppThemePreference.system,
     this.pttHotkey,
+    this.channelPanelWidth,
   });
 
   /// 没有设置过昵称时的默认值。
@@ -58,12 +59,16 @@ class SessionPreferences {
   /// keyId 跨平台稳定，注册到系统时再按平台换算成原生键码。
   final int? pttHotkey;
 
+  /// 频道栏宽度（逻辑像素）；`null` 表示用默认宽度。
+  final double? channelPanelWidth;
+
   SessionPreferences copyWith({
     String? nickname,
     Map<String, DateTime>? lastConnected,
     Object? locale = _unset,
     AppThemePreference? theme,
     Object? pttHotkey = _unset,
+    Object? channelPanelWidth = _unset,
   }) => SessionPreferences(
     nickname: nickname ?? this.nickname,
     lastConnected: lastConnected ?? this.lastConnected,
@@ -72,6 +77,9 @@ class SessionPreferences {
     pttHotkey: identical(pttHotkey, _unset)
         ? this.pttHotkey
         : pttHotkey as int?,
+    channelPanelWidth: identical(channelPanelWidth, _unset)
+        ? this.channelPanelWidth
+        : channelPanelWidth as double?,
   );
 
   Map<String, Object?> toJson() => {
@@ -84,6 +92,7 @@ class SessionPreferences {
     'locale': locale,
     'theme': theme.id,
     'pttHotkey': pttHotkey,
+    'channelPanelWidth': channelPanelWidth,
   };
 
   static SessionPreferences fromJson(Map<String, Object?> json) {
@@ -102,6 +111,7 @@ class SessionPreferences {
     final nickname = rawNickname is String ? rawNickname.trim() : '';
     final rawLocale = json['locale'];
     final rawPttHotkey = json['pttHotkey'];
+    final rawPanelWidth = json['channelPanelWidth'];
     return SessionPreferences(
       nickname: nickname.isEmpty || nickname == _legacyFallbackNickname
           ? fallbackNickname
@@ -110,6 +120,10 @@ class SessionPreferences {
       locale: rawLocale is String && rawLocale.isNotEmpty ? rawLocale : null,
       theme: AppThemePreference.fromId(json['theme']),
       pttHotkey: rawPttHotkey is int ? rawPttHotkey : null,
+      // 文件可能被手改或跨版本：不是有限数就当未设置，尺寸交给渲染时的夹取。
+      channelPanelWidth: rawPanelWidth is num && rawPanelWidth.isFinite
+          ? rawPanelWidth.toDouble()
+          : null,
     );
   }
 }

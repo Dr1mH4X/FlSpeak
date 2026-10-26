@@ -120,8 +120,16 @@ abstract final class Sizes {
   /// 服务器栏宽度 `w-20`。
   static const rail = 80.0;
 
-  /// 频道栏宽度 `w-72`。
+  /// 频道栏宽度 `w-72`。也是拖动分隔条后双击恢复的默认值。
   static const channelPanel = 288.0;
+
+  /// 频道栏可拖动的宽度范围。上限之外还要按窗口宽度再收一次，
+  /// 保证主区域不小于 [mainPaneMin]。
+  static const channelPanelMin = 200.0;
+  static const channelPanelMax = 480.0;
+
+  /// 主区域的最小宽度：拖频道栏时不能把聊天区挤到没法用。
+  static const mainPaneMin = 320.0;
 
   /// 连接页内容最大宽度 `max-w-5xl`。
   static const connectContent = 1024.0;

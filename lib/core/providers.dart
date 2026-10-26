@@ -438,6 +438,14 @@ class PreferencesController extends Notifier<SessionPreferences> {
     _update(state.copyWith(pttHotkey: keyId));
   }
 
+  /// `null` 表示回到默认宽度。
+  void setChannelPanelWidth(double? width) {
+    if (width == state.channelPanelWidth) {
+      return;
+    }
+    _update(state.copyWith(channelPanelWidth: width));
+  }
+
   void markConnected(String serverId, DateTime at) {
     _update(
       state.copyWith(lastConnected: {...state.lastConnected, serverId: at}),

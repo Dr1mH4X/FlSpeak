@@ -11,6 +11,7 @@ import '../../router.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common.dart';
 import 'widgets/channel_pane.dart';
+import 'widgets/channel_pane_resizer.dart';
 import 'widgets/server_rail.dart';
 
 /// 工作区外壳：左侧服务器栏 + 频道栏 + 主内容区，三栏通边铺满窗口。
@@ -112,7 +113,17 @@ class WorkspaceShell extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             rail,
-            SizedBox(width: Sizes.channelPanel, child: panel),
+            ChannelPaneResizer(
+              // 分隔条自身也占地，算上限时一并扣掉，主区域不再被它挤穿。
+              maxWidth: math.max(
+                Sizes.channelPanelMin,
+                width -
+                    ServerRail.width -
+                    Sizes.mainPaneMin -
+                    ChannelPaneResizer.handleWidth,
+              ),
+              child: panel,
+            ),
             Expanded(child: surface),
           ],
         ),

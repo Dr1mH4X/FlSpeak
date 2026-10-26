@@ -416,18 +416,6 @@ abstract class AppLocalizations {
   /// **'Pick a registered server from the bar on the left, or add a new address.'**
   String get workspaceNotConnectedBody;
 
-  /// No description provided for @channelExpand.
-  ///
-  /// In en, this message translates to:
-  /// **'Expand'**
-  String get channelExpand;
-
-  /// No description provided for @channelCollapse.
-  ///
-  /// In en, this message translates to:
-  /// **'Collapse'**
-  String get channelCollapse;
-
   /// No description provided for @channelPasswordProtected.
   ///
   /// In en, this message translates to:
@@ -439,6 +427,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Join channel'**
   String get channelJoinMenu;
+
+  /// No description provided for @channelPaneResize.
+  ///
+  /// In en, this message translates to:
+  /// **'Resize channel pane'**
+  String get channelPaneResize;
+
+  /// No description provided for @channelPaneResizeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Drag to resize, double-click to reset'**
+  String get channelPaneResizeHint;
 
   /// No description provided for @voiceMute.
   ///
