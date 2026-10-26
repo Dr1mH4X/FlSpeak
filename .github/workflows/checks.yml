@@ -1,0 +1,153 @@
+name: checks
+
+# 供 ci.yml 与 release.yml 共用：分支/PR 的常规门禁，以及发版前的同一套门禁。
+on:
+  workflow_call:
+
+env:
+  FLUTTER_VERSION: '3.47.5'
+  # audiopus_sys 内置的 Opus 用 `cmake_minimum_required(VERSION <3.5)`，CMake 4 默认拒绝；
+  # 没装系统 libopus 的平台（macOS/Windows runner）只能走源码构建这条路。
+  CMAKE_POLICY_VERSION_MINIMUM: '3.5'
+
+jobs:
+  rust:
+    name: Rust
+    runs-on: ubuntu-latest
+    # rust-toolchain.toml 必须留在 crate 目录里（native assets 钩子只在那里找），
+    # 所以 cargo 也从这里跑，才能吃到锁定的工具链。
+    defaults:
+      run:
+        working-directory: plugins/flspeak_ffi/rust
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: plugins/flspeak_ffi/rust
+          cache-directories: .dart_tool/hooks_runner
+          save-if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+      - name: Install audio build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake pkg-config libopus-dev libasound2-dev
+
+      - name: Check format
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace --all-features
+
+  dart:
+    name: Dart
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Check format
+        run: dart format --output=none --set-exit-if-changed lib setup.dart
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+
+  dart-test:
+    name: Dart tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # `flutter test` 会跑 native assets 钩子，等于把 Rust 再编一遍：音频依赖与
+      # cargo 缓存都按 rust 作业那一套准备，否则用例起不来。缓存单列一份 key，
+      # 不和 rust 作业互相覆盖。
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: dart-test
+          workspaces: plugins/flspeak_ffi/rust
+          cache-directories: .dart_tool/hooks_runner
+          save-if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+      - name: Install audio build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake pkg-config libopus-dev libasound2-dev
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # 用例与被测文件同目录，`flutter test` 的默认 test/ 目录用不上。
+      - name: Test
+        run: flutter test lib
+
+  plugins:
+    name: Plugins
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: plugins/flspeak_ffi/rust
+          cache-directories: .dart_tool/hooks_runner
+          save-if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+      # `flutter analyze` 也会触发 native assets 钩子，Rust 侧需要同一组音频依赖。
+      - name: Install audio build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake pkg-config libopus-dev libasound2-dev
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Install codegen
+        run: cargo install flutter_rust_bridge_codegen --version 2.13.0 --locked
+
+      - name: Check that generated bindings are up to date
+        working-directory: plugins/flspeak_ffi
+        run: |
+          flutter pub get
+          flutter_rust_bridge_codegen generate
+          cd "$GITHUB_WORKSPACE"
+          if ! git diff --exit-code --stat -- plugins/flspeak_ffi; then
+            echo '生成的绑定与提交的不一致，请本地重跑 flutter_rust_bridge_codegen generate' >&2
+            exit 1
+          fi
+
+      - name: Analyze plugin
+        working-directory: plugins/flspeak_ffi
+        run: flutter analyze --no-fatal-infos

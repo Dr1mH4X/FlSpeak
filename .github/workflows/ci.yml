@@ -1,157 +1,27 @@
 name: ci
 
+# 分支与 PR 的常规门禁；tag 只走 release.yml，避免和发布矩阵重复构建。
 on:
   push:
     branches:
       - '**'
-    tags:
-      - 'v*'
   pull_request:
   workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+  cancel-in-progress: true
 
 env:
   FLUTTER_VERSION: '3.47.5'
   NDK_VERSION: r28c
-  # audiopus_sys 内置的 Opus 用 `cmake_minimum_required(VERSION <3.5)`，CMake 4 默认拒绝；
-  # 没装系统 libopus 的平台（macOS/Windows runner）只能走源码构建这条路。
+  # 见 checks.yml：audiopus_sys 内置 Opus 的 CMake 版本下限需要放宽。
   CMAKE_POLICY_VERSION_MINIMUM: '3.5'
 
 jobs:
-  rust:
-    name: Rust
-    runs-on: ubuntu-latest
-    # rust-toolchain.toml 必须留在 crate 目录里（native assets 钩子只在那里找），
-    # 所以 cargo 也从这里跑，才能吃到锁定的工具链。
-    defaults:
-      run:
-        working-directory: plugins/flspeak_ffi/rust
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: plugins/flspeak_ffi/rust
-          cache-directories: .dart_tool/hooks_runner
-
-      - name: Install audio build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake pkg-config libopus-dev libasound2-dev
-
-      - name: Check format
-        run: cargo fmt --all -- --check
-
-      - name: Clippy
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
-
-      - name: Test
-        run: cargo test --workspace --all-features
-
-  dart:
-    name: Dart
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
-
-      - name: Install dependencies
-        run: flutter pub get
-
-      - name: Check format
-        run: dart format --output=none --set-exit-if-changed lib setup.dart
-
-      - name: Analyze
-        run: flutter analyze --no-fatal-infos
-
-  dart-test:
-    name: Dart tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      # `flutter test` 会跑 native assets 钩子，等于把 Rust 再编一遍：音频依赖与
-      # cargo 缓存都按 rust 作业那一套准备，否则用例起不来。缓存单列一份 key，
-      # 不和 rust 作业互相覆盖。
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          key: dart-test
-          workspaces: plugins/flspeak_ffi/rust
-          cache-directories: .dart_tool/hooks_runner
-
-      - name: Install audio build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake pkg-config libopus-dev libasound2-dev
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
-
-      - name: Install dependencies
-        run: flutter pub get
-
-      # 用例与被测文件同目录，`flutter test` 的默认 test/ 目录用不上。
-      - name: Test
-        run: flutter test lib
-
-  plugins:
-    name: Plugins
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: plugins/flspeak_ffi/rust
-          cache-directories: .dart_tool/hooks_runner
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
-
-      - name: Install dependencies
-        run: flutter pub get
-
-      - name: Install codegen
-        run: cargo install flutter_rust_bridge_codegen --version 2.13.0 --locked
-
-      - name: Check that generated bindings are up to date
-        working-directory: plugins/flspeak_ffi
-        run: |
-          flutter pub get
-          flutter_rust_bridge_codegen generate
-          cd "$GITHUB_WORKSPACE"
-          if ! git diff --exit-code --stat -- plugins/flspeak_ffi; then
-            echo '生成的绑定与提交的不一致，请本地重跑 flutter_rust_bridge_codegen generate' >&2
-            exit 1
-          fi
-
-      - name: Analyze plugin
-        working-directory: plugins/flspeak_ffi
-        run: flutter analyze --no-fatal-infos
+  checks:
+    name: Checks
+    uses: ./.github/workflows/checks.yml
 
   desktop:
     name: Desktop ${{ matrix.platform }}
@@ -237,7 +107,31 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      # 仓库自己的 debug APK 用固定的调试密钥；fork/PR 上没有 secret 时退回 runner
+      # 默认的 debug keystore，不让外部 PR 因缺签名失败。
+      - name: Restore Android debug signing key
+        env:
+          ANDROID_DEBUG_KEYSTORE_BASE64: ${{ secrets.ANDROID_DEBUG_KEYSTORE_BASE64 }}
+          ANDROID_DEBUG_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_DEBUG_KEYSTORE_PASSWORD }}
+          ANDROID_DEBUG_KEY_ALIAS: ${{ secrets.ANDROID_DEBUG_KEY_ALIAS }}
+          ANDROID_DEBUG_KEY_PASSWORD: ${{ secrets.ANDROID_DEBUG_KEY_PASSWORD }}
+        run: |
+          if [ -z "$ANDROID_DEBUG_KEYSTORE_BASE64" ]; then
+            echo 'ANDROID_DEBUG_KEYSTORE_BASE64 未配置，使用 runner 默认 debug keystore'
+            exit 0
+          fi
+          missing=
+          for name in ANDROID_DEBUG_KEYSTORE_PASSWORD ANDROID_DEBUG_KEY_ALIAS ANDROID_DEBUG_KEY_PASSWORD; do
+            test -n "${!name}" || missing="$missing $name"
+          done
+          test -z "$missing" || { echo "缺少 debug 签名 secret:$missing" >&2; exit 1; }
+          printf '%s' "$ANDROID_DEBUG_KEYSTORE_BASE64" | base64 --decode > android/app/debug-upload.jks
+          echo 'ANDROID_DEBUG_KEYSTORE_PATH=debug-upload.jks' >> "$GITHUB_ENV"
+
       - name: Build debug apk
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+          ANDROID_DEBUG_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_DEBUG_KEYSTORE_PASSWORD }}
+          ANDROID_DEBUG_KEY_ALIAS: ${{ secrets.ANDROID_DEBUG_KEY_ALIAS }}
+          ANDROID_DEBUG_KEY_PASSWORD: ${{ secrets.ANDROID_DEBUG_KEY_PASSWORD }}
         run: flutter build apk --debug

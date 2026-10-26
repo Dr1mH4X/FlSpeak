@@ -13,7 +13,7 @@ description: 推送、强推、把 PR 标为可评审或声称检查通过之前
 - [docs/testing.md](../../../docs/testing.md)：单测摆放、测试范围选择、真实服务器手动测试、CI 测试门。
 - [docs/defensive-patterns.md](../../../docs/defensive-patterns.md)：编码反面与连接边界改动的自查要求。
 - [docs/ci-cd.md](../../../docs/ci-cd.md)：CI 各作业与发布矩阵、本地复现方法。
-- [.github/workflows/ci.yml](../../../.github/workflows/ci.yml)：PR 的实际门禁。
+- [.github/workflows/checks.yml](../../../.github/workflows/checks.yml)：PR 的实际门禁（`ci.yml` 调用它，并另跑桌面与 Android 构建）。
 
 ## 工作流步骤
 

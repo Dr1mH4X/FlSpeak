@@ -15,7 +15,7 @@ FlSpeak/
 ├── lib/                            # Flutter 应用：UI 与状态收敛
 ├── arb/                            # 中英文案
 ├── .agents/                        # 人机协作约定与决策记录
-└── .github/workflows/              # ci.yml / release.yml
+└── .github/workflows/              # checks.yml / ci.yml / release.yml
 ```
 
 ## 不变量
