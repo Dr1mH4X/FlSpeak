@@ -86,12 +86,13 @@ class SessionController extends Notifier<SessionView> {
     await _run(() => ref.read(coreSessionProvider).disconnect());
   }
 
-  Future<void> joinChannel(int channelId, {String? password}) async {
+  /// 返回是否真的换了频道：调用方要按结果决定要不要把界面停在目标频道。
+  Future<bool> joinChannel(int channelId, {String? password}) async {
     final clientId = state.selfClientId;
     if (clientId == null) {
-      return;
+      return false;
     }
-    await _run(() async {
+    return _run(() async {
       await ref
           .read(coreSessionProvider)
           .moveToChannel(
@@ -212,12 +213,16 @@ class SessionController extends Notifier<SessionView> {
     state = state.copyWith(notice: null);
   }
 
-  Future<void> _run(Future<void> Function() action) async {
+  /// 命令的统一外壳：置忙、把 `CoreError` 收敛成提示条。返回命令是否成功，
+  /// 让需要的调用方（如加入频道）能据此回滚自己先做的界面假设。
+  Future<bool> _run(Future<void> Function() action) async {
     state = state.copyWith(busy: true, notice: null);
     try {
       await action();
+      return true;
     } on CoreError catch (error) {
       state = state.copyWith(notice: describeCoreError(error));
+      return false;
     } finally {
       state = state.copyWith(busy: false);
     }

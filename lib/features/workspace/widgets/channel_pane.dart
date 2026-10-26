@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
@@ -6,6 +9,7 @@ import '../../../core/channel_display.dart';
 import '../../../core/models.dart';
 import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
 import '../../../widgets/monogram.dart';
@@ -29,6 +33,16 @@ class ChannelPanel extends ConsumerStatefulWidget {
 class _ChannelPanelState extends ConsumerState<ChannelPanel> {
   /// 记录被折叠的频道，新出现的频道默认展开。
   final _collapsed = <int>{};
+
+  /// 上一次点击的频道、点下去之前的高亮位置与双击判定窗口。按 `channelId`
+  /// 比对，而不是按行位置，因为 `ListView.builder` 会按位置复用行。
+  ({int channelId, SelectedChannel? fallback, Timer timer})? _pendingTap;
+
+  @override
+  void dispose() {
+    _pendingTap?.timer.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -54,15 +68,60 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
       ref
           .read(selectedChannelProvider.notifier)
           .select(channel.id, serverId: view.activeServerId);
-      // 抽屉不属于路由栈：选中频道后先收起抽屉，再到外壳切回工作区。
+      widget.onChannelSelected?.call();
+    }
+
+    // 双击/右键加入频道：TS 里换频道就是移动到该频道的语音房间。
+    // [fallback] 是加入被服务端拒时退回的高亮位置：双击的第一次点击已经改过
+    // 高亮，得退回点下去之前的位置；右键菜单不动高亮，退回当前选中即可。
+    Future<void> join(
+      ChannelView channel, {
+      required SelectedChannel? fallback,
+    }) async {
+      await ref
+          .read(selectedChannelProvider.notifier)
+          .join(channel.id, serverId: view.activeServerId, fallback: fallback);
+      if (!context.mounted) {
+        return;
+      }
+      // 抽屉不属于路由栈：加入频道后先收起抽屉，再到外壳切回工作区。
       // 桌面没有打开中的抽屉，这一步是空操作。
       Scaffold.maybeOf(context)?.closeDrawer();
       widget.onChannelSelected?.call();
     }
 
-    // 双击/右键加入频道：TS 里换频道就是移动到该频道的语音房间。
-    void join(ChannelView channel) {
-      ref.read(sessionViewProvider.notifier).joinChannel(channel.id);
+    // 右键菜单的加入：按点菜单那一刻的选中位置回退，不受双击窗口干扰。
+    void joinFromMenu(ChannelView channel) {
+      unawaited(join(channel, fallback: ref.read(selectedChannelProvider)));
+    }
+
+    // 单击只看、双击进入。不用 `InkWell.onDoubleTap`：它会把手势竞技场按到
+    // `kDoubleTapTimeout` 之后，单击反馈也跟着晚一拍。改成按点击间隔自己判定，
+    // 单击当场派发，第二次点击落在窗口内才算双击。
+    void tap(ChannelView channel) {
+      final pending = _pendingTap;
+      _pendingTap?.timer.cancel();
+      if (pending != null &&
+          pending.channelId == channel.id &&
+          _canJoin(view, channel)) {
+        _pendingTap = null;
+        unawaited(join(channel, fallback: pending.fallback));
+        return;
+      }
+      final fallback = ref.read(selectedChannelProvider);
+      select(channel);
+      _pendingTap = (
+        channelId: channel.id,
+        fallback: fallback,
+        timer: Timer(kDoubleTapTimeout, () {
+          _pendingTap = null;
+          // 窄屏频道栏在抽屉里：抽屉留到双击窗口结束再收，否则第二次点击
+          // 会落在正在移开的抽屉或遮罩上，触屏就没有双击加入了。
+          if (mounted) {
+            Scaffold.maybeOf(context)?.closeDrawer();
+          }
+        }),
+      );
     }
 
     return Material(
@@ -85,8 +144,8 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
                     view,
                     activeId,
                     toggle,
-                    select,
-                    join,
+                    tap,
+                    joinFromMenu,
                   ),
                 ),
               ],
@@ -145,7 +204,8 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
     SessionView view,
     int? activeId,
     void Function(ChannelView channel, bool expanded) onToggle,
-    void Function(ChannelView channel) onSelect,
+    void Function(ChannelView channel) onTap,
+    // 菜单通道的加入：回退位置由调用方按当时的选中补齐。
     void Function(ChannelView channel) onJoin,
   ) {
     final rows = _flatten(view);
@@ -183,12 +243,9 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
                   view.clientsIn(channel.id).isNotEmpty ||
                   view.childrenOf(channel.id).isNotEmpty,
               onToggle: () => onToggle(channel, expanded),
-              onSelect: () => onSelect(channel),
+              onTap: () => onTap(channel),
               onJoin: () => onJoin(channel),
-              canJoin:
-                  view.connected &&
-                  !view.busy &&
-                  view.selfChannelId != channel.id,
+              canJoin: _canJoin(view, channel),
               spacer: spacer,
             ),
           _MemberRow(:final client, :final depth) => _MemberTile(
@@ -247,6 +304,10 @@ sealed class _TreeRow {
   const _TreeRow();
 }
 
+/// 可以双击/右键加入：已连接、没有命令在跑，且自己还不在这个频道里。
+bool _canJoin(SessionView view, ChannelView channel) =>
+    view.connected && !view.busy && view.selfChannelId != channel.id;
+
 class _ChannelRow extends _TreeRow {
   const _ChannelRow({
     required this.channel,
@@ -277,7 +338,7 @@ class _ChannelTile extends StatelessWidget {
     required this.expanded,
     required this.hasContent,
     required this.onToggle,
-    required this.onSelect,
+    required this.onTap,
     required this.onJoin,
     required this.canJoin,
     this.spacer,
@@ -290,7 +351,9 @@ class _ChannelTile extends StatelessWidget {
   final bool expanded;
   final bool hasContent;
   final VoidCallback onToggle;
-  final VoidCallback onSelect;
+
+  /// 单击：只换主区域展示的频道；双击由父级按点击间隔判定后另外加入。
+  final VoidCallback onTap;
 
   /// 双击或右键菜单加入；已在频道里、未连接或命令进行中时不可用。
   final VoidCallback onJoin;
@@ -332,91 +395,108 @@ class _ChannelTile extends StatelessWidget {
         builder: (context, menuController) => Semantics(
           button: true,
           selected: selected,
-          child: Material(
-            color: selected ? scheme.primaryContainer : Colors.transparent,
-            borderRadius: Radii.pillAll,
+          child: AnimatedContainer(
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : Motion.effectsFast,
+            curve: Motion.effectsDefaultCurve,
             clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: onSelect,
-              onDoubleTap: canJoin ? onJoin : null,
+            decoration: BoxDecoration(
+              color: selected ? scheme.primaryContainer : Colors.transparent,
               borderRadius: Radii.pillAll,
-              child: SizedBox(
-                height: 48,
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 14),
-                  child: spacer == null
-                      ? Row(
-                          children: [
-                            SizedBox(
-                              width: 32,
-                              child: hasContent
-                                  ? Tooltip(
-                                      message: expanded
-                                          ? l10n.channelCollapse
-                                          : l10n.channelExpand,
-                                      child: InkWell(
-                                        onTap: onToggle,
-                                        customBorder: const CircleBorder(),
-                                        child: SizedBox(
-                                          width: 32,
-                                          height: 40,
-                                          child: Icon(
-                                            expanded
-                                                ? Icons
-                                                      .keyboard_arrow_down_rounded
-                                                : Icons
-                                                      .keyboard_arrow_right_rounded,
-                                            size: 20,
-                                            color: foreground,
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: Radii.pillAll,
+                child: SizedBox(
+                  height: 48,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 14),
+                    child: spacer == null
+                        ? Row(
+                            children: [
+                              SizedBox(
+                                width: 32,
+                                child: hasContent
+                                    ? Tooltip(
+                                        message: expanded
+                                            ? l10n.channelCollapse
+                                            : l10n.channelExpand,
+                                        child: InkWell(
+                                          onTap: onToggle,
+                                          customBorder: const CircleBorder(),
+                                          child: SizedBox(
+                                            width: 32,
+                                            height: 40,
+                                            // 单图标旋转表达折叠方向：比两个
+                                            // 字形硬切多一层空间连续性。
+                                            child: AnimatedRotation(
+                                              turns: expanded ? 0 : 0.25,
+                                              duration:
+                                                  MediaQuery.disableAnimationsOf(
+                                                    context,
+                                                  )
+                                                  ? Duration.zero
+                                                  : Motion.spatialFast,
+                                              curve: Motion.spatialCurve,
+                                              child: Icon(
+                                                Icons
+                                                    .keyboard_arrow_down_rounded,
+                                                size: 20,
+                                                color: foreground,
+                                              ),
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                    )
-                                  : null,
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: context.texts.bodyMedium?.copyWith(
-                                  fontSize: 14,
-                                  color: selected
-                                      ? scheme.onPrimaryContainer
-                                      : scheme.onSurfaceVariant,
-                                  fontWeight: selected
-                                      ? FontWeight.w500
-                                      : FontWeight.w400,
-                                ),
+                                      )
+                                    : null,
                               ),
-                            ),
-                            if (channel.passwordProtected == true)
-                              Padding(
-                                padding: const EdgeInsets.only(left: 6),
-                                child: Tooltip(
-                                  message: l10n.channelPasswordProtected,
-                                  child: Icon(
-                                    Icons.lock_outline_rounded,
-                                    size: 15,
-                                    color: foreground,
-                                  ),
-                                ),
-                              ),
-                            if (memberLabel != null)
-                              Padding(
-                                padding: const EdgeInsets.only(left: 8),
+                              const SizedBox(width: 10),
+                              Expanded(
                                 child: Text(
-                                  memberLabel,
-                                  style: context.texts.labelSmall?.copyWith(
-                                    color: foreground,
-                                    fontFeatures: tabularFigures,
+                                  name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: context.texts.bodyMedium?.copyWith(
+                                    fontSize: 14,
+                                    color: selected
+                                        ? scheme.onPrimaryContainer
+                                        : scheme.onSurfaceVariant,
+                                    fontWeight: selected
+                                        ? FontWeight.w500
+                                        : FontWeight.w400,
                                   ),
                                 ),
                               ),
-                          ],
-                        )
-                      : _spacerBody(context, foreground),
+                              if (channel.passwordProtected == true)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 6),
+                                  child: Tooltip(
+                                    message: l10n.channelPasswordProtected,
+                                    child: Icon(
+                                      Icons.lock_rounded,
+                                      size: 15,
+                                      color: foreground,
+                                    ),
+                                  ),
+                                ),
+                              if (memberLabel != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 8),
+                                  child: Text(
+                                    memberLabel,
+                                    style: context.texts.labelSmall?.copyWith(
+                                      color: foreground,
+                                      fontFeatures: tabularFigures,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          )
+                        : _spacerBody(context, foreground),
+                  ),
                 ),
               ),
             ),
@@ -668,7 +748,8 @@ class _UserFooter extends StatelessWidget {
               tooltip: away ? l10n.voiceUnaway : l10n.voiceAway,
               icon: Icons.schedule_rounded,
               active: away,
-              activeColor: scheme.primary,
+              activeContainer: scheme.primaryContainer,
+              activeOnContainer: scheme.onPrimaryContainer,
               onTap: onToggleAway,
             ),
           ],
@@ -685,7 +766,8 @@ class _IconToggle extends StatelessWidget {
     required this.icon,
     required this.active,
     required this.onTap,
-    this.activeColor,
+    this.activeContainer,
+    this.activeOnContainer,
   });
 
   final String tooltip;
@@ -693,13 +775,17 @@ class _IconToggle extends StatelessWidget {
   final bool active;
   final VoidCallback onTap;
 
-  /// 激活色；静音类状态缺省用 error，离开这类中性状态换主色。
-  final Color? activeColor;
+  /// 激活态的 container 语义对；静音类状态缺省用 error 对，中性状态
+  /// （离开）传 primary 对。透明度叠底在暗色下发浊，container 对
+  /// 亮暗都成立。
+  final Color? activeContainer;
+  final Color? activeOnContainer;
 
   @override
   Widget build(BuildContext context) {
     final scheme = context.scheme;
-    final highlight = activeColor ?? scheme.error;
+    final activeBackground = activeContainer ?? scheme.errorContainer;
+    final activeForeground = activeOnContainer ?? scheme.onErrorContainer;
     return Tooltip(
       message: tooltip,
       child: Semantics(
@@ -712,19 +798,21 @@ class _IconToggle extends StatelessWidget {
             width: Sizes.touch,
             height: Sizes.touch,
             child: Center(
-              child: Container(
+              child: AnimatedContainer(
                 width: 36,
                 height: 36,
+                duration: MediaQuery.disableAnimationsOf(context)
+                    ? Duration.zero
+                    : Motion.effectsFast,
+                curve: Motion.effectsDefaultCurve,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: active
-                      ? highlight.withValues(alpha: 0.12)
-                      : Colors.transparent,
+                  color: active ? activeBackground : Colors.transparent,
                 ),
                 child: Icon(
                   icon,
                   size: 20,
-                  color: active ? highlight : scheme.onSurfaceVariant,
+                  color: active ? activeForeground : scheme.onSurfaceVariant,
                 ),
               ),
             ),

@@ -18,6 +18,25 @@ class SelectedChannelController extends Notifier<SelectedChannel?> {
   void select(int channelId, {String? serverId}) {
     state = (serverId: serverId, channelId: channelId);
   }
+
+  /// 双击频道：立刻把高亮移过去，再让 core 移动自己。移动被服务端拒（密码、
+  /// 权限）时退回 [fallback]——双击的第一次点击已经选过目标频道，所以「原位置」
+  /// 只能由调用方在点下去之前记下；不回退的话主区域会停在一个自己没进去的频道上。
+  /// 选中与加入放在一起，是因为 [activeChannelIdProvider] 的优先规则在此定义。
+  Future<void> join(
+    int channelId, {
+    required String? serverId,
+    required SelectedChannel? fallback,
+  }) async {
+    select(channelId, serverId: serverId);
+    final moved = await ref
+        .read(sessionViewProvider.notifier)
+        .joinChannel(channelId);
+    // 期间用户又换了目标时以新的为准，不回滚。
+    if (!moved && state == (serverId: serverId, channelId: channelId)) {
+      state = fallback;
+    }
+  }
 }
 
 /// 主区域正在展示的频道：优先用户点开的那一个，其次自己所在的频道，
