@@ -28,7 +28,7 @@ git diff --stat origin/main...HEAD
    - `core/` 某个 crate 的行为：从 `plugins/flspeak_ffi/rust` 定向跑拥有它的测试，例如 `cargo test -p server -p proto`；改动共享 crate 时再补相邻 crate 的测试。
    - 连接边界（`core/proto`、`core/server`、`FORBIDDEN_HOST_SUFFIXES`、`check_transfer_host`）：先按 [docs/defensive-patterns.md](../../../docs/defensive-patterns.md) 的连接边界一节自查——决策记录先行，放宽限制必须写清理由与残余风险——再补相似域名与目标重定向的测试。
    - `plugins/flspeak_ffi/rust/src/api/**` 或其中的类型：重跑 `flutter_rust_bridge_codegen generate`，确认生成物一起提交。
-   - `lib/`、`arb/`：`dart format lib setup.dart`、`flutter analyze --no-fatal-infos`；改了 `arb/` 先 `flutter gen-l10n`。界面行为没有自动回归，改动面向用户时手动跑 `just run` 走一遍相关路径。
+   - `lib/`、`arb/`：`dart format lib setup.dart`、`flutter analyze --no-fatal-infos`、`just test`（`flutter test lib`，用例与实现同目录）；改了 `arb/` 先 `flutter gen-l10n`。
    - `docs/`、`.agents/`、`AGENTS.md`：仓库内相对链接与路径是否解析（见验证命令），笔记还要按[核查清单](../../../.agents/notes/AGENTS.md#核查清单)过一遍。
    - `.github/workflows/`、`setup.dart`、native assets 钩子：本机无法复现发布矩阵的，推到 PR 后看 `gh pr checks`，不要在本地假装验证过。
 3. **只在必要时做全量排练**：用户明确要求、正在诊断 CI 失败、或改动跨到没有更窄集合可信时才跑 `just check`。不要因为「反正要提交」重复一遍刚通过的检查。

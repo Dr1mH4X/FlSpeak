@@ -74,6 +74,11 @@ l10n:
 analyze:
     flutter analyze --no-fatal-infos
 
+# Dart 单测（用例与实现同目录，跑 lib 而不是 test/）
+[group('flutter')]
+test:
+    flutter test lib
+
 [group('flutter')]
 [working-directory: 'plugins/flspeak_ffi']
 analyze-plugin:
@@ -94,7 +99,7 @@ setup platform arch version:
 # ── 聚合 ────────────────────────────────────────────────────────────────────
 
 # 提交前全量验证（AGENTS.md「验证」一节）
-check: fmt rust-clippy rust-test analyze
+check: fmt rust-clippy rust-test analyze test
 
 # 对齐 CI 的静态检查，只读不落盘；生成物一致性另跑 just codegen-check
 ci: fmt-check rust-clippy rust-test analyze analyze-plugin

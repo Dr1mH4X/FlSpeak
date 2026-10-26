@@ -12,5 +12,6 @@
 - `lib/l10n/**` 是生成物，不要手改；改 `arb/` 后重跑 `flutter gen-l10n`。
 - FFI 生成类型在 `plugins/flspeak_ffi/lib/src/rust/**`，同样不要手改。
 - 页面布局可以依赖 `SessionView`，但不能依赖 `CoreSession` 的内部状态。
+- Dart 单测与被测文件同目录（`foo.dart` 旁 `foo_test.dart`），靠 `just test` 跑；仓库根不设 `test/`，`flutter test` 的默认扫描目录因此用不上。
 
 编码反面见 [../docs/defensive-patterns.md](../docs/defensive-patterns.md)，开发流程与语言约定见 [../docs/development.md](../docs/development.md)。

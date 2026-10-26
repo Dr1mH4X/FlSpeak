@@ -47,6 +47,7 @@ flutter pub get
 flutter gen-l10n                          # 改了 arb/ 之后（pub get 也会触发）
 dart format lib setup.dart
 flutter analyze --no-fatal-infos
+flutter test lib                          # Dart 单测（用例与实现同目录）
 ```
 
 `plugins/flspeak_ffi` 单独分析：

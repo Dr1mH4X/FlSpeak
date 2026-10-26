@@ -32,4 +32,4 @@ Status: implemented
 
 ## Testing
 
-- 回滚行为没有自动回归用例：仓库不再保留 Dart 单测目录（`docs/testing.md`）。改这条路径时手动跑 `just run`，走「双击被拒」与「右键加入被拒」两条，确认高亮回到点击前的位置；自己被放在另一个频道时回到菜单前选中，而不是自己的频道。
+- `lib/features/workspace/widgets/channel_pane_test.dart`（与 `channel_pane.dart` 同目录）覆盖双击被拒后退回点击前的高亮，以及右键加入被拒后退回点菜单前的选中——自己被放在另一个频道时也回到菜单前选中，而不是自己的频道。
