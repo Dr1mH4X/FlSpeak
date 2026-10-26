@@ -13,8 +13,8 @@ Powered by [tsclient-rs](https://github.com/Dr1mH4X/tsclient-rs)
 
 </div>
 
-> 非官方社区客户端，与 TeamSpeak 无隶属关系。TeamSpeak 与相关商标归其权利人所有。
-
 ## 许可
 
 AGPL-3.0-only，见 [LICENSE](LICENSE)。
+
+> 非官方社区客户端，与 TeamSpeak 无隶属关系。TeamSpeak 与相关商标归其权利人所有。
