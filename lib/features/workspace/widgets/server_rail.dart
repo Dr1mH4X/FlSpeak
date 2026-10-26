@@ -14,6 +14,9 @@ import '../../../widgets/monogram.dart';
 /// 宽度固定 80：它是全局导航，不参与内容区的伸缩；品牌标记与设置按钮上下夹住
 /// 服务器列表，扫视顺序稳定。设置放在最底部是用户明确要求的位置
 /// （`设置按钮移动到左下角`），这样频道栏底部就留给了语音状态。
+///
+/// 两个工具入口都不占面：添加与设置都是透明的图标按钮，交互只在状态层上
+/// 表达。rail 的实心重量留给品牌标记和选中的服务器，投影一处也不画。
 class ServerRail extends ConsumerWidget {
   const ServerRail({
     required this.onSelect,
@@ -67,7 +70,9 @@ class ServerRail extends ConsumerWidget {
             const SizedBox(height: 12),
             Expanded(
               child: ListView.builder(
-                padding: const EdgeInsets.symmetric(vertical: 4),
+                // 底部 12 把最后一个服务器与下面的添加槽位分开：列表结束 /
+                // 空槽 / chrome 三段各自断开。
+                padding: const EdgeInsets.only(top: 4, bottom: 12),
                 itemCount: view.servers.length,
                 itemBuilder: (context, index) {
                   final server = view.servers[index];
@@ -90,47 +95,64 @@ class ServerRail extends ConsumerWidget {
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Tooltip(
-                message: l10n.serverAdd,
-                child: Material(
-                  color: context.cardColor,
-                  elevation: 1,
-                  // 投影色交回 scheme.shadow，暗色下才画得出来。
-                  shadowColor: scheme.shadow,
-                  borderRadius: Radii.largeAll,
-                  clipBehavior: Clip.antiAlias,
-                  child: InkWell(
-                    onTap: () => runFromRail(onAdd),
-                    child: SizedBox(
-                      width: Sizes.railTile,
-                      height: Sizes.railTile,
-                      child: Icon(
-                        Icons.add_rounded,
-                        size: 20,
-                        color: scheme.primary,
-                      ),
+              // 空槽位：与品牌标记同几何（48 / r16），不描边、不填充，
+              // 识别落在 20px 的 + 图标上（rail 上 5.24:1 / 9.31:1）。
+              child: IconButton(
+                tooltip: l10n.serverAdd,
+                onPressed: () => runFromRail(onAdd),
+                icon: const Icon(Icons.add_rounded),
+                style: ButtonStyle(
+                  // 键盘焦点仍需可见：2px primary 环，未聚焦时同宽全透明。
+                  side: WidgetStateProperty.resolveWith(
+                    (states) => BorderSide(
+                      width: 2,
+                      color: states.contains(WidgetState.focused)
+                          ? scheme.primary
+                          : Colors.transparent,
                     ),
                   ),
+                  shape: WidgetStatePropertyAll(
+                    RoundedRectangleBorder(borderRadius: Radii.largeAll),
+                  ),
+                  backgroundColor: const WidgetStatePropertyAll(
+                    Colors.transparent,
+                  ),
+                  foregroundColor: WidgetStatePropertyAll(
+                    scheme.onSurfaceVariant,
+                  ),
+                  // M3 state layer：hover 8%、press 12%，不换底色。
+                  overlayColor: WidgetStateProperty.resolveWith(
+                    (states) => states.contains(WidgetState.pressed)
+                        ? scheme.onSurface.withValues(alpha: 0.12)
+                        : states.contains(WidgetState.hovered) ||
+                              states.contains(WidgetState.focused)
+                        ? scheme.onSurface.withValues(alpha: 0.08)
+                        : Colors.transparent,
+                  ),
+                  iconSize: const WidgetStatePropertyAll(20),
+                  fixedSize: const WidgetStatePropertyAll(
+                    Size(Sizes.railTile, Sizes.railTile),
+                  ),
+                  padding: const WidgetStatePropertyAll(EdgeInsets.zero),
                 ),
               ),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(0, 8, 0, 16),
-              child: SizedBox(
-                width: Sizes.touch,
-                height: Sizes.touch,
-                child: IconButton(
-                  tooltip: l10n.settingsTitle,
-                  onPressed: () => runFromRail(onSettings),
+              // 设置是常驻 chrome，不是「选中的东西」：无底色，交互只走
+              // state layer，与连接页 LoginRail 的同一个按钮同形。
+              child: IconButton(
+                tooltip: l10n.settingsTitle,
+                onPressed: () => runFromRail(onSettings),
+                iconSize: 20,
+                color: scheme.onSurfaceVariant,
+                style: IconButton.styleFrom(
+                  minimumSize: const Size(Sizes.touch, Sizes.touch),
+                  maximumSize: const Size(Sizes.touch, Sizes.touch),
                   padding: EdgeInsets.zero,
-                  iconSize: 20,
-                  style: IconButton.styleFrom(
-                    backgroundColor: context.cardColor,
-                    foregroundColor: scheme.onSurfaceVariant,
-                    shape: const CircleBorder(),
-                  ),
-                  icon: const Icon(Icons.settings_rounded),
+                  overlayColor: scheme.onSurfaceVariant,
                 ),
+                icon: const Icon(Icons.settings_rounded),
               ),
             ),
           ],
