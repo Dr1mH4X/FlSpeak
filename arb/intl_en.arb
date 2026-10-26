@@ -7,7 +7,7 @@
   "commonDone": "Done",
   "commonCopy": "Copy",
   "commonCopied": "Copied",
-  "connectTitle": "Connect to a server",
+  
   "connectAddressLabel": "Server address",
   "connectAddressHint": "ts.example.com or ts.example.com:9987",
   "connectNicknameLabel": "Nickname",
@@ -107,8 +107,7 @@
   "channelsSection": "Channels",
   "workspaceNoChannels": "This server has no channels yet.",
   "workspaceOpenMenu": "Open channel menu",
-  "workspaceNotConnectedTitle": "Not connected",
-  "workspaceNotConnectedBody": "Pick a registered server from the bar on the left, or add a new address.",
+  
   "channelPasswordProtected": "Channel password required",
   "channelJoinMenu": "Join channel",
   "channelPaneResize": "Resize channel pane",

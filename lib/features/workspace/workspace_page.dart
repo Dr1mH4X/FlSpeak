@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../core/channel_display.dart';
 import '../../core/models.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_localizations.dart';
-import '../../router.dart';
 import '../../theme/app_motion.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common.dart';
@@ -123,19 +121,6 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
     SessionView view,
     ChannelView? channel,
   ) {
-    if (!view.connected && !view.connecting && !view.reconnecting) {
-      return EmptyState(
-        icon: Icons.power_off_rounded,
-        title: l10n.workspaceNotConnectedTitle,
-        body: l10n.workspaceNotConnectedBody,
-        action: FilledButton.icon(
-          onPressed: () => context.go(AppRoutes.connect),
-          icon: const Icon(Icons.link_rounded, size: 18),
-          label: Text(l10n.connectTitle),
-        ),
-      );
-    }
-
     if (view.connecting || view.reconnecting) {
       final scheme = context.scheme;
       return Center(

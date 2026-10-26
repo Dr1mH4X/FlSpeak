@@ -7,7 +7,7 @@
   "commonDone": "完成",
   "commonCopy": "复制",
   "commonCopied": "已复制",
-  "connectTitle": "连接服务器",
+  
   "connectAddressLabel": "服务器地址",
   "connectAddressHint": "ts.example.com 或 ts.example.com:9987",
   "connectNicknameLabel": "昵称",
@@ -107,8 +107,7 @@
   "channelsSection": "频道",
   "workspaceNoChannels": "服务器还没有频道。",
   "workspaceOpenMenu": "打开频道菜单",
-  "workspaceNotConnectedTitle": "未连接服务器",
-  "workspaceNotConnectedBody": "从左侧服务器栏选择一台已登记的服务器，或添加新地址。",
+  
   "channelPasswordProtected": "需要频道密码",
   "channelJoinMenu": "加入频道",
   "channelPaneResize": "调整频道栏宽度",

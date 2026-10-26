@@ -82,9 +82,8 @@ class SessionController extends Notifier<SessionView> {
     });
   }
 
-  Future<void> disconnect() async {
-    await _run(() => ref.read(coreSessionProvider).disconnect());
-  }
+  Future<bool> disconnect() =>
+      _run(() => ref.read(coreSessionProvider).disconnect());
 
   /// 返回是否真的换了频道：调用方要按结果决定要不要把界面停在目标频道。
   Future<bool> joinChannel(int channelId, {String? password}) async {

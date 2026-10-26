@@ -31,9 +31,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get commonCopied => '已复制';
 
   @override
-  String get connectTitle => '连接服务器';
-
-  @override
   String get connectAddressLabel => '服务器地址';
 
   @override
@@ -182,12 +179,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get workspaceOpenMenu => '打开频道菜单';
-
-  @override
-  String get workspaceNotConnectedTitle => '未连接服务器';
-
-  @override
-  String get workspaceNotConnectedBody => '从左侧服务器栏选择一台已登记的服务器，或添加新地址。';
 
   @override
   String get channelPasswordProtected => '需要频道密码';

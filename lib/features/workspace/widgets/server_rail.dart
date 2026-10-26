@@ -22,6 +22,7 @@ class ServerRail extends ConsumerWidget {
     required this.onSelect,
     required this.onAdd,
     required this.onSettings,
+    required this.onDisconnect,
     super.key,
   });
 
@@ -30,6 +31,9 @@ class ServerRail extends ConsumerWidget {
   final ValueChanged<ServerProfileView> onSelect;
   final VoidCallback onAdd;
   final VoidCallback onSettings;
+
+  /// 断开当前连接；外壳负责断开后回到服务器列表。
+  final VoidCallback onDisconnect;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -67,10 +71,7 @@ class ServerRail extends ConsumerWidget {
                       connected:
                           view.connected && server.id == view.activeServerId,
                       onTap: () => runFromRail(() => onSelect(server)),
-                      onDisconnect: () => runFromRail(
-                        () =>
-                            ref.read(sessionViewProvider.notifier).disconnect(),
-                      ),
+                      onDisconnect: () => runFromRail(onDisconnect),
                     ),
                   );
                 },

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -52,6 +53,19 @@ class WorkspaceShell extends ConsumerWidget {
 
     void addServer() => context.go(AppRoutes.connect);
 
+    /// 断开后回到服务器列表：工作区只剩空频道栏，
+    /// 用户下一步能做的事全在连接页。
+    Future<void> disconnect() async {
+      // 以 core 的断开结果为准，不读刚被事件改写的会话状态：广播是异步的，
+      // 读状态可能抢在 Disconnected 事件之前。
+      final disconnected = await ref
+          .read(sessionViewProvider.notifier)
+          .disconnect();
+      if (disconnected && context.mounted) {
+        context.go(AppRoutes.connect);
+      }
+    }
+
     // 设置页可能被路由包进外壳：这种情况下按钮已经处于目标页，不再重复入栈。
     void openSettings() {
       if (location != AppRoutes.settings) {
@@ -70,6 +84,7 @@ class WorkspaceShell extends ConsumerWidget {
       onSelect: selectServer,
       onAdd: addServer,
       onSettings: openSettings,
+      onDisconnect: () => unawaited(disconnect()),
     );
     final panel = ChannelPanel(onChannelSelected: selectChannel);
     final surface = _MainSurface(

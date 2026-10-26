@@ -31,9 +31,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get commonCopied => 'Copied';
 
   @override
-  String get connectTitle => 'Connect to a server';
-
-  @override
   String get connectAddressLabel => 'Server address';
 
   @override
@@ -183,13 +180,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get workspaceOpenMenu => 'Open channel menu';
-
-  @override
-  String get workspaceNotConnectedTitle => 'Not connected';
-
-  @override
-  String get workspaceNotConnectedBody =>
-      'Pick a registered server from the bar on the left, or add a new address.';
 
   @override
   String get channelPasswordProtected => 'Channel password required';

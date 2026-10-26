@@ -140,12 +140,6 @@ abstract class AppLocalizations {
   /// **'Copied'**
   String get commonCopied;
 
-  /// No description provided for @connectTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Connect to a server'**
-  String get connectTitle;
-
   /// No description provided for @connectAddressLabel.
   ///
   /// In en, this message translates to:
@@ -403,18 +397,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open channel menu'**
   String get workspaceOpenMenu;
-
-  /// No description provided for @workspaceNotConnectedTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Not connected'**
-  String get workspaceNotConnectedTitle;
-
-  /// No description provided for @workspaceNotConnectedBody.
-  ///
-  /// In en, this message translates to:
-  /// **'Pick a registered server from the bar on the left, or add a new address.'**
-  String get workspaceNotConnectedBody;
 
   /// No description provided for @channelPasswordProtected.
   ///
