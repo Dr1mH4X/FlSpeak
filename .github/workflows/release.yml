@@ -107,6 +107,13 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # tag 上默认只读，复用 main 的 Gradle 缓存，不回写发版环境。
+      - name: Setup Gradle
+        if: matrix.platform == 'android'
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+
       - name: Setup NDK
         if: matrix.platform == 'android'
         uses: nttld/setup-ndk@v1

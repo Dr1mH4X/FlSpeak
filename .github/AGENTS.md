@@ -5,13 +5,18 @@
 - 检查作业集中在可复用的 `checks.yml`（`workflow_call`）：Rust 检查、Flutter
   analyze、Dart 单测、FFI 生成物一致性。`ci.yml` 与 `release.yml` 都调用它，
   改检查时只改这一处。文档检查不进 CI。
-- `ci.yml` 负责分支与 PR：调用 `checks.yml`，再跑桌面与 Android 的 debug 构建；
+- `ci.yml` 负责 main 与 PR：调用 `checks.yml`，再跑桌面与 Android 的 debug 构建；
   tag 不触发它，发布时的平台构建只在 `release.yml` 里发生一次。
 - `release.yml` 的 `build` 依赖 `checks`，检查失败时打包矩阵不启动。
 - Rust 作业从 `plugins/flspeak_ffi/rust` 目录运行，才能使用锁定的工具链。
 - Dart 作业只格式化 `lib` 与 `setup.dart`，并运行 `flutter analyze`。
-- `plugins` 作业重跑 `flutter_rust_bridge_codegen generate`，再用
-  `git diff` 检查生成物；`flutter analyze` 会触发 native assets，所以它也要装音频依赖。
+- `dart-test` 作业同时跑单测与 FFI 生成物校验，两者共用一次 checkout、Flutter 与
+  native assets 编译；生成物校验重跑 `flutter_rust_bridge_codegen generate`，再用
+  `git diff` 检查。新增检查若同样依赖 native assets，优先并进这个作业。
+- codegen 用官方 release 的 x86_64 linux 预编译附件，版本与 sha256 固定在
+  `checks.yml` 顶部；升级 `flutter_rust_bridge` 时同步 `pubspec.yaml` 与这两个值。
+- Android 作业把 NDK 链接进 SDK，避免构建阶段再下一份；Gradle 依赖由
+  `gradle/actions/setup-gradle` 缓存（`cache-provider: basic`），`release.yml` 只读复用。
 - 发版作业从 tag 或手动输入推导版本号，把版本传给
   `dart setup.dart <platform> <arch> --version <version>`，不依赖额外的版本脚本。
 - 平台构建保持现有矩阵；新增目标时同时更新 `setup.dart` 和发布工作流。

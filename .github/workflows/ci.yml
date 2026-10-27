@@ -1,10 +1,10 @@
 name: ci
 
-# 分支与 PR 的常规门禁；tag 只走 release.yml，避免和发布矩阵重复构建。
+# main 与 PR 的常规门禁；tag 只走 release.yml，避免和发布矩阵重复构建。
 on:
   push:
     branches:
-      - '**'
+      - main
   pull_request:
   workflow_dispatch:
 
@@ -102,17 +102,25 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
+      # Flutter 的 Gradle 插件按 SDK 目录找 NDK；不链接时构建阶段会再下一份。
       - name: Setup NDK
         uses: nttld/setup-ndk@v1
         id: ndk
         with:
           ndk-version: ${{ env.NDK_VERSION }}
+          link-to-sdk: true
 
       - name: Setup Java
         uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
+
+      # 缓存 Gradle 依赖与构建状态；PR 上默认只读，main 上写入供后续运行复用。
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
 
       - name: Install dependencies
         run: flutter pub get
