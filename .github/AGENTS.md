@@ -7,6 +7,8 @@
   改检查时只改这一处。文档检查不进 CI。
 - `ci.yml` 负责 main 与 PR：调用 `checks.yml`，再跑桌面与 Android 的 debug 构建；
   tag 不触发它，发布时的平台构建只在 `release.yml` 里发生一次。
+- `ci.yml` 用 `paths-ignore` 跳过只改 `**/*.md` 或 `LICENSE` 的运行；文档检查
+  不进 CI，纯文档改动不产生状态，把检查设为合并必需时要一并处理这一点。
 - `release.yml` 的 `build` 依赖 `checks`，检查失败时打包矩阵不启动。
 - Rust 作业从 `plugins/flspeak_ffi/rust` 目录运行，才能使用锁定的工具链。
 - Dart 作业只格式化 `lib` 与 `setup.dart`，并运行 `flutter analyze`。

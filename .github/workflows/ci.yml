@@ -1,11 +1,18 @@
 name: ci
 
 # main 与 PR 的常规门禁；tag 只走 release.yml，避免和发布矩阵重复构建。
+# 纯文档改动不跑流水线：文档没有单独的 CI 检查，跑全量构建只浪费 runner。
 on:
   push:
     branches:
       - main
+    paths-ignore:
+      - '**/*.md'
+      - LICENSE
   pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - LICENSE
   workflow_dispatch:
 
 concurrency:

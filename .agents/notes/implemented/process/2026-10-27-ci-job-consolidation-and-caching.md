@@ -22,6 +22,8 @@ assets，同一套 Rust 被编译两次。Android 作业没有 Gradle 缓存，S
   从 SDK 目录找到 NDK。
 - `ci.yml` 与 `release.yml` 的 Android 作业使用 `gradle/actions/setup-gradle`
   （`cache-provider: basic`）。PR 与 tag 上只读，main push 写入。
+- `ci.yml` 的 `push` 与 `pull_request` 加 `paths-ignore`，跳过只改 `**/*.md` 或
+  `LICENSE` 的运行；文档检查不进 CI。
 
 ## Alternatives considered
 
@@ -41,6 +43,8 @@ assets，同一套 Rust 被编译两次。Android 作业没有 Gradle 缓存，S
   `FRB_CODEGEN_VERSION` 与 `FRB_CODEGEN_SHA256`；校验和不匹配会让作业在下载步骤失败。
 - codegen 附件只覆盖 x86_64 linux，`dart-test` 作业需要留在 `ubuntu-latest` 的 x64
   runner 上。
+- 纯文档 PR 不产生状态检查；把 `ci` 的检查设为合并必需时，要同时放宽或替换
+  `paths-ignore`，否则文档 PR 会一直等不到状态。
 
 ## Testing
 

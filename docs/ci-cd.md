@@ -5,11 +5,13 @@
 | 文件 | 触发 | 内容 |
 | --- | --- | --- |
 | `checks.yml` | `workflow_call` | 可复用的检查作业：`rust`、`dart`、`dart-test` |
-| `ci.yml` | main push、PR、手动 | 调用 `checks.yml`，再跑 `desktop` 与 `android` 的 debug 构建 |
+| `ci.yml` | main push、PR、手动 | 调用 `checks.yml`，再跑 `desktop` 与 `android` 的 debug 构建；纯文档改动不触发 |
 | `release.yml` | `v*` tag、手动输入版本号 | `meta`、`checks`、七平台 `build` 矩阵、`publish` |
 
 tag 推送只启动 `release.yml`，平台打包因此只发生一次；main 与 PR 仍由 `ci.yml`
-覆盖桌面与 Android 的编译。`release.yml` 的 `build` 通过 `needs: [meta, checks]`
+覆盖桌面与 Android 的编译。`ci.yml` 用 `paths-ignore` 跳过只改 `**/*.md` 或
+`LICENSE` 的推送与 PR：文档没有独立的 CI 检查，这类改动不跑 Rust、Flutter 与平台
+构建。若将来把检查设为合并必需，纯文档 PR 不会产生状态，需要同时调整这项配置。`release.yml` 的 `build` 通过 `needs: [meta, checks]`
 等待检查，任一检查失败时打包矩阵不会启动，手动输入版本号的发版路径也走同一套检查。
 
 ## `checks.yml`
