@@ -260,11 +260,10 @@ class _NoticeCardState extends State<_NoticeCard> {
                       ),
                     ),
                   ),
-                  SizedBox(
-                    width: 32,
-                    height: 28,
+                  SizedBox.square(
+                    dimension: Sizes.touch,
                     child: IconButton(
-                      iconSize: 14,
+                      iconSize: 16,
                       padding: EdgeInsets.zero,
                       color: foreground,
                       onPressed: _dismiss,

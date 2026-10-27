@@ -94,7 +94,7 @@ class SettingsRow extends StatelessWidget {
       ),
       title: Text(
         title,
-        maxLines: 1,
+        maxLines: 2,
         overflow: TextOverflow.ellipsis,
         style: texts.titleMedium?.copyWith(
           fontWeight: FontWeight.w500,

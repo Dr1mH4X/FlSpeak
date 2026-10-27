@@ -31,6 +31,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get commonCopied => '已复制';
 
   @override
+  String get commonRetry => '重试';
+
+  @override
   String get connectAddressLabel => '服务器地址';
 
   @override
@@ -214,6 +217,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String memberAwayWith(Object message) {
     return '离开：$message';
   }
+
+  @override
+  String get memberSpeaking => '正在说话';
 
   @override
   String get voiceAway => '标记离开';

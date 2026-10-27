@@ -71,114 +71,152 @@ class _ServerRowState extends State<ServerRow> {
           color: connected
               ? scheme.primaryContainer.withValues(alpha: 0.3)
               : Colors.transparent,
-          child: Semantics(
-            button: true,
-            enabled: active,
-            child: InkWell(
-              onTap: widget.enabled ? widget.onTap : null,
-              // M3 state layer：hover 是 onSurface 8%，不再自定底色。
-              hoverColor: scheme.onSurface.withValues(alpha: 0.08),
-              child: AnimatedOpacity(
-                duration: animations,
-                curve: Motion.effectsDefaultCurve,
-                opacity: active ? 1 : 0.5,
-                child: Padding(
-                  // 与身份卡的内容缩进（20）对齐，两卡头像才能落在同一条线上。
-                  padding: EdgeInsets.fromLTRB(narrow ? 16 : 20, 12, 20, 12),
-                  child: Row(
-                    children: [
-                      ServerMonogram(
-                        id: widget.profile.id,
-                        label: widget.profile.label,
-                        host: widget.profile.host,
-                        size: 44,
-                        online: connected,
-                      ),
-                      SizedBox(width: narrow ? 12 : 16),
-                      Expanded(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
+            children: [
+              Expanded(
+                child: Semantics(
+                  button: true,
+                  enabled: active,
+                  child: InkWell(
+                    onTap: widget.enabled ? widget.onTap : null,
+                    // M3 state layer：hover 是 onSurface 8%，不再自定底色。
+                    hoverColor: scheme.onSurface.withValues(alpha: 0.08),
+                    child: AnimatedOpacity(
+                      duration: animations,
+                      curve: Motion.effectsDefaultCurve,
+                      opacity: active ? 1 : 0.5,
+                      child: Padding(
+                        // 与身份卡的内容缩进（20）对齐，两卡头像才能落在同一条线上。
+                        padding: EdgeInsets.fromLTRB(
+                          narrow ? 16 : 20,
+                          12,
+                          !connected && !widget.connecting ? 4 : 20,
+                          12,
+                        ),
+                        child: Row(
                           children: [
-                            Text(
-                              widget.profile.label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: texts.titleMedium,
+                            ServerMonogram(
+                              id: widget.profile.id,
+                              label: widget.profile.label,
+                              host: widget.profile.host,
+                              size: 44,
+                              online: connected,
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '${widget.profile.host}:${widget.profile.port}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: texts.bodySmall?.copyWith(
-                                color: scheme.onSurfaceVariant,
-                                fontFeatures: tabularFigures,
+                            SizedBox(width: narrow ? 12 : 16),
+                            Expanded(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    widget.profile.label,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: texts.titleMedium,
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${widget.profile.host}:${widget.profile.port}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: texts.bodySmall?.copyWith(
+                                      color: scheme.onSurfaceVariant,
+                                      fontFeatures: tabularFigures,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      if (widget.connecting)
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const SizedBox.square(
-                              dimension: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
+                            const SizedBox(width: 8),
+                            if (widget.connecting)
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const SizedBox.square(
+                                    dimension: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    l10n.sessionConnecting,
+                                    style: texts.labelMedium?.copyWith(
+                                      fontSize: 12,
+                                      color: scheme.primary,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            else if (connected)
+                              _ConnectedChip(label: l10n.sessionConnected)
+                            else if (showLastConnected)
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 160,
+                                ),
+                                child: Text(
+                                  lastConnectedLabel(
+                                    context,
+                                    widget.lastConnected,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: texts.bodySmall?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                    fontFeatures: tabularFigures,
+                                  ),
+                                ),
+                              ),
                             const SizedBox(width: 6),
-                            Text(
-                              l10n.sessionConnecting,
-                              style: texts.labelMedium?.copyWith(
-                                fontSize: 12,
-                                color: scheme.primary,
+                            // hover 反馈按 M3 归到 effects fast：nudge 只有 2px，
+                            // 用 slow 的 spatial 档反而拖沓。
+                            AnimatedContainer(
+                              duration: MediaQuery.disableAnimationsOf(context)
+                                  ? Duration.zero
+                                  : Motion.effectsFast,
+                              curve: Motion.effectsFastCurve,
+                              transform: Matrix4.translationValues(
+                                _hovered && active ? 2 : 0,
+                                0,
+                                0,
+                              ),
+                              child: Icon(
+                                Icons.arrow_forward_rounded,
+                                size: 18,
+                                color: connected
+                                    ? scheme.primary
+                                    : scheme.onSurfaceVariant,
                               ),
                             ),
                           ],
-                        )
-                      else if (connected)
-                        _ConnectedChip(label: l10n.sessionConnected)
-                      else if (showLastConnected)
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 160),
-                          child: Text(
-                            lastConnectedLabel(context, widget.lastConnected),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: texts.bodySmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                              fontFeatures: tabularFigures,
-                            ),
-                          ),
-                        ),
-                      const SizedBox(width: 6),
-                      // hover 反馈按 M3 归到 effects fast：nudge 只有 2px，
-                      // 用 slow 的 spatial 档反而拖沓。
-                      AnimatedContainer(
-                        duration: MediaQuery.disableAnimationsOf(context)
-                            ? Duration.zero
-                            : Motion.effectsFast,
-                        curve: Motion.effectsFastCurve,
-                        transform: Matrix4.translationValues(
-                          _hovered && active ? 2 : 0,
-                          0,
-                          0,
-                        ),
-                        child: Icon(
-                          Icons.arrow_forward_rounded,
-                          size: 18,
-                          color: connected
-                              ? scheme.primary
-                              : scheme.onSurfaceVariant,
                         ),
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
+              // 右键菜单在触屏和键盘上不可达；这里给出同一条目的可见入口。
+              if (!connected && !widget.connecting)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: IconButton(
+                    onPressed: menuController.open,
+                    iconSize: 18,
+                    color: scheme.onSurfaceVariant,
+                    style: IconButton.styleFrom(
+                      minimumSize: const Size(Sizes.touch, Sizes.touch),
+                      maximumSize: const Size(Sizes.touch, Sizes.touch),
+                      padding: EdgeInsets.zero,
+                    ),
+                    icon: Icon(
+                      Icons.more_vert_rounded,
+                      semanticLabel: MaterialLocalizations.of(context)
+                          .showMenuTooltip,
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       ),

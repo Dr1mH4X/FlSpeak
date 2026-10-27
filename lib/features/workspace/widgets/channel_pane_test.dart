@@ -57,17 +57,20 @@ SessionView _view(
   List<ChannelView> channels, {
   List<ClientView>? clients,
   int selfChannelId = 0,
+  Set<int> speaking = const {},
 }) => SessionView(
   state: CoreSessionState.connected(clientId: 1, channelId: selfChannelId),
   activeServerId: 's1',
   channels: channels,
   clients: clients ?? [_client(1, '自己', selfChannelId)],
+  speaking: speaking,
 );
 
 Future<_FixedSessionController> _pumpPane(
   WidgetTester tester,
   SessionView view, {
   bool moves = true,
+  bool settle = true,
 }) async {
   await tester.binding.setSurfaceSize(const Size(480, 800));
   final controller = _FixedSessionController(view, moves: moves);
@@ -75,13 +78,19 @@ Future<_FixedSessionController> _pumpPane(
     ProviderScope(
       overrides: [sessionViewProvider.overrideWith(() => controller)],
       child: const MaterialApp(
+        locale: Locale('zh'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(body: ChannelPanel()),
       ),
     ),
   );
-  await tester.pumpAndSettle();
+  if (settle) {
+    await tester.pumpAndSettle();
+  } else {
+    // 说话光环是循环动画，pumpAndSettle 永远等不到静止。
+    await tester.pump();
+  }
   return controller;
 }
 
@@ -98,6 +107,37 @@ void main() {
     expect(find.byIcon(Icons.mic_rounded), findsOneWidget);
     expect(find.byIcon(Icons.headphones_rounded), findsOneWidget);
     expect(find.byIcon(Icons.schedule_rounded), findsOneWidget);
+  });
+
+  testWidgets('说话状态只由头像表达，并带读屏标签', (tester) async {
+    final view = _view(
+      [_channel(1, name: '大厅')],
+      clients: [_client(1, '自己', 1), _client(2, '张三', 1)],
+      selfChannelId: 1,
+      speaking: {2},
+    );
+    await _pumpPane(tester, view, settle: false);
+
+    expect(find.byIcon(Icons.graphic_eq_rounded), findsNothing);
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is Semantics && widget.properties.label == '正在说话',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('200% 字号下频道树不溢出', (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final view = _view(
+      [_channel(1, name: '大厅')],
+      clients: [_client(1, '自己', 1), _client(2, '张三', 1)],
+      selfChannelId: 1,
+    );
+    await _pumpPane(tester, view);
+
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('spacer 行与普通频道同尺寸，且点击/选中行为一致', (tester) async {

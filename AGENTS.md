@@ -40,6 +40,9 @@
    别处并发调用 tsclient-rs。
 5. 生成代码（`frb_generated.*`、`plugins/flspeak_ffi/lib/src/rust/**`、`lib/l10n/**`）
    不手改，改输入后重跑生成。
+6. **全仓不使用悬停提示**：不引入 `Tooltip`，也不给 `IconButton` 等控件传 `tooltip:`。
+   图标按钮的无障碍名称用 `semanticLabel` 或 `Semantics` 提供；`MaterialLocalizations`
+   里的 `*Tooltip` 只作为标准语义文案使用。
 
 ## 验证
 

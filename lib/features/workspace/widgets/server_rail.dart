@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
@@ -197,8 +198,19 @@ class _ServerTile extends StatelessWidget {
           selected: online,
           excludeSemantics: true,
           label: semanticsLabel.toString(),
+          // `excludeSemantics` 会丢掉 InkWell 的点击动作，必须在这里补回来；
+          // 否则读屏用户听到「按钮」却无法选中服务器。
+          onTap: onTap,
+          customSemanticsActions: connected
+              ? {
+                  CustomSemanticsAction(label: l10n.serverDisconnect):
+                      onDisconnect,
+                }
+              : null,
           child: InkWell(
             onTap: onTap,
+            // 触屏没有右键：长按打开同一个断开菜单。
+            onLongPress: connected ? menuController.open : null,
             borderRadius: Radii.largeAll,
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),

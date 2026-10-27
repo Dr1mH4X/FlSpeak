@@ -507,8 +507,6 @@ class _ServerSection extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 12),
-          _AddServerRow(onTap: onAdd),
         ],
       ],
     );
@@ -567,63 +565,6 @@ class _EmptyServers extends StatelessWidget {
                 onPressed: onAdd,
                 icon: const Icon(Icons.add_rounded, size: 16),
                 label: Text(l10n.serverEmptyAction),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AddServerRow extends StatelessWidget {
-  const _AddServerRow({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final scheme = context.scheme;
-
-    return HairlineCard(
-      clip: true,
-      child: InkWell(
-        onTap: onTap,
-        // M3 state layer：onSurface 8%。
-        hoverColor: scheme.onSurface.withValues(alpha: 0.08),
-        child: Padding(
-          // 内容缩进与服务器行（20）对齐，+ 圆钮和头像落在同一条线上。
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-          child: Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainer,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(Icons.add_rounded, size: 18, color: scheme.primary),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  l10n.serverAdd,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: context.texts.bodyMedium?.copyWith(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Icon(
-                Icons.arrow_forward_rounded,
-                size: 16,
-                color: scheme.onSurfaceVariant,
               ),
             ],
           ),

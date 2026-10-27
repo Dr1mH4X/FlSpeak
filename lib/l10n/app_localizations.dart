@@ -140,6 +140,12 @@ abstract class AppLocalizations {
   /// **'Copied'**
   String get commonCopied;
 
+  /// No description provided for @commonRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get commonRetry;
+
   /// No description provided for @connectAddressLabel.
   ///
   /// In en, this message translates to:
@@ -463,6 +469,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Away: {message}'**
   String memberAwayWith(Object message);
+
+  /// No description provided for @memberSpeaking.
+  ///
+  /// In en, this message translates to:
+  /// **'Speaking'**
+  String get memberSpeaking;
 
   /// No description provided for @voiceAway.
   ///

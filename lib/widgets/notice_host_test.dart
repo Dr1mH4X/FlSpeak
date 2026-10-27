@@ -119,10 +119,13 @@ void main() {
     expect(rect.right, greaterThan(900));
   });
 
-  testWidgets('关闭按钮移除提示', (tester) async {
+  testWidgets('关闭按钮移除提示，命中区域达到触控下限', (tester) async {
     final container = await pumpHost(tester);
     container.read(noticeCenterProvider.notifier).show('boom');
     await tester.pumpAndSettle();
+
+    final close = find.widgetWithIcon(IconButton, Icons.close_rounded);
+    expect(tester.getSize(close), const Size(Sizes.touch, Sizes.touch));
 
     await tester.tap(find.byIcon(Icons.close_rounded));
     await tester.pumpAndSettle();

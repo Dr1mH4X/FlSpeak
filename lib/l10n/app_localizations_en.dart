@@ -31,6 +31,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get commonCopied => 'Copied';
 
   @override
+  String get commonRetry => 'Retry';
+
+  @override
   String get connectAddressLabel => 'Server address';
 
   @override
@@ -215,6 +218,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String memberAwayWith(Object message) {
     return 'Away: $message';
   }
+
+  @override
+  String get memberSpeaking => 'Speaking';
 
   @override
   String get voiceAway => 'Set away';

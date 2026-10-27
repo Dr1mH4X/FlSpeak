@@ -7,6 +7,7 @@
   "commonDone": "Done",
   "commonCopy": "Copy",
   "commonCopied": "Copied",
+  "commonRetry": "Retry",
   
   "connectAddressLabel": "Server address",
   "connectAddressHint": "ts.example.com or ts.example.com:9987",
@@ -120,6 +121,7 @@
   "memberSpeakerMuted": "Speaker muted",
   "memberAway": "Away",
   "memberAwayWith": "Away: {message}",
+  "memberSpeaking": "Speaking",
   "voiceAway": "Set away",
   "voiceUnaway": "Unset away",
   "voiceMicUnavailable": "Microphone unavailable",

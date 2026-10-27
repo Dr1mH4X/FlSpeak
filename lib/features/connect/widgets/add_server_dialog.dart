@@ -181,6 +181,7 @@ class _AddServerFormState extends ConsumerState<_AddServerForm> {
           autocorrect: false,
           keyboardType: TextInputType.url,
           textInputAction: TextInputAction.next,
+          onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
           onChanged: (_) {
             if (_error != null) {
               setState(() => _error = null);
@@ -201,6 +202,7 @@ class _AddServerFormState extends ConsumerState<_AddServerForm> {
           controller: _label,
           autocorrect: false,
           textInputAction: TextInputAction.done,
+          onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
           onSubmitted: (_) => submit(),
           decoration: InputDecoration(hintText: l10n.serverLabelHint),
         ),

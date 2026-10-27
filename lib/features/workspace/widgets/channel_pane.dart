@@ -481,6 +481,12 @@ class _MemberTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
+    final avatar = MemberAvatar(
+      label: initialsOf(client.nickname),
+      size: AvatarSize.small,
+      speaking: speaking,
+      onSurface: true,
+    );
 
     return Padding(
       padding: EdgeInsets.only(left: 40.0 + (depth - 1) * 16.0, right: 14),
@@ -488,12 +494,10 @@ class _MemberTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(
           children: [
-            MemberAvatar(
-              label: initialsOf(client.nickname),
-              size: AvatarSize.small,
-              speaking: speaking,
-              onSurface: true,
-            ),
+            // 头像本身用光环表达说话；读屏靠外层标签拿到同一个状态。
+            speaking
+                ? Semantics(label: l10n.memberSpeaking, child: avatar)
+                : avatar,
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -502,7 +506,7 @@ class _MemberTile extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: context.texts.bodySmall?.copyWith(
                   fontSize: 13,
-                  color: speaking ? scheme.onSurface : scheme.onSurfaceVariant,
+                  color: scheme.onSurfaceVariant,
                 ),
               ),
             ),
@@ -628,7 +632,7 @@ class _UserFooter extends StatelessWidget {
   }
 }
 
-/// 静音/闭麦开关：视觉圆点 36，落点撑到 44（触摸目标下限）。
+/// 静音/闭麦开关：视觉圆点 36，落点撑到 48（M3 触控下限）。
 class _IconToggle extends StatelessWidget {
   const _IconToggle({
     required this.label,

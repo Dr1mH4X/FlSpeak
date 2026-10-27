@@ -194,6 +194,7 @@ class _IdentityDialogContentState extends State<_IdentityDialogContent> {
             autofocus: true,
             autocorrect: false,
             textInputAction: TextInputAction.done,
+            onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
             inputFormatters: [LengthLimitingTextInputFormatter(32)],
             style: context.texts.bodyLarge?.copyWith(fontSize: 14),
             onChanged: (_) => setState(() => _error = null),

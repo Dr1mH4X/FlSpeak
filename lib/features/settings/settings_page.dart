@@ -132,7 +132,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 semanticLabel: l10n.commonCopy,
               ),
               padding: EdgeInsets.zero,
-              constraints: const BoxConstraints.tightFor(width: 44, height: 44),
+              constraints: const BoxConstraints.tightFor(
+                width: Sizes.touch,
+                height: Sizes.touch,
+              ),
             ),
           ),
         ],
@@ -380,12 +383,29 @@ class _AudioDevicePicker extends ConsumerWidget {
         ),
       ),
       error: (error, stackTrace) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 20),
-        child: Text(
-          l10n.settingsAudioUnavailable,
-          style: context.texts.bodyMedium?.copyWith(
-            color: context.scheme.onSurfaceVariant,
-          ),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          children: [
+            Icon(
+              Icons.error_outline_rounded,
+              size: 18,
+              color: context.scheme.error,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                l10n.settingsAudioUnavailable,
+                style: context.texts.bodyMedium?.copyWith(
+                  color: context.scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            TextButton(
+              onPressed: () => ref.invalidate(audioDevicesProvider),
+              child: Text(l10n.commonRetry),
+            ),
+          ],
         ),
       ),
       data: (available) {

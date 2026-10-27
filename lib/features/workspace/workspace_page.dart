@@ -326,7 +326,7 @@ class _ViewTabs extends StatelessWidget {
       tabs: [
         for (final tab in tabs)
           Tab(
-            height: 40,
+            height: 48,
             child: labeled
                 ? Row(
                     mainAxisSize: MainAxisSize.min,

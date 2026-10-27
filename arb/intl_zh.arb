@@ -7,6 +7,7 @@
   "commonDone": "完成",
   "commonCopy": "复制",
   "commonCopied": "已复制",
+  "commonRetry": "重试",
   
   "connectAddressLabel": "服务器地址",
   "connectAddressHint": "ts.example.com 或 ts.example.com:9987",
@@ -120,6 +121,7 @@
   "memberSpeakerMuted": "扬声器已静音",
   "memberAway": "离开",
   "memberAwayWith": "离开：{message}",
+  "memberSpeaking": "正在说话",
   "voiceAway": "标记离开",
   "voiceUnaway": "取消离开",
   "voiceMicUnavailable": "麦克风不可用",

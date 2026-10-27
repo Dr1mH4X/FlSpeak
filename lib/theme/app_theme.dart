@@ -105,11 +105,12 @@ abstract final class Radii {
 
 /// 布局断点。和设计稿的 `md` / `lg` 对齐。
 abstract final class Breakpoints {
-  /// `md`：以下是手机布局，抽屉取代常驻侧栏。
+  /// 手机布局上限。M3 的 compact 是 600；这里沿用设计稿的 768：600–767
+  /// 之间工作区三栏会把主区域压到 400 以内，抽屉布局更稳。
   static const compact = 768.0;
 
-  /// `lg`：连接页从单列变成「身份卡 + 服务器列表」两列。
-  static const wide = 1024.0;
+  /// M3 expanded 的起点：连接页从单列变成「身份卡 + 服务器列表」两列。
+  static const wide = 840.0;
 }
 
 /// 固定尺寸。全部取自设计稿的 Tailwind 标尺（1 单位 = 4px）。
@@ -140,8 +141,9 @@ abstract final class Sizes {
   /// 聊天内容最大宽度 `max-w-3xl`。
   static const chatContent = 768.0;
 
-  /// 最小可点区域：44×44。
-  static const touch = 44.0;
+  /// 最小可点区域：48×48。M3 的 Android 触控下限；桌面沿用同一尺寸，
+  /// 让同一套控件跨端保持一致的命中面积。
+  static const touch = 48.0;
 
   /// 服务器栏磁贴 `size-12`。
   static const railTile = 48.0;
@@ -462,7 +464,7 @@ ThemeData buildAppTheme(Brightness brightness) {
     filledButtonTheme: FilledButtonThemeData(
       style: ButtonStyle(
         minimumSize: const WidgetStatePropertyAll(Size(0, Sizes.touch)),
-        // h44 + r22 是药丸：光学对齐要求左右内边距 ≥ 半径（22）。
+        // h48 + r22 接近胶囊：光学对齐要求左右内边距 ≥ 半径（22）。
         padding: const WidgetStatePropertyAll(
           EdgeInsets.symmetric(horizontal: 22),
         ),

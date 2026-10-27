@@ -122,17 +122,37 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
       },
       theme: buildAppTheme(Brightness.light),
       darkTheme: buildAppTheme(Brightness.dark),
-      builder: (context, child) => _WindowBackgroundSync(
-        child: Stack(
-          children: [
-            child ?? const SizedBox.shrink(),
-            const Positioned(top: 0, right: 0, child: NoticeHost()),
-          ],
+      builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
+        value: appSystemUiOverlayStyle(Theme.of(context)),
+        child: _WindowBackgroundSync(
+          child: Stack(
+            children: [
+              child ?? const SizedBox.shrink(),
+              const Positioned(top: 0, right: 0, child: NoticeHost()),
+            ],
+          ),
         ),
       ),
       routerConfig: router,
     );
   }
+}
+
+/// 状态栏与系统导航栏的图标亮度跟随主题。Android 没有 AppBar 时不会自动
+/// 推断，深色主题需要明确要求浅色图标，浅色主题反之。
+SystemUiOverlayStyle appSystemUiOverlayStyle(ThemeData theme) {
+  final dark = theme.brightness == Brightness.dark;
+  return SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
+    statusBarBrightness: dark ? Brightness.dark : Brightness.light,
+    systemNavigationBarColor: theme.colorScheme.surface,
+    systemNavigationBarIconBrightness: dark
+        ? Brightness.light
+        : Brightness.dark,
+    systemNavigationBarDividerColor: Colors.transparent,
+    systemNavigationBarContrastEnforced: false,
+  );
 }
 
 /// 把当前主题的 surface 色报给原生窗口：macOS 的标题栏与圆角边缘底色

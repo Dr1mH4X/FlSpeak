@@ -140,6 +140,8 @@ class _ChatPaneState extends State<ChatPane> {
         Expanded(
           child: ListView.builder(
             controller: _scroll,
+            // 拖动消息列表时收起键盘，避免触屏上键盘挡住输入区。
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: EdgeInsets.fromLTRB(horizontal, 24, horizontal, 24),
             itemCount: widget.messages.length + 1,
             itemBuilder: (context, index) {
@@ -206,6 +208,9 @@ class _ChatPaneState extends State<ChatPane> {
                       minLines: 1,
                       maxLines: 5,
                       keyboardType: TextInputType.multiline,
+                      // 触屏没有 Tab 键：点输入框外收起键盘。
+                      onTapOutside: (_) =>
+                          FocusManager.instance.primaryFocus?.unfocus(),
                       style: texts.bodyMedium?.copyWith(
                         color: scheme.onSurface,
                       ),
@@ -274,16 +279,19 @@ class _ScopeButton extends StatelessWidget {
         '${l10n.chatScopeTitle} · '
         '${server ? l10n.chatScopeServer : l10n.chatScopeChannel}';
 
-    return SizedBox.square(
-      dimension: Sizes.touch,
-      child: IconButton(
-        onPressed: () =>
-            onChanged(server ? ChatScope.channel : ChatScope.server),
-        iconSize: 20,
-        icon: Icon(
-          server ? Icons.public_rounded : Icons.chat_bubble_rounded,
-          color: scheme.onSurfaceVariant,
-          semanticLabel: label,
+    return Semantics(
+      toggled: server,
+      child: SizedBox.square(
+        dimension: Sizes.touch,
+        child: IconButton(
+          onPressed: () =>
+              onChanged(server ? ChatScope.channel : ChatScope.server),
+          iconSize: 20,
+          icon: Icon(
+            server ? Icons.public_rounded : Icons.chat_bubble_rounded,
+            color: scheme.onSurfaceVariant,
+            semanticLabel: label,
+          ),
         ),
       ),
     );
