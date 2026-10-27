@@ -173,7 +173,10 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get channelsEmpty => 'Not connected.';
+  String get workspaceDropped => 'Disconnected';
+
+  @override
+  String get workspaceRetrying => 'Retrying…';
 
   @override
   String get channelsSection => 'Channels';

@@ -191,10 +191,14 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
   ) {
     final rows = _flatten(view);
     if (rows.isEmpty) {
+      // 掉线时主区域已经说明状态，频道栏留空，不再重复同一句话。
+      if (!view.connected) {
+        return const SizedBox.shrink();
+      }
       return Padding(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
         child: Text(
-          view.connected ? l10n.workspaceNoChannels : l10n.channelsEmpty,
+          l10n.workspaceNoChannels,
           style: context.texts.bodySmall?.copyWith(
             color: context.scheme.onSurfaceVariant,
           ),

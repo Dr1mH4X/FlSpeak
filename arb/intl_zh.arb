@@ -8,7 +8,7 @@
   "commonCopy": "复制",
   "commonCopied": "已复制",
   "commonRetry": "重试",
-  
+
   "connectAddressLabel": "服务器地址",
   "connectAddressHint": "ts.example.com 或 ts.example.com:9987",
   "connectNicknameLabel": "昵称",
@@ -104,15 +104,16 @@
       }
     }
   },
-  "channelsEmpty": "尚未连接。",
+  "workspaceDropped": "连接丢失",
+  "workspaceRetrying": "正在重试…",
   "channelsSection": "频道",
   "workspaceNoChannels": "服务器还没有频道。",
   "workspaceOpenMenu": "打开频道菜单",
-  
+
   "channelPasswordProtected": "需要频道密码",
   "channelJoinMenu": "加入频道",
   "channelPaneResize": "调整频道栏宽度",
-  
+
   "voiceMute": "静音",
   "voiceUnmute": "取消静音",
   "voiceDeafen": "关闭声音",

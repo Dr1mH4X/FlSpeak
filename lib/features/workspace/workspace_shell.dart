@@ -6,8 +6,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/models.dart';
+import '../../core/notices.dart';
 import '../../core/providers.dart';
-
+import '../../l10n/app_localizations.dart';
 import '../../router.dart';
 import '../../theme/app_theme.dart';
 import 'widgets/channel_pane.dart';
@@ -32,12 +34,28 @@ class WorkspaceShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = context.scheme;
+    final l10n = AppLocalizations.of(context);
     final view = ref.watch(sessionViewProvider);
     final width = MediaQuery.sizeOf(context).width;
     final compact = width < Breakpoints.compact;
     final panelColor = context.isDark
         ? scheme.surfaceContainerLow
         : scheme.surfaceContainerLowest;
+
+    // 掉线重连期间每换一次尝试就在右上角刷新同一条提示；同一文案由
+    // NoticeCenter 去重，不会叠成多张卡片。
+    ref.listen<SessionView>(sessionViewProvider, (previous, next) {
+      if (!next.reconnecting) {
+        return;
+      }
+      if (previous?.reconnecting == true &&
+          previous?.reconnectAttempt == next.reconnectAttempt) {
+        return;
+      }
+      ref
+          .read(noticeCenterProvider.notifier)
+          .show(l10n.workspaceRetrying, tone: NoticeTone.info);
+    });
 
     void selectServer(ServerProfileView server) {
       if (server.id == view.activeServerId && view.connected) {
