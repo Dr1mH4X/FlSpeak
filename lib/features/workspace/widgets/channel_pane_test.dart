@@ -8,6 +8,7 @@ import 'package:flspeak/features/workspace/workspace_state.dart';
 import 'package:flspeak/features/workspace/widgets/channel_pane.dart';
 import 'package:flspeak/features/workspace/widgets/voice_activity_ribbon.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
+import 'package:flspeak/widgets/monogram.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -98,15 +99,24 @@ ProviderContainer _container(WidgetTester tester) =>
     ProviderScope.containerOf(tester.element(find.byType(ChannelPanel)));
 
 void main() {
-  testWidgets('底部用户卡只留控制按钮与电平条', (tester) async {
+  testWidgets('底部语音卡显示可视化、语音状态与控制按钮', (tester) async {
     await _pumpPane(tester, _view([_channel(1, name: '大厅')]));
 
     expect(find.byType(VoiceActivityRibbon), findsOneWidget);
-    expect(find.text('Connected'), findsNothing);
-    expect(find.text('Offline'), findsNothing);
+    expect(find.byType(IdentityAvatar), findsNothing);
+    expect(find.text('语音已连接'), findsOneWidget);
+    expect(find.text('FlSpeakUser'), findsNothing);
     expect(find.byIcon(Icons.mic_rounded), findsOneWidget);
     expect(find.byIcon(Icons.headphones_rounded), findsOneWidget);
     expect(find.byIcon(Icons.schedule_rounded), findsOneWidget);
+    expect(
+      tester.getRect(find.byType(VoiceActivityRibbon)).right,
+      lessThan(tester.getRect(find.byIcon(Icons.mic_rounded)).left),
+    );
+    expect(
+      tester.getCenter(find.byType(VoiceActivityRibbon)).dy,
+      tester.getCenter(find.byIcon(Icons.mic_rounded)).dy,
+    );
   });
 
   testWidgets('说话状态只由头像表达，并带读屏标签', (tester) async {
@@ -207,7 +217,7 @@ void main() {
     final container = _container(tester);
 
     // 先单击 41 建立「之前的高亮位置」，再双击 42。
-    await tester.tap(find.text('大厅'));
+    await tester.tap(find.text('大厅').first);
     await tester.pump();
     expect(container.read(activeChannelIdProvider), 41);
 
@@ -229,7 +239,7 @@ void main() {
     final controller = await _pumpPane(tester, view, moves: false);
     final container = _container(tester);
 
-    await tester.tap(find.text('大厅'));
+    await tester.tap(find.text('大厅').first);
     await tester.pump();
     await tester.tap(find.text('上锁'));
     await tester.pump(const Duration(milliseconds: 100));
@@ -246,9 +256,9 @@ void main() {
     final controller = await _pumpPane(tester, view);
     final container = _container(tester);
 
-    await tester.tap(find.text('大厅'));
+    await tester.tap(find.text('大厅').first);
     await tester.pump(const Duration(milliseconds: 100));
-    await tester.tap(find.text('大厅'));
+    await tester.tap(find.text('大厅').first);
     await tester.pump();
 
     expect(controller.joined, isEmpty);
@@ -264,7 +274,7 @@ void main() {
     await _pumpPane(tester, view, moves: false);
     final container = _container(tester);
 
-    await tester.tap(find.text('大厅'));
+    await tester.tap(find.text('大厅').first);
     await tester.pump();
     expect(container.read(activeChannelIdProvider), 71);
 

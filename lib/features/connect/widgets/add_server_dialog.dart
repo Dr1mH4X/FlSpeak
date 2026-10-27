@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../../../core/models.dart';
+import '../../../core/server_icon.dart';
+import '../../../widgets/server_icon_picker.dart';
+import '../../../widgets/expressive_frame.dart';
 import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_motion.dart';
@@ -90,6 +93,7 @@ class _AddServerForm extends ConsumerStatefulWidget {
 }
 
 class _AddServerFormState extends ConsumerState<_AddServerForm> {
+  ServerIcon _icon = ServerIcon.community;
   final _address = TextEditingController();
   final _label = TextEditingController();
   final _addressFocus = FocusNode();
@@ -147,6 +151,7 @@ class _AddServerFormState extends ConsumerState<_AddServerForm> {
       _addressFocus.requestFocus();
       return;
     }
+    ref.read(preferencesProvider.notifier).setServerIcon(profile.id, _icon);
     widget.submitting.value = false;
     if (!mounted) {
       return;
@@ -205,6 +210,29 @@ class _AddServerFormState extends ConsumerState<_AddServerForm> {
           onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
           onSubmitted: (_) => submit(),
           decoration: InputDecoration(hintText: l10n.serverLabelHint),
+        ),
+        const SizedBox(height: 20),
+        Row(
+          children: [
+            ExpressiveFrame(
+              size: 44,
+              shapeSeed: _icon.index,
+              child: Icon(_icon.icon, color: context.scheme.onPrimaryContainer),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(_icon.label(l10n), style: context.texts.bodyMedium),
+            ),
+            TextButton(
+              onPressed: _submitting
+                  ? null
+                  : () async {
+                      final icon = await showServerIconPicker(context, _icon);
+                      if (icon != null && mounted) setState(() => _icon = icon);
+                    },
+              child: Text(l10n.serverIconChange),
+            ),
+          ],
         ),
         const SizedBox(height: 8),
       ],

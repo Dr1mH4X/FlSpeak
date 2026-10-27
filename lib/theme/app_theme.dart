@@ -2,13 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// 语义状态色：界面里只有这两种状态允许使用饱和色。
-///
-/// 一个语音客户端最贵的像素是「谁在线、谁在说话」，所以调色板只把饱和槽位留给
-/// 连接态与拒绝态，其余全部走中性面阶。
-///
-/// 两者都按正文对比度要求保持至少 4.5:1：连接态会当正文用，拒绝态只出现在
-/// 提示与校验结果里。
+/// 连接与错误使用独立语义色，避免与导航的蓝紫强调色混淆。
 @immutable
 class StatusColors extends ThemeExtension<StatusColors> {
   const StatusColors({required this.live, required this.deny});
@@ -46,36 +40,26 @@ extension AppSchemeOf on BuildContext {
   TextTheme get texts => Theme.of(this).textTheme;
   bool get isDark => Theme.of(this).brightness == Brightness.dark;
 
-  /// 卡片面：浅色下是纯白，深色下比页面上浮一级。
-  Color get cardColor => isDark ? scheme.surfaceContainerLow : scheme.surface;
+  /// 卡片使用 surfaceContainerLow，与内容底板形成柔和面阶。
+  Color get cardColor => scheme.surfaceContainerLow;
 
-  /// 页面底板：浅色是带一点青的米白，深色接近黑。
+  /// 主内容底板。
   Color get pageColor => scheme.surface;
 
-  /// 浅色下页面与卡片需要靠描边分开，深色下靠面阶本身就够了。
+  /// 描边与分隔线。
   Color get hairline => scheme.outlineVariant;
 
   bool get isCompact => MediaQuery.sizeOf(this).width < Breakpoints.compact;
 }
 
-/// 圆角只有这几档，和设计稿的 Tailwind 半径一一对应。
-///
-/// `xl` 给按钮与输入框，`xxl` 给页面级卡片与列表（[HairlineCard] 家族），
-/// `xxxl` 给对话框与桌面内容面板等大容器。
-///
-/// 页面级卡片取 `xxl` 还有个物理原因：家族里最矮的卡片（添加行 ≈56 高）
-/// 显示不了超过半高（≈28）的圆角，Flutter 会把它钳制成胶囊；家族统一在
-/// `xxl`，高矮卡片才能渲染出同一条弧。
-///
-/// 圆弧刻意使用正圆弧而非连续曲率（Squircle）：桌面端惯例，且 Flutter 原生
-/// 不提供 `.continuous`；同心对齐靠数值（见 [inner]）而不是曲率形状。
+/// M3 圆角层级：频道行、控件、卡片与对话框。
 abstract final class Radii {
   static const small = 10.0;
-  static const medium = 13.0;
+  static const medium = 12.0;
   static const large = 16.0;
-  static const xl = 22.0;
-  static const xxl = 29.0;
-  static const xxxl = 35.0;
+  static const xl = 16.0;
+  static const xxl = 24.0;
+  static const xxxl = 28.0;
 
   /// 胶囊形：频道行、标签页、头像、状态点都用它。
   static const pill = 999.0;
@@ -113,7 +97,7 @@ abstract final class Breakpoints {
   static const wide = 840.0;
 }
 
-/// 固定尺寸。全部取自设计稿的 Tailwind 标尺（1 单位 = 4px）。
+/// 桌面三栏布局与触控尺寸。
 abstract final class Sizes {
   /// 顶栏高度 `h-16`。
   static const header = 64.0;
@@ -135,8 +119,8 @@ abstract final class Sizes {
   /// 连接页内容最大宽度 `max-w-5xl`。
   static const connectContent = 1024.0;
 
-  /// 身份栏宽度 `340px`。
-  static const identityColumn = 340.0;
+  /// 连接页身份卡宽度。
+  static const identityColumn = 264.0;
 
   /// 聊天内容最大宽度 `max-w-3xl`。
   static const chatContent = 768.0;
@@ -195,8 +179,8 @@ abstract final class ServerPalette {
       HSLColor.fromAHSL(
         1,
         _hues[_hash(id) % _hues.length],
-        0.62,
-        0.5,
+        0.35,
+        0.45,
       ).toColor(),
     ),
   );
@@ -260,88 +244,96 @@ TextTheme _textTheme(Brightness brightness) {
   final base = brightness == Brightness.dark
       ? Typography.material2021().white
       : Typography.material2021().black;
-  return base.copyWith(
-    displaySmall: base.displaySmall?.copyWith(
-      fontSize: 34,
-      fontWeight: FontWeight.w700,
-      letterSpacing: -0.6,
-      height: 1.1,
-      fontFeatures: tabularFigures,
-    ),
-    headlineSmall: base.headlineSmall?.copyWith(
-      fontSize: 24,
-      fontWeight: FontWeight.w600,
-      letterSpacing: -0.3,
-      height: 1.2,
-    ),
-    titleLarge: base.titleLarge?.copyWith(
-      fontSize: 20,
-      fontWeight: FontWeight.w600,
-      letterSpacing: -0.2,
-    ),
-    titleMedium: base.titleMedium?.copyWith(
-      fontSize: 15,
-      fontWeight: FontWeight.w500,
-    ),
-    titleSmall: base.titleSmall?.copyWith(
-      fontSize: 13.5,
-      fontWeight: FontWeight.w600,
-      letterSpacing: 0.1,
-    ),
-    bodyLarge: base.bodyLarge?.copyWith(fontSize: 16, height: 1.5),
-    bodyMedium: base.bodyMedium?.copyWith(fontSize: 14, height: 1.5),
-    bodySmall: base.bodySmall?.copyWith(fontSize: 12.5, height: 1.45),
-    labelLarge: base.labelLarge?.copyWith(
-      fontSize: 14,
-      fontWeight: FontWeight.w600,
-    ),
-    labelMedium: base.labelMedium?.copyWith(
-      fontSize: 12.5,
-      fontWeight: FontWeight.w500,
-      letterSpacing: 0.2,
-    ),
-    labelSmall: base.labelSmall?.copyWith(
-      fontSize: 11,
-      fontWeight: FontWeight.w500,
-      letterSpacing: 0.3,
-    ),
-  );
+  return base
+      .copyWith(
+        displaySmall: base.displaySmall?.copyWith(
+          fontSize: 36,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -1.0,
+          height: 1.1,
+          fontFeatures: tabularFigures,
+        ),
+        headlineSmall: base.headlineSmall?.copyWith(
+          fontSize: 24,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.3,
+          height: 1.2,
+        ),
+        titleLarge: base.titleLarge?.copyWith(
+          fontSize: 20,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.2,
+        ),
+        titleMedium: base.titleMedium?.copyWith(
+          fontSize: 15,
+          fontWeight: FontWeight.w500,
+        ),
+        titleSmall: base.titleSmall?.copyWith(
+          fontSize: 13.5,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.1,
+        ),
+        bodyLarge: base.bodyLarge?.copyWith(fontSize: 16, height: 1.5),
+        bodyMedium: base.bodyMedium?.copyWith(fontSize: 14, height: 1.5),
+        bodySmall: base.bodySmall?.copyWith(fontSize: 12.5, height: 1.45),
+        labelLarge: base.labelLarge?.copyWith(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+        ),
+        labelMedium: base.labelMedium?.copyWith(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.2,
+        ),
+        labelSmall: base.labelSmall?.copyWith(
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.3,
+        ),
+      )
+      .apply(
+        fontFamilyFallback: const [
+          'PingFang SC',
+          'Microsoft YaHei',
+          'Noto Sans CJK SC',
+        ],
+      );
 }
 
 ColorScheme _scheme(Brightness brightness) {
   final dark = brightness == Brightness.dark;
   final seeded = ColorScheme.fromSeed(
-    seedColor: const Color(0xFF006A60),
+    seedColor: const Color(0xFF5556C9),
     brightness: brightness,
-    dynamicSchemeVariant: DynamicSchemeVariant.fidelity,
+    dynamicSchemeVariant: DynamicSchemeVariant.tonalSpot,
   );
 
   if (dark) {
     return seeded.copyWith(
-      primary: const Color(0xFF6FDBD0),
-      onPrimary: const Color(0xFF003733),
-      primaryContainer: const Color(0xFF00504A),
-      onPrimaryContainer: const Color(0xFF8DF7EB),
-      secondaryContainer: const Color(0xFF2A3330),
-      onSecondaryContainer: const Color(0xFFDCE5E1),
-      surface: const Color(0xFF0E1513),
-      surfaceDim: const Color(0xFF090F0E),
-      surfaceBright: const Color(0xFF343B39),
-      surfaceContainerLowest: const Color(0xFF090F0E),
-      surfaceContainerLow: const Color(0xFF151C1A),
-      surfaceContainer: const Color(0xFF1A211F),
-      surfaceContainerHigh: const Color(0xFF252C2A),
-      surfaceContainerHighest: const Color(0xFF303836),
-      onSurface: const Color(0xFFDEE4E1),
-      onSurfaceVariant: const Color(0xFFB9C6C3),
-      outline: const Color(0xFF84938F),
-      outlineVariant: const Color(0xFF3F4947),
+      primary: const Color(0xFFC2C1FF),
+      onPrimary: const Color(0xFF29277D),
+      primaryContainer: const Color(0xFF383765),
+      onPrimaryContainer: const Color(0xFFE5E1FF),
+      secondaryContainer: const Color(0xFF30313C),
+      onSecondaryContainer: const Color(0xFFE2E1EC),
+      surface: const Color(0xFF16171F),
+      surfaceDim: const Color(0xFF111218),
+      surfaceBright: const Color(0xFF393A45),
+      surfaceContainerLowest: const Color(0xFF111218),
+      surfaceContainerLow: const Color(0xFF1E1F29),
+      surfaceContainer: const Color(0xFF252631),
+      surfaceContainerHigh: const Color(0xFF2E2F3C),
+      surfaceContainerHighest: const Color(0xFF393A49),
+      onSurface: const Color(0xFFEEEFF7),
+      onSurfaceVariant: const Color(0xFFB9BACB),
+      outline: const Color(0xFF8D8E9F),
+      outlineVariant: const Color(0xFF3B3C4B),
       error: const Color(0xFFFFB4AB),
       onError: const Color(0xFF690005),
       errorContainer: const Color(0xFF93000A),
       onErrorContainer: const Color(0xFFFFDAD6),
-      inverseSurface: const Color(0xFFDEE4E1),
-      onInverseSurface: const Color(0xFF2B3230),
+      inverseSurface: const Color(0xFFEEEFF7),
+      onInverseSurface: const Color(0xFF30313C),
       // 面板底色已由 surfaceContainer 家族分层，M3 的 elevation tint 一律关掉。
       surfaceTint: Colors.transparent,
       shadow: Colors.black,
@@ -350,30 +342,30 @@ ColorScheme _scheme(Brightness brightness) {
   }
 
   return seeded.copyWith(
-    primary: const Color(0xFF006A60),
+    primary: const Color(0xFF5556C9),
     onPrimary: Colors.white,
-    primaryContainer: const Color(0xFF9EF2E4),
-    onPrimaryContainer: const Color(0xFF00201C),
-    secondaryContainer: const Color(0xFFDCE5E2),
-    onSecondaryContainer: const Color(0xFF151D1B),
-    surface: const Color(0xFFF4FBF8),
-    surfaceDim: const Color(0xFFD5DBD9),
-    surfaceBright: const Color(0xFFF4FBF8),
+    primaryContainer: const Color(0xFFE4DFFF),
+    onPrimaryContainer: const Color(0xFF1D1857),
+    secondaryContainer: const Color(0xFFE5E5EF),
+    onSecondaryContainer: const Color(0xFF252531),
+    surface: const Color(0xFFF7F7FC),
+    surfaceDim: const Color(0xFFDADAE5),
+    surfaceBright: const Color(0xFFF7F7FC),
     surfaceContainerLowest: const Color(0xFFFFFFFF),
-    surfaceContainerLow: const Color(0xFFFFFFFF),
-    surfaceContainer: const Color(0xFFE9EFEC),
-    surfaceContainerHigh: const Color(0xFFDDE4E1),
-    surfaceContainerHighest: const Color(0xFFD2DCD9),
-    onSurface: const Color(0xFF171D1B),
-    onSurfaceVariant: const Color(0xFF5B6461),
-    outline: const Color(0xFF6F7B78),
-    outlineVariant: const Color(0xFFC9D1CE),
+    surfaceContainerLow: const Color(0xFFF1F1F9),
+    surfaceContainer: const Color(0xFFEEEEF6),
+    surfaceContainerHigh: const Color(0xFFE7E7F1),
+    surfaceContainerHighest: const Color(0xFFE1E1ED),
+    onSurface: const Color(0xFF1C1D29),
+    onSurfaceVariant: const Color(0xFF5B5C70),
+    outline: const Color(0xFF77788C),
+    outlineVariant: const Color(0xFFDCDCE8),
     error: const Color(0xFFBA1A1A),
     onError: Colors.white,
     errorContainer: const Color(0xFFFFDAD6),
     onErrorContainer: const Color(0xFF410002),
-    inverseSurface: const Color(0xFF2B3230),
-    onInverseSurface: const Color(0xFFEAF1EE),
+    inverseSurface: const Color(0xFF30313C),
+    onInverseSurface: const Color(0xFFF2F1FA),
     surfaceTint: Colors.transparent,
     shadow: Colors.black,
     scrim: Colors.black,
@@ -433,9 +425,9 @@ ThemeData buildAppTheme(Brightness brightness) {
       filled: true,
       // M3 filled field 的容器色是 surfaceContainerHighest；暗色下再往下取
       // 面阶（旧值 lowest）会在面板上沉积成一整块死黑。
-      fillColor: scheme.surfaceContainerHighest,
+      fillColor: scheme.surfaceContainer,
       hoverColor: scheme.onSurface.withValues(alpha: 0.08),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       border: OutlineInputBorder(
         borderRadius: Radii.xlAll,
         borderSide: BorderSide(color: scheme.outlineVariant),

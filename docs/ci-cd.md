@@ -46,8 +46,10 @@ codegen 用官方 release 的 x86_64 linux 预编译附件（版本与 sha256 �
 
 | 作业 | 内容 |
 | --- | --- |
-| `desktop` | linux / windows / macos 各跑一次 `flutter build <platform> --debug`，验证 native assets 钩子能编出 Rust |
-| `android` | 装 NDK（链接进 SDK，避免构建时重复下载）后 `flutter build apk --debug`；Gradle 依赖与构建状态由 `gradle/actions/setup-gradle` 缓存 |
+| `desktop` | linux / windows / macos 各跑一次 `flutter build <platform> --debug`，打包完整 bundle 并上传 artifact，包含 Rust 动态库与 Flutter 资源 |
+| `android` | 装 NDK（链接进 SDK，避免构建时重复下载）后 `flutter build apk --debug`，上传 APK；Gradle 依赖与构建状态由 `gradle/actions/setup-gradle` 缓存 |
+
+构建成功后，在 Actions 对应运行页的 Artifacts 区域下载。桌面产物名为 `flspeak-<platform>-<runner.arch>-debug`，Android 为 `flspeak-android-debug`，保留 14 天。Linux 包为 tar.gz，Windows 包为完整目录 zip，macOS 包保留 `.app` 目录结构；桌面包需要整体解压运行。Debug 产物用于测试，macOS 包未做分发签名与公证。
 
 ## `release.yml`
 

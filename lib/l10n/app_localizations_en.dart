@@ -16,6 +16,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appName => 'FlSpeak';
 
   @override
+  String get homeTitle => 'Home';
+
+  @override
   String get commonClose => 'Close';
 
   @override
@@ -383,4 +386,77 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsStorePath => 'Storage directory';
+
+  @override
+  String get connectTitle => 'Find your people';
+
+  @override
+  String get connectSubtitle => 'Your communities, one conversation away.';
+
+  @override
+  String get serverEmptyBody =>
+      'Add a server address to join your people in a channel.';
+
+  @override
+  String get serverSearchLabel => 'Search servers';
+
+  @override
+  String get serverSearchEmpty => 'No matching servers';
+
+  @override
+  String get connectIdentityBody => 'One identity. All your communities.';
+
+  @override
+  String get connectLocalIdentity => 'Identity stored on this device';
+
+  @override
+  String get membersTitle => 'Channel members';
+
+  @override
+  String get voiceConnected => 'Voice connected';
+
+  @override
+  String get memberListening => 'In this channel';
+
+  @override
+  String get appearancePreview => 'Appearance';
+
+  @override
+  String get serverIconTitle => 'Choose server icon';
+
+  @override
+  String get serverIconChange => 'Change icon';
+
+  @override
+  String get serverIconCommunity => 'Community';
+
+  @override
+  String get serverIconGaming => 'Gaming';
+
+  @override
+  String get serverIconMusic => 'Music';
+
+  @override
+  String get serverIconWork => 'Work';
+
+  @override
+  String get serverIconTerminal => 'Terminal';
+
+  @override
+  String get serverIconFavorite => 'Favorite';
+
+  @override
+  String get serverIconPlanet => 'Planet';
+
+  @override
+  String get serverIconCoffee => 'Coffee';
+
+  @override
+  String get serverIconRocket => 'Rocket';
+
+  @override
+  String get serverIconScience => 'Explore';
+
+  @override
+  String get channelIconRetry => 'Retry channel icon';
 }

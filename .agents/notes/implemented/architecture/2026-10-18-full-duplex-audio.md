@@ -28,8 +28,7 @@ TeamSpeakClaw 的 `VoicePacer`。
   原频道，Dart 保存 `lastChannelId` 并提供「回到上次频道」按钮。
 - **身份提升**：连续 3 次握手超时后 +5 级（上限 29），独立线程挖矿、可取消，身份文件用
   临时文件 + fsync + rename 原子写。
-- **文件传输尾部**：tsclient-rs 的 AES 流丢弃不足 16 字节的尾部；上传补零到块边界，下载
-  按声明 size 截断。
+- **文件传输**：TCP 发送原始 `ftkey` 后收发明文字节，下载严格校验声明大小；传输与图标的理由见[频道图标](../../implemented/architecture/2026-10-28-channel-icons.md)。
 
 ## Alternatives considered
 

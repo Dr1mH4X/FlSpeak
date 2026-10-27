@@ -16,6 +16,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appName => 'FlSpeak';
 
   @override
+  String get homeTitle => '主页';
+
+  @override
   String get commonClose => '关闭';
 
   @override
@@ -379,4 +382,76 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsStorePath => '存储目录';
+
+  @override
+  String get connectTitle => '找到你的声音';
+
+  @override
+  String get connectSubtitle => '加入熟悉的频道，让对话自然发生。';
+
+  @override
+  String get serverEmptyBody => '添加服务器地址，和伙伴在同一个频道相聚。';
+
+  @override
+  String get serverSearchLabel => '搜索服务器';
+
+  @override
+  String get serverSearchEmpty => '没有匹配的服务器';
+
+  @override
+  String get connectIdentityBody => '一个身份，连接你熟悉的每个社区。';
+
+  @override
+  String get connectLocalIdentity => '身份保存在本机';
+
+  @override
+  String get membersTitle => '频道成员';
+
+  @override
+  String get voiceConnected => '语音已连接';
+
+  @override
+  String get memberListening => '正在频道中';
+
+  @override
+  String get appearancePreview => '外观';
+
+  @override
+  String get serverIconTitle => '选择服务器图标';
+
+  @override
+  String get serverIconChange => '更换图标';
+
+  @override
+  String get serverIconCommunity => '社区';
+
+  @override
+  String get serverIconGaming => '游戏';
+
+  @override
+  String get serverIconMusic => '音乐';
+
+  @override
+  String get serverIconWork => '工作';
+
+  @override
+  String get serverIconTerminal => '终端';
+
+  @override
+  String get serverIconFavorite => '喜爱';
+
+  @override
+  String get serverIconPlanet => '星球';
+
+  @override
+  String get serverIconCoffee => '咖啡';
+
+  @override
+  String get serverIconRocket => '火箭';
+
+  @override
+  String get serverIconScience => '探索';
+
+  @override
+  String get channelIconRetry => '重新加载频道图标';
 }

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,10 +9,7 @@ import '../../../core/providers.dart';
 import '../../../core/voice_levels.dart';
 import '../../../theme/app_theme.dart';
 
-/// 用户卡背景：跟随所选声源的一段电平历史。
-///
-/// 只订阅 `voiceLevelsProvider`，10Hz 的更新不会牵动频道树。柱子用 M3
-/// 的 primary 与圆角画成；静止时是几乎不可见的一条基线。
+/// 所选声源的响度历史；只订阅电平流，避免重建频道树。
 class VoiceActivityRibbon extends ConsumerWidget {
   const VoiceActivityRibbon({super.key});
 
@@ -47,6 +46,12 @@ class _RibbonState extends State<_Ribbon> {
       : widget.levels.received;
 
   @override
+  void initState() {
+    super.initState();
+    _history = [..._history.skip(1), _level.clamp(0.0, 1.0).toDouble()];
+  }
+
+  @override
   void didUpdateWidget(covariant _Ribbon oldWidget) {
     super.didUpdateWidget(oldWidget);
     final switched = widget.source != oldWidget.source;
@@ -62,15 +67,32 @@ class _RibbonState extends State<_Ribbon> {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox.expand(
-      child: CustomPaint(
-        painter: _RibbonPainter(
-          history: _history,
-          color: context.scheme.primary,
+    return TweenAnimationBuilder<List<double>>(
+      tween: _HistoryTween(begin: _history, end: _history),
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 100),
+      curve: Curves.easeOut,
+      builder: (context, history, child) => SizedBox.expand(
+        child: CustomPaint(
+          painter: _RibbonPainter(
+            history: history,
+            color: context.scheme.primary,
+          ),
         ),
       ),
     );
   }
+}
+
+class _HistoryTween extends Tween<List<double>> {
+  _HistoryTween({required super.begin, required super.end});
+
+  @override
+  List<double> lerp(double t) => List.generate(
+    end!.length,
+    (index) => begin![index] + (end![index] - begin![index]) * t,
+  );
 }
 
 class _RibbonPainter extends CustomPainter {
@@ -79,30 +101,29 @@ class _RibbonPainter extends CustomPainter {
   final List<double> history;
   final Color color;
 
-  static const _barWidth = 3.0;
+  static const _barWidth = 4.0;
   static const _minGap = 4.0;
-  static const _maxGap = 12.0;
+  static const _maxGap = 8.0;
   static const _idleHeight = 3.0;
-  static const _maxHeight = 22.0;
 
   @override
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty || history.isEmpty) {
       return;
     }
-    final count = ((size.width - 24) / (_barWidth + _minGap)).floor().clamp(
-      16,
-      32,
+    final inset = math.min(12.0, size.width * 0.1);
+    final available = size.width - inset * 2;
+    final count = ((available + _minGap) / (_barWidth + _minGap)).floor().clamp(
+      1,
+      40,
     );
     final gap = count == 1
         ? 0.0
-        : ((size.width - 24 - count * _barWidth) / (count - 1)).clamp(
-            _minGap,
-            _maxGap,
-          );
+        : ((available - count * _barWidth) / (count - 1)).clamp(0.0, _maxGap);
     final total = count * _barWidth + (count - 1) * gap;
     final start = (size.width - total) / 2;
     final center = size.height / 2;
+    final maxHeight = math.max(_idleHeight, size.height - 16);
     final paint = Paint()..style = PaintingStyle.fill;
 
     for (var index = 0; index < count; index++) {
@@ -114,8 +135,8 @@ class _RibbonPainter extends CustomPainter {
       final fraction = position - left;
       final level = (history[left] * (1 - fraction) + history[right] * fraction)
           .clamp(0.0, 1.0);
-      final height = _idleHeight + level * (_maxHeight - _idleHeight);
-      paint.color = color.withValues(alpha: 0.10 + level * 0.24);
+      final height = _idleHeight + level * (maxHeight - _idleHeight);
+      paint.color = color.withValues(alpha: 0.24 + level * 0.66);
       final rect = Rect.fromLTWH(
         start + index * (_barWidth + gap),
         center - height / 2,

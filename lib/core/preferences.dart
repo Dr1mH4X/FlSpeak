@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import 'server_icon.dart';
+
 /// 外观偏好的三档。存进 JSON 的是稳定字符串，改枚举名不会毁掉已有文件。
 enum AppThemePreference {
   system('system'),
@@ -20,7 +22,7 @@ enum AppThemePreference {
         return mode;
       }
     }
-    return AppThemePreference.system;
+    return AppThemePreference.dark;
   }
 }
 
@@ -53,10 +55,11 @@ class SessionPreferences {
     required this.nickname,
     this.lastConnected = const <String, DateTime>{},
     this.locale,
-    this.theme = AppThemePreference.system,
+    this.theme = AppThemePreference.dark,
     this.pttHotkey,
     this.channelPanelWidth,
     this.voiceMeterSource = VoiceMeterSource.microphone,
+    this.serverIcons = const {},
   });
 
   /// 没有设置过昵称时的默认值。
@@ -83,6 +86,7 @@ class SessionPreferences {
   final double? channelPanelWidth;
 
   final VoiceMeterSource voiceMeterSource;
+  final Map<String, ServerIcon> serverIcons;
 
   SessionPreferences copyWith({
     String? nickname,
@@ -92,6 +96,7 @@ class SessionPreferences {
     Object? pttHotkey = _unset,
     Object? channelPanelWidth = _unset,
     VoiceMeterSource? voiceMeterSource,
+    Map<String, ServerIcon>? serverIcons,
   }) => SessionPreferences(
     nickname: nickname ?? this.nickname,
     lastConnected: lastConnected ?? this.lastConnected,
@@ -104,6 +109,7 @@ class SessionPreferences {
         ? this.channelPanelWidth
         : channelPanelWidth as double?,
     voiceMeterSource: voiceMeterSource ?? this.voiceMeterSource,
+    serverIcons: serverIcons ?? this.serverIcons,
   );
 
   Map<String, Object?> toJson() => {
@@ -118,6 +124,7 @@ class SessionPreferences {
     'pttHotkey': pttHotkey,
     'channelPanelWidth': channelPanelWidth,
     'voiceMeterSource': voiceMeterSource.id,
+    'serverIcons': serverIcons.map((id, icon) => MapEntry(id, icon.id)),
   };
 
   static SessionPreferences fromJson(Map<String, Object?> json) {
@@ -129,6 +136,15 @@ class SessionPreferences {
         final value = entry.value;
         if (key is String && value is int) {
           lastConnected[key] = DateTime.fromMillisecondsSinceEpoch(value);
+        }
+      }
+    }
+    final rawIcons = json['serverIcons'];
+    final serverIcons = <String, ServerIcon>{};
+    if (rawIcons is Map) {
+      for (final entry in rawIcons.entries) {
+        if (entry.key is String && entry.value is String) {
+          serverIcons[entry.key as String] = ServerIcon.fromId(entry.value);
         }
       }
     }
@@ -150,6 +166,7 @@ class SessionPreferences {
           ? rawPanelWidth.toDouble()
           : null,
       voiceMeterSource: VoiceMeterSource.fromId(json['voiceMeterSource']),
+      serverIcons: Map.unmodifiable(serverIcons),
     );
   }
 }

@@ -30,6 +30,7 @@ pub struct ServerProfileView {
 
 #[derive(Debug, Clone)]
 pub struct ChannelView {
+    pub icon_id: Option<u32>,
     pub id: u64,
     pub parent_id: u64,
     pub order: Option<u64>,
@@ -219,9 +220,14 @@ pub struct CoreSession {
 
 impl CoreSession {
     #[frb(sync)]
-    pub fn new(store_path: String) -> Result<CoreSession, CoreError> {
+    pub fn new(store_path: String, audio_enabled: Option<bool>) -> Result<CoreSession, CoreError> {
         Ok(CoreSession {
-            handle: SessionHandle::spawn(PathBuf::from(store_path))?,
+            handle: SessionHandle::spawn_with_options(
+                PathBuf::from(store_path),
+                session::SessionOptions {
+                    audio: audio_enabled.unwrap_or(true),
+                },
+            )?,
         })
     }
 
@@ -371,6 +377,10 @@ impl CoreSession {
             .await?)
     }
 
+    pub async fn fetch_icon(&self, icon_id: u32) -> Result<Vec<u8>, CoreError> {
+        Ok(self.handle.fetch_icon(icon_id).await?)
+    }
+
     pub async fn download_file(
         &self,
         remote_path: String,
@@ -439,6 +449,7 @@ impl From<ServerProfileCore> for ServerProfileView {
 impl From<CoreChannelView> for ChannelView {
     fn from(view: CoreChannelView) -> Self {
         Self {
+            icon_id: view.icon_id,
             id: view.id,
             parent_id: view.parent_id,
             order: view.order,

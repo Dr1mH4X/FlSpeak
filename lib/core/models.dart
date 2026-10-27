@@ -64,6 +64,7 @@ class SessionView {
     this.chatScope = ChatScope.channel,
     this.busy = false,
     this.failureSeq = 0,
+    this.connectionEpoch = 0,
     this.muted = false,
     this.deafened = false,
     this.away = false,
@@ -91,6 +92,8 @@ class SessionView {
 
   /// 连接失败或被拒事件的序号。只给连接页判断等待状态，不渲染。
   final int failureSeq;
+
+  final int connectionEpoch;
 
   /// 自己是否处于静音/聋听状态；由 Rust 的 Voice 事件确认。
   final bool muted;
@@ -239,6 +242,7 @@ class SessionView {
     ChatScope? chatScope,
     bool? busy,
     int? failureSeq,
+    int? connectionEpoch,
     bool? muted,
     bool? deafened,
     bool? away,
@@ -260,6 +264,7 @@ class SessionView {
     chatScope: chatScope ?? this.chatScope,
     busy: busy ?? this.busy,
     failureSeq: failureSeq ?? this.failureSeq,
+    connectionEpoch: connectionEpoch ?? this.connectionEpoch,
     muted: muted ?? this.muted,
     deafened: deafened ?? this.deafened,
     away: away ?? this.away,

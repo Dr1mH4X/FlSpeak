@@ -18,7 +18,7 @@ Status: implemented
   `core/session` 的图片抓取复用同一份 host 检查。
 - SRV 是标准 DNS，`proto::resolve_target` 继续解析；查询失败回退档案字面地址。
 - `DenyResolver` 保留，继续挡住 tsclient-rs 自带的 discovery。
-- 文件传输主机必须等于会话主机，检查放在 `proto::check_transfer_host`。
+- 文件传输主机必须等于经过最终检查的会话主机，检查放在 `proto::check_transfer_host`；会话保存 SRV 解析后的目标，理由见[频道图标](../../implemented/architecture/2026-10-28-channel-icons.md)。
 - 不实现 myTeamSpeak 账号、云同步、官方媒体上传或附件下载。
 
 ## Alternatives considered

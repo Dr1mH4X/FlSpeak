@@ -306,16 +306,6 @@ class HairlineCard extends StatelessWidget {
         color: context.cardColor,
         borderRadius: Radii.xxlAll,
         border: Border.fromBorderSide(hairlineSide(context)),
-        // 投影走 scheme.shadow：亮色 4% 维持原观感，暗色提到 20% 才可见。
-        boxShadow: [
-          BoxShadow(
-            color: context.scheme.shadow.withValues(
-              alpha: context.isDark ? 0.20 : 0.04,
-            ),
-            blurRadius: 2,
-            offset: const Offset(0, 1),
-          ),
-        ],
       ),
       clipBehavior: clip ? Clip.antiAlias : Clip.none,
       child: Material(type: MaterialType.transparency, child: child),

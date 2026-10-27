@@ -7,22 +7,17 @@ import '../../core/models.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../router.dart';
-import '../../theme/app_motion.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common.dart';
 import 'widgets/add_server_dialog.dart';
 import 'widgets/connect_header.dart';
-import 'widgets/dashed_border.dart';
 import 'widgets/identity_card.dart';
 import 'widgets/identity_dialog.dart';
-import 'widgets/login_rail.dart';
+import '../workspace/widgets/server_rail.dart';
 import 'widgets/remove_server_dialog.dart';
 import 'widgets/server_row.dart';
 
-/// 打开应用看到的第一页：身份 + 服务器列表。
-///
-/// 一行服务器就是一次连接，昵称从本机身份里带过去，不再有第二步。
-/// 宽屏是「身份卡 + 列表」两列，窄屏把身份压成一条，首屏留给服务器。
+/// 连接页：服务器库、搜索与本机身份，沿用工作区的服务器导航。
 class ConnectPage extends ConsumerStatefulWidget {
   const ConnectPage({this.serverId, super.key});
 
@@ -37,6 +32,7 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
   /// 正在连接的目标。用来在状态事件到达前就把对应行标成连接中。
   String? _pendingServerId;
   bool _autoConnectTried = false;
+  String _query = '';
 
   @override
   void didUpdateWidget(ConnectPage oldWidget) {
@@ -160,9 +156,18 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
     final busy =
         _pendingServerId != null || view.connecting || view.reconnecting;
     final servers = _orderedServers(view, preferences.lastConnected);
+    final filtered = servers
+        .where(
+          (server) => '${server.label} ${server.host}'.toLowerCase().contains(
+            _query.toLowerCase().trim(),
+          ),
+        )
+        .toList();
 
     final section = _ServerSection(
-      servers: servers,
+      servers: filtered,
+      hasServers: servers.isNotEmpty,
+      onSearch: (value) => setState(() => _query = value),
       lastConnected: preferences.lastConnected,
       connectedId: connectedId,
       connectingId: connectingId,
@@ -173,38 +178,47 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
     );
 
     final identity = wide
-        ? IdentityCard(
-            nickname: preferences.nickname,
-            identityCount: 1,
-            serverCount: view.servers.length,
-            onManage: _openIdentity,
-          )
+        ? IdentityCard(nickname: preferences.nickname, onManage: _openIdentity)
         : IdentityStrip(
             nickname: preferences.nickname,
             serverCount: view.servers.length,
             onManage: _openIdentity,
           );
 
-    final horizontal = wide ? 32.0 : (size.width >= 640 ? 24.0 : 16.0);
-    final top = wide ? 40.0 : (size.width >= 640 ? 24.0 : 8.0);
+    final horizontal = wide ? 40.0 : 20.0;
     final content = SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(horizontal, top, horizontal, 24),
+      padding: EdgeInsets.fromLTRB(horizontal, wide ? 48 : 28, horizontal, 32),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: Sizes.connectContent),
-          child: wide
-              ? Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(l10n.connectTitle, style: context.texts.displaySmall),
+              const SizedBox(height: 12),
+              Text(
+                l10n.connectSubtitle,
+                style: context.texts.bodyLarge?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 36),
+              if (wide)
+                Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SizedBox(width: Sizes.identityColumn, child: identity),
-                    const SizedBox(width: 24),
                     Expanded(child: section),
+                    const SizedBox(width: 28),
+                    SizedBox(width: Sizes.identityColumn, child: identity),
                   ],
                 )
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [identity, const SizedBox(height: 20), section],
-                ),
+              else ...[
+                identity,
+                const SizedBox(height: 28),
+                section,
+              ],
+            ],
+          ),
         ),
       ),
     );
@@ -220,83 +234,43 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
       onSettings: () => context.push(AppRoutes.settings),
     );
 
-    final glow = Positioned(
-      top: 0,
-      left: 0,
-      right: 0,
-      height: 520,
-      child: IgnorePointer(
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: RadialGradient(
-              center: const Alignment(0.1, -1),
-              radius: 0.95,
-              colors: [
-                scheme.primary.withValues(alpha: 0.10),
-                scheme.primary.withValues(alpha: 0),
-              ],
-              stops: const [0, 0.7],
-            ),
-          ),
-        ),
-      ),
-    );
-
-    if (desktop) {
-      // 面板与 8px 沟槽同色，避免沟槽在暗色面板四周形成一圈近黑边框。
-      final panelColor = context.cardColor;
-      return Scaffold(
-        backgroundColor: panelColor,
-        body: Stack(
+    return Scaffold(
+      backgroundColor: scheme.surfaceContainerLowest,
+      body: SafeArea(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            glow,
-            SafeArea(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  LoginRail(onSettings: () => context.push(AppRoutes.settings)),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(0, 8, 8, 8),
-                      child: Material(
-                        // 不透明面板：半透明会让顶部光晕透进来；与工作区
-                        // 面板的做法对齐。
-                        color: panelColor,
-                        borderRadius: Radii.xxxlAll,
-                        clipBehavior: Clip.antiAlias,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            header,
-                            Expanded(child: content),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+            if (desktop)
+              ServerRail(
+                homeSelected: true,
+                onSelect: _connect,
+                onAdd: _openAddServer,
+                onHome: () {},
+                onSettings: () => context.push(AppRoutes.settings),
+                onDisconnect: () async {
+                  await ref.read(sessionViewProvider.notifier).disconnect();
+                },
+              ),
+            Expanded(
+              child: Material(
+                color: scheme.surface,
+                borderRadius: desktop
+                    ? const BorderRadius.only(
+                        topLeft: Radius.circular(Radii.xxl),
+                      )
+                    : BorderRadius.zero,
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    header,
+                    Expanded(child: content),
+                  ],
+                ),
               ),
             ),
           ],
         ),
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: scheme.surface,
-      body: Stack(
-        children: [
-          glow,
-          SafeArea(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                header,
-                Expanded(child: content),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -371,6 +345,8 @@ ServerProfileView? _serverById(List<ServerProfileView> servers, String id) {
 class _ServerSection extends StatelessWidget {
   const _ServerSection({
     required this.servers,
+    required this.hasServers,
+    required this.onSearch,
     required this.lastConnected,
     required this.connectedId,
     required this.connectingId,
@@ -381,6 +357,8 @@ class _ServerSection extends StatelessWidget {
   });
 
   final List<ServerProfileView> servers;
+  final bool hasServers;
+  final ValueChanged<String> onSearch;
   final Map<String, DateTime> lastConnected;
   final String? connectedId;
   final String? connectingId;
@@ -393,121 +371,76 @@ class _ServerSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
-    final texts = context.texts;
-    // 640 以下按钮只留图标，把宽度让给标题与计数。
-    final showAddLabel = MediaQuery.sizeOf(context).width >= 640;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Flexible(
-                    child: Text(
-                      l10n.serversTitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: texts.titleLarge,
-                    ),
-                  ),
-                  if (servers.isNotEmpty) ...[
-                    const SizedBox(width: 8),
-                    Text(
-                      '${servers.length}',
-                      style: texts.bodySmall?.copyWith(
-                        fontSize: 13,
-                        color: scheme.onSurfaceVariant,
-                        fontFeatures: tabularFigures,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
+              child: Text(l10n.serversTitle, style: context.texts.titleLarge),
             ),
-            if (servers.isNotEmpty)
-              showAddLabel
-                  ? OutlinedButton(
-                      onPressed: onAdd,
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size(0, Sizes.touch),
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        foregroundColor: scheme.onSurface,
-                        backgroundColor: scheme.surface,
-                        textStyle: texts.bodyMedium?.copyWith(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.add_rounded, size: 16),
-                          const SizedBox(width: 6),
-                          Text(l10n.serverAdd),
-                        ],
-                      ),
-                    )
-                  : IconButton.outlined(
-                      onPressed: onAdd,
-                      iconSize: 18,
-                      style: IconButton.styleFrom(
-                        minimumSize: const Size(Sizes.touch, Sizes.touch),
-                        maximumSize: const Size(Sizes.touch, Sizes.touch),
-                        padding: EdgeInsets.zero,
-                      ),
-                      icon: Icon(
-                        Icons.add_rounded,
-                        semanticLabel: l10n.serverAdd,
-                      ),
-                    ),
+            if (context.isCompact)
+              IconButton.filled(
+                onPressed: onAdd,
+                icon: Icon(Icons.add_rounded, semanticLabel: l10n.serverAdd),
+              )
+            else
+              FilledButton.icon(
+                onPressed: onAdd,
+                icon: const Icon(Icons.add_rounded, size: 20),
+                label: Text(l10n.serverAdd),
+              ),
           ],
         ),
-        const SizedBox(height: 16),
-        if (servers.isEmpty)
-          _EmptyServers(onAdd: onAdd)
-        else ...[
-          // 卡片高度随服务器的增删走 spatial fast：列表重排不再瞬跳。
-          AnimatedSize(
-            duration: MediaQuery.disableAnimationsOf(context)
-                ? Duration.zero
-                : Motion.spatialFast,
-            curve: Motion.spatialCurve,
-            alignment: Alignment.topCenter,
-            child: HairlineCard(
-              clip: true,
-              child: Column(
-                children: [
-                  for (var index = 0; index < servers.length; index++) ...[
-                    if (index > 0)
-                      // 分隔线缩进到内容边缘：不顶到卡片圆角区，也和头像对齐。
-                      Divider(
-                        height: 1,
-                        thickness: 1,
-                        indent: 20,
-                        endIndent: 20,
-                        color: hairlineSide(context).color,
-                      ),
-                    ServerRow(
-                      profile: servers[index],
-                      lastConnected: lastConnected[servers[index].id],
-                      connected: servers[index].id == connectedId,
-                      connecting: servers[index].id == connectingId,
-                      enabled: enabled && servers[index].id != connectingId,
-                      onTap: () => onConnect(servers[index]),
-                      onRemove: () => onRemove(servers[index]),
-                    ),
-                  ],
-                ],
-              ),
+        const SizedBox(height: 20),
+        if (hasServers) ...[
+          TextField(
+            onChanged: onSearch,
+            decoration: InputDecoration(
+              labelText: l10n.serverSearchLabel,
+              prefixIcon: const Icon(Icons.search_rounded, size: 22),
             ),
           ),
+          const SizedBox(height: 16),
         ],
+        if (!hasServers)
+          _EmptyServers(onAdd: onAdd)
+        else if (servers.isEmpty)
+          Padding(
+            padding: const EdgeInsets.all(32),
+            child: Text(
+              l10n.serverSearchEmpty,
+              style: context.texts.bodyMedium?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          )
+        else
+          HairlineCard(
+            clip: true,
+            child: Column(
+              children: [
+                for (var index = 0; index < servers.length; index++) ...[
+                  if (index > 0)
+                    Divider(
+                      height: 1,
+                      indent: 20,
+                      endIndent: 20,
+                      color: scheme.outlineVariant,
+                    ),
+                  ServerRow(
+                    profile: servers[index],
+                    lastConnected: lastConnected[servers[index].id],
+                    connected: servers[index].id == connectedId,
+                    connecting: servers[index].id == connectingId,
+                    enabled: enabled && servers[index].id != connectingId,
+                    onTap: () => onConnect(servers[index]),
+                    onRemove: () => onRemove(servers[index]),
+                  ),
+                ],
+              ],
+            ),
+          ),
       ],
     );
   }
@@ -515,59 +448,51 @@ class _ServerSection extends StatelessWidget {
 
 class _EmptyServers extends StatelessWidget {
   const _EmptyServers({required this.onAdd});
-
   final VoidCallback onAdd;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
-
-    return Container(
-      decoration: BoxDecoration(
-        // 实色：透明叠底在暗色下与页面底板糊在一起，虚线描边才是空态的
-        // 视觉信号。
-        color: context.cardColor,
-        borderRadius: Radii.xxlAll,
-      ),
-      child: DashedBorder(
-        color: context.hairline,
-        radius: Radii.xxl,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 52,
-                height: 52,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: scheme.primaryContainer,
-                  borderRadius: Radii.xxlAll,
-                ),
-                child: Icon(
-                  Icons.dns_rounded,
-                  size: 22,
-                  color: scheme.onPrimaryContainer,
-                ),
+    return HairlineCard(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
+        child: Column(
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                color: scheme.primaryContainer,
+                borderRadius: Radii.xxlAll,
               ),
-              const SizedBox(height: 16),
-              Text(
-                l10n.serverEmptyTitle,
-                style: context.texts.bodyLarge?.copyWith(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
+              child: Icon(
+                Icons.forum_outlined,
+                size: 36,
+                color: scheme.onPrimaryContainer,
               ),
-              const SizedBox(height: 20),
-              FilledButton.icon(
-                onPressed: onAdd,
-                icon: const Icon(Icons.add_rounded, size: 16),
-                label: Text(l10n.serverEmptyAction),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              l10n.serverEmptyTitle,
+              style: context.texts.titleLarge,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              l10n.serverEmptyBody,
+              textAlign: TextAlign.center,
+              style: context.texts.bodyMedium?.copyWith(
+                color: scheme.onSurfaceVariant,
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 28),
+            FilledButton.tonalIcon(
+              onPressed: onAdd,
+              icon: const Icon(Icons.add_rounded, size: 20),
+              label: Text(l10n.serverEmptyAction),
+            ),
+          ],
         ),
       ),
     );

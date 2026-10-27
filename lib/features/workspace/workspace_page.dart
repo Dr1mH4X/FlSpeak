@@ -12,6 +12,7 @@ import '../../widgets/common.dart';
 import 'widgets/chat_pane.dart';
 import 'widgets/media_grid.dart';
 import 'widgets/media_viewer.dart';
+import 'widgets/members_pane.dart';
 import 'workspace_state.dart';
 
 /// 主区域：频道标题 + 消息 / 媒体两个视图，以及未连接时的下一步。
@@ -94,15 +95,28 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
         Expanded(
           // 视图替换走 crossfade（M3 effects default）：同一容器内换内容
           // 不做位移，避免整块内容跳来跳去。
-          child: AnimatedSwitcher(
-            duration: MediaQuery.disableAnimationsOf(context)
-                ? Duration.zero
-                : Motion.effectsDefault,
-            switchInCurve: Motion.effectsDefaultCurve,
-            switchOutCurve: Motion.effectsDefaultCurve.flipped,
-            child: KeyedSubtree(
-              key: ValueKey(_tab),
-              child: _buildBody(context, l10n, view, channel),
+          child: LayoutBuilder(
+            builder: (context, constraints) => Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: AnimatedSwitcher(
+                    duration: MediaQuery.disableAnimationsOf(context)
+                        ? Duration.zero
+                        : Motion.effectsDefault,
+                    switchInCurve: Motion.effectsDefaultCurve,
+                    switchOutCurve: Motion.effectsDefaultCurve.flipped,
+                    child: KeyedSubtree(
+                      key: ValueKey(_tab),
+                      child: _buildBody(context, l10n, view, channel),
+                    ),
+                  ),
+                ),
+                if (constraints.maxWidth >= 900 &&
+                    channel != null &&
+                    view.connected)
+                  MembersPane(view: view, channelId: channel.id),
+              ],
             ),
           ),
         ),
@@ -242,8 +256,13 @@ class _ChannelHeader extends StatelessWidget {
     final horizontal = compact ? 8.0 : 24.0;
     final hasChannel = channelName != null;
 
-    return SizedBox(
+    return Container(
       height: Sizes.header,
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: context.scheme.outlineVariant),
+        ),
+      ),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final tabs = _tabSpecs(l10n);
@@ -320,7 +339,7 @@ class _ViewTabs extends StatelessWidget {
       controller: controller,
       isScrollable: true,
       // M3 scrollable tabs 的默认对齐：首签偏移一个 tab 边距。
-      tabAlignment: TabAlignment.startOffset,
+      tabAlignment: TabAlignment.start,
       // 频道头只有 64 高，页签压到 40 贴标题基线。
       splashBorderRadius: Radii.pillAll,
       tabs: [

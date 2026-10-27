@@ -12,9 +12,9 @@ use audio::engine::{AudioEvent, AudioStage, VoiceEngine};
 use audio::format::{VOICE_CODEC, is_supported_codec};
 use audio::playback::VoiceFrame;
 use proto::ConnectError;
-use server::{ServerError, ServerProfile, ServerRegistry};
+use server::{ServerError, ServerProfile, ServerRegistry, ServerTarget};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc, oneshot};
 use tsclient_rs::{
     AbortSignal, ChannelInfo, Client, ClientInfo, Event as ProtocolEvent, FileDownloadInfo, Logger,
 };
@@ -109,6 +109,7 @@ pub(crate) struct Actor {
     self_client_id: Option<i32>,
     self_channel_id: u64,
     active_server_id: Option<String>,
+    transfer_target: Option<ServerTarget>,
     last_target: Option<ConnectTarget>,
     generation: u64,
     reconnect_attempt: u32,
@@ -161,6 +162,7 @@ impl Actor {
             self_client_id: None,
             self_channel_id: 0,
             active_server_id: None,
+            transfer_target: None,
             last_target: None,
             generation: 0,
             reconnect_attempt: 0,
@@ -370,6 +372,9 @@ impl Actor {
                         .await,
                 );
             }
+            SessionCommand::FetchIcon { icon_id, reply } => {
+                self.fetch_icon(icon_id, reply).await;
+            }
             SessionCommand::DownloadFile {
                 remote_path,
                 local_path,
@@ -508,6 +513,7 @@ impl Actor {
                 let client_id = client.client_id();
                 let channel_id = client.channel_id();
                 self.client = Some(Arc::new(client));
+                self.transfer_target = Some(resolved.target);
                 self.self_client_id = Some(client_id);
                 self.self_channel_id = channel_id;
                 self.active_server_id = Some(profile.id.clone());
@@ -1161,6 +1167,63 @@ impl Actor {
         self.emit_voice_state();
     }
 
+    async fn fetch_icon(
+        &self,
+        icon_id: u32,
+        reply: oneshot::Sender<Result<Vec<u8>, SessionError>>,
+    ) {
+        let negotiated = async {
+            if icon_id == 0 {
+                return Err(SessionError::Transfer("icon id must be nonzero".into()));
+            }
+            let client = self.connected()?;
+            let target = self
+                .transfer_target
+                .as_ref()
+                .ok_or(SessionError::NotConnected)?;
+            proto::check_transfer_host(target, &target.host)?;
+            let info = client
+                .file_transfer_init_download(0, &tsclient_rs::icon_file_name(icon_id), "")
+                .await
+                .map_err(protocol_error)?;
+            validate_port(info.port)?;
+            if info.size == 0 || info.size > 1024 * 1024 {
+                return Err(SessionError::Transfer(
+                    "icon size must be between 1 byte and 1 MiB".into(),
+                ));
+            }
+            Ok((target.host.clone(), info))
+        }
+        .await;
+        let (host, info) = match negotiated {
+            Ok(value) => value,
+            Err(error) => {
+                let _ = reply.send(Err(error));
+                return;
+            }
+        };
+        let epoch = self.connection_epoch;
+        let current_epoch = Arc::clone(&self.epoch);
+        // 仅 TCP 字节传输离开 actor；Client 的协商仍在命令队列中串行执行。
+        tokio::task::spawn_local(async move {
+            let outcome = tokio::time::timeout(Duration::from_secs(20), async {
+                let mut bytes = Vec::with_capacity(info.size as usize);
+                tsclient_rs::downloadFileData(&host, &info, &mut bytes)
+                    .await
+                    .map_err(protocol_error)?;
+                Ok(bytes)
+            })
+            .await
+            .unwrap_or(Err(SessionError::Timeout));
+            let outcome = if current_epoch.load(Ordering::SeqCst) == epoch {
+                outcome
+            } else {
+                Err(SessionError::NotConnected)
+            };
+            let _ = reply.send(outcome);
+        });
+    }
+
     async fn upload_file(
         &mut self,
         local_path: String,
@@ -1173,9 +1236,11 @@ impl Actor {
             return Err(SessionError::NotInChannel);
         }
         let client = self.connected()?;
-        let profile = self.active_profile()?;
-        let target = profile.target()?;
-        proto::check_transfer_host(&target, &profile.host)?;
+        let target = self
+            .transfer_target
+            .as_ref()
+            .ok_or(SessionError::NotConnected)?;
+        proto::check_transfer_host(target, &target.host)?;
 
         let file = tokio::fs::File::open(&local_path)
             .await
@@ -1210,7 +1275,7 @@ impl Actor {
         let host = target.host.clone();
         tokio::task::spawn_local(async move {
             let reader = ProgressReader::new(file, id, size, events.clone());
-            let outcome = client.upload_file_data(&host, &info, reader).await;
+            let outcome = tsclient_rs::uploadFileData(&host, &info, reader).await;
             let _ = events.send(SessionEvent::TransferFinished {
                 id,
                 error: outcome.err().map(|err| err.to_string()),
@@ -1230,9 +1295,11 @@ impl Actor {
             return Err(SessionError::NotInChannel);
         }
         let client = self.connected()?;
-        let profile = self.active_profile()?;
-        let target = profile.target()?;
-        proto::check_transfer_host(&target, &profile.host)?;
+        let target = self
+            .transfer_target
+            .as_ref()
+            .ok_or(SessionError::NotConnected)?;
+        proto::check_transfer_host(target, &target.host)?;
 
         let info: FileDownloadInfo = client
             .file_transfer_init_download(
@@ -1247,10 +1314,6 @@ impl Actor {
         let file = tokio::fs::File::create(&local_path)
             .await
             .map_err(|err| SessionError::Transfer(format!("创建本地文件失败: {err}")))?;
-        let truncate = file
-            .try_clone()
-            .await
-            .map_err(|err| SessionError::Transfer(format!("复制文件句柄失败: {err}")))?;
         let id = self.next_transfer_id;
         self.next_transfer_id = self.next_transfer_id.wrapping_add(1);
         self.emit(SessionEvent::TransferStarted {
@@ -1264,21 +1327,10 @@ impl Actor {
         let host = target.host.clone();
         tokio::task::spawn_local(async move {
             let writer = ProgressWriter::new(file, id, info.size, events.clone());
-            let outcome = client.download_file_data(&host, &info, writer).await;
-            let error = match &outcome {
-                Ok(()) => {
-                    // 下载流同样按 16 字节块解密，多出的补零要按服务器声明的 size 截掉。
-                    truncate
-                        .set_len(info.size)
-                        .await
-                        .err()
-                        .map(|err| err.to_string())
-                }
-                Err(_) => None,
-            };
+            let outcome = tsclient_rs::downloadFileData(&host, &info, writer).await;
             let _ = events.send(SessionEvent::TransferFinished {
                 id,
-                error: error.or_else(|| outcome.err().map(|err| err.to_string())),
+                error: outcome.err().map(|err| err.to_string()),
             });
         });
         Ok(id)
@@ -1602,15 +1654,8 @@ impl Actor {
         self.client.clone().ok_or(SessionError::NotConnected)
     }
 
-    fn active_profile(&self) -> Result<ServerProfile, SessionError> {
-        let id = self
-            .active_server_id
-            .as_ref()
-            .ok_or(SessionError::NotConnected)?;
-        self.registry.require(id).cloned().map_err(Into::into)
-    }
-
     fn invalidate_handlers(&mut self) {
+        self.transfer_target = None;
         self.connection_epoch = self.connection_epoch.wrapping_add(1);
         self.epoch.store(self.connection_epoch, Ordering::SeqCst);
     }
@@ -1698,6 +1743,7 @@ fn parse_channel_metadata(rows: &[HashMap<String, String>]) -> HashMap<u64, Chan
 fn channel_view(channel: ChannelInfo, metadata: Option<&ChannelMetadata>) -> ChannelView {
     let metadata = metadata.cloned().unwrap_or_default();
     ChannelView {
+        icon_id: channel.icon_id,
         id: channel.id,
         parent_id: channel.parent_id,
         order: metadata.order.or(Some(channel.order)),
@@ -2097,8 +2143,6 @@ struct ProgressReader {
     transferred: u64,
     last_emit_bytes: u64,
     last_emit_at: Instant,
-    padding: usize,
-    padding_sent: bool,
     events: broadcast::Sender<SessionEvent>,
 }
 
@@ -2109,7 +2153,6 @@ impl ProgressReader {
         total: u64,
         events: broadcast::Sender<SessionEvent>,
     ) -> Self {
-        let padding = (16 - (total % 16) as usize) % 16;
         Self {
             inner,
             id,
@@ -2117,8 +2160,6 @@ impl ProgressReader {
             transferred: 0,
             last_emit_bytes: 0,
             last_emit_at: Instant::now(),
-            padding,
-            padding_sent: false,
             events,
         }
     }
@@ -2150,15 +2191,6 @@ impl AsyncRead for ProgressReader {
         let poll = Pin::new(&mut this.inner).poll_read(cx, buf);
         if let Poll::Ready(Ok(())) = &poll {
             let read = buf.filled().len() - before;
-            if read == 0 && !this.padding_sent && this.padding > 0 {
-                // tsclient-rs 的 AES 数据流按 16 字节块加密，尾部不足一块会被静默丢掉；
-                // 补零到块边界，服务端按声明的原始 size 截断。
-                const ZEROS: [u8; 16] = [0; 16];
-                let count = this.padding.min(buf.remaining());
-                buf.put_slice(&ZEROS[..count]);
-                this.padding_sent = count == this.padding;
-                return Poll::Ready(Ok(()));
-            }
             this.transferred += read as u64;
             this.maybe_emit();
         }
@@ -2349,10 +2381,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn upload_reader_pads_the_last_aes_block() {
+    async fn upload_reader_preserves_exact_payload() {
         use tokio::io::AsyncReadExt;
 
-        let dir = std::env::temp_dir().join("flspeak-transfer-padding-test");
+        let dir = std::env::temp_dir().join("flspeak-transfer-payload-test");
         let path = dir.join("payload.bin");
         let _ = tokio::fs::remove_dir_all(&dir).await;
         tokio::fs::create_dir_all(&dir).await.unwrap();
@@ -2364,9 +2396,7 @@ mod tests {
         let mut output = Vec::new();
         reader.read_to_end(&mut output).await.unwrap();
 
-        assert_eq!(output.len(), 16, "不足 16 字节的尾部必须补零");
-        assert_eq!(&output[..5], b"hello");
-        assert!(output[5..].iter().all(|byte| *byte == 0));
+        assert_eq!(output, b"hello");
 
         let _ = tokio::fs::remove_dir_all(&dir).await;
     }
@@ -2412,6 +2442,7 @@ mod tests {
     #[test]
     fn channel_view_merges_directory_rows_with_optional_flags() {
         let channel = ChannelInfo {
+            icon_id: Some(3763318035),
             id: 9,
             parent_id: 2,
             order: 1,
@@ -2432,6 +2463,7 @@ mod tests {
         };
 
         let view = channel_view(channel.clone(), Some(&metadata));
+        assert_eq!(view.icon_id, Some(3763318035));
         assert_eq!(view.order, Some(12));
         assert_eq!(view.description, "Public topic");
         assert_eq!(view.max_clients, Some(10));

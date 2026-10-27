@@ -171,7 +171,7 @@ class _ChatPaneState extends State<ChatPane> {
     final scheme = context.scheme;
     final texts = context.texts;
     final horizontal = context.isCompact ? 16.0 : 32.0;
-    final bottom = context.isCompact ? 16.0 : 32.0;
+    final bottom = context.isCompact ? 16.0 : 24.0;
     final scope = widget.scope;
     final target = scope == ChatScope.server
         ? l10n.chatScopeServer
@@ -187,10 +187,9 @@ class _ChatPaneState extends State<ChatPane> {
             decoration: BoxDecoration(
               // 暗色主面板本身就是 surfaceContainer，输入条往上一级
               // （Highest）才浮得出来；亮色维持原状。
-              color: context.isDark
-                  ? scheme.surfaceContainerHighest
-                  : scheme.surfaceContainer,
-              borderRadius: BorderRadius.circular(Radii.xxxl),
+              color: scheme.surfaceContainerHigh,
+              borderRadius: Radii.xlAll,
+              border: Border.all(color: scheme.outlineVariant),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
@@ -309,27 +308,30 @@ class _Welcome extends StatelessWidget {
     final scheme = context.scheme;
     final texts = context.texts;
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            l10n.chatWelcomeTitle(channelName),
-            style: texts.headlineSmall?.copyWith(
-              fontSize: 24,
-              fontWeight: FontWeight.w500,
+    return SizedBox(
+      width: double.infinity,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              l10n.chatWelcomeTitle(channelName),
+              style: texts.headlineSmall?.copyWith(
+                fontSize: 24,
+                fontWeight: FontWeight.w500,
+              ),
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            l10n.chatWelcomeBody,
-            style: texts.bodyMedium?.copyWith(
-              fontSize: 14,
-              color: scheme.onSurfaceVariant,
+            const SizedBox(height: 4),
+            Text(
+              l10n.chatWelcomeBody,
+              style: texts.bodyMedium?.copyWith(
+                fontSize: 14,
+                color: scheme.onSurfaceVariant,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

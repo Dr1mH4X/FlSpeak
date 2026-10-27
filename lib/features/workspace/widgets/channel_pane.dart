@@ -12,6 +12,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
+import '../../../widgets/channel_icon.dart';
 import '../../../widgets/monogram.dart';
 import '../workspace_state.dart';
 import 'voice_activity_ribbon.dart';
@@ -22,10 +23,11 @@ import 'voice_activity_ribbon.dart';
 /// 所以设计稿里的「文字频道 / 语音频道」两段在真实数据上没有依据，这里只保留
 /// 一棵按 `parentId` 展开的频道树，成员跟随所属频道缩进显示。
 class ChannelPanel extends ConsumerStatefulWidget {
-  const ChannelPanel({this.onChannelSelected, super.key});
+  const ChannelPanel({this.onChannelSelected, this.onDisconnect, super.key});
 
   /// 点频道后离开设置页，回到工作区。
   final VoidCallback? onChannelSelected;
+  final VoidCallback? onDisconnect;
 
   @override
   ConsumerState<ChannelPanel> createState() => _ChannelPanelState();
@@ -110,9 +112,7 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
     }
 
     return Material(
-      color: context.isDark
-          ? scheme.surfaceContainerLow
-          : scheme.surfaceContainerLowest,
+      color: scheme.surfaceContainerLow,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -136,6 +136,8 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
             ),
           ),
           _UserFooter(
+            view: view,
+            onDisconnect: widget.onDisconnect,
             muted: view.muted,
             deafened: view.deafened,
             away: view.away,
@@ -163,6 +165,8 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
         padding: const EdgeInsets.only(left: 20, right: 4),
         child: Row(
           children: [
+            Icon(Icons.dns_outlined, size: 20, color: context.scheme.primary),
+            const SizedBox(width: 10),
             Expanded(
               child: Text(
                 view.activeServer?.label ?? l10n.appName,
@@ -337,13 +341,13 @@ class _ChannelTile extends StatelessWidget {
             clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
               color: selected ? scheme.primaryContainer : Colors.transparent,
-              borderRadius: Radii.pillAll,
+              borderRadius: Radii.mediumAll,
             ),
             child: Material(
               color: Colors.transparent,
               child: InkWell(
                 onTap: onTap,
-                borderRadius: Radii.pillAll,
+                borderRadius: Radii.mediumAll,
                 child: SizedBox(
                   height: 48,
                   child: Padding(
@@ -353,6 +357,11 @@ class _ChannelTile extends StatelessWidget {
                             padding: const EdgeInsets.only(left: 12),
                             child: Row(
                               children: [
+                                ChannelIcon(
+                                  iconId: channel.iconId,
+                                  color: foreground,
+                                ),
+                                const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
                                     name,
@@ -562,71 +571,146 @@ class _MemberFlag extends StatelessWidget {
   }
 }
 
-/// 语音卡：背景是所选声源的电平历史，前景只留三个控制开关。
-///
-/// 昵称与连接状态不再占这张卡；真正的断开入口在服务器栏的右键菜单里。
 class _UserFooter extends StatelessWidget {
   const _UserFooter({
+    required this.view,
     required this.muted,
     required this.deafened,
     required this.away,
     required this.onToggleMute,
     required this.onToggleDeafen,
     required this.onToggleAway,
+    this.onDisconnect,
   });
 
+  final SessionView view;
   final bool muted;
   final bool deafened;
   final bool away;
   final VoidCallback onToggleMute;
   final VoidCallback onToggleDeafen;
   final VoidCallback onToggleAway;
+  final VoidCallback? onDisconnect;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
-
-    return Material(
-      color: scheme.surfaceContainer,
-      child: SizedBox(
-        height: 68,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            const VoiceActivityRibbon(),
+    final channel = view.selfChannelId == null
+        ? null
+        : view.channelById(view.selfChannelId!);
+    return Container(
+      margin: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainer,
+        borderRadius: Radii.largeAll,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (view.connected || view.reconnecting)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.fromLTRB(12, 8, 4, 4),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  _IconToggle(
-                    label: muted ? l10n.voiceUnmute : l10n.voiceMute,
-                    icon: muted ? Icons.mic_off_rounded : Icons.mic_rounded,
-                    active: muted,
-                    onTap: onToggleMute,
+                  Icon(
+                    Icons.network_check_rounded,
+                    size: 22,
+                    color: view.connected
+                        ? context.status.live
+                        : scheme.primary,
                   ),
-                  _IconToggle(
-                    label: deafened ? l10n.voiceUndeafen : l10n.voiceDeafen,
-                    icon: deafened
-                        ? Icons.headset_off_rounded
-                        : Icons.headphones_rounded,
-                    active: deafened,
-                    onTap: onToggleDeafen,
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          view.connected
+                              ? l10n.voiceConnected
+                              : l10n.sessionConnecting,
+                          style: context.texts.labelMedium?.copyWith(
+                            color: view.connected
+                                ? context.status.live
+                                : scheme.primary,
+                          ),
+                        ),
+                        Text(
+                          channel == null
+                              ? (view.activeServer?.label ?? l10n.appName)
+                              : channelDisplayName(channel),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: context.texts.bodySmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  _IconToggle(
-                    label: away ? l10n.voiceUnaway : l10n.voiceAway,
-                    icon: Icons.schedule_rounded,
-                    active: away,
-                    activeContainer: scheme.primaryContainer,
-                    activeOnContainer: scheme.onPrimaryContainer,
-                    onTap: onToggleAway,
-                  ),
+                  if (onDisconnect != null)
+                    IconButton(
+                      onPressed: view.busy ? null : onDisconnect,
+                      icon: Icon(
+                        Icons.call_end_rounded,
+                        size: 20,
+                        semanticLabel: l10n.serverDisconnect,
+                      ),
+                    ),
                 ],
               ),
             ),
-          ],
-        ),
+          if (view.connected || view.reconnecting)
+            Divider(
+              height: 1,
+              indent: 12,
+              endIndent: 12,
+              color: scheme.outlineVariant,
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 4, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: scheme.primaryContainer.withValues(alpha: 0.28),
+                      borderRadius: Radii.mediumAll,
+                    ),
+                    child: const SizedBox(
+                      height: 40,
+                      child: VoiceActivityRibbon(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                _IconToggle(
+                  label: muted ? l10n.voiceUnmute : l10n.voiceMute,
+                  icon: muted ? Icons.mic_off_rounded : Icons.mic_rounded,
+                  active: muted,
+                  onTap: onToggleMute,
+                ),
+                _IconToggle(
+                  label: deafened ? l10n.voiceUndeafen : l10n.voiceDeafen,
+                  icon: deafened
+                      ? Icons.headset_off_rounded
+                      : Icons.headphones_rounded,
+                  active: deafened,
+                  onTap: onToggleDeafen,
+                ),
+                _IconToggle(
+                  label: away ? l10n.voiceUnaway : l10n.voiceAway,
+                  icon: Icons.schedule_rounded,
+                  active: away,
+                  activeContainer: scheme.primaryContainer,
+                  activeOnContainer: scheme.onPrimaryContainer,
+                  onTap: onToggleAway,
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

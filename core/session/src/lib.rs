@@ -58,6 +58,7 @@ pub struct TextMessageView {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChannelView {
+    pub icon_id: Option<u32>,
     pub id: u64,
     pub parent_id: u64,
     /// TeamSpeak 的同级排序位置；频道标志不可读时为空。
@@ -293,6 +294,10 @@ pub enum SessionCommand {
         channel_id: u64,
         password: Option<String>,
         reply: oneshot::Sender<Result<u64, SessionError>>,
+    },
+    FetchIcon {
+        icon_id: u32,
+        reply: oneshot::Sender<Result<Vec<u8>, SessionError>>,
     },
     Shutdown,
 }
@@ -639,6 +644,12 @@ impl SessionHandle {
             password,
             reply,
         })?;
+        rx.await.map_err(|_| SessionError::Closed)?
+    }
+
+    pub async fn fetch_icon(&self, icon_id: u32) -> Result<Vec<u8>, SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::FetchIcon { icon_id, reply })?;
         rx.await.map_err(|_| SessionError::Closed)?
     }
 

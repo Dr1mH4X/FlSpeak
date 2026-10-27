@@ -18,6 +18,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/common.dart';
 import 'settings_state.dart';
 import 'widgets/settings_card.dart';
+import 'widgets/appearance_picker.dart';
 import 'widgets/settings_dialogs.dart';
 
 /// 该路由是顶层路由，所以页面自带 Scaffold；从工作区或登录页进入都能原路返回。
@@ -29,6 +30,23 @@ class SettingsPage extends ConsumerStatefulWidget {
 }
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
+  int _selectedSection = 0;
+  final _sectionKeys = List.generate(4, (_) => GlobalKey());
+
+  void _jumpTo(int index) {
+    setState(() => _selectedSection = index);
+    final section = _sectionKeys[index].currentContext;
+    if (section != null) {
+      Scrollable.ensureVisible(
+        section,
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : const Duration(milliseconds: 250),
+        alignment: 0.05,
+      );
+    }
+  }
+
   void _back() {
     if (context.canPop()) {
       context.pop();
@@ -59,12 +77,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             title: l10n.settingsLanguage,
             subtitle: _localeLabel(l10n, preferences.locale),
             onTap: () => unawaited(_pickLanguage(preferences.locale)),
-          ),
-          SettingsRow(
-            icon: Icons.palette_rounded,
-            title: l10n.settingsTheme,
-            subtitle: _themeLabel(l10n, preferences.theme),
-            onTap: () => unawaited(_pickTheme(preferences.theme)),
           ),
         ],
       ),
@@ -143,35 +155,103 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       SettingsGroup(title: l10n.settingsAbout, children: [_about(l10n)]),
     ];
 
+    final titles = [
+      l10n.settingsGeneral,
+      l10n.settingsVoice,
+      l10n.settingsData,
+      l10n.settingsAbout,
+    ];
+    final icons = [
+      Icons.tune_rounded,
+      Icons.headphones_outlined,
+      Icons.folder_outlined,
+      Icons.info_outline_rounded,
+    ];
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _SettingsTopBar(onBack: _back),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              compact ? 20 : 40,
+              24,
+              compact ? 20 : 40,
+              40,
+            ),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 760),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    KeyedSubtree(
+                      key: _sectionKeys.first,
+                      child: AppearancePicker(
+                        value: preferences.theme,
+                        onChanged: ref
+                            .read(preferencesProvider.notifier)
+                            .setTheme,
+                      ),
+                    ),
+                    sections.first,
+                    for (var index = 1; index < sections.length; index++)
+                      KeyedSubtree(
+                        key: _sectionKeys[index],
+                        child: sections[index],
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
     return Scaffold(
       backgroundColor: context.pageColor,
       body: SafeArea(
-        child: Column(
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _SettingsTopBar(onBack: _back),
-            Expanded(
-              child: ListView(
-                padding: EdgeInsets.fromLTRB(
-                  compact ? 16 : 24,
-                  compact ? 0 : 8,
-                  compact ? 16 : 24,
-                  32,
-                ),
-                children: [
-                  Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 880),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: sections,
-                      ),
+            if (!compact)
+              SizedBox(
+                width: 224,
+                child: Material(
+                  color: context.scheme.surfaceContainerLow,
+                  child: ListView(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 24,
                     ),
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+                        child: Text(
+                          l10n.appName,
+                          style: context.texts.titleLarge,
+                        ),
+                      ),
+                      for (var index = 0; index < titles.length; index++)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: ListTile(
+                            selected: _selectedSection == index,
+                            selectedTileColor: context.scheme.primaryContainer,
+                            selectedColor: context.scheme.onPrimaryContainer,
+                            leading: Icon(icons[index], size: 20),
+                            title: Text(
+                              titles[index],
+                              style: context.texts.bodyMedium,
+                            ),
+                            onTap: () => _jumpTo(index),
+                          ),
+                        ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
+            Expanded(child: content),
           ],
         ),
       ),
@@ -210,21 +290,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       return;
     }
     ref.read(preferencesProvider.notifier).setVoiceMeterSource(source);
-  }
-
-  Future<void> _pickTheme(AppThemePreference current) async {
-    final l10n = AppLocalizations.of(context);
-    final theme = await showSettingsOptions<AppThemePreference>(
-      context,
-      title: l10n.settingsTheme,
-      options: AppThemePreference.values,
-      current: current,
-      labelBuilder: (context, value) => _themeLabel(l10n, value),
-    );
-    if (theme == null) {
-      return;
-    }
-    ref.read(preferencesProvider.notifier).setTheme(theme);
   }
 
   Future<void> _pickAudioDevice({
@@ -441,13 +506,6 @@ String _localeLabel(AppLocalizations l10n, String? locale) => switch (locale) {
   'zh' => '中文',
   _ => locale,
 };
-
-String _themeLabel(AppLocalizations l10n, AppThemePreference theme) =>
-    switch (theme) {
-      AppThemePreference.system => l10n.settingsThemeSystem,
-      AppThemePreference.light => l10n.settingsThemeLight,
-      AppThemePreference.dark => l10n.settingsThemeDark,
-    };
 
 String _voiceMeterLabel(AppLocalizations l10n, VoiceMeterSource source) =>
     switch (source) {

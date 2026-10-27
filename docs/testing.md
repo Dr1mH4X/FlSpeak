@@ -39,6 +39,10 @@ cargo test -p session --test live_connect -- --ignored --nocapture
 TSDNS 尚未实现。服务器对访客关闭 `channellist` 时，测试只验证连接与状态，列表调用
 会打印权限拒绝而不判失败。
 
+设置 `FLSPEAK_TEST_ICON_DIR` 时，真实连接测试还会通过 actor 下载非零频道图标，并把原始图片和 `channels.json` 保存到该目录；此模式要求目标服务器至少有一个自定义频道图标。
+
+本机 Flutter 渲染验证可显式运行 `lib/live_channel_icons_test.dart`，用 `--dart-define=FLSPEAK_LIVE_SERVER=<地址>` 与 `--dart-define=FLSPEAK_NATIVE_LIBRARY=<本机动态库绝对路径>` 指定目标。该测试关闭音频，用真实 actor、FFI、Provider 和 Flutter 图片解码链路；未设置这两个值时默认跳过。可另设 `FLSPEAK_CAPTURE_DIR` 保存界面截图。
+
 ### 最小消息探针（后台等消息）
 
 `core/session/examples/live_probe.rs` 会保持在线，把收到的文本消息**原文**写到 stdout 和

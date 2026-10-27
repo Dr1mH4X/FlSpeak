@@ -87,10 +87,22 @@ class SettingsRow extends StatelessWidget {
     // M3 list item：ink/hover/semantics 交给 ListTile，样式仍由主题与
     // 这里的显式样式锁住，保持卡片里的行高节奏。
     return ListTile(
-      leading: Icon(
-        icon,
-        size: 20,
-        color: destructive ? scheme.error : secondary,
+      leading: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: destructive
+              ? scheme.errorContainer
+              : scheme.secondaryContainer,
+          borderRadius: Radii.mediumAll,
+        ),
+        child: Icon(
+          icon,
+          size: 20,
+          color: destructive
+              ? scheme.onErrorContainer
+              : scheme.onSecondaryContainer,
+        ),
       ),
       title: Text(
         title,
@@ -117,7 +129,7 @@ class SettingsRow extends StatelessWidget {
               ? Icon(Icons.chevron_right_rounded, size: 18, color: secondary)
               : null),
       onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
     );
   }
 }

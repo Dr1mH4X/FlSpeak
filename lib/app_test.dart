@@ -8,6 +8,28 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  for (final brightness in Brightness.values) {
+    test('theme text and status contrast: $brightness', () {
+      final theme = buildAppTheme(brightness);
+      final scheme = theme.colorScheme;
+      final status = theme.extension<StatusColors>()!;
+      for (final pair in [
+        (scheme.onSurface, scheme.surface),
+        (scheme.onSurfaceVariant, scheme.surfaceContainerLow),
+        (scheme.onPrimary, scheme.primary),
+        (scheme.onPrimaryContainer, scheme.primaryContainer),
+        (status.live, scheme.surfaceContainer),
+      ]) {
+        final first = pair.$1.computeLuminance();
+        final second = pair.$2.computeLuminance();
+        final ratio = first > second
+            ? (first + 0.05) / (second + 0.05)
+            : (second + 0.05) / (first + 0.05);
+        expect(ratio, greaterThanOrEqualTo(4.5));
+      }
+    });
+  }
+
   test('深色主题要求浅色系统栏图标', () {
     final style = appSystemUiOverlayStyle(buildAppTheme(Brightness.dark));
 

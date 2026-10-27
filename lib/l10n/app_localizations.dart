@@ -110,6 +110,12 @@ abstract class AppLocalizations {
   /// **'FlSpeak'**
   String get appName;
 
+  /// No description provided for @homeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Home'**
+  String get homeTitle;
+
   /// No description provided for @commonClose.
   ///
   /// In en, this message translates to:
@@ -781,6 +787,150 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Storage directory'**
   String get settingsStorePath;
+
+  /// No description provided for @connectTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Find your people'**
+  String get connectTitle;
+
+  /// No description provided for @connectSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your communities, one conversation away.'**
+  String get connectSubtitle;
+
+  /// No description provided for @serverEmptyBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a server address to join your people in a channel.'**
+  String get serverEmptyBody;
+
+  /// No description provided for @serverSearchLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Search servers'**
+  String get serverSearchLabel;
+
+  /// No description provided for @serverSearchEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching servers'**
+  String get serverSearchEmpty;
+
+  /// No description provided for @connectIdentityBody.
+  ///
+  /// In en, this message translates to:
+  /// **'One identity. All your communities.'**
+  String get connectIdentityBody;
+
+  /// No description provided for @connectLocalIdentity.
+  ///
+  /// In en, this message translates to:
+  /// **'Identity stored on this device'**
+  String get connectLocalIdentity;
+
+  /// No description provided for @membersTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Channel members'**
+  String get membersTitle;
+
+  /// No description provided for @voiceConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice connected'**
+  String get voiceConnected;
+
+  /// No description provided for @memberListening.
+  ///
+  /// In en, this message translates to:
+  /// **'In this channel'**
+  String get memberListening;
+
+  /// No description provided for @appearancePreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance'**
+  String get appearancePreview;
+
+  /// No description provided for @serverIconTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose server icon'**
+  String get serverIconTitle;
+
+  /// No description provided for @serverIconChange.
+  ///
+  /// In en, this message translates to:
+  /// **'Change icon'**
+  String get serverIconChange;
+
+  /// No description provided for @serverIconCommunity.
+  ///
+  /// In en, this message translates to:
+  /// **'Community'**
+  String get serverIconCommunity;
+
+  /// No description provided for @serverIconGaming.
+  ///
+  /// In en, this message translates to:
+  /// **'Gaming'**
+  String get serverIconGaming;
+
+  /// No description provided for @serverIconMusic.
+  ///
+  /// In en, this message translates to:
+  /// **'Music'**
+  String get serverIconMusic;
+
+  /// No description provided for @serverIconWork.
+  ///
+  /// In en, this message translates to:
+  /// **'Work'**
+  String get serverIconWork;
+
+  /// No description provided for @serverIconTerminal.
+  ///
+  /// In en, this message translates to:
+  /// **'Terminal'**
+  String get serverIconTerminal;
+
+  /// No description provided for @serverIconFavorite.
+  ///
+  /// In en, this message translates to:
+  /// **'Favorite'**
+  String get serverIconFavorite;
+
+  /// No description provided for @serverIconPlanet.
+  ///
+  /// In en, this message translates to:
+  /// **'Planet'**
+  String get serverIconPlanet;
+
+  /// No description provided for @serverIconCoffee.
+  ///
+  /// In en, this message translates to:
+  /// **'Coffee'**
+  String get serverIconCoffee;
+
+  /// No description provided for @serverIconRocket.
+  ///
+  /// In en, this message translates to:
+  /// **'Rocket'**
+  String get serverIconRocket;
+
+  /// No description provided for @serverIconScience.
+  ///
+  /// In en, this message translates to:
+  /// **'Explore'**
+  String get serverIconScience;
+
+  /// No description provided for @channelIconRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry channel icon'**
+  String get channelIconRetry;
 }
 
 class _AppLocalizationsDelegate

@@ -111,6 +111,7 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
     final preferences = ref.watch(preferencesProvider);
 
     return MaterialApp.router(
+      debugShowCheckedModeBanner: false,
       onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,

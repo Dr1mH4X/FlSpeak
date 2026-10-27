@@ -7,6 +7,7 @@ import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'models.dart';
 import 'notices.dart';
 import 'preferences.dart';
+import 'server_icon.dart';
 import 'voice_levels.dart';
 
 /// 在 `main()` 里用真实句柄覆盖；测试里用假的实现覆盖。
@@ -85,6 +86,8 @@ class SessionController extends Notifier<SessionView> {
       // 先记下目标档案：状态事件只带客户端 id，界面需要知道连的是哪台服务器。
       state = state.copyWith(
         activeServerId: id,
+        channels: const [],
+        clients: const [],
         messages: const [],
         speaking: const {},
       );
@@ -261,7 +264,13 @@ class SessionController extends Notifier<SessionView> {
             identityUpgradeTarget: null,
             busy: false,
           ),
-          _ => current.copyWith(state: next),
+          _ => current.copyWith(
+            state: next,
+            connectionEpoch:
+                next is CoreSessionState_Connected && !current.connected
+                ? current.connectionEpoch + 1
+                : current.connectionEpoch,
+          ),
         };
       case CoreEvent_Servers(:final profiles):
         state = current.copyWith(servers: profiles);
@@ -474,6 +483,14 @@ class PreferencesController extends Notifier<SessionPreferences> {
       return;
     }
     _update(state.copyWith(voiceMeterSource: source));
+  }
+
+  void setServerIcon(String serverId, ServerIcon icon) {
+    _update(
+      state.copyWith(
+        serverIcons: Map.unmodifiable({...state.serverIcons, serverId: icon}),
+      ),
+    );
   }
 
   void markConnected(String serverId, DateTime at) {

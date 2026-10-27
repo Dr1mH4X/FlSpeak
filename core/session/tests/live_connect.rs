@@ -81,6 +81,42 @@ async fn live_connect_chain() {
         Err(err) => eprintln!("listChannels 被拒绝（权限不足时正常）: {err}"),
     }
 
+    if let Ok(output) = std::env::var("FLSPEAK_TEST_ICON_DIR") {
+        let output = std::path::PathBuf::from(output);
+        tokio::fs::create_dir_all(&output)
+            .await
+            .expect("icon output directory");
+        let channels = handle.list_channels().await.expect("channel directory");
+        let mut downloaded = std::collections::HashSet::new();
+        let mut rows = Vec::new();
+        for channel in channels {
+            if let Some(id) = channel.icon_id.filter(|id| *id != 0)
+                && downloaded.insert(id)
+            {
+                let bytes = handle
+                    .fetch_icon(id)
+                    .await
+                    .expect("download channel icon through actor");
+                assert!(!bytes.is_empty());
+                println!("icon_id={id} bytes={}", bytes.len());
+                tokio::fs::write(output.join(format!("icon_{id}")), bytes)
+                    .await
+                    .expect("save icon");
+            }
+            rows.push(serde_json::json!({"id":channel.id,"parentId":channel.parent_id,"order":channel.order,"name":channel.name,"description":channel.description,"iconId":channel.icon_id}));
+        }
+        assert!(
+            !downloaded.is_empty(),
+            "server must have a custom channel icon for this probe"
+        );
+        tokio::fs::write(
+            output.join("channels.json"),
+            serde_json::to_vec_pretty(&rows).expect("encode directory"),
+        )
+        .await
+        .expect("save directory");
+    }
+
     match handle.list_clients().await {
         Ok(clients) => {
             println!("clients: {}", clients.len());

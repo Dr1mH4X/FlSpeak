@@ -84,9 +84,36 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      # 编译桌面 runner 与 native assets 钩子里的 Rust 代码；产物丢弃。
+      # 保留完整 bundle，包含 Rust 动态库与 Flutter 资源。
       - name: Build debug bundle
         run: flutter build ${{ matrix.platform }} --debug
+
+      - name: Archive Linux bundle
+        if: matrix.platform == 'linux'
+        run: |
+          mkdir -p dist
+          tar -czf dist/flspeak-linux-x64-debug.tar.gz -C build/linux/x64/debug/bundle .
+
+      - name: Archive macOS bundle
+        if: matrix.platform == 'macos'
+        run: |
+          mkdir -p dist
+          ditto -c -k --sequesterRsrc --keepParent build/macos/Build/Products/Debug/flspeak.app dist/flspeak-macos-${{ runner.arch }}-debug.zip
+
+      - name: Archive Windows bundle
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Compress-Archive -Path build/windows/x64/runner/Debug/* -DestinationPath dist/flspeak-windows-x64-debug.zip
+
+      - name: Upload desktop bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: flspeak-${{ matrix.platform }}-${{ runner.arch }}-debug
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
 
   android:
     name: Android
@@ -160,3 +187,11 @@ jobs:
           ANDROID_DEBUG_KEY_ALIAS: ${{ secrets.ANDROID_DEBUG_KEY_ALIAS }}
           ANDROID_DEBUG_KEY_PASSWORD: ${{ secrets.ANDROID_DEBUG_KEY_PASSWORD }}
         run: flutter build apk --debug
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: flspeak-android-debug
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14

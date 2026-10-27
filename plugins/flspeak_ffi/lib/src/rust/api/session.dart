@@ -36,6 +36,8 @@ abstract class CoreSession implements RustOpaqueInterface {
   /// 这时 Dart 侧取消订阅会立刻完成；反过来先取消，要等下一次 `add` 失败才收尾。
   Stream<CoreEvent> events();
 
+  Future<Uint8List> fetchIcon({required int iconId});
+
   Future<AudioDevicesView> listAudioDevices();
 
   Future<List<ChannelView>> listChannels();
@@ -50,8 +52,11 @@ abstract class CoreSession implements RustOpaqueInterface {
     String? password,
   });
 
-  factory CoreSession({required String storePath}) =>
-      RustLib.instance.api.crateApiSessionCoreSessionNew(storePath: storePath);
+  factory CoreSession({required String storePath, bool? audioEnabled}) =>
+      RustLib.instance.api.crateApiSessionCoreSessionNew(
+        storePath: storePath,
+        audioEnabled: audioEnabled,
+      );
 
   /// 录入服务器。地址在这里解析并登记，连接目标只能来自档案。
   Future<ServerProfileView> registerServer({
@@ -140,6 +145,7 @@ class AudioDevicesView {
 }
 
 class ChannelView {
+  final int? iconId;
   final int id;
   final int parentId;
   final int? order;
@@ -150,6 +156,7 @@ class ChannelView {
   final bool? passwordProtected;
 
   const ChannelView({
+    this.iconId,
     required this.id,
     required this.parentId,
     this.order,
@@ -162,6 +169,7 @@ class ChannelView {
 
   @override
   int get hashCode =>
+      iconId.hashCode ^
       id.hashCode ^
       parentId.hashCode ^
       order.hashCode ^
@@ -176,6 +184,7 @@ class ChannelView {
       identical(this, other) ||
       other is ChannelView &&
           runtimeType == other.runtimeType &&
+          iconId == other.iconId &&
           id == other.id &&
           parentId == other.parentId &&
           order == other.order &&

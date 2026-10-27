@@ -14,11 +14,7 @@ import 'widgets/channel_pane.dart';
 import 'widgets/channel_pane_resizer.dart';
 import 'widgets/server_rail.dart';
 
-/// 工作区外壳：左侧服务器栏 + 频道栏 + 主内容区，三栏通边铺满窗口。
-///
-/// 窗口圆角完全交给操作系统按系统偏好处理，应用不再自绘外框和留边；
-/// 更窄时两栏收进抽屉，主区域占满宽度。设置入口属于服务器栏（左下角），
-/// 不在频道栏底部。
+/// 工作区三栏布局；窄屏将服务器与频道收进抽屉。
 class WorkspaceShell extends ConsumerWidget {
   const WorkspaceShell({
     required this.location,
@@ -81,10 +77,14 @@ class WorkspaceShell extends ConsumerWidget {
     final rail = ServerRail(
       onSelect: selectServer,
       onAdd: addServer,
+      onHome: addServer,
       onSettings: openSettings,
       onDisconnect: () => unawaited(disconnect()),
     );
-    final panel = ChannelPanel(onChannelSelected: selectChannel);
+    final panel = ChannelPanel(
+      onChannelSelected: selectChannel,
+      onDisconnect: () => unawaited(disconnect()),
+    );
     final surface = _MainSurface(compact: compact, child: child);
 
     if (compact) {
@@ -140,7 +140,7 @@ class WorkspaceShell extends ConsumerWidget {
   }
 }
 
-/// 右侧主内容区：三栏之一，与窗口通边；窄屏铺满。
+/// 主内容区在桌面以圆角与导航分隔，窄屏铺满。
 class _MainSurface extends StatelessWidget {
   const _MainSurface({required this.compact, required this.child});
 
@@ -152,13 +152,11 @@ class _MainSurface extends StatelessWidget {
     final scheme = context.scheme;
 
     return Material(
-      // 三个分支都是实色面板：亮色半透明白在浅色底上会发灰，也和暗色
-      // 分支的观感不一致。
-      color: compact
-          ? scheme.surface
-          : context.isDark
-          ? scheme.surfaceContainer
-          : scheme.surfaceContainerLowest,
+      color: scheme.surface,
+      borderRadius: compact
+          ? BorderRadius.zero
+          : const BorderRadius.only(topLeft: Radius.circular(Radii.xxl)),
+      clipBehavior: Clip.antiAlias,
       child: child,
     );
   }

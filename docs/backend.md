@@ -16,7 +16,7 @@
 | 重连 | 1/2/4/15/30/…s 退避，首轮成功前最多 5 次、之后不限次；自动回原频道，UI 提供按钮 | 会话恢复、未发送消息重放 |
 | 身份 | 连续 3 次握手超时自动 +5 安全等级，独立线程挖矿、可取消、原子写入 | 自动选等级/导入身份 |
 | 历史 | 文本消息按服务器持久化，连接时回放，500 条/服务器 | 搜索、导出、端到端加密 |
-| 文件传输 | 上传/下载、进度事件、主机固定为会话主机、16 字节尾部补零/截断 | 目录浏览、断点续传、UI 文件选择器 |
+| 文件传输 | 上传/下载、进度事件、主机固定为 SRV 解析后的会话主机、精确字节传输 | 目录浏览、断点续传、UI 文件选择器 |
 
 ## 语音
 
@@ -155,9 +155,8 @@ Connected ──非主动断开──> Reconnecting{attempt, delay}
 - 初始化（`ftinitupload` / `ftinitdownload`）在 actor 里；数据连接是独立 TCP 流，初始化后
   交给 local task 执行，避免大文件堵住命令队列。
 - 主机只允许会话主机：`proto::check_transfer_host`，Dart 不能传主机名；端口用服务器下发值。
-- tsclient-rs 的 AES 流按 16 字节块加解密，尾部不足一块会被丢掉：
-  - 上传：`ProgressReader` 在 EOF 后补零到块边界，声明 size 保持原始值；
-  - 下载：`ProgressWriter` 写完后按服务器声明的 `size` 截断本地文件。
+- TCP 先发送服务器下发的原始 `ftkey`，随后收发明文字节；下载严格校验声明的 `size`，不填充或截断文件。
+- 频道图标使用频道 0 的 `/icon_<无符号 CRC-32 ID>` 文件。`SessionHandle::fetch_icon` 只返回图标字节，限制为 1 MiB、20 秒；协商在 actor 中串行执行，TCP 任务独立运行，连接代次变化后丢弃旧结果。
 - 事件：`TransferStarted`、`TransferProgress`（256KiB/200ms 节流）、`TransferFinished`。
 - UI 文件选择器/传输列表留待后续。
 
