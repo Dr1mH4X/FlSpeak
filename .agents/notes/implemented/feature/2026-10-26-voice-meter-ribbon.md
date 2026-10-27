@@ -37,6 +37,5 @@ Material 3 没有现成的音频可视化组件。界面需要一条跟随真实
 ## Testing
 
 - `core/audio/src/level.rs` 覆盖 RMS、dB 映射、噪声门、平滑与 10Hz 节流。
-- `lib/features/workspace/widgets/channel_pane_test.dart` 断言用户卡只有电平条和三个控制开关。
-- `lib/features/workspace/widgets/channel_pane_resizer_test.dart` 覆盖 `voiceMeterSource` 的偏好读写与缺省值。
+- 用户卡与 `voiceMeterSource` 的界面行为没有自动回归用例：改这条路径时手动跑 `just run`，确认用户卡只有电平条和三个控制开关，且声源偏好在重启后保持。
 - `docs/audio.md` 与音频边界笔记同步说明聚合电平事件。

@@ -8,7 +8,7 @@ Rust 单测与实现同文件，为 `#[cfg(test)] mod tests { use super::*; }` �
 - 断言只用 `assert!` / `assert_eq!`
 - 不依赖网络与真实服务器；需要官方域名做测试夹具时，从 `core/proto` 的 `FORBIDDEN_HOST_SUFFIXES` 拼，不要写字面量
 
-Dart 单测与被测文件同目录，命名 `<被测文件>_test.dart`（`lib/core/channel_display.dart` 对 `lib/core/channel_display_test.dart`）。`flutter test` 默认只扫 `test/`，所以路径显式指到 `lib`：`just test` 就是 `flutter test lib`。
+Dart 单测与被测文件同目录，命名 `<被测文件>_test.dart`（`lib/app.dart` 对 `lib/app_test.dart`）。`flutter test` 默认只扫 `test/`，所以路径显式指到 `lib`：`just test` 就是 `flutter test lib`。
 
 `lib/` 下的用例文件顶部要写 `// ignore_for_file: depend_on_referenced_packages`：`flutter_test` 是 dev 依赖，而 analyzer 无法从代码看出这些文件不被应用入口引用。
 
