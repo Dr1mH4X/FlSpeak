@@ -94,9 +94,9 @@ Android 的 debug 与 release 签名分开配置，都写进 `android/key.proper
 ## 本地改上游 tsclient-rs
 
 ```toml
-# Cargo.toml，临时用，不要提交
-[patch.crates-io]
+# 根 Cargo.toml 中临时替换对应依赖，不要提交
+[workspace.dependencies]
 tsclient-rs = { path = "../tsclient-rs" }
 ```
 
-用完删掉，不要提交（CI 上没有那个路径）。上游关系的其余约定见 `.agents/project.md`。
+调试结束后恢复 `Cargo.toml` 中的 Git 来源、固定 `rev` 及对应 `Cargo.lock`，不提交本地路径。上游关系的其余约定见 [项目结构](../.agents/project.md)。
