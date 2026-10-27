@@ -9,6 +9,8 @@ import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
 import '../../../widgets/monogram.dart';
+import '../../../widgets/view_scope.dart';
+import '../../../widgets/window_header.dart';
 
 /// 最左侧的服务器栏：已登记的服务器、添加与设置。
 ///
@@ -41,6 +43,9 @@ class ServerRail extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
     final view = ref.watch(sessionViewProvider);
+    // 宽屏时红绿灯压在轨道左上角，列表整体让到 32px 之下；
+    // 窄屏与全屏由标题条或系统接管，保持原来的 16px。
+    final windowControls = ViewScope.windowControlsOf(context);
 
     // 抽屉里必须先收起再跳转：抽屉不属于路由栈，直接跳转会让旧页面的抽屉
     // 盖在新页面上。桌面没有打开中的抽屉，这一步是空操作。
@@ -55,7 +60,12 @@ class ServerRail extends ConsumerWidget {
         width: width,
         child: Column(
           children: [
-            const SizedBox(height: 16),
+            WindowDragRegion(
+              child: SizedBox(
+                width: double.infinity,
+                height: windowControls.isEmpty ? 16 : windowControls.height + 4,
+              ),
+            ),
             Expanded(
               child: ListView.builder(
                 // 底部 12 把最后一个服务器与下面的添加槽位分开：列表结束 /

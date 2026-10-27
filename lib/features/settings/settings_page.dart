@@ -16,6 +16,7 @@ import '../../l10n/app_localizations.dart';
 import '../../router.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common.dart';
+import '../../widgets/window_header.dart';
 import 'settings_state.dart';
 import 'widgets/settings_card.dart';
 import 'widgets/settings_dialogs.dart';
@@ -143,36 +144,38 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       SettingsGroup(title: l10n.settingsAbout, children: [_about(l10n)]),
     ];
 
-    return Scaffold(
-      backgroundColor: context.pageColor,
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _SettingsTopBar(onBack: _back),
-            Expanded(
-              child: ListView(
-                padding: EdgeInsets.fromLTRB(
-                  compact ? 16 : 24,
-                  compact ? 0 : 8,
-                  compact ? 16 : 24,
-                  32,
-                ),
-                children: [
-                  Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 880),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: sections,
+    return WindowControlsClearance(
+      child: Scaffold(
+        backgroundColor: context.pageColor,
+        body: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              WindowDragRegion(child: _SettingsTopBar(onBack: _back)),
+              Expanded(
+                child: ListView(
+                  padding: EdgeInsets.fromLTRB(
+                    compact ? 16 : 24,
+                    compact ? 0 : 8,
+                    compact ? 16 : 24,
+                    32,
+                  ),
+                  children: [
+                    Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 880),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: sections,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

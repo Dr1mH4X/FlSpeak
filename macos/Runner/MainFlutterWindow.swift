@@ -1,3 +1,10 @@
+// 本文件包含的代码片段来源于 FlClash（https://github.com/chen08209/FlClash）项目。
+// 原始许可证：FlClash 应用代码为 GPL-3.0；其 plugins/window 插件为 MIT。
+// 来源提交：7fd417fb9a9a277c6a9339a8ac87f907df7c25f7。
+// 本片段取自 plugins/window（MIT），可按 MIT 或 GPL-3.0 使用：对应
+// plugins/window/macos/window/Sources/window/WindowStyle.swift 的 .hidden 分支，
+// 以及同目录 WindowController.swift 的 startDragging / maximize / setFullScreen。
+
 import Carbon.HIToolbox
 import Cocoa
 import FlutterMacOS
@@ -22,13 +29,36 @@ class MainFlutterWindow: NSWindow {
     let windowFrame = self.frame
     self.contentViewController = flutterViewController
     self.setFrame(windowFrame, display: true)
+    // FlClash 的隐藏标题栏组合：标题文字不画、标题栏透明、内容铺满窗口。
+    // 系统红绿灯保留，由 Dart 侧按 78×32 的区域让位。
+    self.titleVisibility = .hidden
     self.titlebarAppearsTransparent = true
+    self.styleMask.insert(.fullSizeContentView)
 
     RegisterGeneratedPlugins(registry: flutterViewController)
     setupGlobalHotkey(flutterViewController)
     setupWindowChannel(flutterViewController)
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(fullScreenStateChanged(_:)),
+      name: NSWindow.didEnterFullScreenNotification,
+      object: self)
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(fullScreenStateChanged(_:)),
+      name: NSWindow.didExitFullScreenNotification,
+      object: self)
 
     super.awakeFromNib()
+  }
+
+  deinit {
+    NotificationCenter.default.removeObserver(self)
+  }
+
+  @objc private func fullScreenStateChanged(_ notification: Notification) {
+    windowChannel?.invokeMethod(
+      "onFullScreenChanged", arguments: styleMask.contains(.fullScreen))
   }
 
   private func setupWindowChannel(_ controller: FlutterViewController) {
@@ -50,6 +80,27 @@ class MainFlutterWindow: NSWindow {
           blue: CGFloat(value & 0xFF) / 255.0,
           alpha: CGFloat((value >> 24) & 0xFF) / 255.0)
         result(true)
+      case "startDragging":
+        guard let event = self?.currentEvent else {
+          result(false)
+          return
+        }
+        // 通道调用返回时 pointer event 可能已经结束；排到主队列再取一次。
+        DispatchQueue.main.async {
+          self?.performDrag(with: event)
+        }
+        result(true)
+      case "toggleZoom":
+        if let self = self {
+          if self.styleMask.contains(.fullScreen) {
+            self.toggleFullScreen(nil)
+          } else {
+            self.zoom(nil)
+          }
+        }
+        result(true)
+      case "isFullScreen":
+        result(self?.styleMask.contains(.fullScreen) ?? false)
       default:
         result(FlutterMethodNotImplemented)
       }

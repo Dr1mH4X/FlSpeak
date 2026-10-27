@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/view_scope.dart';
+import '../../../widgets/window_header.dart';
 
 /// 连接页左侧窄栏：只有底部设置入口。
 ///
@@ -18,12 +20,19 @@ class LoginRail extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
+    final windowControls = ViewScope.windowControlsOf(context);
 
     return Container(
       width: width,
       color: scheme.surfaceContainer,
       child: Column(
         children: [
+          WindowDragRegion(
+            child: SizedBox(
+              width: double.infinity,
+              height: windowControls.height,
+            ),
+          ),
           const Spacer(),
           Padding(
             padding: const EdgeInsets.only(bottom: 16),

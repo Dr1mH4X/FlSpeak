@@ -18,11 +18,12 @@
 | `docs/defensive-patterns.md` | 编码反面与替代：FAILFAST、YAGNI、DRY、警告压制处置、类型安全优先、连接边界 | 常规开发流程 |
 | `docs/ci-cd.md` | 各 GitHub Actions workflow 的触发条件与职责、发布矩阵、打包产物与已知简化 | 架构决策 |
 | `docs/release/` | 发版日志：每个 tag 一篇 Release 正文；格式与生命周期见其 `AGENTS.md` | 当前机制的说明（→ docs 各归属地）、下一版的计划 |
+| `docs/THIRD-PARTY.md` | 第三方代码的来源、来源提交、原始许可证与文件清单 | 决策理由（→ `.agents/notes/`） |
 | `.agents/notes/` | 决策记录：为什么这么做、放弃了什么、如何验证；路径编码生命周期与类目，规则见其 `README.md` | 迁移计划、验收清单、spec 语气 |
 | `.agents/skills/` | agent 侧复用工作流与判定标准（`SKILL.md`） | 产品与运行期契约（→ docs 或源码） |
 | 模块内 `AGENTS.md` | 目录级规则，如 `core/AGENTS.md`、`lib/AGENTS.md`、本文 | 仓库级规则（→ 根 AGENTS.md） |
 
-放置速查：standing orders → 根 `AGENTS.md`；结构与不变量 → `project.md`；命令与流程 → `development.md`；测试 → `testing.md`；编码反面 → `defensive-patterns.md`；拓扑与索引 → `architecture.md`；跨 crate 链路 → 主题文档；单 crate 契约 → `subsystems/`；workflow → `ci-cd.md`；发版日志 → `docs/release/`；决策理由 → `.agents/notes/`；复用流程 → `.agents/skills/`；目录规则 → 该目录的 `AGENTS.md`。
+放置速查：standing orders → 根 `AGENTS.md`；结构与不变量 → `project.md`；命令与流程 → `development.md`；测试 → `testing.md`；编码反面 → `defensive-patterns.md`；拓扑与索引 → `architecture.md`；跨 crate 链路 → 主题文档；单 crate 契约 → `subsystems/`；workflow → `ci-cd.md`；发版日志 → `docs/release/`；第三方代码 → `docs/THIRD-PARTY.md`；决策理由 → `.agents/notes/`；复用流程 → `.agents/skills/`；目录规则 → 该目录的 `AGENTS.md`。
 
 ## 写作规则
 
