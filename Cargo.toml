@@ -29,7 +29,7 @@ tokio = { version = "1", features = [
     "time",
 ] }
 tracing = "0.1"
-tsclient-rs = { git = "https://github.com/ZeroBlock0/tsclient-rs.git", rev = "a4ca5ce0ba2f769b7f3c45789a881aa64c24b61b" }
+tsclient-rs = { git = "https://github.com/ZeroBlock0/tsclient-rs.git", rev = "d2c4e52908afa44de665d996205b3599db816b7d" }
 reqwest = { version = "0.12.28", default-features = false, features = ["rustls-tls", "stream"] }
 
 audio = { path = "core/audio" }
