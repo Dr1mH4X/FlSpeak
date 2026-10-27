@@ -4,12 +4,14 @@
 
 | 文件 | 触发 | 内容 |
 | --- | --- | --- |
-| `checks.yml` | `workflow_call` | 可复用的检查作业：`rust`、`dart`、`dart-test`、`plugins` |
-| `ci.yml` | 分支 push、PR、手动 | 调用 `checks.yml`，再跑 `desktop` 与 `android` 的 debug 构建 |
+| `checks.yml` | `workflow_call` | 可复用的检查作业：`rust`、`dart`、`dart-test` |
+| `ci.yml` | main push、PR、手动 | 调用 `checks.yml`，再跑 `desktop` 与 `android` 的 debug 构建；纯文档改动不触发 |
 | `release.yml` | `v*` tag、手动输入版本号 | `meta`、`checks`、七平台 `build` 矩阵、`publish` |
 
-tag 推送只启动 `release.yml`，平台打包因此只发生一次；分支与 PR 仍由 `ci.yml`
-覆盖桌面与 Android 的编译。`release.yml` 的 `build` 通过 `needs: [meta, checks]`
+tag 推送只启动 `release.yml`，平台打包因此只发生一次；main 与 PR 仍由 `ci.yml`
+覆盖桌面与 Android 的编译。`ci.yml` 用 `paths-ignore` 跳过只改 `**/*.md` 或
+`LICENSE` 的推送与 PR：文档没有独立的 CI 检查，这类改动不跑 Rust、Flutter 与平台
+构建。若将来把检查设为合并必需，纯文档 PR 不会产生状态，需要同时调整这项配置。`release.yml` 的 `build` 通过 `needs: [meta, checks]`
 等待检查，任一检查失败时打包矩阵不会启动，手动输入版本号的发版路径也走同一套检查。
 
 ## `checks.yml`
@@ -18,8 +20,12 @@ tag 推送只启动 `release.yml`，平台打包因此只发生一次；分支�
 | --- | --- |
 | `rust` | `cargo fmt --check`、`clippy -D warnings`、`cargo test`（`--all-features`，含音频） |
 | `dart` | `dart format --output=none --set-exit-if-changed lib setup.dart`、`flutter analyze` |
-| `dart-test` | `flutter test lib`（用例与实现同目录）；`flutter test` 会触发 native assets 钩子，因此它也装 Rust 音频依赖并缓存 cargo 与钩子产物 |
-| `plugins` | 重跑 `flutter_rust_bridge_codegen generate` 并用 `git diff` 校验生成物一致；再分析插件。`flutter analyze` 会触发 native assets，所以它也装音频依赖 |
+| `dart-test` | `flutter test lib`（用例与实现同目录）与插件检查共用一个作业：重跑 `flutter_rust_bridge_codegen generate` 并用 `git diff` 校验生成物，再分析插件。`flutter test` 会触发 native assets 钩子，因此作业装 Rust 音频依赖并缓存 cargo 与钩子产物；两项检查共用这次编译 |
+
+codegen 用官方 release 的 x86_64 linux 预编译附件（版本与 sha256 固定在
+`checks.yml` 顶部），不再从源码 `cargo install`；升级 `flutter_rust_bridge` 时把
+`plugins/flspeak_ffi/pubspec.yaml`、`FRB_CODEGEN_VERSION` 与 `FRB_CODEGEN_SHA256`
+一起改。
 
 两个环境细节：
 
@@ -41,7 +47,7 @@ tag 推送只启动 `release.yml`，平台打包因此只发生一次；分支�
 | 作业 | 内容 |
 | --- | --- |
 | `desktop` | linux / windows / macos 各跑一次 `flutter build <platform> --debug`，验证 native assets 钩子能编出 Rust |
-| `android` | 装 NDK 后 `flutter build apk --debug` |
+| `android` | 装 NDK（链接进 SDK，避免构建时重复下载）后 `flutter build apk --debug`；Gradle 依赖与构建状态由 `gradle/actions/setup-gradle` 缓存 |
 
 ## `release.yml`
 

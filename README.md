@@ -19,7 +19,7 @@ _Yet another teamspeak client, multi-platform and open-source._
     <img src="https://img.shields.io/badge/AGPL--3.0-red?style=for-the-badge" alt="License">
   </a>
 
-  <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-purple?style=for-the-badge" alt="Supported Platforms">
+  <img src="https://img.shields.io/badge/Platform-Multi--platform-purple?style=for-the-badge" alt="Supported Platforms">
 
   <img src="https://img.shields.io/badge/TeamSpeak-2580C3?style=for-the-badge&logo=teamspeak&logoColor=white" alt="TeamSpeak Support">
 
