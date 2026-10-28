@@ -450,6 +450,7 @@ impl CoreSession {
     pub async fn kick(
         &self,
         uid: String,
+        client_id: i32,
         channel_id: u64,
         target: KickTarget,
         reason: String,
@@ -458,6 +459,7 @@ impl CoreSession {
         self.handle
             .kick(
                 uid,
+                client_id,
                 channel_id,
                 match target {
                     KickTarget::Channel => session::KickTarget::Channel,

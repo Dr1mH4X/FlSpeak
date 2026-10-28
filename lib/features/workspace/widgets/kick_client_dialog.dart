@@ -62,8 +62,7 @@ class _KickFormState extends ConsumerState<_KickForm> {
       final sent = await ref
           .read(sessionViewProvider.notifier)
           .kickClient(
-            widget.client.uid,
-            widget.client.channelId,
+            widget.client,
             widget.target,
             _reason.text,
             widget.connectionEpoch,
@@ -85,7 +84,9 @@ class _KickFormState extends ConsumerState<_KickForm> {
     final peer = view.clients
         .where(
           (client) =>
-              client.uid == widget.client.uid && client.id != view.selfClientId,
+              client.id == widget.client.id &&
+              client.uid == widget.client.uid &&
+              client.id != view.selfClientId,
         )
         .firstOrNull;
     final targetAvailable =

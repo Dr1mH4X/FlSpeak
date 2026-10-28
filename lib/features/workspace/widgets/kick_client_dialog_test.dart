@@ -17,7 +17,14 @@ const _peer = ClientView(id: 2, nickname: 'Peer', uid: 'peer', channelId: 5);
 class _Controller extends SessionController {
   final calls =
       <
-        ({String uid, int channel, KickTarget target, String reason, int epoch})
+        ({
+          String uid,
+          int id,
+          int channel,
+          KickTarget target,
+          String reason,
+          int epoch,
+        })
       >[];
   Completer<bool>? pending;
   @override
@@ -29,15 +36,15 @@ class _Controller extends SessionController {
   );
   @override
   Future<bool> kickClient(
-    String uid,
-    int channelId,
+    ClientView client,
     KickTarget target,
     String reason,
     int connectionEpoch,
   ) {
     calls.add((
-      uid: uid,
-      channel: channelId,
+      uid: client.uid,
+      id: client.id,
+      channel: client.channelId,
       target: target,
       reason: reason,
       epoch: connectionEpoch,
@@ -45,6 +52,12 @@ class _Controller extends SessionController {
     pending = Completer<bool>();
     return pending!.future;
   }
+
+  void replacePeerConnection() => state = state.copyWith(
+    clients: [
+      const ClientView(id: 3, nickname: 'Peer', uid: 'peer', channelId: 5),
+    ],
+  );
 
   void reconnect() => state = state.copyWith(connectionEpoch: 4);
   void movePeer() => state = state.copyWith(
@@ -158,6 +171,7 @@ void main() {
       );
       expect(context.controller.calls.single, (
         uid: 'peer',
+        id: 2,
         channel: 5,
         target: KickTarget.server,
         reason: 'reason | 测试',

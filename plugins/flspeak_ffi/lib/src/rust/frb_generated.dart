@@ -114,6 +114,7 @@ abstract class RustLibApi extends BaseApi {
   Future<void> crateApiSessionCoreSessionKick({
     required CoreSession that,
     required String uid,
+    required int clientId,
     required int channelId,
     required KickTarget target,
     required String reason,
@@ -551,6 +552,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Future<void> crateApiSessionCoreSessionKick({
     required CoreSession that,
     required String uid,
+    required int clientId,
     required int channelId,
     required KickTarget target,
     required String reason,
@@ -565,6 +567,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_String(uid, serializer);
+          sse_encode_i_32(clientId, serializer);
           sse_encode_CastedPrimitive_u_64(channelId, serializer);
           sse_encode_kick_target(target, serializer);
           sse_encode_String(reason, serializer);
@@ -581,7 +584,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_core_error,
         ),
         constMeta: kCrateApiSessionCoreSessionKickConstMeta,
-        argValues: [that, uid, channelId, target, reason, connectionEpoch],
+        argValues: [
+          that,
+          uid,
+          clientId,
+          channelId,
+          target,
+          reason,
+          connectionEpoch,
+        ],
         apiImpl: this,
       ),
     );
@@ -593,6 +604,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         argNames: [
           "that",
           "uid",
+          "clientId",
           "channelId",
           "target",
           "reason",
@@ -3672,6 +3684,7 @@ class CoreSessionImpl extends RustOpaque implements CoreSession {
 
   Future<void> kick({
     required String uid,
+    required int clientId,
     required int channelId,
     required KickTarget target,
     required String reason,
@@ -3679,6 +3692,7 @@ class CoreSessionImpl extends RustOpaque implements CoreSession {
   }) => RustLib.instance.api.crateApiSessionCoreSessionKick(
     that: this,
     uid: uid,
+    clientId: clientId,
     channelId: channelId,
     target: target,
     reason: reason,

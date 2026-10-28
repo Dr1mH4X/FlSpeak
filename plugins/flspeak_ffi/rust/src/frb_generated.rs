@@ -486,6 +486,7 @@ fn wire__crate__api__session__CoreSession_kick_impl(
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<CoreSession>,
             >>::sse_decode(&mut deserializer);
             let api_uid = <String>::sse_decode(&mut deserializer);
+            let api_client_id = <i32>::sse_decode(&mut deserializer);
             let api_channel_id = <u64>::sse_decode(&mut deserializer);
             let api_target = <crate::api::session::KickTarget>::sse_decode(&mut deserializer);
             let api_reason = <String>::sse_decode(&mut deserializer);
@@ -514,6 +515,7 @@ fn wire__crate__api__session__CoreSession_kick_impl(
                         let output_ok = crate::api::session::CoreSession::kick(
                             &*api_that_guard,
                             api_uid,
+                            api_client_id,
                             api_channel_id,
                             api_target,
                             api_reason,

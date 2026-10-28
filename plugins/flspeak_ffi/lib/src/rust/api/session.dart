@@ -62,6 +62,7 @@ abstract class CoreSession implements RustOpaqueInterface {
 
   Future<void> kick({
     required String uid,
+    required int clientId,
     required int channelId,
     required KickTarget target,
     required String reason,

@@ -210,19 +210,24 @@ class SessionController extends Notifier<SessionView> {
   }
 
   Future<bool> kickClient(
-    String uid,
-    int channelId,
+    ClientView recipient,
     KickTarget target,
     String reason,
     int connectionEpoch,
   ) async {
     if (!state.connected || state.busy) return false;
     final peer = state.clients
-        .where((client) => client.uid == uid && client.id != state.selfClientId)
+        .where(
+          (client) =>
+              client.id == recipient.id &&
+              client.uid == recipient.uid &&
+              client.id != state.selfClientId,
+        )
         .firstOrNull;
     final l10n = ref.read(_localizationsProvider);
     if (peer == null ||
-        (target == KickTarget.channel && peer.channelId != channelId)) {
+        (target == KickTarget.channel &&
+            peer.channelId != recipient.channelId)) {
       _notify(l10n.kickTargetUnavailable);
       return false;
     }
@@ -230,8 +235,9 @@ class SessionController extends Notifier<SessionView> {
       () => ref
           .read(coreSessionProvider)
           .kick(
-            uid: uid,
-            channelId: channelId,
+            uid: recipient.uid,
+            clientId: recipient.id,
+            channelId: recipient.channelId,
             target: target,
             reason: reason.trim(),
             connectionEpoch: connectionEpoch,

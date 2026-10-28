@@ -320,6 +320,7 @@ pub enum SessionCommand {
     },
     Kick {
         uid: String,
+        client_id: i32,
         channel_id: u64,
         target: KickTarget,
         reason: String,
@@ -695,6 +696,7 @@ impl SessionHandle {
     pub async fn kick(
         &self,
         uid: String,
+        client_id: i32,
         channel_id: u64,
         target: KickTarget,
         reason: String,
@@ -703,6 +705,7 @@ impl SessionHandle {
         let (reply, response) = oneshot::channel();
         self.send(SessionCommand::Kick {
             uid,
+            client_id,
             channel_id,
             target,
             reason,
@@ -813,11 +816,11 @@ mod tests {
         )
         .unwrap();
         assert!(
-            matches!(handle.kick("peer".into(), 5, KickTarget::Server, String::new(), u64::MAX).await, Err(SessionError::Protocol(message)) if message == "connection changed")
+            matches!(handle.kick("peer".into(), 2, 5, KickTarget::Server, String::new(), u64::MAX).await, Err(SessionError::Protocol(message)) if message == "connection changed")
         );
         assert!(matches!(
             handle
-                .kick("peer".into(), 5, KickTarget::Channel, String::new(), 0)
+                .kick("peer".into(), 2, 5, KickTarget::Channel, String::new(), 0)
                 .await,
             Err(SessionError::NotConnected)
         ));

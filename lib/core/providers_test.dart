@@ -20,6 +20,7 @@ class _Core extends Fake implements CoreSession {
       <
         ({
           String uid,
+          int clientId,
           int channelId,
           KickTarget target,
           String reason,
@@ -29,6 +30,7 @@ class _Core extends Fake implements CoreSession {
   @override
   Future<void> kick({
     required String uid,
+    required int clientId,
     required int channelId,
     required KickTarget target,
     required String reason,
@@ -37,6 +39,7 @@ class _Core extends Fake implements CoreSession {
     if (fail) throw const CoreError.connection(message: 'kick rejected');
     kicks.add((
       uid: uid,
+      clientId: clientId,
       channelId: channelId,
       target: target,
       reason: reason,
@@ -79,6 +82,8 @@ class _Core extends Fake implements CoreSession {
 
 void main() {
   test('kick preserves UID and native epoch, rejects moved/offline/self targets and retains members on refusal', () async {
+    const peer = ClientView(id: 2, nickname: 'Peer', uid: 'peer', channelId: 5);
+    const myself = ClientView(id: 1, nickname: 'Me', uid: 'self', channelId: 5);
     final events = StreamController<CoreEvent>.broadcast(sync: true);
     final core = _Core(events);
     final container = ProviderContainer(
@@ -104,13 +109,12 @@ void main() {
       ),
     );
     expect(
-      await controller.kickClient('self', 5, KickTarget.server, '', 42),
+      await controller.kickClient(myself, KickTarget.server, '', 42),
       isFalse,
     );
     expect(
       await controller.kickClient(
-        'peer',
-        5,
+        peer,
         KickTarget.channel,
         '  reason | test  ',
         42,
@@ -119,6 +123,7 @@ void main() {
     );
     expect(core.kicks.single, (
       uid: 'peer',
+      clientId: 2,
       channelId: 5,
       target: KickTarget.channel,
       reason: 'reason | test',
@@ -126,12 +131,12 @@ void main() {
     ));
     events.add(const CoreEvent.clientMoved(id: 2, channelId: 9));
     expect(
-      await controller.kickClient('peer', 5, KickTarget.channel, '', 42),
+      await controller.kickClient(peer, KickTarget.channel, '', 42),
       isFalse,
     );
     core.fail = true;
     expect(
-      await controller.kickClient('peer', 5, KickTarget.server, '', 42),
+      await controller.kickClient(peer, KickTarget.server, '', 42),
       isFalse,
     );
     expect(
@@ -149,17 +154,72 @@ void main() {
     );
     core.fail = false;
     expect(
-      await controller.kickClient('peer', 5, KickTarget.server, '', 42),
+      await controller.kickClient(peer, KickTarget.server, '', 42),
       isTrue,
     );
     expect(core.kicks.last.target, KickTarget.server);
     events.add(const CoreEvent.clientLeft(id: 2));
     expect(
-      await controller.kickClient('peer', 9, KickTarget.server, '', 42),
+      await controller.kickClient(peer, KickTarget.server, '', 42),
       isFalse,
     );
     expect(core.kicks, hasLength(2));
   });
+
+  test(
+    'kick selects the exact connection when an identity has multiple clients',
+    () async {
+      const first = ClientView(
+        id: 2,
+        nickname: 'First',
+        uid: 'shared',
+        channelId: 5,
+      );
+      const selected = ClientView(
+        id: 3,
+        nickname: 'Selected',
+        uid: 'shared',
+        channelId: 9,
+      );
+      final events = StreamController<CoreEvent>.broadcast(sync: true);
+      final core = _Core(events);
+      final container = ProviderContainer(
+        overrides: [coreSessionProvider.overrideWithValue(core)],
+      );
+      addTearDown(() async {
+        container.dispose();
+        await events.close();
+      });
+      final controller = container.read(sessionViewProvider.notifier);
+      events.add(
+        const CoreEvent.state(
+          state: CoreSessionState.connected(clientId: 1, channelId: 5),
+        ),
+      );
+      events.add(
+        const CoreEvent.snapshot(channels: [], clients: [first, selected]),
+      );
+      expect(
+        await controller.kickClient(selected, KickTarget.server, '', 42),
+        isTrue,
+      );
+      expect(core.kicks.single.clientId, 3);
+      events.add(const CoreEvent.clientLeft(id: 3));
+      events.add(
+        const CoreEvent.clientJoined(
+          id: 3,
+          nickname: 'Other',
+          uid: 'other',
+          channelId: 9,
+        ),
+      );
+      expect(
+        await controller.kickClient(selected, KickTarget.server, '', 42),
+        isFalse,
+      );
+      expect(core.kicks, hasLength(1));
+    },
+  );
 
   test('download completion arriving before the API reply is retained even without a start event', () async {
     final events = StreamController<CoreEvent>.broadcast(sync: true);

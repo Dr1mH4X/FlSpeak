@@ -178,10 +178,22 @@ fn validate_kick(
     Ok(())
 }
 
+fn kick_target<'a>(
+    clients: &'a [tsclient_rs::ClientInfo],
+    uid: &str,
+    client_id: i32,
+) -> Result<&'a tsclient_rs::ClientInfo, SessionError> {
+    clients
+        .iter()
+        .find(|peer| client_id > 0 && !uid.is_empty() && peer.id == client_id && peer.uid == uid)
+        .ok_or_else(|| SessionError::Protocol("member is offline or identity changed".into()))
+}
+
 pub(crate) async fn kick(
     client: &Client,
     tools: &mut ChannelTools,
     uid: &str,
+    client_id: i32,
     channel_id: u64,
     target: KickTarget,
     reason: &str,
@@ -193,11 +205,7 @@ pub(crate) async fn kick(
     let directory = client
         .directory_snapshot()
         .ok_or(SessionError::NotConnected)?;
-    let peer = directory
-        .clients
-        .iter()
-        .find(|peer| !uid.is_empty() && peer.uid == uid)
-        .ok_or_else(|| SessionError::Protocol("member is offline".into()))?;
+    let peer = kick_target(&directory.clients, uid, client_id)?;
     let power = match target {
         KickTarget::Channel => own.kick_channel_power,
         KickTarget::Server => own.kick_server_power,
@@ -419,6 +427,29 @@ pub(crate) async fn files(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn kick_resolves_the_selected_clone_and_rejects_a_reused_client_id() {
+        let peer = |id, uid: &str| tsclient_rs::ClientInfo {
+            id,
+            uid: uid.into(),
+            nickname: uid.into(),
+            channel_id: 5,
+            server_groups: Vec::new(),
+            r#type: 0,
+            away: None,
+            away_message: None,
+            input_muted: None,
+            output_muted: None,
+            channel_commander: None,
+        };
+        let mut clients = vec![peer(2, "same"), peer(3, "same")];
+        assert_eq!(kick_target(&clients, "same", 3).unwrap().id, 3);
+        clients[1] = peer(3, "different");
+        assert!(kick_target(&clients, "same", 3).is_err());
+        assert!(kick_target(&clients, "same", 4).is_err());
+        assert!(kick_target(&clients, "", 2).is_err());
+        assert!(kick_target(&clients, "same", 0).is_err());
+    }
     #[test]
     fn kick_validation_rejects_stale_channels_self_and_missing_power() {
         assert!(validate_kick(KickTarget::Channel, Some(50), 3, 4, false).is_err());

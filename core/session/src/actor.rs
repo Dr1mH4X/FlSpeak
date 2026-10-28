@@ -325,6 +325,7 @@ impl Actor {
             }
             SessionCommand::Kick {
                 uid,
+                client_id,
                 channel_id,
                 target,
                 reason,
@@ -340,6 +341,7 @@ impl Actor {
                                 &client,
                                 &mut self.channel_tools,
                                 &uid,
+                                client_id,
                                 channel_id,
                                 target,
                                 &reason,
