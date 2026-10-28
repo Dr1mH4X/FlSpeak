@@ -186,39 +186,49 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
           );
 
     final horizontal = wide ? 40.0 : 20.0;
+    final intro = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(l10n.connectTitle, style: context.texts.displaySmall),
+        const SizedBox(height: 12),
+        Text(
+          l10n.connectSubtitle,
+          style: context.texts.bodyLarge?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+
     final content = SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(horizontal, wide ? 48 : 28, horizontal, 32),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: Sizes.connectContent),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(l10n.connectTitle, style: context.texts.displaySmall),
-              const SizedBox(height: 12),
-              Text(
-                l10n.connectSubtitle,
-                style: context.texts.bodyLarge?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 36),
-              if (wide)
-                Row(
+          child: wide
+              ? Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: section),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [intro, const SizedBox(height: 36), section],
+                      ),
+                    ),
                     const SizedBox(width: 28),
                     SizedBox(width: Sizes.identityColumn, child: identity),
                   ],
                 )
-              else ...[
-                identity,
-                const SizedBox(height: 28),
-                section,
-              ],
-            ],
-          ),
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    intro,
+                    const SizedBox(height: 28),
+                    identity,
+                    const SizedBox(height: 28),
+                    section,
+                  ],
+                ),
         ),
       ),
     );
