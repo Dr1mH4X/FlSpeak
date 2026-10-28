@@ -16,6 +16,7 @@ import '../../../widgets/channel_icon.dart';
 import '../../../widgets/monogram.dart';
 import '../workspace_state.dart';
 import 'client_actions.dart';
+import 'channel_password_dialog.dart';
 import 'voice_activity_ribbon.dart';
 
 /// 频道栏：服务器身份、统一的频道树、当前用户。
@@ -68,7 +69,13 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
     }) async {
       await ref
           .read(selectedChannelProvider.notifier)
-          .join(channel.id, serverId: view.activeServerId, fallback: fallback);
+          .join(
+            channel.id,
+            serverId: view.activeServerId,
+            fallback: fallback,
+            requestPassword: () =>
+                requestChannelPassword(context, ref, channel.id),
+          );
       if (!context.mounted) {
         return;
       }

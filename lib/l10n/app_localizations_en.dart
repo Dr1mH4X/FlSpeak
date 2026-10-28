@@ -554,4 +554,66 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get imageHostPublicHint => 'https://images.example.com/';
+
+  @override
+  String get channelPasswordTitle => 'Channel password required';
+
+  @override
+  String get channelPasswordLabel => 'Channel password';
+
+  @override
+  String get channelPasswordWrong => 'Incorrect password. Try again.';
+
+  @override
+  String get memberPermissions => 'Manage permissions';
+
+  @override
+  String get permissionsUnavailable => 'Permissions are unavailable';
+
+  @override
+  String get serverGroups => 'Server groups';
+
+  @override
+  String get channelGroups => 'Channel groups';
+
+  @override
+  String get groupCurrent => 'Current';
+
+  @override
+  String get groupAssign => 'Assign';
+
+  @override
+  String get chatTabFiles => 'Files';
+
+  @override
+  String get fileParent => 'Parent folder';
+
+  @override
+  String get fileDownload => 'Download file';
+
+  @override
+  String get fileUnlock => 'Open';
+
+  @override
+  String get fileListEmpty => 'This channel has no files';
+
+  @override
+  String get fileDownloadFailed =>
+      'Could not download or save the file. Try again.';
+
+  @override
+  String get fileDownloadSaved => 'File saved';
+
+  @override
+  String fileSizeBytes(int count) {
+    return '$count bytes';
+  }
+
+  @override
+  String get fileConnectionChanged =>
+      'Connection changed. Start the download again.';
+
+  @override
+  String get fileCleanupFailed =>
+      'Temporary download files could not be removed';
 }

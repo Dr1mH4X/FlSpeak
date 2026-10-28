@@ -543,4 +543,63 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get imageHostPublicHint => 'https://images.example.com/';
+
+  @override
+  String get channelPasswordTitle => '频道需要密码';
+
+  @override
+  String get channelPasswordLabel => '频道密码';
+
+  @override
+  String get channelPasswordWrong => '密码不正确，请重试';
+
+  @override
+  String get memberPermissions => '权限管理';
+
+  @override
+  String get permissionsUnavailable => '暂时无法读取权限';
+
+  @override
+  String get serverGroups => '服务器权限组';
+
+  @override
+  String get channelGroups => '频道权限组';
+
+  @override
+  String get groupCurrent => '当前';
+
+  @override
+  String get groupAssign => '设置';
+
+  @override
+  String get chatTabFiles => '文件';
+
+  @override
+  String get fileParent => '上级目录';
+
+  @override
+  String get fileDownload => '下载文件';
+
+  @override
+  String get fileUnlock => '打开';
+
+  @override
+  String get fileListEmpty => '此频道暂无文件';
+
+  @override
+  String get fileDownloadFailed => '文件下载或保存失败，请重试';
+
+  @override
+  String get fileDownloadSaved => '文件已保存';
+
+  @override
+  String fileSizeBytes(int count) {
+    return '$count 字节';
+  }
+
+  @override
+  String get fileConnectionChanged => '连接已变化，请重新下载';
+
+  @override
+  String get fileCleanupFailed => '临时下载文件未能清理';
 }

@@ -18,6 +18,17 @@ class _Core extends Fake implements CoreSession {
   bool fail = false;
   final pokes = <({int id, String message})>[];
   @override
+  Future<int> downloadFile({
+    required String remotePath,
+    required String localPath,
+    required int channelId,
+    String? password,
+  }) async {
+    eventsController.add(const CoreEvent.transferFinished(id: 55));
+    return 55;
+  }
+
+  @override
   Future<void> poke({required int clientId, required String message}) async {
     if (fail) throw const CoreError.connection(message: 'poke rejected');
     pokes.add((id: clientId, message: message));
@@ -39,6 +50,23 @@ class _Core extends Fake implements CoreSession {
 }
 
 void main() {
+  test('download completion arriving before the API reply is retained even without a start event', () async {
+    final events = StreamController<CoreEvent>.broadcast(sync: true);
+    final container = ProviderContainer(
+      overrides: [coreSessionProvider.overrideWithValue(_Core(events))],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await events.close();
+    });
+    final result = await container
+        .read(sessionViewProvider.notifier)
+        .downloadChannelFile(5, '/fixture', '/tmp/fixture')
+        .timeout(const Duration(seconds: 1));
+    expect(result, isTrue);
+    expect(container.read(sessionViewProvider).transfers[55]!.finished, isTrue);
+  });
+
   test('private recipient uses current UID mapping and cannot fall back to another client', () async {
     final events = StreamController<CoreEvent>.broadcast(sync: true);
     final core = _Core(events);

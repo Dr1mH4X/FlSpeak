@@ -6,6 +6,7 @@ import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../router.dart';
 import '../../../widgets/common.dart';
+import 'member_permissions_dialog.dart';
 
 class ClientActionsButton extends ConsumerWidget {
   const ClientActionsButton({required this.client, super.key});
@@ -19,6 +20,10 @@ class ClientActionsButton extends ConsumerWidget {
       return const SizedBox.shrink();
     }
     final l10n = AppLocalizations.of(context);
+    final access = ref.watch(sessionAccessProvider).asData?.value;
+    final canManage =
+        (access?.memberAddPower ?? 0) > 0 ||
+        (access?.memberRemovePower ?? 0) > 0;
     return MenuAnchor(
       builder: (context, menu, child) => IconButton(
         onPressed: !view.connected || view.busy
@@ -31,6 +36,13 @@ class ClientActionsButton extends ConsumerWidget {
         ),
       ),
       menuChildren: [
+        MenuItemButton(
+          leadingIcon: const Icon(Icons.admin_panel_settings_outlined),
+          onPressed: canManage
+              ? () => showMemberPermissions(context, client)
+              : null,
+          child: Text(l10n.memberPermissions),
+        ),
         MenuItemButton(
           leadingIcon: const Icon(Icons.chat_bubble_outline_rounded),
           onPressed: () {

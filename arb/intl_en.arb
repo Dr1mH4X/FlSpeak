@@ -9,7 +9,6 @@
   "commonCopy": "Copy",
   "commonCopied": "Copied",
   "commonRetry": "Retry",
-  
   "connectAddressLabel": "Server address",
   "connectAddressHint": "ts.example.com or ts.example.com:9987",
   "connectNicknameLabel": "Nickname",
@@ -109,11 +108,9 @@
   "channelsSection": "Channels",
   "workspaceNoChannels": "This server has no channels yet.",
   "workspaceOpenMenu": "Open channel menu",
-  
   "channelPasswordProtected": "Channel password required",
   "channelJoinMenu": "Join channel",
   "channelPaneResize": "Resize channel pane",
-  
   "voiceMute": "Mute",
   "voiceUnmute": "Unmute",
   "voiceDeafen": "Deafen",
@@ -225,13 +222,40 @@
   "pokeAction": "Poke",
   "pokeMessage": "Message",
   "pokeTitle": "Poke {name}",
-  "@pokeTitle": {"placeholders": {"name": {"type": "String"}}},
+  "@pokeTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "pokeSent": "Poked {name}",
-  "@pokeSent": {"placeholders": {"name": {"type": "String"}}},
+  "@pokeSent": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "pokeReceived": "{name} poked you: {message}",
-  "@pokeReceived": {"placeholders": {"name": {"type": "String"}, "message": {"type": "String"}}},
+  "@pokeReceived": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "message": {
+        "type": "String"
+      }
+    }
+  },
   "memberActions": "Actions for {name}",
-  "@memberActions": {"placeholders": {"name": {"type": "String"}}},
+  "@memberActions": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "chatDestinationChanged": "The destination changed. Your draft was kept; confirm the recipient and retry.",
   "chatImageTooLarge": "Images must be no larger than 20 MiB",
   "chatClipboardEmpty": "No image in the clipboard",
@@ -249,5 +273,31 @@
   "imageHostRemove": "Clear configuration",
   "imageHostSave": "Save",
   "imageHostUploadHint": "https://upload.example.com/images/",
-  "imageHostPublicHint": "https://images.example.com/"
+  "imageHostPublicHint": "https://images.example.com/",
+  "channelPasswordTitle": "Channel password required",
+  "channelPasswordLabel": "Channel password",
+  "channelPasswordWrong": "Incorrect password. Try again.",
+  "memberPermissions": "Manage permissions",
+  "permissionsUnavailable": "Permissions are unavailable",
+  "serverGroups": "Server groups",
+  "channelGroups": "Channel groups",
+  "groupCurrent": "Current",
+  "groupAssign": "Assign",
+  "chatTabFiles": "Files",
+  "fileParent": "Parent folder",
+  "fileDownload": "Download file",
+  "fileUnlock": "Open",
+  "fileListEmpty": "This channel has no files",
+  "fileDownloadFailed": "Could not download or save the file. Try again.",
+  "fileDownloadSaved": "File saved",
+  "fileSizeBytes": "{count} bytes",
+  "@fileSizeBytes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "fileConnectionChanged": "Connection changed. Start the download again.",
+  "fileCleanupFailed": "Temporary download files could not be removed"
 }

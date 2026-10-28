@@ -1093,6 +1093,120 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'https://images.example.com/'**
   String get imageHostPublicHint;
+
+  /// No description provided for @channelPasswordTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Channel password required'**
+  String get channelPasswordTitle;
+
+  /// No description provided for @channelPasswordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Channel password'**
+  String get channelPasswordLabel;
+
+  /// No description provided for @channelPasswordWrong.
+  ///
+  /// In en, this message translates to:
+  /// **'Incorrect password. Try again.'**
+  String get channelPasswordWrong;
+
+  /// No description provided for @memberPermissions.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage permissions'**
+  String get memberPermissions;
+
+  /// No description provided for @permissionsUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Permissions are unavailable'**
+  String get permissionsUnavailable;
+
+  /// No description provided for @serverGroups.
+  ///
+  /// In en, this message translates to:
+  /// **'Server groups'**
+  String get serverGroups;
+
+  /// No description provided for @channelGroups.
+  ///
+  /// In en, this message translates to:
+  /// **'Channel groups'**
+  String get channelGroups;
+
+  /// No description provided for @groupCurrent.
+  ///
+  /// In en, this message translates to:
+  /// **'Current'**
+  String get groupCurrent;
+
+  /// No description provided for @groupAssign.
+  ///
+  /// In en, this message translates to:
+  /// **'Assign'**
+  String get groupAssign;
+
+  /// No description provided for @chatTabFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Files'**
+  String get chatTabFiles;
+
+  /// No description provided for @fileParent.
+  ///
+  /// In en, this message translates to:
+  /// **'Parent folder'**
+  String get fileParent;
+
+  /// No description provided for @fileDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Download file'**
+  String get fileDownload;
+
+  /// No description provided for @fileUnlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Open'**
+  String get fileUnlock;
+
+  /// No description provided for @fileListEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'This channel has no files'**
+  String get fileListEmpty;
+
+  /// No description provided for @fileDownloadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not download or save the file. Try again.'**
+  String get fileDownloadFailed;
+
+  /// No description provided for @fileDownloadSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'File saved'**
+  String get fileDownloadSaved;
+
+  /// No description provided for @fileSizeBytes.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} bytes'**
+  String fileSizeBytes(int count);
+
+  /// No description provided for @fileConnectionChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection changed. Start the download again.'**
+  String get fileConnectionChanged;
+
+  /// No description provided for @fileCleanupFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Temporary download files could not be removed'**
+  String get fileCleanupFailed;
 }
 
 class _AppLocalizationsDelegate

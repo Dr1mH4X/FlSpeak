@@ -75,8 +75,10 @@ class SessionView {
     this.selfSpeaking = false,
     this.pttMode = false,
     this.identityUpgradeTarget,
+    this.transfers = const {},
   });
 
+  final Map<int, FileTransfer> transfers;
   final CoreSessionState state;
   final List<ServerProfileView> servers;
   final List<ChannelView> channels;
@@ -244,6 +246,7 @@ class SessionView {
   }
 
   SessionView copyWith({
+    Map<int, FileTransfer>? transfers,
     CoreSessionState? state,
     List<ServerProfileView>? servers,
     List<ChannelView>? channels,
@@ -265,6 +268,7 @@ class SessionView {
     bool? pttMode,
     Object? identityUpgradeTarget = _unset,
   }) => SessionView(
+    transfers: transfers ?? this.transfers,
     state: state ?? this.state,
     servers: servers ?? this.servers,
     channels: channels ?? this.channels,
@@ -299,5 +303,21 @@ String describeCoreError(CoreError error) => switch (error) {
   CoreError_InvalidAddress(:final message) => '服务器地址不可用：$message',
   CoreError_BlockedAddress(:final message) => '已阻止该地址：$message',
   CoreError_Connection(:final message) => '连接失败：$message',
+  CoreError_ChannelPasswordRequired(:final message) => message,
   CoreError_Internal(:final message) => '内部错误：$message',
 };
+
+class FileTransfer {
+  const FileTransfer({
+    required this.remotePath,
+    required this.total,
+    this.transferred = 0,
+    this.finished = false,
+    this.error,
+  });
+  final String remotePath;
+  final int total;
+  final int transferred;
+  final bool finished;
+  final String? error;
+}

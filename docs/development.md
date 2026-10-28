@@ -101,4 +101,4 @@ Android 的 debug 与 release 签名分开配置，都写进 `android/key.proper
 tsclient-rs = { path = "../tsclient-rs" }
 ```
 
-调试结束后恢复 `Cargo.toml` 中的版本号及对应 `Cargo.lock`，不提交本地路径。上游关系的其余约定见 [项目结构](../.agents/project.md)。
+调试结束后恢复 `Cargo.toml` 中的依赖来源及对应 `Cargo.lock`，不提交本地路径。上游关系的其余约定见 [项目结构](../.agents/project.md)。

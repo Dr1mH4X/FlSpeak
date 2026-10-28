@@ -15,6 +15,7 @@ Status: implemented
 - 双击传 `_pendingTap.fallback`：第一次点击之前由 `ref.read(selectedChannelProvider)` 记下，第二次点击落在双击窗口内时才交给加入。
 - 回滚条件在 `SelectedChannelController.join` 里：只有高亮仍停在刚请求的频道上才退回 `fallback`，期间用户换了目标就以新的为准。
 - `fallback` 可以是 `null`，表示点下去之前本来没有选中，此时由 `activeChannelIdProvider` 按自己的规则挑展示频道。
+- 频道密码错误先打开密码框重试，取消或最终失败才应用同一个回退位置。加入请求先不带密码，服务器授予的免密权限可以直接生效；不能只看到频道有锁就阻止请求。密码框核对服务器和连接代次，避免切服后重试旧频道 id。
 
 ## Alternatives considered
 
@@ -33,3 +34,4 @@ Status: implemented
 ## Testing
 
 - `lib/features/workspace/widgets/channel_pane_test.dart`（与 `channel_pane.dart` 同目录）覆盖双击被拒后退回点击前的高亮，以及右键加入被拒后退回点菜单前的选中——自己被放在另一个频道时也回到菜单前选中，而不是自己的频道。
+- `lib/features/workspace/widgets/channel_password_dialog_test.dart` 覆盖密码错误后修正、取消回退与有权免密进入；真实受控夹具的入口见 [测试约定](../../../../docs/testing.md)。

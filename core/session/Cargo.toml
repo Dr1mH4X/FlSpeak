@@ -15,5 +15,7 @@ tokio.workspace = true
 proto.workspace = true
 reqwest.workspace = true
 rand.workspace = true
+sha1.workspace = true
+base64.workspace = true
 server.workspace = true
 tsclient-rs.workspace = true

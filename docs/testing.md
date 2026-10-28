@@ -67,3 +67,9 @@ cargo run -p session --example live_probe
 `cargo clippy -D warnings` 与 `cargo test --all-features`，`dart` 作业覆盖格式与分析，
 `dart-test` 作业覆盖单测、插件分析与 FFI 生成物一致性，见 [ci-cd.md](ci-cd.md)。
 测试用例本身不写入本文档。
+
+## 受控频道、权限与文件测试
+
+`session` 的 `live_channel_files_and_permissions` 默认忽略，通过 `FLSPEAK_CONTROLLED_FIXTURE` 指向仅本机保存的 JSON 夹具。夹具包含 `server`、`channel_id`、`channel_group_id`、`server_group_id` 与临时频道 `password`；所有对象由测试管理员预先创建，不使用现有用户或业务频道。
+
+在 `plugins/flspeak_ffi/rust` 执行 `cargo test -p session --lib live_channel_files_and_permissions -- --ignored --nocapture`。测试在夹具同目录生成 `ready.json`，控制端只为其中两个临时 UID 授权后创建 `authorized` 文件。测试覆盖密码拒绝与修正、有权身份免密进入、权限组授予/回读/恢复、普通身份被拒，以及小文件上传、目录查询、精确下载和已有文件保护。控制端负责在测试结束后删除专用频道、测试权限组和临时身份；Query 凭据不进入夹具。

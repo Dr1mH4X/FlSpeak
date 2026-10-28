@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../../core/channel_display.dart';
 import '../../core/providers.dart';
@@ -27,11 +28,17 @@ class SelectedChannelController extends Notifier<SelectedChannel?> {
     int channelId, {
     required String? serverId,
     required SelectedChannel? fallback,
+    Future<bool> Function()? requestPassword,
   }) async {
     select(channelId, serverId: serverId);
-    final moved = await ref
-        .read(sessionViewProvider.notifier)
-        .joinChannel(channelId);
+    bool moved;
+    try {
+      moved = await ref
+          .read(sessionViewProvider.notifier)
+          .joinChannel(channelId);
+    } on CoreError_ChannelPasswordRequired {
+      moved = await requestPassword?.call() ?? false;
+    }
     // 期间用户又换了目标时以新的为准，不回滚。
     if (!moved && state == (serverId: serverId, channelId: channelId)) {
       state = fallback;

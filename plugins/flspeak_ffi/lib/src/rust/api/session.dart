@@ -9,7 +9,7 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'session.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `runtime`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 /// 抓取第三方图片 URL。myTS 的 `ts.file.myts` 附件不经过这里。
 Future<Uint8List> fetchImage({required String url}) =>
@@ -37,6 +37,8 @@ Future<String> uploadImage({
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<CoreSession>>
 abstract class CoreSession implements RustOpaqueInterface {
+  Future<AccessView> access();
+
   Future<void> cancelIdentityUpgrade();
 
   Future<void> connect({required String id, required String nickname});
@@ -64,7 +66,15 @@ abstract class CoreSession implements RustOpaqueInterface {
 
   Future<List<ClientView>> listClients();
 
+  Future<List<ChannelFileView>> listFiles({
+    required int channelId,
+    required String path,
+    String? password,
+  });
+
   Future<List<ServerProfileView>> listServers();
+
+  Future<List<MemberGroupView>> memberGroups({required String uid});
 
   Future<void> moveToChannel({
     required int clientId,
@@ -105,6 +115,14 @@ abstract class CoreSession implements RustOpaqueInterface {
 
   Future<void> setDeafened({required bool deafened});
 
+  Future<void> setMemberGroup({
+    required String uid,
+    required int groupId,
+    required int channelId,
+    required GroupKind kind,
+    required bool enabled,
+  });
+
   Future<void> setMuted({required bool muted});
 
   Future<void> setPttActive({required bool active});
@@ -122,6 +140,24 @@ abstract class CoreSession implements RustOpaqueInterface {
     String? password,
     required bool overwrite,
   });
+}
+
+class AccessView {
+  final int? memberAddPower;
+  final int? memberRemovePower;
+
+  const AccessView({this.memberAddPower, this.memberRemovePower});
+
+  @override
+  int get hashCode => memberAddPower.hashCode ^ memberRemovePower.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AccessView &&
+          runtimeType == other.runtimeType &&
+          memberAddPower == other.memberAddPower &&
+          memberRemovePower == other.memberRemovePower;
 }
 
 class AudioDeviceView {
@@ -164,6 +200,34 @@ class AudioDevicesView {
           runtimeType == other.runtimeType &&
           inputs == other.inputs &&
           outputs == other.outputs;
+}
+
+class ChannelFileView {
+  final String name;
+  final String path;
+  final bool directory;
+  final int size;
+
+  const ChannelFileView({
+    required this.name,
+    required this.path,
+    required this.directory,
+    required this.size,
+  });
+
+  @override
+  int get hashCode =>
+      name.hashCode ^ path.hashCode ^ directory.hashCode ^ size.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ChannelFileView &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          path == other.path &&
+          directory == other.directory &&
+          size == other.size;
 }
 
 class ChannelView {
@@ -287,6 +351,8 @@ sealed class CoreError with _$CoreError implements FrbException {
   /// 建连或协议层失败。
   const factory CoreError.connection({required String message}) =
       CoreError_Connection;
+  const factory CoreError.channelPasswordRequired({required String message}) =
+      CoreError_ChannelPasswordRequired;
 
   /// 桥自身的问题。
   const factory CoreError.internal({required String message}) =
@@ -297,6 +363,7 @@ sealed class CoreError with _$CoreError implements FrbException {
 sealed class CoreEvent with _$CoreEvent {
   const CoreEvent._();
 
+  const factory CoreEvent.accessChanged() = CoreEvent_AccessChanged;
   const factory CoreEvent.state({required CoreSessionState state}) =
       CoreEvent_State;
   const factory CoreEvent.servers({required List<ServerProfileView> profiles}) =
@@ -481,6 +548,51 @@ class CoreVoiceState {
           inputReady == other.inputReady &&
           outputReady == other.outputReady &&
           message == other.message;
+}
+
+enum GroupKind { server, channel }
+
+class MemberGroupView {
+  final int channelId;
+  final int id;
+  final String name;
+  final GroupKind kind;
+  final bool member;
+  final bool canAdd;
+  final bool canRemove;
+
+  const MemberGroupView({
+    required this.channelId,
+    required this.id,
+    required this.name,
+    required this.kind,
+    required this.member,
+    required this.canAdd,
+    required this.canRemove,
+  });
+
+  @override
+  int get hashCode =>
+      channelId.hashCode ^
+      id.hashCode ^
+      name.hashCode ^
+      kind.hashCode ^
+      member.hashCode ^
+      canAdd.hashCode ^
+      canRemove.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MemberGroupView &&
+          runtimeType == other.runtimeType &&
+          channelId == other.channelId &&
+          id == other.id &&
+          name == other.name &&
+          kind == other.kind &&
+          member == other.member &&
+          canAdd == other.canAdd &&
+          canRemove == other.canRemove;
 }
 
 class ServerProfileView {

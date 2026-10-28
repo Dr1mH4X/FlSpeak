@@ -7,7 +7,7 @@ import 'media_viewer.dart';
 
 /// 频道媒体墙：把聊天里出现过的图片按顺序铺成方格，点击进入全屏浏览。
 ///
-/// 展示已收到的 URL 图片；图床上传入口尚未接线。
+/// 展示已收到的 URL 图片；本地图片由聊天输入框上传。
 class MediaGrid extends StatelessWidget {
   const MediaGrid({required this.urls, required this.onOpen, super.key});
 

@@ -1,12 +1,15 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../l10n/app_localizations.dart';
 import 'models.dart';
+import 'file_export.dart';
 import 'image_host.dart';
 import 'notices.dart';
 import 'preferences.dart';
@@ -40,10 +43,33 @@ final voiceLevelsProvider = StreamProvider<VoiceLevels>((ref) {
   return ref.watch(sessionViewProvider.notifier).levels;
 });
 
+final sessionAccessProvider = FutureProvider.autoDispose<AccessView>((
+  ref,
+) async {
+  final target = ref.watch(
+    sessionViewProvider.select(
+      (v) => (v.connected, v.connectionEpoch, v.selfChannelId),
+    ),
+  );
+  if (!target.$1) return const AccessView();
+  return ref.read(coreSessionProvider).access();
+});
+
+final memberGroupsProvider = FutureProvider.autoDispose
+    .family<List<MemberGroupView>, String>((ref, uid) {
+      ref.watch(
+        sessionViewProvider.select(
+          (v) => (v.connectionEpoch, v.selfChannelId, v.connected),
+        ),
+      );
+      return ref.read(coreSessionProvider).memberGroups(uid: uid);
+    });
+
 class SessionController extends Notifier<SessionView> {
   /// 只保留本次会话的消息；上限防止长时间挂着时无限增长。
   static const _messageLimit = 500;
 
+  final _transferReplies = <int, Completer<bool>>{};
   final _levels = StreamController<VoiceLevels>.broadcast();
   VoiceLevels _latestLevels = VoiceLevels.silent;
 
@@ -58,6 +84,11 @@ class SessionController extends Notifier<SessionView> {
     final subscription = session.events().listen(_onEvent);
     ref.onDispose(subscription.cancel);
     ref.onDispose(_levels.close);
+    ref.onDispose(() {
+      for (final reply in _transferReplies.values) {
+        if (!reply.isCompleted) reply.complete(false);
+      }
+    });
     // 初始档案在 spawn 时就广播过一次，广播通道不补发给订阅者；订阅后主动拉一遍，
     // 否则打开应用时已保存的服务器列表要等下一次增删才会出现。
     unawaited(_loadServers(session));
@@ -126,7 +157,7 @@ class SessionController extends Notifier<SessionView> {
             password: password,
           );
       await refresh();
-    });
+    }, passwordPrompt: true);
   }
 
   void selectChatScope(ChatScope scope) {
@@ -303,6 +334,113 @@ class SessionController extends Notifier<SessionView> {
     return null;
   }
 
+  Future<bool> setMemberGroup(
+    String uid,
+    MemberGroupView group,
+    bool enabled,
+  ) async {
+    final sent = await _run(
+      () => ref
+          .read(coreSessionProvider)
+          .setMemberGroup(
+            uid: uid,
+            groupId: group.id,
+            channelId: group.channelId,
+            kind: group.kind,
+            enabled: enabled,
+          ),
+    );
+    if (ref.mounted) {
+      ref.invalidate(memberGroupsProvider(uid));
+      ref.invalidate(sessionAccessProvider);
+    }
+    return sent;
+  }
+
+  Future<bool> saveChannelFile(
+    int channelId,
+    String remotePath,
+    String name, {
+    String? password,
+    ValueChanged<int>? onStarted,
+  }) async {
+    final l10n = ref.read(_localizationsProvider);
+    final target = (state.activeServerId, state.connectionEpoch);
+    final export = ref.read(fileExportProvider);
+    Directory? directory;
+    try {
+      final root = await getTemporaryDirectory();
+      directory = await Directory(root.path).createTemp('flspeak-download-');
+      if (!ref.mounted) return false;
+      if (!state.connected ||
+          target != (state.activeServerId, state.connectionEpoch)) {
+        _notify(l10n.fileConnectionChanged);
+        return false;
+      }
+      final path = '${directory.path}/download';
+      final downloaded = await downloadChannelFile(
+        channelId,
+        remotePath,
+        path,
+        password: password,
+        onStarted: onStarted,
+      );
+      if (!downloaded || !ref.mounted) return false;
+      final saved = await export(path, name);
+      if (saved && ref.mounted) {
+        _notify(l10n.fileDownloadSaved, tone: NoticeTone.info);
+      }
+      return saved;
+    } on CoreError_ChannelPasswordRequired {
+      rethrow;
+    } on Exception {
+      if (ref.mounted) _notify(l10n.fileDownloadFailed);
+      return false;
+    } finally {
+      try {
+        if (directory != null && await directory.exists()) {
+          await directory.delete(recursive: true);
+        }
+      } on FileSystemException {
+        if (ref.mounted) _notify(l10n.fileDownloadFailed);
+      }
+    }
+  }
+
+  Future<bool> downloadChannelFile(
+    int channelId,
+    String path,
+    String localPath, {
+    String? password,
+    ValueChanged<int>? onStarted,
+  }) async {
+    int? transferId;
+    final started = await _run(() async {
+      transferId = await ref
+          .read(coreSessionProvider)
+          .downloadFile(
+            remotePath: path,
+            localPath: localPath,
+            channelId: channelId,
+            password: password,
+          );
+    }, passwordPrompt: true);
+    if (!started || !ref.mounted) return false;
+    final id = transferId!;
+    onStarted?.call(id);
+    final transfer = state.transfers[id];
+    final success = transfer?.finished == true
+        ? transfer!.error == null
+        : await _transferReplies.putIfAbsent(id, Completer<bool>.new).future;
+    if (!success && ref.mounted) {
+      _notify(
+        state.transfers[id]?.error ??
+            ref.read(_localizationsProvider).fileDownloadFailed,
+      );
+    }
+    return success;
+  }
+
   /// 按当前范围发送。频道范围要求已进入某个频道，否则拒绝发送而不是发错地方。
   Future<bool> sendMessage(String text) async {
     final message = text.trim();
@@ -360,12 +498,16 @@ class SessionController extends Notifier<SessionView> {
 
   /// 命令的统一外壳：置忙，把 `CoreError` 收敛成右上角提示。返回命令是否成功，
   /// 让需要的调用方（如加入频道）能据此回滚自己先做的界面假设。
-  Future<bool> _run(Future<void> Function() action) async {
+  Future<bool> _run(
+    Future<void> Function() action, {
+    bool passwordPrompt = false,
+  }) async {
     state = state.copyWith(busy: true);
     try {
       await action();
       return true;
     } on CoreError catch (error) {
+      if (passwordPrompt && error is CoreError_ChannelPasswordRequired) rethrow;
       if (ref.mounted) _notify(describeCoreError(error));
       return false;
     } finally {
@@ -376,6 +518,9 @@ class SessionController extends Notifier<SessionView> {
   void _onEvent(CoreEvent event) {
     final current = state;
     switch (event) {
+      case CoreEvent_AccessChanged():
+        ref.invalidate(sessionAccessProvider);
+        ref.invalidate(memberGroupsProvider);
       case CoreEvent_State(state: final next):
         if (next is CoreSessionState_Disconnected) {
           // 采集/播放随断开停止，电平流不会再来新样本；主动清零，
@@ -407,6 +552,7 @@ class SessionController extends Notifier<SessionView> {
       case CoreEvent_Servers(:final profiles):
         state = current.copyWith(servers: profiles);
       case CoreEvent_Snapshot(:final channels, :final clients):
+        ref.invalidate(sessionAccessProvider);
         state = current.copyWith(channels: channels, clients: clients);
       case CoreEvent_History(:final messages):
         state = current.copyWith(
@@ -538,11 +684,53 @@ class SessionController extends Notifier<SessionView> {
       case CoreEvent_IdentityUpgraded(:final level):
         state = current.copyWith(identityUpgradeTarget: null);
         _notify('身份等级已提升到 $level，正在重连…', tone: NoticeTone.info);
-      case CoreEvent_TransferStarted():
-      case CoreEvent_TransferProgress():
-      case CoreEvent_TransferFinished():
-        // 传输进度暂时没有界面入口；后端事件先保留，避免以后加 UI 时改协议。
-        break;
+      case CoreEvent_TransferStarted(
+        :final id,
+        :final remotePath,
+        :final total,
+      ):
+        final transfers = {...current.transfers};
+        if (transfers.length >= 32) {
+          final old = transfers.keys
+              .where((key) => transfers[key]!.finished)
+              .firstOrNull;
+          if (old != null) transfers.remove(old);
+        }
+        transfers[id] = FileTransfer(remotePath: remotePath, total: total);
+        state = current.copyWith(transfers: transfers);
+      case CoreEvent_TransferProgress(:final id, :final transferred):
+        final transfer = current.transfers[id];
+        if (transfer != null) {
+          state = current.copyWith(
+            transfers: {
+              ...current.transfers,
+              id: FileTransfer(
+                remotePath: transfer.remotePath,
+                total: transfer.total,
+                transferred: transferred,
+              ),
+            },
+          );
+        }
+      case CoreEvent_TransferFinished(:final id, :final error):
+        final transfer =
+            current.transfers[id] ??
+            const FileTransfer(remotePath: '', total: 0);
+        state = current.copyWith(
+          transfers: {
+            ...current.transfers,
+            id: FileTransfer(
+              remotePath: transfer.remotePath,
+              total: transfer.total,
+              transferred: error == null
+                  ? transfer.total
+                  : transfer.transferred,
+              finished: true,
+              error: error,
+            ),
+          },
+        );
+        _transferReplies.remove(id)?.complete(error == null);
       case CoreEvent_Log():
         // 协议日志不进界面，避免刷屏。
         break;

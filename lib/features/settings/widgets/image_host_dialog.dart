@@ -61,6 +61,7 @@ class _ImageHostFormState extends ConsumerState<_ImageHostForm> {
             CoreError_InvalidAddress(:final message) ||
             CoreError_BlockedAddress(:final message) ||
             CoreError_Connection(:final message) ||
+            CoreError_ChannelPasswordRequired(:final message) ||
             CoreError_Internal(:final message) => message,
           },
         );

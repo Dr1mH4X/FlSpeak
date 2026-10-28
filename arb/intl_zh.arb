@@ -9,7 +9,6 @@
   "commonCopy": "复制",
   "commonCopied": "已复制",
   "commonRetry": "重试",
-  
   "connectAddressLabel": "服务器地址",
   "connectAddressHint": "ts.example.com 或 ts.example.com:9987",
   "connectNicknameLabel": "昵称",
@@ -109,11 +108,9 @@
   "channelsSection": "频道",
   "workspaceNoChannels": "服务器还没有频道。",
   "workspaceOpenMenu": "打开频道菜单",
-  
   "channelPasswordProtected": "需要频道密码",
   "channelJoinMenu": "加入频道",
   "channelPaneResize": "调整频道栏宽度",
-  
   "voiceMute": "静音",
   "voiceUnmute": "取消静音",
   "voiceDeafen": "关闭声音",
@@ -225,13 +222,40 @@
   "pokeAction": "戳一下",
   "pokeMessage": "消息",
   "pokeTitle": "戳一下 {name}",
-  "@pokeTitle": {"placeholders": {"name": {"type": "String"}}},
+  "@pokeTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "pokeSent": "已戳了 {name} 一下",
-  "@pokeSent": {"placeholders": {"name": {"type": "String"}}},
+  "@pokeSent": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "pokeReceived": "{name} 戳了你一下：{message}",
-  "@pokeReceived": {"placeholders": {"name": {"type": "String"}, "message": {"type": "String"}}},
+  "@pokeReceived": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "message": {
+        "type": "String"
+      }
+    }
+  },
   "memberActions": "{name} 的操作",
-  "@memberActions": {"placeholders": {"name": {"type": "String"}}},
+  "@memberActions": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "chatDestinationChanged": "发送目标已改变，草稿已保留，请确认后重试",
   "chatImageTooLarge": "图片不能超过 20 MiB",
   "chatClipboardEmpty": "剪贴板中没有图片",
@@ -249,5 +273,31 @@
   "imageHostRemove": "清除配置",
   "imageHostSave": "保存",
   "imageHostUploadHint": "https://upload.example.com/images/",
-  "imageHostPublicHint": "https://images.example.com/"
+  "imageHostPublicHint": "https://images.example.com/",
+  "channelPasswordTitle": "频道需要密码",
+  "channelPasswordLabel": "频道密码",
+  "channelPasswordWrong": "密码不正确，请重试",
+  "memberPermissions": "权限管理",
+  "permissionsUnavailable": "暂时无法读取权限",
+  "serverGroups": "服务器权限组",
+  "channelGroups": "频道权限组",
+  "groupCurrent": "当前",
+  "groupAssign": "设置",
+  "chatTabFiles": "文件",
+  "fileParent": "上级目录",
+  "fileDownload": "下载文件",
+  "fileUnlock": "打开",
+  "fileListEmpty": "此频道暂无文件",
+  "fileDownloadFailed": "文件下载或保存失败，请重试",
+  "fileDownloadSaved": "文件已保存",
+  "fileSizeBytes": "{count} 字节",
+  "@fileSizeBytes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "fileConnectionChanged": "连接已变化，请重新下载",
+  "fileCleanupFailed": "临时下载文件未能清理"
 }

@@ -11,6 +11,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/common.dart';
 import '../settings/widgets/image_host_dialog.dart';
 import 'widgets/chat_pane.dart';
+import 'widgets/channel_files_pane.dart';
 import 'widgets/media_grid.dart';
 import 'widgets/media_viewer.dart';
 import 'widgets/members_pane.dart';
@@ -24,13 +25,13 @@ class WorkspacePage extends ConsumerStatefulWidget {
   ConsumerState<WorkspacePage> createState() => _WorkspacePageState();
 }
 
-enum _MainTab { chat, media }
+enum _MainTab { chat, media, files }
 
 class _WorkspacePageState extends ConsumerState<WorkspacePage>
     with SingleTickerProviderStateMixin {
   // M3 primary tabs：页签状态由 TabController 持有，指示器动画随组件自带。
   late final TabController _tabController = TabController(
-    length: 2,
+    length: 3,
     vsync: this,
   )..addListener(_handleTabChanged);
   _MainTab _tab = _MainTab.chat;
@@ -173,6 +174,11 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
 
     final controller = ref.read(sessionViewProvider.notifier);
     switch (_tab) {
+      case _MainTab.files:
+        return ChannelFilesPane(
+          key: ValueKey((view.connectionEpoch, channel.id)),
+          channelId: channel.id,
+        );
       case _MainTab.media:
         final urls = imageUrlsInMessages(
           view.visibleMessages(channelId: channel.id),
@@ -229,6 +235,11 @@ List<_TabSpec> _tabSpecs(AppLocalizations l10n) => [
     tab: _MainTab.media,
     label: l10n.chatTabMedia,
     icon: Icons.photo_library_rounded,
+  ),
+  _TabSpec(
+    tab: _MainTab.files,
+    label: l10n.chatTabFiles,
+    icon: Icons.folder_rounded,
   ),
 ];
 

@@ -55,6 +55,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String dco_decode_String(dynamic raw);
 
   @protected
+  AccessView dco_decode_access_view(dynamic raw);
+
+  @protected
   AudioDeviceView dco_decode_audio_device_view(dynamic raw);
 
   @protected
@@ -73,10 +76,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   CoreVoiceState dco_decode_box_autoadd_core_voice_state(dynamic raw);
 
   @protected
+  int dco_decode_box_autoadd_i_32(dynamic raw);
+
+  @protected
   int dco_decode_box_autoadd_u_16(dynamic raw);
 
   @protected
   int dco_decode_box_autoadd_u_32(dynamic raw);
+
+  @protected
+  ChannelFileView dco_decode_channel_file_view(dynamic raw);
 
   @protected
   ChannelView dco_decode_channel_view(dynamic raw);
@@ -106,10 +115,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   double dco_decode_f_64(dynamic raw);
 
   @protected
+  GroupKind dco_decode_group_kind(dynamic raw);
+
+  @protected
   int dco_decode_i_32(dynamic raw);
 
   @protected
   List<AudioDeviceView> dco_decode_list_audio_device_view(dynamic raw);
+
+  @protected
+  List<ChannelFileView> dco_decode_list_channel_file_view(dynamic raw);
 
   @protected
   List<ChannelView> dco_decode_list_channel_view(dynamic raw);
@@ -119,6 +134,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<CoreMessage> dco_decode_list_core_message(dynamic raw);
+
+  @protected
+  List<MemberGroupView> dco_decode_list_member_group_view(dynamic raw);
 
   @protected
   Int32List dco_decode_list_prim_i_32_strict(dynamic raw);
@@ -133,6 +151,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<ServerProfileView> dco_decode_list_server_profile_view(dynamic raw);
 
   @protected
+  MemberGroupView dco_decode_member_group_view(dynamic raw);
+
+  @protected
   int? dco_decode_opt_CastedPrimitive_u_64(dynamic raw);
 
   @protected
@@ -140,6 +161,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   bool? dco_decode_opt_box_autoadd_bool(dynamic raw);
+
+  @protected
+  int? dco_decode_opt_box_autoadd_i_32(dynamic raw);
 
   @protected
   int? dco_decode_opt_box_autoadd_u_16(dynamic raw);
@@ -201,6 +225,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String sse_decode_String(SseDeserializer deserializer);
 
   @protected
+  AccessView sse_decode_access_view(SseDeserializer deserializer);
+
+  @protected
   AudioDeviceView sse_decode_audio_device_view(SseDeserializer deserializer);
 
   @protected
@@ -223,10 +250,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  int sse_decode_box_autoadd_i_32(SseDeserializer deserializer);
+
+  @protected
   int sse_decode_box_autoadd_u_16(SseDeserializer deserializer);
 
   @protected
   int sse_decode_box_autoadd_u_32(SseDeserializer deserializer);
+
+  @protected
+  ChannelFileView sse_decode_channel_file_view(SseDeserializer deserializer);
 
   @protected
   ChannelView sse_decode_channel_view(SseDeserializer deserializer);
@@ -258,10 +291,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   double sse_decode_f_64(SseDeserializer deserializer);
 
   @protected
+  GroupKind sse_decode_group_kind(SseDeserializer deserializer);
+
+  @protected
   int sse_decode_i_32(SseDeserializer deserializer);
 
   @protected
   List<AudioDeviceView> sse_decode_list_audio_device_view(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<ChannelFileView> sse_decode_list_channel_file_view(
     SseDeserializer deserializer,
   );
 
@@ -273,6 +314,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<CoreMessage> sse_decode_list_core_message(SseDeserializer deserializer);
+
+  @protected
+  List<MemberGroupView> sse_decode_list_member_group_view(
+    SseDeserializer deserializer,
+  );
 
   @protected
   Int32List sse_decode_list_prim_i_32_strict(SseDeserializer deserializer);
@@ -289,6 +335,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  MemberGroupView sse_decode_member_group_view(SseDeserializer deserializer);
+
+  @protected
   int? sse_decode_opt_CastedPrimitive_u_64(SseDeserializer deserializer);
 
   @protected
@@ -296,6 +345,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   bool? sse_decode_opt_box_autoadd_bool(SseDeserializer deserializer);
+
+  @protected
+  int? sse_decode_opt_box_autoadd_i_32(SseDeserializer deserializer);
 
   @protected
   int? sse_decode_opt_box_autoadd_u_16(SseDeserializer deserializer);
@@ -366,6 +418,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_String(String self, SseSerializer serializer);
 
   @protected
+  void sse_encode_access_view(AccessView self, SseSerializer serializer);
+
+  @protected
   void sse_encode_audio_device_view(
     AudioDeviceView self,
     SseSerializer serializer,
@@ -396,10 +451,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_i_32(int self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_u_16(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_channel_file_view(
+    ChannelFileView self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_channel_view(ChannelView self, SseSerializer serializer);
@@ -438,11 +502,20 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_f_64(double self, SseSerializer serializer);
 
   @protected
+  void sse_encode_group_kind(GroupKind self, SseSerializer serializer);
+
+  @protected
   void sse_encode_i_32(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_audio_device_view(
     List<AudioDeviceView> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_channel_file_view(
+    List<ChannelFileView> self,
     SseSerializer serializer,
   );
 
@@ -461,6 +534,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_core_message(
     List<CoreMessage> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_member_group_view(
+    List<MemberGroupView> self,
     SseSerializer serializer,
   );
 
@@ -486,6 +565,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_member_group_view(
+    MemberGroupView self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_CastedPrimitive_u_64(int? self, SseSerializer serializer);
 
   @protected
@@ -493,6 +578,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_opt_box_autoadd_bool(bool? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_i_32(int? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_u_16(int? self, SseSerializer serializer);

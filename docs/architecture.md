@@ -14,7 +14,7 @@ session      命令队列 + 事件广播，独占 Client
 proto        SRV 解析 + 最终连接边界 + deny-all 解析器 + 建连
   ├────────> server   服务器档案、地址解析与本地登记
   ▼
-tsclient-rs           协议实现（版本见 Cargo.toml）
+tsclient-rs           协议实现（依赖来源见 Cargo.toml）
 ```
 
 Flutter 负责界面，Rust 负责协议、连接边界与音频。Dart 不持有身份私钥，
@@ -58,7 +58,7 @@ Rust 侧把协议事件收敛成 `SessionEvent`，FFI 翻成 `CoreEvent`（freez
 ```text
 State / Servers / Snapshot / History / TextMessage / ClientJoined / ClientLeft /
 ClientMoved / Voice / Speaking / SelfSpeaking / IdentityUpgrade / IdentityUpgraded /
-Transfer* / Log / Denied / Failed
+Poked / AccessChanged / Transfer* / Log / Denied / Failed
 ```
 
 - 广播通道容量 256；订阅慢时旧事件被丢弃，订阅者收到 `Lagged` 后继续。
@@ -95,7 +95,7 @@ tsclient-rs 的建连 future 不是 `Send`。
 - 聊天正文：Dart `MessageContent` 渲染 TS6 Markdown 的一个子集；原始文本不做转换，
   历史里保留原样。
 - TSDNS：可选 legacy fallback，当前只做 SRV，未实现 TSDNS。
-- 文件传输 UI：FFI 已暴露上传/下载与进度事件，Dart 还没有文件选择器和传输列表。
+- 文件传输：频道文件浏览、下载和进度已接线；普通文件上传 UI、断点续传尚未接线。详见 [channels.md](channels.md)。
 - 历史清除入口：历史已持久化并回放，设置页还不能清除。
 - 音频处理：没有 AEC/降噪/AGC；语音包没有 seq，播放只能按到达顺序做固定延迟 jitter。
 - 频道创建/删除没有实时事件，靠 30s 轮询快照兜底。
