@@ -175,7 +175,10 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get channelsEmpty => '尚未连接。';
+  String get workspaceDropped => '连接丢失';
+
+  @override
+  String get workspaceRetrying => '正在重试…';
 
   @override
   String get channelsSection => '频道';

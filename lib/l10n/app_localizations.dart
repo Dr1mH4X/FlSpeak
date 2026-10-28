@@ -386,11 +386,17 @@ abstract class AppLocalizations {
   /// **'Upgrading identity level to {target}…'**
   String identityUpgrading(int target);
 
-  /// No description provided for @channelsEmpty.
+  /// No description provided for @workspaceDropped.
   ///
   /// In en, this message translates to:
-  /// **'Not connected.'**
-  String get channelsEmpty;
+  /// **'Disconnected'**
+  String get workspaceDropped;
+
+  /// No description provided for @workspaceRetrying.
+  ///
+  /// In en, this message translates to:
+  /// **'Retrying…'**
+  String get workspaceRetrying;
 
   /// No description provided for @channelsSection.
   ///

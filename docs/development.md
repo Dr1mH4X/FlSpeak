@@ -73,12 +73,12 @@ cd plugins/flspeak_ffi && flutter analyze
 
 ## git 约定
 
-提交用 Conventional Commits 格式，标题 ≤100 字符，描述小写开头、结尾不加句号，中文可用：
+提交用 Conventional Commits 格式，标题 ≤100 字符，描述小写开头、结尾不加句号，使用英文：
 
 ```text
-feat(session): 增加频道切换命令
+feat(session): add a channel switch command
 fix(proto): reject look-alike official domains
-docs(boundary): 记录 SRV 与 TSDNS 的取舍
+docs(boundary): record the SRV and TSDNS trade-offs
 ```
 
 不要写 `Co-authored-by:` 署名编码代理。破坏性改动用 `!` 加 `BREAKING CHANGE:` 页脚。发版日志按这些提交归纳，规则见 [release/AGENTS.md](release/AGENTS.md)。

@@ -33,5 +33,4 @@ Status: implemented
 
 ## Testing
 
-- `lib/features/workspace/widgets/channel_pane_resizer_test.dart`（与 `channel_pane_resizer.dart` 同目录）覆盖拖动写入偏好、超过窗口上限时停在上限、双击恢复默认并清掉偏好、握把只在悬停与拖动时出现，以及 `SessionPreferences` 的读写往返。
-- 窄屏抽屉不含分隔条，`channel_pane_test.dart` 的交互断言不受影响。
+- 分隔条交互没有自动回归用例：改这条路径时手动跑 `just run`，检查拖动写入偏好、超过窗口上限时停在上限、双击恢复默认并清掉偏好、握把只在悬停与拖动时出现，以及窄屏抽屉不含分隔条。

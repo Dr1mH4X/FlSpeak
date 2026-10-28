@@ -104,7 +104,8 @@
       }
     }
   },
-  "channelsEmpty": "尚未连接。",
+  "workspaceDropped": "连接丢失",
+  "workspaceRetrying": "正在重试…",
   "channelsSection": "频道",
   "workspaceNoChannels": "服务器还没有频道。",
   "workspaceOpenMenu": "打开频道菜单",

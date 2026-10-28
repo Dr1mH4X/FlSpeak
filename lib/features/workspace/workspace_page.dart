@@ -17,7 +17,7 @@ import 'widgets/media_viewer.dart';
 import 'widgets/members_pane.dart';
 import 'workspace_state.dart';
 
-/// 主区域：频道标题 + 消息 / 媒体两个视图，以及未连接时的下一步。
+/// 主区域：频道标题 + 消息 / 媒体两个视图，以及掉线后的空状态。
 class WorkspacePage extends ConsumerStatefulWidget {
   const WorkspacePage({super.key});
 
@@ -167,8 +167,8 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
 
     if (channel == null) {
       return EmptyState(
-        icon: Icons.forum_rounded,
-        body: l10n.workspaceNoChannels,
+        icon: view.connected ? Icons.forum_rounded : Icons.link_off_rounded,
+        body: view.connected ? l10n.workspaceNoChannels : l10n.workspaceDropped,
       );
     }
 

@@ -26,4 +26,4 @@ Status: implemented
 
 ## Testing
 
-- `lib/features/workspace/workspace_shell_test.dart`：右键服务器磁贴、点「断开」，断言路由落到 `AppRoutes.connect`。
+- 断开后的去向没有自动回归用例：改这条路径时手动跑 `just run`，右键服务器磁贴与长按磁贴各断开一次，确认路由落到 `AppRoutes.connect`，并确认断开失败时留在工作区。

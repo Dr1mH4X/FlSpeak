@@ -33,5 +33,4 @@ Status: implemented
 
 ## Testing
 
-- `lib/features/workspace/widgets/channel_pane_test.dart`（与 `channel_pane.dart` 同目录）覆盖双击被拒后退回点击前的高亮，以及右键加入被拒后退回点菜单前的选中——自己被放在另一个频道时也回到菜单前选中，而不是自己的频道。
-- `lib/features/workspace/widgets/channel_password_dialog_test.dart` 覆盖密码错误后修正、取消回退与有权免密进入；真实受控夹具的入口见 [测试约定](../../../../docs/testing.md)。
+- 回滚行为没有自动回归用例：改这条路径时手动跑 `just run`，走「双击被拒」与「右键加入被拒」两条，确认高亮回到点击前的位置；自己被放在另一个频道时回到菜单前选中，而不是自己的频道。

@@ -104,7 +104,8 @@
       }
     }
   },
-  "channelsEmpty": "Not connected.",
+  "workspaceDropped": "Disconnected",
+  "workspaceRetrying": "Retrying…",
   "channelsSection": "Channels",
   "workspaceNoChannels": "This server has no channels yet.",
   "workspaceOpenMenu": "Open channel menu",

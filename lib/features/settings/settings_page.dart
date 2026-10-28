@@ -16,6 +16,8 @@ import '../../l10n/app_localizations.dart';
 import '../../router.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common.dart';
+import '../../widgets/view_scope.dart';
+import '../../widgets/window_header.dart';
 import 'settings_state.dart';
 import 'widgets/settings_card.dart';
 import 'widgets/appearance_picker.dart';
@@ -161,6 +163,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       SettingsGroup(title: l10n.settingsAbout, children: [_about(l10n)]),
     ];
 
+    final windowControls = ViewScope.windowControlsOf(context);
     final titles = [
       l10n.settingsGeneral,
       l10n.settingsVoice,
@@ -176,7 +179,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _SettingsTopBar(onBack: _back),
+        WindowDragRegion(child: _SettingsTopBar(onBack: _back)),
         Expanded(
           child: SingleChildScrollView(
             padding: EdgeInsets.fromLTRB(
@@ -225,34 +228,49 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 width: 224,
                 child: Material(
                   color: context.scheme.surfaceContainerLow,
-                  child: ListView(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 24,
-                    ),
+                  child: Column(
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-                        child: Text(
-                          l10n.appName,
-                          style: context.texts.titleLarge,
+                      // 宽屏时红绿灯压在侧栏左上角，标题整体让到按钮区之下。
+                      WindowDragRegion(
+                        child: SizedBox(
+                          width: double.infinity,
+                          height: windowControls.height,
                         ),
                       ),
-                      for (var index = 0; index < titles.length; index++)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: ListTile(
-                            selected: _selectedSection == index,
-                            selectedTileColor: context.scheme.primaryContainer,
-                            selectedColor: context.scheme.onPrimaryContainer,
-                            leading: Icon(icons[index], size: 20),
-                            title: Text(
-                              titles[index],
-                              style: context.texts.bodyMedium,
-                            ),
-                            onTap: () => _jumpTo(index),
+                      Expanded(
+                        child: ListView(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 24,
                           ),
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+                              child: Text(
+                                l10n.appName,
+                                style: context.texts.titleLarge,
+                              ),
+                            ),
+                            for (var index = 0; index < titles.length; index++)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: ListTile(
+                                  selected: _selectedSection == index,
+                                  selectedTileColor:
+                                      context.scheme.primaryContainer,
+                                  selectedColor:
+                                      context.scheme.onPrimaryContainer,
+                                  leading: Icon(icons[index], size: 20),
+                                  title: Text(
+                                    titles[index],
+                                    style: context.texts.bodyMedium,
+                                  ),
+                                  onTap: () => _jumpTo(index),
+                                ),
+                              ),
+                          ],
                         ),
+                      ),
                     ],
                   ),
                 ),

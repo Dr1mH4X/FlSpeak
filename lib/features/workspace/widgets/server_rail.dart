@@ -10,6 +10,8 @@ import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
 import '../../../widgets/monogram.dart';
 import '../../../widgets/server_icon_picker.dart';
+import '../../../widgets/view_scope.dart';
+import '../../../widgets/window_header.dart';
 
 /// Discord 式服务器栏：顶部社区入口、服务器磁贴与底部设置。
 class ServerRail extends ConsumerWidget {
@@ -39,6 +41,9 @@ class ServerRail extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
     final view = ref.watch(sessionViewProvider);
+    // 宽屏时红绿灯压在轨道左上角，列表整体让到 32px 之下；
+    // 窄屏与全屏由标题条或系统接管，保持原来的 16px。
+    final windowControls = ViewScope.windowControlsOf(context);
 
     // 抽屉里必须先收起再跳转：抽屉不属于路由栈，直接跳转会让旧页面的抽屉
     // 盖在新页面上。桌面没有打开中的抽屉，这一步是空操作。
@@ -53,7 +58,12 @@ class ServerRail extends ConsumerWidget {
         width: width,
         child: Column(
           children: [
-            const SizedBox(height: 16),
+            WindowDragRegion(
+              child: SizedBox(
+                width: double.infinity,
+                height: windowControls.isEmpty ? 16 : windowControls.height + 4,
+              ),
+            ),
             Semantics(
               button: true,
               selected: homeSelected,
