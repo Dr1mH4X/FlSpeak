@@ -602,4 +602,37 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fileCleanupFailed => '临时下载文件未能清理';
+
+  @override
+  String get kickChannel => '踢出频道';
+
+  @override
+  String get kickServer => '踢出服务器';
+
+  @override
+  String kickChannelConfirm(String nickname) {
+    return '将 $nickname 移出当前频道？对方将返回服务器默认频道。';
+  }
+
+  @override
+  String kickServerConfirm(String nickname) {
+    return '将 $nickname 踢出服务器？此操作不会封禁对方。';
+  }
+
+  @override
+  String get kickReason => '原因（可选）';
+
+  @override
+  String get kickConfirm => '确认踢出';
+
+  @override
+  String kickSent(String nickname) {
+    return '已踢出 $nickname';
+  }
+
+  @override
+  String get kickTargetUnavailable => '成员已离线或更换频道，请重新选择';
+
+  @override
+  String get kickConnectionChanged => '连接已变化，请关闭后重新操作';
 }

@@ -313,10 +313,41 @@ impl Actor {
             }
             SessionCommand::Access { reply } => {
                 let result = match self.connected() {
-                    Ok(client) => {
-                        crate::channel_tools::access(&client, &mut self.channel_tools).await
-                    }
+                    Ok(client) => crate::channel_tools::access(&client, &mut self.channel_tools)
+                        .await
+                        .map(|mut access| {
+                            access.connection_epoch = Some(self.connection_epoch);
+                            access
+                        }),
                     Err(error) => Err(error),
+                };
+                let _ = reply.send(result);
+            }
+            SessionCommand::Kick {
+                uid,
+                channel_id,
+                target,
+                reason,
+                connection_epoch,
+                reply,
+            } => {
+                let result = if connection_epoch != self.connection_epoch {
+                    Err(SessionError::Protocol("connection changed".into()))
+                } else {
+                    match self.connected() {
+                        Ok(client) => {
+                            crate::channel_tools::kick(
+                                &client,
+                                &mut self.channel_tools,
+                                &uid,
+                                channel_id,
+                                target,
+                                &reason,
+                            )
+                            .await
+                        }
+                        Err(error) => Err(error),
+                    }
                 };
                 let _ = reply.send(result);
             }

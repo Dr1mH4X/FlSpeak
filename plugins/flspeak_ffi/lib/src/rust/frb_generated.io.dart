@@ -119,6 +119,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int dco_decode_i_32(dynamic raw);
 
   @protected
+  KickTarget dco_decode_kick_target(dynamic raw);
+
+  @protected
   List<AudioDeviceView> dco_decode_list_audio_device_view(dynamic raw);
 
   @protected
@@ -293,6 +296,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   int sse_decode_i_32(SseDeserializer deserializer);
+
+  @protected
+  KickTarget sse_decode_kick_target(SseDeserializer deserializer);
 
   @protected
   List<AudioDeviceView> sse_decode_list_audio_device_view(
@@ -504,6 +510,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_i_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_kick_target(KickTarget self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_audio_device_view(

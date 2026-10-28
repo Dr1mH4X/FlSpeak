@@ -616,4 +616,39 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get fileCleanupFailed =>
       'Temporary download files could not be removed';
+
+  @override
+  String get kickChannel => 'Kick from channel';
+
+  @override
+  String get kickServer => 'Kick from server';
+
+  @override
+  String kickChannelConfirm(String nickname) {
+    return 'Remove $nickname from their current channel? They will return to the server’s default channel.';
+  }
+
+  @override
+  String kickServerConfirm(String nickname) {
+    return 'Kick $nickname from the server? This does not ban them.';
+  }
+
+  @override
+  String get kickReason => 'Reason (optional)';
+
+  @override
+  String get kickConfirm => 'Confirm kick';
+
+  @override
+  String kickSent(String nickname) {
+    return 'Kicked $nickname';
+  }
+
+  @override
+  String get kickTargetUnavailable =>
+      'The member is offline or has changed channel. Select them again.';
+
+  @override
+  String get kickConnectionChanged =>
+      'The connection changed. Close this dialog and try again.';
 }

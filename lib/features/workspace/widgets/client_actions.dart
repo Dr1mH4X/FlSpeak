@@ -7,6 +7,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../router.dart';
 import '../../../widgets/common.dart';
 import 'member_permissions_dialog.dart';
+import 'kick_client_dialog.dart';
 
 class ClientActionsButton extends ConsumerWidget {
   const ClientActionsButton({required this.client, super.key});
@@ -43,6 +44,32 @@ class ClientActionsButton extends ConsumerWidget {
               : null,
           child: Text(l10n.memberPermissions),
         ),
+        for (final target in KickTarget.values)
+          MenuItemButton(
+            leadingIcon: Icon(
+              target == KickTarget.channel
+                  ? Icons.logout_rounded
+                  : Icons.person_remove_outlined,
+            ),
+            onPressed:
+                view.connected &&
+                    !view.busy &&
+                    access?.connectionEpoch != null &&
+                    (target == KickTarget.channel
+                            ? access?.kickChannelPower ?? 0
+                            : access?.kickServerPower ?? 0) >
+                        0
+                ? () => showKickClient(
+                    context,
+                    client,
+                    target,
+                    access!.connectionEpoch!,
+                  )
+                : null,
+            child: Text(
+              target == KickTarget.channel ? l10n.kickChannel : l10n.kickServer,
+            ),
+          ),
         MenuItemButton(
           leadingIcon: const Icon(Icons.chat_bubble_outline_rounded),
           onPressed: () {

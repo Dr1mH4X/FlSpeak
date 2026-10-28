@@ -14,7 +14,7 @@ mod images;
 mod store;
 
 mod channel_tools;
-pub use channel_tools::{AccessView, ChannelFileView, GroupKind, MemberGroupView};
+pub use channel_tools::{AccessView, ChannelFileView, GroupKind, KickTarget, MemberGroupView};
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -317,6 +317,14 @@ pub enum SessionCommand {
     },
     Access {
         reply: oneshot::Sender<Result<AccessView, SessionError>>,
+    },
+    Kick {
+        uid: String,
+        channel_id: u64,
+        target: KickTarget,
+        reason: String,
+        connection_epoch: u64,
+        reply: oneshot::Sender<Result<(), SessionError>>,
     },
     MemberGroups {
         uid: String,
@@ -684,6 +692,25 @@ impl SessionHandle {
         self.send(SessionCommand::Access { reply })?;
         response.await.map_err(|_| SessionError::Closed)?
     }
+    pub async fn kick(
+        &self,
+        uid: String,
+        channel_id: u64,
+        target: KickTarget,
+        reason: String,
+        connection_epoch: u64,
+    ) -> Result<(), SessionError> {
+        let (reply, response) = oneshot::channel();
+        self.send(SessionCommand::Kick {
+            uid,
+            channel_id,
+            target,
+            reason,
+            connection_epoch,
+            reply,
+        })?;
+        response.await.map_err(|_| SessionError::Closed)?
+    }
     pub async fn member_groups(&self, uid: String) -> Result<Vec<MemberGroupView>, SessionError> {
         let (reply, response) = oneshot::channel();
         self.send(SessionCommand::MemberGroups { uid, reply })?;
@@ -777,6 +804,27 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(50)).await;
         let _ = tokio::fs::remove_dir_all(&dir).await;
     }
+    #[tokio::test]
+    async fn kick_rejects_another_connection_before_any_protocol_operation() {
+        let dir = std::env::temp_dir().join(format!("flspeak-kick-test-{}", rand::random::<u64>()));
+        let handle = SessionHandle::spawn_with_options(
+            dir.join("servers.json"),
+            SessionOptions { audio: false },
+        )
+        .unwrap();
+        assert!(
+            matches!(handle.kick("peer".into(), 5, KickTarget::Server, String::new(), u64::MAX).await, Err(SessionError::Protocol(message)) if message == "connection changed")
+        );
+        assert!(matches!(
+            handle
+                .kick("peer".into(), 5, KickTarget::Channel, String::new(), 0)
+                .await,
+            Err(SessionError::NotConnected)
+        ));
+        handle.shutdown().await.unwrap();
+        let _ = tokio::fs::remove_dir_all(dir).await;
+    }
+
     async fn transfer_finished(
         events: &mut broadcast::Receiver<SessionEvent>,
         id: u64,

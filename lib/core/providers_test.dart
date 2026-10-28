@@ -16,6 +16,34 @@ class _Core extends Fake implements CoreSession {
   final StreamController<CoreEvent> eventsController;
   final sent = <({int mode, int target, String text})>[];
   bool fail = false;
+  final kicks =
+      <
+        ({
+          String uid,
+          int channelId,
+          KickTarget target,
+          String reason,
+          int epoch,
+        })
+      >[];
+  @override
+  Future<void> kick({
+    required String uid,
+    required int channelId,
+    required KickTarget target,
+    required String reason,
+    required int connectionEpoch,
+  }) async {
+    if (fail) throw const CoreError.connection(message: 'kick rejected');
+    kicks.add((
+      uid: uid,
+      channelId: channelId,
+      target: target,
+      reason: reason,
+      epoch: connectionEpoch,
+    ));
+  }
+
   final pokes = <({int id, String message})>[];
   @override
   Future<int> downloadFile({
@@ -50,6 +78,89 @@ class _Core extends Fake implements CoreSession {
 }
 
 void main() {
+  test('kick preserves UID and native epoch, rejects moved/offline/self targets and retains members on refusal', () async {
+    final events = StreamController<CoreEvent>.broadcast(sync: true);
+    final core = _Core(events);
+    final container = ProviderContainer(
+      overrides: [coreSessionProvider.overrideWithValue(core)],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await events.close();
+    });
+    final controller = container.read(sessionViewProvider.notifier);
+    events.add(
+      const CoreEvent.state(
+        state: CoreSessionState.connected(clientId: 1, channelId: 5),
+      ),
+    );
+    events.add(
+      const CoreEvent.snapshot(
+        channels: [],
+        clients: [
+          ClientView(id: 1, nickname: 'Me', uid: 'self', channelId: 5),
+          ClientView(id: 2, nickname: 'Peer', uid: 'peer', channelId: 5),
+        ],
+      ),
+    );
+    expect(
+      await controller.kickClient('self', 5, KickTarget.server, '', 42),
+      isFalse,
+    );
+    expect(
+      await controller.kickClient(
+        'peer',
+        5,
+        KickTarget.channel,
+        '  reason | test  ',
+        42,
+      ),
+      isTrue,
+    );
+    expect(core.kicks.single, (
+      uid: 'peer',
+      channelId: 5,
+      target: KickTarget.channel,
+      reason: 'reason | test',
+      epoch: 42,
+    ));
+    events.add(const CoreEvent.clientMoved(id: 2, channelId: 9));
+    expect(
+      await controller.kickClient('peer', 5, KickTarget.channel, '', 42),
+      isFalse,
+    );
+    core.fail = true;
+    expect(
+      await controller.kickClient('peer', 5, KickTarget.server, '', 42),
+      isFalse,
+    );
+    expect(
+      container
+          .read(sessionViewProvider)
+          .clients
+          .any((peer) => peer.uid == 'peer'),
+      isTrue,
+    );
+    expect(
+      container
+          .read(noticeCenterProvider)
+          .any((notice) => notice.message.contains('kick rejected')),
+      isTrue,
+    );
+    core.fail = false;
+    expect(
+      await controller.kickClient('peer', 5, KickTarget.server, '', 42),
+      isTrue,
+    );
+    expect(core.kicks.last.target, KickTarget.server);
+    events.add(const CoreEvent.clientLeft(id: 2));
+    expect(
+      await controller.kickClient('peer', 9, KickTarget.server, '', 42),
+      isFalse,
+    );
+    expect(core.kicks, hasLength(2));
+  });
+
   test('download completion arriving before the API reply is retained even without a start event', () async {
     final events = StreamController<CoreEvent>.broadcast(sync: true);
     final container = ProviderContainer(

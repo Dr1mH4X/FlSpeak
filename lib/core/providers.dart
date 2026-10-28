@@ -209,6 +209,40 @@ class SessionController extends Notifier<SessionView> {
     return sent;
   }
 
+  Future<bool> kickClient(
+    String uid,
+    int channelId,
+    KickTarget target,
+    String reason,
+    int connectionEpoch,
+  ) async {
+    if (!state.connected || state.busy) return false;
+    final peer = state.clients
+        .where((client) => client.uid == uid && client.id != state.selfClientId)
+        .firstOrNull;
+    final l10n = ref.read(_localizationsProvider);
+    if (peer == null ||
+        (target == KickTarget.channel && peer.channelId != channelId)) {
+      _notify(l10n.kickTargetUnavailable);
+      return false;
+    }
+    final sent = await _run(
+      () => ref
+          .read(coreSessionProvider)
+          .kick(
+            uid: uid,
+            channelId: channelId,
+            target: target,
+            reason: reason.trim(),
+            connectionEpoch: connectionEpoch,
+          ),
+    );
+    if (sent && ref.mounted) {
+      _notify(l10n.kickSent(peer.nickname), tone: NoticeTone.info);
+    }
+    return sent;
+  }
+
   /// 静音只停发送；deafen 同时停发送并静音播放。状态以 Rust 的 Voice 事件为准。
   Future<void> setMuted(bool muted) async {
     try {

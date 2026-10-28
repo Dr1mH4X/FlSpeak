@@ -1207,6 +1207,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Temporary download files could not be removed'**
   String get fileCleanupFailed;
+
+  /// No description provided for @kickChannel.
+  ///
+  /// In en, this message translates to:
+  /// **'Kick from channel'**
+  String get kickChannel;
+
+  /// No description provided for @kickServer.
+  ///
+  /// In en, this message translates to:
+  /// **'Kick from server'**
+  String get kickServer;
+
+  /// No description provided for @kickChannelConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove {nickname} from their current channel? They will return to the server’s default channel.'**
+  String kickChannelConfirm(String nickname);
+
+  /// No description provided for @kickServerConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Kick {nickname} from the server? This does not ban them.'**
+  String kickServerConfirm(String nickname);
+
+  /// No description provided for @kickReason.
+  ///
+  /// In en, this message translates to:
+  /// **'Reason (optional)'**
+  String get kickReason;
+
+  /// No description provided for @kickConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm kick'**
+  String get kickConfirm;
+
+  /// No description provided for @kickSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Kicked {nickname}'**
+  String kickSent(String nickname);
+
+  /// No description provided for @kickTargetUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'The member is offline or has changed channel. Select them again.'**
+  String get kickTargetUnavailable;
+
+  /// No description provided for @kickConnectionChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'The connection changed. Close this dialog and try again.'**
+  String get kickConnectionChanged;
 }
 
 class _AppLocalizationsDelegate

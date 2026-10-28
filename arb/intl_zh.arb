@@ -299,5 +299,35 @@
     }
   },
   "fileConnectionChanged": "连接已变化，请重新下载",
-  "fileCleanupFailed": "临时下载文件未能清理"
+  "fileCleanupFailed": "临时下载文件未能清理",
+  "kickChannel": "踢出频道",
+  "kickServer": "踢出服务器",
+  "kickChannelConfirm": "将 {nickname} 移出当前频道？对方将返回服务器默认频道。",
+  "kickServerConfirm": "将 {nickname} 踢出服务器？此操作不会封禁对方。",
+  "kickReason": "原因（可选）",
+  "kickConfirm": "确认踢出",
+  "kickSent": "已踢出 {nickname}",
+  "kickTargetUnavailable": "成员已离线或更换频道，请重新选择",
+  "kickConnectionChanged": "连接已变化，请关闭后重新操作",
+  "@kickChannelConfirm": {
+    "placeholders": {
+      "nickname": {
+        "type": "String"
+      }
+    }
+  },
+  "@kickServerConfirm": {
+    "placeholders": {
+      "nickname": {
+        "type": "String"
+      }
+    }
+  },
+  "@kickSent": {
+    "placeholders": {
+      "nickname": {
+        "type": "String"
+      }
+    }
+  }
 }

@@ -15,6 +15,15 @@ type Row = HashMap<String, String>;
 pub struct AccessView {
     pub member_add_power: Option<i32>,
     pub member_remove_power: Option<i32>,
+    pub kick_channel_power: Option<i32>,
+    pub kick_server_power: Option<i32>,
+    pub connection_epoch: Option<u64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KickTarget {
+    Channel,
+    Server,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -115,6 +124,9 @@ pub(crate) async fn access(
     Ok(AccessView {
         member_add_power: value("i_group_member_add_power"),
         member_remove_power: value("i_group_member_remove_power"),
+        kick_channel_power: value("i_client_kick_from_channel_power"),
+        kick_server_power: value("i_client_kick_from_server_power"),
+        connection_epoch: None,
     })
 }
 
@@ -143,6 +155,67 @@ async fn member(client: &Client, uid: &str) -> Result<Row, SessionError> {
         return Err(SessionError::Protocol("member identity changed".into()));
     }
     Ok(info)
+}
+
+fn validate_kick(
+    target: KickTarget,
+    power: Option<i32>,
+    expected_channel: u64,
+    current_channel: u64,
+    is_self: bool,
+) -> Result<(), SessionError> {
+    if is_self {
+        return Err(SessionError::Protocol("cannot kick yourself".into()));
+    }
+    if target == KickTarget::Channel
+        && (expected_channel == 0 || current_channel != expected_channel)
+    {
+        return Err(SessionError::Protocol("member changed channel".into()));
+    }
+    if power.is_none_or(|power| power <= 0) {
+        return Err(SessionError::Protocol("insufficient kick power".into()));
+    }
+    Ok(())
+}
+
+pub(crate) async fn kick(
+    client: &Client,
+    tools: &mut ChannelTools,
+    uid: &str,
+    channel_id: u64,
+    target: KickTarget,
+    reason: &str,
+) -> Result<(), SessionError> {
+    if reason.contains('\0') {
+        return Err(SessionError::Protocol("invalid kick reason".into()));
+    }
+    let own = access(client, tools).await?;
+    let directory = client
+        .directory_snapshot()
+        .ok_or(SessionError::NotConnected)?;
+    let peer = directory
+        .clients
+        .iter()
+        .find(|peer| !uid.is_empty() && peer.uid == uid)
+        .ok_or_else(|| SessionError::Protocol("member is offline".into()))?;
+    let power = match target {
+        KickTarget::Channel => own.kick_channel_power,
+        KickTarget::Server => own.kick_server_power,
+    };
+    validate_kick(
+        target,
+        power,
+        channel_id,
+        peer.channel_id,
+        peer.id == client.client_id(),
+    )?;
+    let reason_code = match target {
+        KickTarget::Channel => tsclient_rs::KickReason::Channel,
+        KickTarget::Server => tsclient_rs::KickReason::Server,
+    };
+    tsclient_rs::clientKick(client, peer.id, reason_code, reason.trim())
+        .await
+        .map_err(protocol_error)
 }
 
 fn permitted(power: Option<i32>, needed: Option<i32>) -> bool {
@@ -346,6 +419,19 @@ pub(crate) async fn files(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn kick_validation_rejects_stale_channels_self_and_missing_power() {
+        assert!(validate_kick(KickTarget::Channel, Some(50), 3, 4, false).is_err());
+        assert!(validate_kick(KickTarget::Channel, Some(50), 0, 0, false).is_err());
+        for target in [KickTarget::Channel, KickTarget::Server] {
+            assert!(validate_kick(target, Some(75), 3, 3, true).is_err());
+            for power in [None, Some(0), Some(-1)] {
+                assert!(validate_kick(target, power, 3, 3, false).is_err());
+            }
+            assert!(validate_kick(target, Some(50), 3, 3, false).is_ok());
+        }
+        assert!(validate_kick(KickTarget::Server, Some(50), 3, 4, false).is_ok());
+    }
     #[test]
     fn privileges_fail_closed_and_compare_numeric_power() {
         assert!(!permitted(None, Some(0)));

@@ -232,6 +232,14 @@ pub enum CoreError {
 pub struct AccessView {
     pub member_add_power: Option<i32>,
     pub member_remove_power: Option<i32>,
+    pub kick_channel_power: Option<i32>,
+    pub kick_server_power: Option<i32>,
+    pub connection_epoch: Option<u64>,
+}
+#[derive(Debug, Clone)]
+pub enum KickTarget {
+    Channel,
+    Server,
 }
 #[derive(Debug, Clone)]
 pub enum GroupKind {
@@ -434,7 +442,32 @@ impl CoreSession {
         Ok(AccessView {
             member_add_power: access.member_add_power,
             member_remove_power: access.member_remove_power,
+            kick_channel_power: access.kick_channel_power,
+            kick_server_power: access.kick_server_power,
+            connection_epoch: access.connection_epoch,
         })
+    }
+    pub async fn kick(
+        &self,
+        uid: String,
+        channel_id: u64,
+        target: KickTarget,
+        reason: String,
+        connection_epoch: u64,
+    ) -> Result<(), CoreError> {
+        self.handle
+            .kick(
+                uid,
+                channel_id,
+                match target {
+                    KickTarget::Channel => session::KickTarget::Channel,
+                    KickTarget::Server => session::KickTarget::Server,
+                },
+                reason,
+                connection_epoch,
+            )
+            .await?;
+        Ok(())
     }
     pub async fn member_groups(&self, uid: String) -> Result<Vec<MemberGroupView>, CoreError> {
         Ok(self

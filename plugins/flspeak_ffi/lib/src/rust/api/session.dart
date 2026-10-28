@@ -9,7 +9,7 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'session.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `runtime`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 /// 抓取第三方图片 URL。myTS 的 `ts.file.myts` 附件不经过这里。
 Future<Uint8List> fetchImage({required String url}) =>
@@ -59,6 +59,14 @@ abstract class CoreSession implements RustOpaqueInterface {
   Stream<CoreEvent> events();
 
   Future<Uint8List> fetchIcon({required int iconId});
+
+  Future<void> kick({
+    required String uid,
+    required int channelId,
+    required KickTarget target,
+    required String reason,
+    required int connectionEpoch,
+  });
 
   Future<AudioDevicesView> listAudioDevices();
 
@@ -145,11 +153,25 @@ abstract class CoreSession implements RustOpaqueInterface {
 class AccessView {
   final int? memberAddPower;
   final int? memberRemovePower;
+  final int? kickChannelPower;
+  final int? kickServerPower;
+  final int? connectionEpoch;
 
-  const AccessView({this.memberAddPower, this.memberRemovePower});
+  const AccessView({
+    this.memberAddPower,
+    this.memberRemovePower,
+    this.kickChannelPower,
+    this.kickServerPower,
+    this.connectionEpoch,
+  });
 
   @override
-  int get hashCode => memberAddPower.hashCode ^ memberRemovePower.hashCode;
+  int get hashCode =>
+      memberAddPower.hashCode ^
+      memberRemovePower.hashCode ^
+      kickChannelPower.hashCode ^
+      kickServerPower.hashCode ^
+      connectionEpoch.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -157,7 +179,10 @@ class AccessView {
       other is AccessView &&
           runtimeType == other.runtimeType &&
           memberAddPower == other.memberAddPower &&
-          memberRemovePower == other.memberRemovePower;
+          memberRemovePower == other.memberRemovePower &&
+          kickChannelPower == other.kickChannelPower &&
+          kickServerPower == other.kickServerPower &&
+          connectionEpoch == other.connectionEpoch;
 }
 
 class AudioDeviceView {
@@ -551,6 +576,8 @@ class CoreVoiceState {
 }
 
 enum GroupKind { server, channel }
+
+enum KickTarget { channel, server }
 
 class MemberGroupView {
   final int channelId;
