@@ -1,14 +1,24 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
+import '../l10n/app_localizations.dart';
 import 'models.dart';
+import 'image_host.dart';
 import 'notices.dart';
 import 'preferences.dart';
 import 'server_icon.dart';
 import 'voice_levels.dart';
+
+final _localizationsProvider = Provider<AppLocalizations>((ref) {
+  final code =
+      ref.watch(preferencesProvider).locale ??
+      PlatformDispatcher.instance.locale.languageCode;
+  return lookupAppLocalizations(Locale(code == 'zh' ? 'zh' : 'en'));
+});
 
 /// 在 `main()` 里用真实句柄覆盖；测试里用假的实现覆盖。
 final coreSessionProvider = Provider<CoreSession>(
@@ -89,6 +99,8 @@ class SessionController extends Notifier<SessionView> {
         channels: const [],
         clients: const [],
         messages: const [],
+        chatScope: ChatScope.channel,
+        directRecipientUid: null,
         speaking: const {},
       );
       // 频道/成员快照由 actor 在连接成功后主动推送，不再额外拉一遍。
@@ -119,6 +131,51 @@ class SessionController extends Notifier<SessionView> {
 
   void selectChatScope(ChatScope scope) {
     state = state.copyWith(chatScope: scope);
+  }
+
+  void selectDirectRecipient(String uid) {
+    state = state.copyWith(
+      chatScope: ChatScope.direct,
+      directRecipientUid: uid,
+    );
+  }
+
+  void replyToMessage(ChatMessage message) {
+    if (message.scope != ChatScope.direct || message.fromUid == state.selfUid) {
+      return;
+    }
+    final peer = state.clients
+        .where(
+          (peer) =>
+              peer.uid == message.fromUid && peer.id != state.selfClientId,
+        )
+        .firstOrNull;
+    if (peer == null) {
+      _notify(ref.read(_localizationsProvider).chatRecipientUnavailable);
+      return;
+    }
+    selectDirectRecipient(peer.uid);
+  }
+
+  Future<bool> pokeClient(String uid, String message) async {
+    if (!state.connected || state.busy) return false;
+    final peer = state.clients
+        .where((client) => client.uid == uid && client.id != state.selfClientId)
+        .firstOrNull;
+    final l10n = ref.read(_localizationsProvider);
+    if (peer == null) {
+      _notify(l10n.chatRecipientUnavailable);
+      return false;
+    }
+    final sent = await _run(
+      () => ref
+          .read(coreSessionProvider)
+          .poke(clientId: peer.id, message: message),
+    );
+    if (sent && ref.mounted) {
+      _notify(l10n.pokeSent(peer.nickname), tone: NoticeTone.info);
+    }
+    return sent;
   }
 
   /// 静音只停发送；deafen 同时停发送并静音播放。状态以 Rust 的 Voice 事件为准。
@@ -180,25 +237,98 @@ class SessionController extends Notifier<SessionView> {
     );
   }
 
+  /// 上传可能跨越服务器/频道切换；发送闭包绑定用户发起操作时的目标。
+  Future<bool> Function(String) prepareMessageSender() {
+    final target = _messageDestination;
+    return (text) {
+      if (!ref.mounted) return Future.value(false);
+      if (target != _messageDestination) {
+        _notify(ref.read(_localizationsProvider).chatDestinationChanged);
+        return Future.value(false);
+      }
+      return sendMessage(text);
+    };
+  }
+
+  Object get _messageDestination => (
+    state.activeServerId,
+    state.connectionEpoch,
+    state.chatScope,
+    state.chatScope == ChatScope.direct
+        ? state.directRecipientUid
+        : state.chatScope == ChatScope.channel
+        ? state.selfChannelId
+        : null,
+  );
+
+  Future<String?> uploadChatImage(Uint8List bytes) async {
+    final l10n = ref.read(_localizationsProvider);
+    try {
+      final config = await ref.read(imageHostProvider.future);
+      if (!ref.mounted) return null;
+      if (config == null) {
+        _notify(l10n.imageHostRequired);
+        return null;
+      }
+      return await uploadImage(
+        uploadBase: config.uploadBase,
+        publicBase: config.publicBase,
+        token: config.token.isEmpty ? null : config.token,
+        bytes: bytes,
+      );
+    } on CoreError catch (error) {
+      if (ref.mounted) _notify(describeCoreError(error));
+      return null;
+    } on Exception {
+      if (ref.mounted) _notify(l10n.imageHostStorageFailed);
+      return null;
+    }
+  }
+
+  Future<PickedChatImage?> pickChatImage({required bool paste}) async {
+    final l10n = ref.read(_localizationsProvider);
+    try {
+      final input = ref.read(imageInputProvider);
+      return paste ? await input.paste() : await input.pick();
+    } on ImageInputException catch (error) {
+      if (ref.mounted) {
+        _notify(switch (error.failure) {
+          ImageInputFailure.tooLarge => l10n.chatImageTooLarge,
+          ImageInputFailure.clipboardEmpty => l10n.chatClipboardEmpty,
+        });
+      }
+    } on Exception {
+      if (ref.mounted) _notify(l10n.chatImageInputFailed);
+    }
+    return null;
+  }
+
   /// 按当前范围发送。频道范围要求已进入某个频道，否则拒绝发送而不是发错地方。
-  Future<void> sendMessage(String text) async {
+  Future<bool> sendMessage(String text) async {
     final message = text.trim();
     if (message.isEmpty) {
-      return;
+      return false;
     }
+
+    if (!state.connected || state.busy) return false;
 
     final scope = state.chatScope;
     final targetId = switch (scope) {
       ChatScope.channel => state.selfChannelId,
       ChatScope.server => 0,
-      ChatScope.direct => null,
+      ChatScope.direct => state.directRecipient?.id,
     };
     if (targetId == null) {
-      _notify('还没有进入任何频道，无法发送频道消息。');
-      return;
+      final l10n = ref.read(_localizationsProvider);
+      _notify(
+        scope == ChatScope.direct
+            ? l10n.chatRecipientUnavailable
+            : l10n.chatChannelUnavailable,
+      );
+      return false;
     }
 
-    await _run(
+    return _run(
       () => ref
           .read(coreSessionProvider)
           .sendText(
@@ -236,10 +366,10 @@ class SessionController extends Notifier<SessionView> {
       await action();
       return true;
     } on CoreError catch (error) {
-      _notify(describeCoreError(error));
+      if (ref.mounted) _notify(describeCoreError(error));
       return false;
     } finally {
-      state = state.copyWith(busy: false);
+      if (ref.mounted) state = state.copyWith(busy: false);
     }
   }
 
@@ -262,6 +392,8 @@ class SessionController extends Notifier<SessionView> {
             speaking: const {},
             selfSpeaking: false,
             identityUpgradeTarget: null,
+            chatScope: ChatScope.channel,
+            directRecipientUid: null,
             busy: false,
           ),
           _ => current.copyWith(
@@ -303,6 +435,11 @@ class SessionController extends Notifier<SessionView> {
           messages: appended.length > _messageLimit
               ? appended.sublist(appended.length - _messageLimit)
               : appended,
+        );
+      case CoreEvent_Poked(:final from, :final message):
+        _notify(
+          ref.read(_localizationsProvider).pokeReceived(from, message),
+          tone: NoticeTone.info,
         );
       case CoreEvent_ClientJoined(
         :final id,

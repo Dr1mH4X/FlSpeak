@@ -130,6 +130,10 @@ pub enum CoreEvent {
         target_id: u64,
         at: u64,
     },
+    Poked {
+        from: String,
+        message: String,
+    },
     ClientJoined {
         id: i32,
         nickname: String,
@@ -296,6 +300,10 @@ impl CoreSession {
             .await?)
     }
 
+    pub async fn poke(&self, client_id: i32, message: String) -> Result<(), CoreError> {
+        Ok(self.handle.poke(client_id, message).await?)
+    }
+
     pub async fn move_to_channel(
         &self,
         client_id: i32,
@@ -401,19 +409,38 @@ impl CoreSession {
 
 /// 抓取第三方图片 URL。myTS 的 `ts.file.myts` 附件不经过这里。
 pub async fn fetch_image(url: String) -> Result<Vec<u8>, CoreError> {
-    session::fetch_image(&url).await.map_err(|err| match err {
-        session::ImageError::InvalidUrl(_) => CoreError::InvalidAddress {
-            message: err.to_string(),
-        },
-        session::ImageError::BlockedHost(_) | session::ImageError::BlockedAddress(_) => {
-            CoreError::BlockedAddress {
+    Ok(session::fetch_image(&url).await?)
+}
+
+pub fn validate_image_host(upload_base: String, public_base: String) -> Result<(), CoreError> {
+    Ok(session::validate_image_host(&upload_base, &public_base)?)
+}
+
+pub async fn upload_image(
+    upload_base: String,
+    public_base: String,
+    token: Option<String>,
+    bytes: Vec<u8>,
+) -> Result<String, CoreError> {
+    Ok(session::upload_image(&upload_base, &public_base, token.as_deref(), bytes).await?)
+}
+
+impl From<session::ImageError> for CoreError {
+    fn from(err: session::ImageError) -> Self {
+        match err {
+            session::ImageError::InvalidUrl(_) => CoreError::InvalidAddress {
                 message: err.to_string(),
+            },
+            session::ImageError::BlockedHost(_) | session::ImageError::BlockedAddress(_) => {
+                CoreError::BlockedAddress {
+                    message: err.to_string(),
+                }
             }
+            _ => CoreError::Connection {
+                message: err.to_string(),
+            },
         }
-        _ => CoreError::Connection {
-            message: err.to_string(),
-        },
-    })
+    }
 }
 
 fn runtime() -> Result<&'static Runtime, CoreError> {
@@ -576,6 +603,7 @@ impl From<SessionEvent> for CoreEvent {
                 target_id: message.target_id,
                 at: message.at,
             },
+            SessionEvent::Poked { from, message } => CoreEvent::Poked { from, message },
             SessionEvent::ClientJoined(client) => CoreEvent::ClientJoined {
                 id: client.id,
                 nickname: client.nickname,

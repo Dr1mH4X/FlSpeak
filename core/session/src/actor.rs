@@ -275,6 +275,19 @@ impl Actor {
             } => {
                 let _ = reply.send(self.send_text(target_mode, target_id, message).await);
             }
+            SessionCommand::Poke {
+                client_id,
+                message,
+                reply,
+            } => {
+                let result = match self.connected() {
+                    Ok(client) => tsclient_rs::poke(&client, client_id, &message)
+                        .await
+                        .map_err(protocol_error),
+                    Err(err) => Err(err),
+                };
+                let _ = reply.send(result);
+            }
             SessionCommand::Move {
                 client_id,
                 channel_id,
@@ -625,7 +638,14 @@ impl Actor {
         // ServerQuery 的单行上限是 8192 字节。长文本按 UTF-8 边界分片，
         // 每一片单独走 sendtextmessage，避免整条消息被服务端截断。
         for chunk in split_text_message(&message, MAX_TEXT_MESSAGE_BYTES) {
-            tsclient_rs::sendTextMessage(&client, target_mode, target_id, &chunk)
+            client
+                .exec_command(
+                    &format!(
+                        "sendtextmessage targetmode={target_mode} target={target_id} msg={}",
+                        tsclient_rs::escape(&chunk).0
+                    ),
+                    5_000,
+                )
                 .await
                 .map_err(protocol_error)?;
         }
@@ -1723,8 +1743,8 @@ fn parse_channel_metadata(rows: &[HashMap<String, String>]) -> HashMap<u64, Chan
                     .get("channel_order")
                     .and_then(|value| value.parse::<u64>().ok()),
                 description: row
-                    .get("channel_topic")
-                    .or_else(|| row.get("channel_description"))
+                    .get("channel_description")
+                    .or_else(|| row.get("channel_topic"))
                     .cloned(),
                 codec: row
                     .get("channel_codec")
@@ -1962,6 +1982,23 @@ fn register_handlers(
                     at: now_millis(),
                 },
             });
+        }
+    }));
+
+    let channel = events.clone();
+    let live = Arc::clone(&current);
+    client.on_poked(Arc::new(move |event: ProtocolEvent| {
+        if live.load(Ordering::Relaxed) != epoch {
+            return;
+        }
+        if let ProtocolEvent::Poked(poke) = event {
+            emit(
+                &channel,
+                SessionEvent::Poked {
+                    from: poke.invoker_name,
+                    message: poke.message,
+                },
+            );
         }
     }));
 
@@ -2407,6 +2444,10 @@ mod tests {
         first.insert("cid".to_string(), "7".to_string());
         first.insert("channel_order".to_string(), "3".to_string());
         first.insert("channel_topic".to_string(), "Welcome".to_string());
+        first.insert(
+            "channel_description".to_string(),
+            "Full description".to_string(),
+        );
         first.insert("channel_maxclients".to_string(), "25".to_string());
         first.insert(
             "channel_flag_maxclients_unlimited".to_string(),
@@ -2427,7 +2468,7 @@ mod tests {
         let metadata = parse_channel_metadata(&[first, second, third]);
         let first = metadata.get(&7).expect("first channel");
         assert_eq!(first.order, Some(3));
-        assert_eq!(first.description.as_deref(), Some("Welcome"));
+        assert_eq!(first.description.as_deref(), Some("Full description"));
         assert_eq!(first.codec, Some(5));
         assert_eq!(first.max_clients, Some(25));
         assert_eq!(first.max_clients_limited, Some(true));

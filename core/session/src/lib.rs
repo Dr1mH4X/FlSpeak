@@ -8,6 +8,7 @@
 //! `Client::send_voice`；音频帧本身不进入这条事件流。
 
 mod actor;
+mod image_upload;
 mod images;
 mod store;
 
@@ -20,6 +21,7 @@ use tokio::runtime::Builder;
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::task::LocalSet;
 
+pub use image_upload::{upload_image, validate_image_host};
 pub use images::{ImageError, fetch_image};
 pub use proto::ConnectError;
 
@@ -129,6 +131,10 @@ pub enum SessionEvent {
         messages: Vec<TextMessageView>,
     },
     TextMessage(TextMessageView),
+    Poked {
+        from: String,
+        message: String,
+    },
     ClientJoined(ClientView),
     ClientLeft {
         id: i32,
@@ -222,6 +228,11 @@ pub enum SessionCommand {
     SendText {
         target_mode: i32,
         target_id: u64,
+        message: String,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
+    Poke {
+        client_id: i32,
         message: String,
         reply: oneshot::Sender<Result<(), SessionError>>,
     },
@@ -507,6 +518,16 @@ impl SessionHandle {
         self.send(SessionCommand::SendText {
             target_mode,
             target_id,
+            message,
+            reply,
+        })?;
+        rx.await.map_err(|_| SessionError::Closed)?
+    }
+
+    pub async fn poke(&self, client_id: i32, message: String) -> Result<(), SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::Poke {
+            client_id,
             message,
             reply,
         })?;

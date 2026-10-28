@@ -20,6 +20,7 @@ import 'settings_state.dart';
 import 'widgets/settings_card.dart';
 import 'widgets/appearance_picker.dart';
 import 'widgets/settings_dialogs.dart';
+import 'widgets/image_host_dialog.dart';
 
 /// 该路由是顶层路由，所以页面自带 Scaffold；从工作区或登录页进入都能原路返回。
 class SettingsPage extends ConsumerStatefulWidget {
@@ -72,6 +73,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       SettingsGroup(
         title: l10n.settingsGeneral,
         children: [
+          SettingsRow(
+            icon: Icons.cloud_upload_outlined,
+            title: l10n.imageHostTitle,
+            onTap: () => showImageHostSettings(context),
+          ),
           SettingsRow(
             icon: Icons.translate_rounded,
             title: l10n.settingsLanguage,

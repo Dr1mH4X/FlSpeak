@@ -4,6 +4,7 @@ import '../../../core/models.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/monogram.dart';
+import 'client_actions.dart';
 
 class MembersPane extends StatelessWidget {
   const MembersPane({required this.view, required this.channelId, super.key});
@@ -82,6 +83,7 @@ class MembersPane extends StatelessWidget {
                       ],
                     ),
                   ),
+                  ClientActionsButton(client: member),
                   if (member.inputMuted ?? false)
                     Icon(
                       Icons.mic_off_rounded,

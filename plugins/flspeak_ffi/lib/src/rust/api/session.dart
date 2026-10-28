@@ -9,11 +9,31 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'session.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `runtime`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 /// 抓取第三方图片 URL。myTS 的 `ts.file.myts` 附件不经过这里。
 Future<Uint8List> fetchImage({required String url}) =>
     RustLib.instance.api.crateApiSessionFetchImage(url: url);
+
+Future<void> validateImageHost({
+  required String uploadBase,
+  required String publicBase,
+}) => RustLib.instance.api.crateApiSessionValidateImageHost(
+  uploadBase: uploadBase,
+  publicBase: publicBase,
+);
+
+Future<String> uploadImage({
+  required String uploadBase,
+  required String publicBase,
+  String? token,
+  required List<int> bytes,
+}) => RustLib.instance.api.crateApiSessionUploadImage(
+  uploadBase: uploadBase,
+  publicBase: publicBase,
+  token: token,
+  bytes: bytes,
+);
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<CoreSession>>
 abstract class CoreSession implements RustOpaqueInterface {
@@ -57,6 +77,8 @@ abstract class CoreSession implements RustOpaqueInterface {
         storePath: storePath,
         audioEnabled: audioEnabled,
       );
+
+  Future<void> poke({required int clientId, required String message});
 
   /// 录入服务器。地址在这里解析并登记，连接目标只能来自档案。
   Future<ServerProfileView> registerServer({
@@ -293,6 +315,10 @@ sealed class CoreEvent with _$CoreEvent {
     required int targetId,
     required int at,
   }) = CoreEvent_TextMessage;
+  const factory CoreEvent.poked({
+    required String from,
+    required String message,
+  }) = CoreEvent_Poked;
   const factory CoreEvent.clientJoined({
     required int id,
     required String nickname,

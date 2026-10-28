@@ -27,6 +27,8 @@ CMAKE_POLICY_VERSION_MINIMUM=3.5 cargo test --workspace --all-features   # 或�
 仓库根 `.cargo/config.toml` 已设置 `CMAKE_POLICY_VERSION_MINIMUM=3.5`；`session` 依赖
 `audio` 的 `audio` feature（Opus/cpal），跑它的测试同样需要 Opus 工具链。
 
+Linux 桌面构建需要 `libsecret-1-dev`，用于图片上传配置的安全存储。开发机使用系统包管理器安装；CI 与发布流水线的 Linux 依赖步骤包含该包。
+
 ## FFI 绑定
 
 改了 `plugins/flspeak_ffi/rust/src/api/**` 或其中的类型，就要重跑生成：

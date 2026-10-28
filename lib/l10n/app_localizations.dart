@@ -931,6 +931,168 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Retry channel icon'**
   String get channelIconRetry;
+
+  /// No description provided for @chatReply.
+  ///
+  /// In en, this message translates to:
+  /// **'Reply privately'**
+  String get chatReply;
+
+  /// No description provided for @chatRecipientUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Recipient is offline. Choose another recipient.'**
+  String get chatRecipientUnavailable;
+
+  /// No description provided for @chatChannelUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Join this channel before sending a message.'**
+  String get chatChannelUnavailable;
+
+  /// No description provided for @pokeAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Poke'**
+  String get pokeAction;
+
+  /// No description provided for @pokeMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Message'**
+  String get pokeMessage;
+
+  /// No description provided for @pokeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Poke {name}'**
+  String pokeTitle(String name);
+
+  /// No description provided for @pokeSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Poked {name}'**
+  String pokeSent(String name);
+
+  /// No description provided for @pokeReceived.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} poked you: {message}'**
+  String pokeReceived(String name, String message);
+
+  /// No description provided for @memberActions.
+  ///
+  /// In en, this message translates to:
+  /// **'Actions for {name}'**
+  String memberActions(String name);
+
+  /// No description provided for @chatDestinationChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'The destination changed. Your draft was kept; confirm the recipient and retry.'**
+  String get chatDestinationChanged;
+
+  /// No description provided for @chatImageTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'Images must be no larger than 20 MiB'**
+  String get chatImageTooLarge;
+
+  /// No description provided for @chatClipboardEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No image in the clipboard'**
+  String get chatClipboardEmpty;
+
+  /// No description provided for @chatImageInputFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read the image. Please choose it again.'**
+  String get chatImageInputFailed;
+
+  /// No description provided for @chatAttachImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Attach image'**
+  String get chatAttachImage;
+
+  /// No description provided for @chatChooseImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose image'**
+  String get chatChooseImage;
+
+  /// No description provided for @chatPasteImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste image'**
+  String get chatPasteImage;
+
+  /// No description provided for @chatRemoveImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove image'**
+  String get chatRemoveImage;
+
+  /// No description provided for @imageHostTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Image uploads'**
+  String get imageHostTitle;
+
+  /// No description provided for @imageHostRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure a self-hosted image host in Image uploads first'**
+  String get imageHostRequired;
+
+  /// No description provided for @imageHostStorageFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not access secure storage for image uploads'**
+  String get imageHostStorageFailed;
+
+  /// No description provided for @imageHostUploadBase.
+  ///
+  /// In en, this message translates to:
+  /// **'HTTP PUT upload base URL'**
+  String get imageHostUploadBase;
+
+  /// No description provided for @imageHostPublicBase.
+  ///
+  /// In en, this message translates to:
+  /// **'Public image base URL'**
+  String get imageHostPublicBase;
+
+  /// No description provided for @imageHostToken.
+  ///
+  /// In en, this message translates to:
+  /// **'Bearer token (optional)'**
+  String get imageHostToken;
+
+  /// No description provided for @imageHostRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear configuration'**
+  String get imageHostRemove;
+
+  /// No description provided for @imageHostSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get imageHostSave;
+
+  /// No description provided for @imageHostUploadHint.
+  ///
+  /// In en, this message translates to:
+  /// **'https://upload.example.com/images/'**
+  String get imageHostUploadHint;
+
+  /// No description provided for @imageHostPublicHint.
+  ///
+  /// In en, this message translates to:
+  /// **'https://images.example.com/'**
+  String get imageHostPublicHint;
 }
 
 class _AppLocalizationsDelegate

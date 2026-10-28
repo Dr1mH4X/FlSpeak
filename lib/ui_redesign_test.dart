@@ -140,8 +140,9 @@ class _UiSessionController extends SessionController {
   }
 
   @override
-  Future<void> sendMessage(String message) async {
+  Future<bool> sendMessage(String message) async {
     sentMessage = message;
+    return true;
   }
 }
 

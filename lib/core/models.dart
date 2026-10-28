@@ -62,6 +62,7 @@ class SessionView {
     this.messages = const <ChatMessage>[],
     this.activeServerId,
     this.chatScope = ChatScope.channel,
+    this.directRecipientUid,
     this.busy = false,
     this.failureSeq = 0,
     this.connectionEpoch = 0,
@@ -87,6 +88,16 @@ class SessionView {
 
   /// 输入框当前投递范围。
   final ChatScope chatScope;
+  final String? directRecipientUid;
+
+  ClientView? get directRecipient {
+    for (final client in clients) {
+      if (client.uid == directRecipientUid && client.id != selfClientId) {
+        return client;
+      }
+    }
+    return null;
+  }
 
   final bool busy;
 
@@ -240,6 +251,7 @@ class SessionView {
     List<ChatMessage>? messages,
     Object? activeServerId = _unset,
     ChatScope? chatScope,
+    Object? directRecipientUid = _unset,
     bool? busy,
     int? failureSeq,
     int? connectionEpoch,
@@ -262,6 +274,9 @@ class SessionView {
         ? this.activeServerId
         : activeServerId as String?,
     chatScope: chatScope ?? this.chatScope,
+    directRecipientUid: identical(directRecipientUid, _unset)
+        ? this.directRecipientUid
+        : directRecipientUid as String?,
     busy: busy ?? this.busy,
     failureSeq: failureSeq ?? this.failureSeq,
     connectionEpoch: connectionEpoch ?? this.connectionEpoch,

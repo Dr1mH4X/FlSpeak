@@ -43,6 +43,8 @@ TSDNS 尚未实现。服务器对访客关闭 `channellist` 时，测试只验�
 
 本机 Flutter 渲染验证可显式运行 `lib/live_channel_icons_test.dart`，用 `--dart-define=FLSPEAK_LIVE_SERVER=<地址>` 与 `--dart-define=FLSPEAK_NATIVE_LIBRARY=<本机动态库绝对路径>` 指定目标。该测试关闭音频，用真实 actor、FFI、Provider 和 Flutter 图片解码链路；未设置这两个值时默认跳过。可另设 `FLSPEAK_CAPTURE_DIR` 保存界面截图。
 
+`lib/live_messaging_test.dart` 使用同样的两个 `--dart-define` 参数，建立两个临时测试身份，验证私聊选择与回复、戳一下双向通知、历史保存和离线目标拒绝；只向这两个测试身份发送消息。未配置目标与动态库时默认跳过，不进入 CI 的真实网络测试。仅设置动态库路径时，可独立运行其中的本机 HTTP PUT 图床夹具，无需真实服务器。
+
 ### 最小消息探针（后台等消息）
 
 `core/session/examples/live_probe.rs` 会保持在线，把收到的文本消息**原文**写到 stdout 和

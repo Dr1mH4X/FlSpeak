@@ -459,4 +459,99 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get channelIconRetry => 'Retry channel icon';
+
+  @override
+  String get chatReply => 'Reply privately';
+
+  @override
+  String get chatRecipientUnavailable =>
+      'Recipient is offline. Choose another recipient.';
+
+  @override
+  String get chatChannelUnavailable =>
+      'Join this channel before sending a message.';
+
+  @override
+  String get pokeAction => 'Poke';
+
+  @override
+  String get pokeMessage => 'Message';
+
+  @override
+  String pokeTitle(String name) {
+    return 'Poke $name';
+  }
+
+  @override
+  String pokeSent(String name) {
+    return 'Poked $name';
+  }
+
+  @override
+  String pokeReceived(String name, String message) {
+    return '$name poked you: $message';
+  }
+
+  @override
+  String memberActions(String name) {
+    return 'Actions for $name';
+  }
+
+  @override
+  String get chatDestinationChanged =>
+      'The destination changed. Your draft was kept; confirm the recipient and retry.';
+
+  @override
+  String get chatImageTooLarge => 'Images must be no larger than 20 MiB';
+
+  @override
+  String get chatClipboardEmpty => 'No image in the clipboard';
+
+  @override
+  String get chatImageInputFailed =>
+      'Could not read the image. Please choose it again.';
+
+  @override
+  String get chatAttachImage => 'Attach image';
+
+  @override
+  String get chatChooseImage => 'Choose image';
+
+  @override
+  String get chatPasteImage => 'Paste image';
+
+  @override
+  String get chatRemoveImage => 'Remove image';
+
+  @override
+  String get imageHostTitle => 'Image uploads';
+
+  @override
+  String get imageHostRequired =>
+      'Configure a self-hosted image host in Image uploads first';
+
+  @override
+  String get imageHostStorageFailed =>
+      'Could not access secure storage for image uploads';
+
+  @override
+  String get imageHostUploadBase => 'HTTP PUT upload base URL';
+
+  @override
+  String get imageHostPublicBase => 'Public image base URL';
+
+  @override
+  String get imageHostToken => 'Bearer token (optional)';
+
+  @override
+  String get imageHostRemove => 'Clear configuration';
+
+  @override
+  String get imageHostSave => 'Save';
+
+  @override
+  String get imageHostUploadHint => 'https://upload.example.com/images/';
+
+  @override
+  String get imageHostPublicHint => 'https://images.example.com/';
 }

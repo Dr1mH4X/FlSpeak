@@ -454,4 +454,93 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get channelIconRetry => '重新加载频道图标';
+
+  @override
+  String get chatReply => '回复私聊';
+
+  @override
+  String get chatRecipientUnavailable => '私聊对象已离线，请重新选择';
+
+  @override
+  String get chatChannelUnavailable => '请先进入此频道再发送消息';
+
+  @override
+  String get pokeAction => '戳一下';
+
+  @override
+  String get pokeMessage => '消息';
+
+  @override
+  String pokeTitle(String name) {
+    return '戳一下 $name';
+  }
+
+  @override
+  String pokeSent(String name) {
+    return '已戳了 $name 一下';
+  }
+
+  @override
+  String pokeReceived(String name, String message) {
+    return '$name 戳了你一下：$message';
+  }
+
+  @override
+  String memberActions(String name) {
+    return '$name 的操作';
+  }
+
+  @override
+  String get chatDestinationChanged => '发送目标已改变，草稿已保留，请确认后重试';
+
+  @override
+  String get chatImageTooLarge => '图片不能超过 20 MiB';
+
+  @override
+  String get chatClipboardEmpty => '剪贴板中没有图片';
+
+  @override
+  String get chatImageInputFailed => '无法读取图片，请重新选择';
+
+  @override
+  String get chatAttachImage => '添加图片';
+
+  @override
+  String get chatChooseImage => '选择图片';
+
+  @override
+  String get chatPasteImage => '粘贴图片';
+
+  @override
+  String get chatRemoveImage => '移除图片';
+
+  @override
+  String get imageHostTitle => '图片上传';
+
+  @override
+  String get imageHostRequired => '请先在图片上传设置中配置自托管图床';
+
+  @override
+  String get imageHostStorageFailed => '无法访问图片上传的安全存储';
+
+  @override
+  String get imageHostUploadBase => 'HTTP PUT 上传地址';
+
+  @override
+  String get imageHostPublicBase => '图片访问地址';
+
+  @override
+  String get imageHostToken => '访问令牌（可选）';
+
+  @override
+  String get imageHostRemove => '清除配置';
+
+  @override
+  String get imageHostSave => '保存';
+
+  @override
+  String get imageHostUploadHint => 'https://upload.example.com/images/';
+
+  @override
+  String get imageHostPublicHint => 'https://images.example.com/';
 }

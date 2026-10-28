@@ -15,6 +15,7 @@ import '../../../widgets/common.dart';
 import '../../../widgets/channel_icon.dart';
 import '../../../widgets/monogram.dart';
 import '../workspace_state.dart';
+import 'client_actions.dart';
 import 'voice_activity_ribbon.dart';
 
 /// 频道栏：服务器身份、统一的频道树、当前用户。
@@ -519,6 +520,7 @@ class _MemberTile extends StatelessWidget {
                 ),
               ),
             ),
+            ClientActionsButton(client: client),
             // 服务器回显的设备状态：快照没带标志（null）时不显示。
             if (client.inputMuted ?? false)
               _MemberFlag(

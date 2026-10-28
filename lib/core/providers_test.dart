@@ -1,0 +1,133 @@
+// ignore_for_file: depend_on_referenced_packages
+
+import 'dart:async';
+
+import 'package:flspeak_ffi/flspeak_ffi.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import 'models.dart';
+import 'providers.dart';
+import 'notices.dart';
+
+class _Core extends Fake implements CoreSession {
+  _Core(this.eventsController);
+
+  final StreamController<CoreEvent> eventsController;
+  final sent = <({int mode, int target, String text})>[];
+  bool fail = false;
+  final pokes = <({int id, String message})>[];
+  @override
+  Future<void> poke({required int clientId, required String message}) async {
+    if (fail) throw const CoreError.connection(message: 'poke rejected');
+    pokes.add((id: clientId, message: message));
+  }
+
+  @override
+  Stream<CoreEvent> events() => eventsController.stream;
+  @override
+  Future<List<ServerProfileView>> listServers() async => [];
+  @override
+  Future<void> sendText({
+    required int targetMode,
+    required int targetId,
+    required String message,
+  }) async {
+    if (fail) throw const CoreError.connection(message: 'rejected');
+    sent.add((mode: targetMode, target: targetId, text: message));
+  }
+}
+
+void main() {
+  test('private recipient uses current UID mapping and cannot fall back to another client', () async {
+    final events = StreamController<CoreEvent>.broadcast(sync: true);
+    final core = _Core(events);
+    final container = ProviderContainer(
+      overrides: [coreSessionProvider.overrideWithValue(core)],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await events.close();
+    });
+    final controller = container.read(sessionViewProvider.notifier);
+    core.eventsController.add(
+      const CoreEvent.state(
+        state: CoreSessionState.connected(clientId: 1, channelId: 7),
+      ),
+    );
+    core.eventsController.add(
+      const CoreEvent.snapshot(
+        channels: [],
+        clients: [
+          ClientView(id: 1, nickname: 'Self', uid: 'self', channelId: 7),
+          ClientView(id: 2, nickname: 'Peer', uid: 'peer', channelId: 7),
+        ],
+      ),
+    );
+    controller.replyToMessage(
+      ChatMessage(
+        from: 'Peer',
+        fromUid: 'peer',
+        text: 'incoming',
+        at: DateTime(2026),
+        scope: ChatScope.direct,
+        targetId: 1,
+      ),
+    );
+    expect(container.read(sessionViewProvider).directRecipientUid, 'peer');
+    expect(await controller.sendMessage('hello'), isTrue);
+    expect(core.sent.single, (mode: 1, target: 2, text: 'hello'));
+    expect(await controller.pokeClient('peer', 'poke body'), isTrue);
+    expect(core.pokes.single, (id: 2, message: 'poke body'));
+    events.add(const CoreEvent.poked(from: 'Peer', message: 'incoming poke'));
+    expect(
+      container
+          .read(noticeCenterProvider)
+          .any(
+            (notice) =>
+                notice.message.contains('incoming poke') &&
+                notice.message.contains('Peer'),
+          ),
+      isTrue,
+    );
+    final oldSender = controller.prepareMessageSender();
+    controller.selectChatScope(ChatScope.channel);
+    expect(await oldSender('must not become a channel message'), isFalse);
+    expect(core.sent, hasLength(1));
+    controller.selectDirectRecipient('peer');
+    core.eventsController.add(const CoreEvent.clientLeft(id: 2));
+    core.eventsController.add(
+      const CoreEvent.clientJoined(
+        id: 2,
+        nickname: 'Other',
+        uid: 'other',
+        channelId: 7,
+      ),
+    );
+    expect(await controller.sendMessage('must not reach Other'), isFalse);
+    expect(await controller.pokeClient('peer', 'must not poke Other'), isFalse);
+    expect(core.pokes, hasLength(1));
+    expect(core.sent, hasLength(1));
+    core.eventsController.add(
+      const CoreEvent.clientJoined(
+        id: 3,
+        nickname: 'Peer',
+        uid: 'peer',
+        channelId: 7,
+      ),
+    );
+    expect(await controller.sendMessage('new client id'), isTrue);
+    expect(core.sent.last.target, 3);
+    core.fail = true;
+    expect(await controller.pokeClient('peer', 'rejected'), isFalse);
+    expect(core.pokes, hasLength(1));
+    expect(await controller.sendMessage('rejected'), isFalse);
+    core.eventsController.add(
+      const CoreEvent.state(state: CoreSessionState.disconnected()),
+    );
+    final view = container.read(sessionViewProvider);
+    expect(view.directRecipientUid, isNull);
+    expect(view.chatScope, ChatScope.channel);
+    expect(await controller.sendMessage('offline'), isFalse);
+  });
+}

@@ -9,6 +9,7 @@ import '../../l10n/app_localizations.dart';
 import '../../theme/app_motion.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common.dart';
+import '../settings/widgets/image_host_dialog.dart';
 import 'widgets/chat_pane.dart';
 import 'widgets/media_grid.dart';
 import 'widgets/media_viewer.dart';
@@ -72,6 +73,18 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
         }
       });
     });
+
+    ref.listen(
+      sessionViewProvider.select(
+        (view) => (view.chatScope, view.directRecipientUid),
+      ),
+      (previous, next) {
+        if (next.$1 != ChatScope.direct) return;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _tabController.index != 0) _tabController.index = 0;
+        });
+      },
+    );
 
     final channel = channelId == null ? null : view.channelById(channelId);
     final compact = MediaQuery.sizeOf(context).width < Breakpoints.compact;
@@ -178,7 +191,21 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
           canSendChannel: view.selfChannelId == channel.id,
           busy: view.busy,
           onScopeChanged: controller.selectChatScope,
-          onSend: controller.sendMessage,
+          onSend: controller.prepareMessageSender(),
+          onPickImage: () => controller.pickChatImage(paste: false),
+          onPasteImage: () => controller.pickChatImage(paste: true),
+          onUploadImage: controller.uploadChatImage,
+          onConfigureImageHost: () => showImageHostSettings(context),
+          description: channel.description,
+          recipients: view.clients
+              .where(
+                (peer) => peer.id != view.selfClientId && peer.uid.isNotEmpty,
+              )
+              .toList(),
+          recipientUid: view.directRecipientUid,
+          selfUid: view.selfUid,
+          onRecipientChanged: controller.selectDirectRecipient,
+          onReply: controller.replyToMessage,
         );
     }
   }
