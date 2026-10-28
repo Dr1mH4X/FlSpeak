@@ -34,6 +34,6 @@ FlSpeak/
 
 ## 与 tsclient-rs 的关系
 
-依赖 `Cargo.toml` 中固定 Git 提交的 `tsclient-rs`，该提交提供频道图标与明文文件传输。上游是 teamspeak-js 的结构化移植，公共 API
+依赖 crates.io 上 `Cargo.toml` 指定版本的 `tsclient-rs`，由它提供频道图标与明文文件传输。上游是 teamspeak-js 的结构化移植，公共 API
 刻意与 JS 对齐，**不要把本项目的连接边界逻辑推回上游**。只有中性的、纯增量的改动才值得提 PR
 （候选见 `.agents/notes/implemented/architecture/2026-10-18-full-duplex-audio.md`）。本地调试方式见 [开发流程](../docs/development.md#本地改上游-tsclient-rs)。

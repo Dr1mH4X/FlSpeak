@@ -14,7 +14,7 @@ session      命令队列 + 事件广播，独占 Client
 proto        SRV 解析 + 最终连接边界 + deny-all 解析器 + 建连
   ├────────> server   服务器档案、地址解析与本地登记
   ▼
-tsclient-rs           协议实现（来源与固定提交见 Cargo.toml）
+tsclient-rs           协议实现（版本见 Cargo.toml）
 ```
 
 Flutter 负责界面，Rust 负责协议、连接边界与音频。Dart 不持有身份私钥，
