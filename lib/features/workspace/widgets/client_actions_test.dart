@@ -11,15 +11,15 @@ import '../../../l10n/app_localizations.dart';
 import 'client_actions.dart';
 
 class _Controller extends SessionController {
-  final calls = <({String uid, String message})>[];
+  final calls = <({String uid, int? clientId, String message})>[];
   bool succeed = false;
   @override
   SessionView build() => const SessionView(
     state: CoreSessionState.connected(clientId: 1, channelId: 1),
   );
   @override
-  Future<bool> pokeClient(String uid, String message) async {
-    calls.add((uid: uid, message: message));
+  Future<bool> pokeClient(String uid, String message, {int? clientId}) async {
+    calls.add((uid: uid, clientId: clientId, message: message));
     return succeed;
   }
 }
@@ -72,8 +72,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(TextField), findsNothing);
       expect(controller.calls, [
-        (uid: 'peer', message: 'hello 🌍'),
-        (uid: 'peer', message: 'hello 🌍'),
+        (uid: 'peer', clientId: 2, message: 'hello 🌍'),
+        (uid: 'peer', clientId: 2, message: 'hello 🌍'),
       ]);
     },
   );

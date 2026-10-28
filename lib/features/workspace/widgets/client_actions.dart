@@ -75,7 +75,7 @@ class ClientActionsButton extends ConsumerWidget {
           onPressed: () {
             ref
                 .read(sessionViewProvider.notifier)
-                .selectDirectRecipient(client.uid);
+                .selectDirectRecipient(client.uid, clientId: client.id);
             ref.read(routerProvider).go(AppRoutes.workspace);
           },
           child: Text(l10n.chatDirectTag),
@@ -115,7 +115,11 @@ class _PokeFormState extends ConsumerState<_PokeForm> {
     setState(() => _busy = true);
     final sent = await ref
         .read(sessionViewProvider.notifier)
-        .pokeClient(widget.client.uid, _message.text.trim());
+        .pokeClient(
+          widget.client.uid,
+          _message.text.trim(),
+          clientId: widget.client.id,
+        );
     if (!mounted) return;
     setState(() => _busy = false);
     if (sent) Navigator.of(context).pop();

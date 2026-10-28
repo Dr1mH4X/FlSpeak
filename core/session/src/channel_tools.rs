@@ -136,18 +136,11 @@ fn number(row: &Row, key: &str) -> Result<u64, SessionError> {
         .ok_or_else(|| SessionError::Protocol(format!("missing or invalid {key}")))
 }
 
-async fn member(client: &Client, uid: &str) -> Result<Row, SessionError> {
-    if uid.is_empty() {
-        return Err(SessionError::Protocol("member is unavailable".into()));
-    }
+async fn member(client: &Client, uid: &str, client_id: i32) -> Result<Row, SessionError> {
     let directory = client
         .directory_snapshot()
         .ok_or(SessionError::NotConnected)?;
-    let peer = directory
-        .clients
-        .iter()
-        .find(|peer| peer.uid == uid)
-        .ok_or_else(|| SessionError::Protocol("member is offline".into()))?;
+    let peer = kick_target(&directory.clients, uid, client_id)?;
     let info = tsclient_rs::getClientInfo(client, peer.id)
         .await
         .map_err(|error| SessionError::Protocol(format!("cannot read member details: {error}")))?;
@@ -236,41 +229,40 @@ async fn groups(
     tools: &mut ChannelTools,
 ) -> Result<Vec<MemberGroupView>, SessionError> {
     let own = access(client, tools).await?;
-    if tools
-        .definitions
-        .as_ref()
-        .is_none_or(|(loaded, _)| loaded.elapsed() >= Duration::from_secs(30))
-    {
-        let mut definitions = Vec::new();
-        for (kind, prefix, key) in [
-            (GroupKind::Server, "servergroup", "sgid"),
-            (GroupKind::Channel, "channelgroup", "cgid"),
-        ] {
-            let rows = match client
-                .exec_command_with_response(&format!("{prefix}list"), 15_000)
-                .await
-            {
-                Ok(rows) => rows,
-                Err(tsclient_rs::Error::ServerError { id, .. }) if id == "2568" => Vec::new(),
-                Err(error) => return Err(protocol_error(error)),
-            };
-            for row in rows {
-                if row.get("type").map(String::as_str) != Some("1") {
-                    continue;
+    let definitions = match &tools.definitions {
+        Some((loaded, definitions)) if loaded.elapsed() < Duration::from_secs(30) => definitions,
+        _ => {
+            let mut definitions = Vec::new();
+            for (kind, prefix, key) in [
+                (GroupKind::Server, "servergroup", "sgid"),
+                (GroupKind::Channel, "channelgroup", "cgid"),
+            ] {
+                let rows = match client
+                    .exec_command_with_response(&format!("{prefix}list"), 15_000)
+                    .await
+                {
+                    Ok(rows) => rows,
+                    Err(tsclient_rs::Error::ServerError { id, .. }) if id == "2568" => Vec::new(),
+                    Err(error) => return Err(protocol_error(error)),
+                };
+                for row in rows {
+                    if row.get("type").map(String::as_str) != Some("1") {
+                        continue;
+                    }
+                    definitions.push(GroupDefinition {
+                        id: number(&row, key)?,
+                        name: row.get("name").cloned().unwrap_or_default(),
+                        kind,
+                        needed_add: row.get("n_member_addp").and_then(|v| v.parse().ok()),
+                        needed_remove: row.get("n_member_removep").and_then(|v| v.parse().ok()),
+                        persistent: kind == GroupKind::Channel
+                            || row.get("savedb").map(String::as_str) == Some("1"),
+                    });
                 }
-                definitions.push(GroupDefinition {
-                    id: number(&row, key)?,
-                    name: row.get("name").cloned().unwrap_or_default(),
-                    kind,
-                    needed_add: row.get("n_member_addp").and_then(|v| v.parse().ok()),
-                    needed_remove: row.get("n_member_removep").and_then(|v| v.parse().ok()),
-                    persistent: kind == GroupKind::Channel
-                        || row.get("savedb").map(String::as_str) == Some("1"),
-                });
             }
+            &tools.definitions.insert((Instant::now(), definitions)).1
         }
-        tools.definitions = Some((Instant::now(), definitions));
-    }
+    };
     let server_groups = info
         .get("client_servergroups")
         .map(|v| v.split(',').collect::<Vec<_>>())
@@ -279,12 +271,7 @@ async fn groups(
         .get("client_channel_group_id")
         .and_then(|v| v.parse::<u64>().ok());
     let mut result = Vec::new();
-    for definition in &tools
-        .definitions
-        .as_ref()
-        .expect("loaded group definitions")
-        .1
-    {
+    for definition in definitions {
         result.push(MemberGroupView {
             channel_id: number(info, "cid")?,
             id: definition.id,
@@ -315,21 +302,22 @@ async fn groups(
 pub(crate) async fn member_groups(
     client: &Client,
     uid: &str,
+    client_id: i32,
     tools: &mut ChannelTools,
 ) -> Result<Vec<MemberGroupView>, SessionError> {
-    groups(client, &member(client, uid).await?, tools).await
+    groups(client, &member(client, uid, client_id).await?, tools).await
 }
 
 pub(crate) async fn set_member_group(
     client: &Client,
-    uid: &str,
+    (uid, client_id): (&str, i32),
     group_id: u64,
     channel_id: u64,
     kind: GroupKind,
     enabled: bool,
     tools: &mut ChannelTools,
 ) -> Result<(), SessionError> {
-    let info = member(client, uid).await?;
+    let info = member(client, uid, client_id).await?;
     if kind == GroupKind::Channel && number(&info, "cid")? != channel_id {
         return Err(SessionError::Protocol("member changed channel".into()));
     }

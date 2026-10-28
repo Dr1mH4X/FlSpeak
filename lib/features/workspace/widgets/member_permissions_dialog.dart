@@ -10,12 +10,12 @@ Future<void> showMemberPermissions(BuildContext context, ClientView client) =>
     showAppModal<void>(
       context,
       title: AppLocalizations.of(context).memberPermissions,
-      builder: (_) => _PermissionsForm(uid: client.uid),
+      builder: (_) => _PermissionsForm(client: client),
     );
 
 class _PermissionsForm extends ConsumerStatefulWidget {
-  const _PermissionsForm({required this.uid});
-  final String uid;
+  const _PermissionsForm({required this.client});
+  final ClientView client;
   @override
   ConsumerState<_PermissionsForm> createState() => _PermissionsFormState();
 }
@@ -23,6 +23,8 @@ class _PermissionsForm extends ConsumerStatefulWidget {
 class _PermissionsFormState extends ConsumerState<_PermissionsForm> {
   bool _busy = false;
   late final _target = ref.read(sessionViewProvider).connectionEpoch;
+  MemberGroupTarget get _member =>
+      (clientId: widget.client.id, uid: widget.client.uid);
   Future<void> _set(MemberGroupView group, bool enabled) async {
     if (_busy || ref.read(sessionViewProvider).connectionEpoch != _target) {
       return;
@@ -31,7 +33,12 @@ class _PermissionsFormState extends ConsumerState<_PermissionsForm> {
     try {
       await ref
           .read(sessionViewProvider.notifier)
-          .setMemberGroup(widget.uid, group, enabled);
+          .setMemberGroup(
+            widget.client.uid,
+            group,
+            enabled,
+            clientId: widget.client.id,
+          );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -40,9 +47,15 @@ class _PermissionsFormState extends ConsumerState<_PermissionsForm> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final groups = ref.watch(memberGroupsProvider(widget.uid));
+    final groups = ref.watch(memberGroupsProvider(_member));
     final view = ref.watch(sessionViewProvider);
-    final available = view.connected && view.connectionEpoch == _target;
+    final available =
+        view.connected &&
+        view.connectionEpoch == _target &&
+        view.clients.any(
+          (peer) =>
+              peer.id == widget.client.id && peer.uid == widget.client.uid,
+        );
     return groups.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, stack) => Column(
@@ -50,7 +63,7 @@ class _PermissionsFormState extends ConsumerState<_PermissionsForm> {
         children: [
           Text(l10n.permissionsUnavailable),
           TextButton(
-            onPressed: () => ref.invalidate(memberGroupsProvider(widget.uid)),
+            onPressed: () => ref.invalidate(memberGroupsProvider(_member)),
             child: Text(l10n.commonRetry),
           ),
         ],

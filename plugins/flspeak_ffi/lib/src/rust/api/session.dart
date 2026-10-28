@@ -83,7 +83,10 @@ abstract class CoreSession implements RustOpaqueInterface {
 
   Future<List<ServerProfileView>> listServers();
 
-  Future<List<MemberGroupView>> memberGroups({required String uid});
+  Future<List<MemberGroupView>> memberGroups({
+    required String uid,
+    required int clientId,
+  });
 
   Future<void> moveToChannel({
     required int clientId,
@@ -126,6 +129,7 @@ abstract class CoreSession implements RustOpaqueInterface {
 
   Future<void> setMemberGroup({
     required String uid,
+    required int clientId,
     required int groupId,
     required int channelId,
     required GroupKind kind,
@@ -403,6 +407,7 @@ sealed class CoreEvent with _$CoreEvent {
   const factory CoreEvent.textMessage({
     required String from,
     required String fromUid,
+    required int fromId,
     required String message,
     required int targetMode,
     required int targetId,
@@ -475,6 +480,7 @@ sealed class CoreEvent with _$CoreEvent {
 class CoreMessage {
   final String from;
   final String fromUid;
+  final int fromId;
   final String message;
   final int targetMode;
   final int targetId;
@@ -483,6 +489,7 @@ class CoreMessage {
   const CoreMessage({
     required this.from,
     required this.fromUid,
+    required this.fromId,
     required this.message,
     required this.targetMode,
     required this.targetId,
@@ -493,6 +500,7 @@ class CoreMessage {
   int get hashCode =>
       from.hashCode ^
       fromUid.hashCode ^
+      fromId.hashCode ^
       message.hashCode ^
       targetMode.hashCode ^
       targetId.hashCode ^
@@ -505,6 +513,7 @@ class CoreMessage {
           runtimeType == other.runtimeType &&
           from == other.from &&
           fromUid == other.fromUid &&
+          fromId == other.fromId &&
           message == other.message &&
           targetMode == other.targetMode &&
           targetId == other.targetId &&

@@ -125,12 +125,10 @@ Connected ──非主动断开──> Reconnecting{attempt, delay}
 
 ## 文本消息
 
-- 发送由 actor 通过 `Client::exec_command` 提交转义后的 `sendtextmessage` 并等待服务器确认（5 秒超时）：`target_mode=1` 私聊、`2` 频道、`3` 服务器；频道消息的 `target` 是频道 id，服务器广播是 0。Dart 仅在确认成功后清空草稿，私聊按 UID 查找当前在线客户端 id。
+- 发送由 actor 通过 `Client::exec_command` 提交转义后的 `sendtextmessage` 并等待服务器确认（5 秒超时）：`target_mode=1` 私聊、`2` 频道、`3` 服务器；频道消息的 `target` 是频道 id，服务器广播是 0。Dart 仅在确认成功后清空草稿，私聊同时核对收件人的在线客户端 id 与 UID。
 - 戳一下通过同一 actor 串行调用 `tsclient_rs::poke`，接收侧只注册一个 `on_poked`，核对连接代次后转成 UI 通知；戳一下不写入聊天历史。
-- ServerQuery 单行上限 8192 字节。actor 在发送前按 UTF-8 字符边界分片，优先在空白处断开；
-  分片之间不保证原子性，网络中断时可能只发出前几片。
-- 接收侧只注册一个 `on_text_message` 处理器，转成 `TextMessageView` 后进 actor 的事件队列；
-  `TextMessageView.from_id` 保留发送者客户端 id，私聊回复需要它。
+- ServerQuery 单行上限 8192 字节。actor 在发送前按 UTF-8 字符边界分片，优先在空白处断开；分片之间不保证原子性，网络中断时可能只发出前几片。
+- 接收侧只注册一个 `on_text_message` 处理器，转成 `TextMessageView` 后进 actor 的事件队列；`TextMessageView.from_id` 保留发送者客户端 id，私聊回复需要它。
 - TS6 图片是 `{"msg_type":"ts.file.myts",...}` JSON，不是 URL；官方客户端从 myTS 附件
   服务下载。FlSpeak 不携带 myTS token，官方附件只显示“不支持的图片格式”占位。
 - 第三方 URL 图片走 `core/session/src/images.rs` + FFI `fetchImage(url)`：校验 http/https、
@@ -152,8 +150,7 @@ Connected ──非主动断开──> Reconnecting{attempt, delay}
 
 ## 文件传输
 
-- 初始化（`ftinitupload` / `ftinitdownload`）在 actor 里；数据连接是独立 TCP 流，初始化后
-  交给 local task 执行，避免大文件堵住命令队列。
+- 初始化（`ftinitupload` / `ftinitdownload`）在 actor 里；数据连接是独立 TCP 流，初始化后交给 local task 执行，避免大文件堵住命令队列。
 - 主机只允许会话主机：`proto::check_transfer_host`，Dart 不能传主机名；端口用服务器下发值。
 - TCP 先发送服务器下发的原始 `ftkey`，随后收发明文字节；下载严格校验声明的 `size`，不填充或截断文件。
 - 频道图标使用频道 0 的 `/icon_<无符号 CRC-32 ID>` 文件。`SessionHandle::fetch_icon` 只返回图标字节，限制为 1 MiB、20 秒；协商在 actor 中串行执行，TCP 任务独立运行，连接代次变化后丢弃旧结果。

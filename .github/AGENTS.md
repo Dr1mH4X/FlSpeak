@@ -5,7 +5,7 @@
 - 检查作业集中在可复用的 `checks.yml`（`workflow_call`）：Rust 检查、Flutter
   analyze、Dart 单测、FFI 生成物一致性。`ci.yml` 与 `release.yml` 都调用它，
   改检查时只改这一处。文档检查不进 CI。
-- `ci.yml` 负责 main 与 PR：调用 `checks.yml`，再跑桌面与 Android 的 debug 构建；
+- `ci.yml` 负责 main 与 PR：调用 `checks.yml`，再跑桌面与 Android 的 debug 构建并打包上传 debug artifact；
   tag 不触发它，发布时的平台构建只在 `release.yml` 里发生一次。
 - `ci.yml` 用 `paths-ignore` 跳过只改 `**/*.md` 或 `LICENSE` 的运行；文档检查
   不进 CI，纯文档改动不产生状态，把检查设为合并必需时要一并处理这一点。

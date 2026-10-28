@@ -11,18 +11,25 @@ import '../../../l10n/app_localizations.dart';
 import 'client_actions.dart';
 
 class _Controller extends SessionController {
-  final changes = <({String uid, int group, bool enabled})>[];
+  final changes = <({String uid, int? clientId, int group, bool enabled})>[];
   @override
   SessionView build() => const SessionView(
     state: CoreSessionState.connected(clientId: 1, channelId: 5),
+    clients: [ClientView(id: 2, nickname: 'Peer', uid: 'peer', channelId: 5)],
   );
   @override
   Future<bool> setMemberGroup(
     String uid,
     MemberGroupView group,
-    bool enabled,
-  ) async {
-    changes.add((uid: uid, group: group.id, enabled: enabled));
+    bool enabled, {
+    int? clientId,
+  }) async {
+    changes.add((
+      uid: uid,
+      clientId: clientId,
+      group: group.id,
+      enabled: enabled,
+    ));
     return true;
   }
 }
@@ -69,7 +76,8 @@ Future<ProviderContainer> _mount(
           memberRemovePower: allowed ? 50 : 0,
         ),
       ),
-      memberGroupsProvider('peer').overrideWith((ref) async => _groups),
+      memberGroupsProvider((clientId: 2, uid: 'peer'))
+          .overrideWith((ref) async => _groups),
     ],
   );
   addTearDown(container.dispose);
@@ -122,7 +130,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       (container.read(sessionViewProvider.notifier) as _Controller).changes,
-      [(uid: 'peer', group: 7, enabled: true)],
+      [(uid: 'peer', clientId: 2, group: 7, enabled: true)],
     );
   });
 }

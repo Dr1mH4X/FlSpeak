@@ -73,7 +73,9 @@ class _ChannelFilesPaneState extends ConsumerState<ChannelFilesPane> {
     } on CoreError catch (error) {
       if (mounted) {
         setState(() => _failed = true);
-        ref.read(noticeCenterProvider.notifier).show(describeCoreError(error));
+        ref
+            .read(noticeCenterProvider.notifier)
+            .show(describeCoreError(error, AppLocalizations.of(context)));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -81,7 +83,12 @@ class _ChannelFilesPaneState extends ConsumerState<ChannelFilesPane> {
   }
 
   Future<void> _download(ChannelFileView file) async {
-    if (_downloading || !_available) return;
+    final view = ref.read(sessionViewProvider);
+    if (_downloading ||
+        view.activeFileDownloads.containsKey((_epoch, widget.channelId)) ||
+        !_available) {
+      return;
+    }
     setState(() {
       _downloading = true;
       _transferId = null;
@@ -109,7 +116,12 @@ class _ChannelFilesPaneState extends ConsumerState<ChannelFilesPane> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final view = ref.watch(sessionViewProvider);
-    final transfer = view.transfers[_transferId];
+    final downloading =
+        _downloading ||
+        view.activeFileDownloads.containsKey((_epoch, widget.channelId));
+    final transferId =
+        _transferId ?? view.activeFileDownloads[(_epoch, widget.channelId)];
+    final transfer = view.transfers[transferId];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -118,7 +130,7 @@ class _ChannelFilesPaneState extends ConsumerState<ChannelFilesPane> {
           child: Row(
             children: [
               IconButton(
-                onPressed: _path == '/' || _loading || _downloading
+                onPressed: _path == '/' || _loading || downloading
                     ? null
                     : () {
                         setState(
@@ -142,7 +154,7 @@ class _ChannelFilesPaneState extends ConsumerState<ChannelFilesPane> {
                 ),
               ),
               IconButton(
-                onPressed: _loading || _downloading ? null : _load,
+                onPressed: _loading || downloading ? null : _load,
                 icon: Icon(
                   Icons.refresh_rounded,
                   semanticLabel: l10n.commonRetry,
@@ -176,9 +188,9 @@ class _ChannelFilesPaneState extends ConsumerState<ChannelFilesPane> {
               ],
             ),
           ),
-        if (_loading || _downloading)
+        if (_loading || downloading)
           LinearProgressIndicator(
-            value: _downloading && transfer != null && transfer.total > 0
+            value: downloading && transfer != null && transfer.total > 0
                 ? transfer.transferred / transfer.total
                 : null,
           ),
@@ -211,7 +223,7 @@ class _ChannelFilesPaneState extends ConsumerState<ChannelFilesPane> {
                       subtitle: file.directory
                           ? null
                           : Text(l10n.fileSizeBytes(file.size)),
-                      onTap: file.directory && !_downloading
+                      onTap: file.directory && !downloading
                           ? () {
                               setState(() => _path = file.path);
                               _load();
@@ -220,7 +232,7 @@ class _ChannelFilesPaneState extends ConsumerState<ChannelFilesPane> {
                       trailing: file.directory
                           ? null
                           : IconButton(
-                              onPressed: _downloading || !_available
+                              onPressed: downloading || !_available
                                   ? null
                                   : () => _download(file),
                               icon: Icon(

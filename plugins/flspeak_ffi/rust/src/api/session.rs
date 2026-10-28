@@ -61,6 +61,7 @@ pub struct ClientView {
 pub struct CoreMessage {
     pub from: String,
     pub from_uid: String,
+    pub from_id: i32,
     pub message: String,
     pub target_mode: i32,
     pub target_id: u64,
@@ -126,6 +127,7 @@ pub enum CoreEvent {
     TextMessage {
         from: String,
         from_uid: String,
+        from_id: i32,
         message: String,
         target_mode: i32,
         target_id: u64,
@@ -471,10 +473,14 @@ impl CoreSession {
             .await?;
         Ok(())
     }
-    pub async fn member_groups(&self, uid: String) -> Result<Vec<MemberGroupView>, CoreError> {
+    pub async fn member_groups(
+        &self,
+        uid: String,
+        client_id: i32,
+    ) -> Result<Vec<MemberGroupView>, CoreError> {
         Ok(self
             .handle
-            .member_groups(uid)
+            .member_groups(uid, client_id)
             .await?
             .into_iter()
             .map(|g| MemberGroupView {
@@ -494,6 +500,7 @@ impl CoreSession {
     pub async fn set_member_group(
         &self,
         uid: String,
+        client_id: i32,
         group_id: u64,
         channel_id: u64,
         kind: GroupKind,
@@ -502,6 +509,7 @@ impl CoreSession {
         self.handle
             .set_member_group(
                 uid,
+                client_id,
                 group_id,
                 channel_id,
                 match kind {
@@ -653,6 +661,7 @@ impl From<CoreTextMessage> for CoreMessage {
         Self {
             from: message.from,
             from_uid: message.from_uid,
+            from_id: message.from_id,
             message: message.message,
             target_mode: message.target_mode,
             target_id: message.target_id,
@@ -743,6 +752,7 @@ impl From<SessionEvent> for CoreEvent {
             SessionEvent::TextMessage(message) => CoreEvent::TextMessage {
                 from: message.from,
                 from_uid: message.from_uid,
+                from_id: message.from_id,
                 message: message.message,
                 target_mode: message.target_mode,
                 target_id: message.target_id,

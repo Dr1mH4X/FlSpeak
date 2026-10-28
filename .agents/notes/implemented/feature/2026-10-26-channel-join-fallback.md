@@ -33,4 +33,4 @@ Status: implemented
 
 ## Testing
 
-- 回滚行为没有自动回归用例：改这条路径时手动跑 `just run`，走「双击被拒」与「右键加入被拒」两条，确认高亮回到点击前的位置；自己被放在另一个频道时回到菜单前选中，而不是自己的频道。
+- `lib/features/workspace/widgets/channel_password_dialog_test.dart` 覆盖服务端返回密码错误（781）后弹出密码框、错误修正与取消回退；完整双击与右键加入路径可通过 `just run` 手动验证高亮回到点击前的位置。

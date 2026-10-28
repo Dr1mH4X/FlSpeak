@@ -120,9 +120,19 @@ async fn live_connect_chain() {
     match handle.list_clients().await {
         Ok(clients) => {
             println!("clients: {}", clients.len());
+            for client in &clients {
+                println!(
+                    "  client id={} channel_id={} nickname={}",
+                    client.id, client.channel_id, client.nickname
+                );
+            }
             assert!(
                 clients.iter().any(|client| client.nickname == nickname),
                 "在线列表里应当有自己 {nickname}"
+            );
+            assert!(
+                clients.iter().all(|client| client.channel_id != 0),
+                "所有在线成员都应解析出真实频道 ID"
             );
         }
         Err(err) => eprintln!("listClients 被拒绝（权限不足时正常）: {err}"),

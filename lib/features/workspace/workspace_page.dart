@@ -77,7 +77,8 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
 
     ref.listen(
       sessionViewProvider.select(
-        (view) => (view.chatScope, view.directRecipientUid),
+        (view) =>
+            (view.chatScope, view.directRecipientUid, view.directRecipientId),
       ),
       (previous, next) {
         if (next.$1 != ChatScope.direct) return;
@@ -209,8 +210,12 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
               )
               .toList(),
           recipientUid: view.directRecipientUid,
+          recipientId: view.directRecipientId,
           selfUid: view.selfUid,
+          selfClientId: view.selfClientId,
           onRecipientChanged: controller.selectDirectRecipient,
+          onRecipientSelected: (peer) =>
+              controller.selectDirectRecipient(peer.uid, clientId: peer.id),
           onReply: controller.replyToMessage,
         );
     }
@@ -355,11 +360,8 @@ class _ChannelHeader extends StatelessWidget {
   }
 }
 
-/// 频道头里的视图切换：M3 primary tabs（`TabBar`）。
-///
-/// 之前是手写的胶囊按钮组；segmented button 在 M3 Expressive 里已不再
-/// 推荐，替代的 connected button group 在 Flutter 上不可用，primary tabs
-/// 是同级视图切换的规范组件，指示器动画与语义由组件自带。
+/// 频道头里的视图切换：M3 primary tabs（`TabBar`），是同级视图切换的规范组件，
+/// 指示器动画与语义由组件自带。
 class _ViewTabs extends StatelessWidget {
   const _ViewTabs({
     required this.tabs,

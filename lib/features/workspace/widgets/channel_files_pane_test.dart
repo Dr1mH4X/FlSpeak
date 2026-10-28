@@ -144,7 +144,21 @@ void main() {
         );
       }
       expect(controller.started.isCompleted, isTrue);
-      // Removing the file pane must not discard an already requested download.
+      // Switching away and back must preserve the active download state.
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            locale: Locale('zh'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(body: ChannelFilesPane(channelId: 5)),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
       controller.release.complete();
       for (var attempt = 0; attempt < 30; attempt++) {
@@ -159,7 +173,7 @@ void main() {
       }
       await tester.pumpAndSettle();
       expect(exported, isTrue);
-      expect(core.paths, ['/', '/', '/folder', '/']);
+      expect(core.paths, ['/', '/', '/folder', '/', '/']);
       final files = await tester.runAsync(() => root.list().toList());
       expect(files, isEmpty);
     },

@@ -1,5 +1,6 @@
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
+import '../l10n/app_localizations.dart';
 import 'channel_display.dart';
 
 /// 文字消息的投递范围，由协议里的 `targetMode` 归一化而来。
@@ -29,10 +30,12 @@ class ChatMessage {
     required this.at,
     required this.scope,
     required this.targetId,
+    this.fromId = 0,
   });
 
   final String from;
   final String fromUid;
+  final int fromId;
   final String text;
   final DateTime at;
   final ChatScope scope;
@@ -43,6 +46,7 @@ class ChatMessage {
   factory ChatMessage.fromCore(CoreMessage message) => ChatMessage(
     from: message.from,
     fromUid: message.fromUid,
+    fromId: message.fromId,
     text: message.message,
     at: DateTime.fromMillisecondsSinceEpoch(message.at),
     scope: ChatScope.fromProtocol(message.targetMode),
@@ -63,6 +67,7 @@ class SessionView {
     this.activeServerId,
     this.chatScope = ChatScope.channel,
     this.directRecipientUid,
+    this.directRecipientId,
     this.busy = false,
     this.failureSeq = 0,
     this.connectionEpoch = 0,
@@ -76,9 +81,11 @@ class SessionView {
     this.pttMode = false,
     this.identityUpgradeTarget,
     this.transfers = const {},
+    this.activeFileDownloads = const {},
   });
 
   final Map<int, FileTransfer> transfers;
+  final Map<(int, int), int?> activeFileDownloads;
   final CoreSessionState state;
   final List<ServerProfileView> servers;
   final List<ChannelView> channels;
@@ -91,14 +98,39 @@ class SessionView {
   /// 输入框当前投递范围。
   final ChatScope chatScope;
   final String? directRecipientUid;
+  final int? directRecipientId;
 
   ClientView? get directRecipient {
-    for (final client in clients) {
-      if (client.uid == directRecipientUid && client.id != selfClientId) {
-        return client;
+    if (directRecipientId != null) {
+      for (final client in clients) {
+        if (client.id == directRecipientId &&
+            client.uid == directRecipientUid &&
+            client.id != selfClientId) {
+          return client;
+        }
       }
+      return null;
     }
-    return null;
+    final matches = clients
+        .where(
+          (client) =>
+              client.uid == directRecipientUid && client.id != selfClientId,
+        )
+        .toList();
+    return matches.length == 1 ? matches.first : null;
+  }
+
+  bool isOwnMessage(ChatMessage message) {
+    if (message.fromId > 0 && selfClientId != null) {
+      return message.fromId == selfClientId;
+    }
+    if (message.scope == ChatScope.direct &&
+        selfClientId != null &&
+        message.targetId > 0) {
+      return message.targetId != selfClientId;
+    }
+    final uid = selfUid;
+    return uid.isNotEmpty && message.fromUid == uid;
   }
 
   final bool busy;
@@ -247,6 +279,7 @@ class SessionView {
 
   SessionView copyWith({
     Map<int, FileTransfer>? transfers,
+    Map<(int, int), int?>? activeFileDownloads,
     CoreSessionState? state,
     List<ServerProfileView>? servers,
     List<ChannelView>? channels,
@@ -255,6 +288,7 @@ class SessionView {
     Object? activeServerId = _unset,
     ChatScope? chatScope,
     Object? directRecipientUid = _unset,
+    Object? directRecipientId = _unset,
     bool? busy,
     int? failureSeq,
     int? connectionEpoch,
@@ -269,6 +303,7 @@ class SessionView {
     Object? identityUpgradeTarget = _unset,
   }) => SessionView(
     transfers: transfers ?? this.transfers,
+    activeFileDownloads: activeFileDownloads ?? this.activeFileDownloads,
     state: state ?? this.state,
     servers: servers ?? this.servers,
     channels: channels ?? this.channels,
@@ -281,6 +316,9 @@ class SessionView {
     directRecipientUid: identical(directRecipientUid, _unset)
         ? this.directRecipientUid
         : directRecipientUid as String?,
+    directRecipientId: identical(directRecipientId, _unset)
+        ? this.directRecipientId
+        : directRecipientId as int?,
     busy: busy ?? this.busy,
     failureSeq: failureSeq ?? this.failureSeq,
     connectionEpoch: connectionEpoch ?? this.connectionEpoch,
@@ -298,14 +336,16 @@ class SessionView {
   );
 }
 
-/// 把 FFI 错误翻成可以直接显示给用户的中文文案。
-String describeCoreError(CoreError error) => switch (error) {
-  CoreError_InvalidAddress(:final message) => '服务器地址不可用：$message',
-  CoreError_BlockedAddress(:final message) => '已阻止该地址：$message',
-  CoreError_Connection(:final message) => '连接失败：$message',
-  CoreError_ChannelPasswordRequired(:final message) => message,
-  CoreError_Internal(:final message) => '内部错误：$message',
-};
+/// 把 FFI 错误翻成可以直接显示给用户的文案。
+String describeCoreError(CoreError error, [AppLocalizations? l10n]) =>
+    switch (error) {
+      CoreError_InvalidAddress(:final message) => '服务器地址不可用：$message',
+      CoreError_BlockedAddress(:final message) => '已阻止该地址：$message',
+      CoreError_Connection(:final message) => '连接失败：$message',
+      CoreError_ChannelPasswordRequired(:final message) =>
+        l10n?.channelPasswordWrong ?? message,
+      CoreError_Internal(:final message) => '内部错误：$message',
+    };
 
 class FileTransfer {
   const FileTransfer({

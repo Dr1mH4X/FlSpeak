@@ -55,14 +55,18 @@ final sessionAccessProvider = FutureProvider.autoDispose<AccessView>((
   return ref.read(coreSessionProvider).access();
 });
 
+typedef MemberGroupTarget = ({int clientId, String uid});
+
 final memberGroupsProvider = FutureProvider.autoDispose
-    .family<List<MemberGroupView>, String>((ref, uid) {
+    .family<List<MemberGroupView>, MemberGroupTarget>((ref, target) {
       ref.watch(
         sessionViewProvider.select(
           (v) => (v.connectionEpoch, v.selfChannelId, v.connected),
         ),
       );
-      return ref.read(coreSessionProvider).memberGroups(uid: uid);
+      return ref
+          .read(coreSessionProvider)
+          .memberGroups(uid: target.uid, clientId: target.clientId);
     });
 
 class SessionController extends Notifier<SessionView> {
@@ -103,7 +107,7 @@ class SessionController extends Notifier<SessionView> {
       }
     } on CoreError catch (error) {
       if (ref.mounted) {
-        _notify(describeCoreError(error));
+        _notify(describeCoreError(error, ref.read(_localizationsProvider)));
       }
     }
   }
@@ -132,6 +136,7 @@ class SessionController extends Notifier<SessionView> {
         messages: const [],
         chatScope: ChatScope.channel,
         directRecipientUid: null,
+        directRecipientId: null,
         speaking: const {},
       );
       // 频道/成员快照由 actor 在连接成功后主动推送，不再额外拉一遍。
@@ -164,35 +169,62 @@ class SessionController extends Notifier<SessionView> {
     state = state.copyWith(chatScope: scope);
   }
 
-  void selectDirectRecipient(String uid) {
+  void selectDirectRecipient(String uid, {int? clientId}) {
     state = state.copyWith(
       chatScope: ChatScope.direct,
       directRecipientUid: uid,
+      directRecipientId: clientId,
     );
   }
 
   void replyToMessage(ChatMessage message) {
-    if (message.scope != ChatScope.direct || message.fromUid == state.selfUid) {
+    if (message.scope != ChatScope.direct || state.isOwnMessage(message)) {
       return;
     }
-    final peer = state.clients
-        .where(
-          (peer) =>
-              peer.uid == message.fromUid && peer.id != state.selfClientId,
-        )
-        .firstOrNull;
+    ClientView? peer;
+    if (message.fromId > 0) {
+      peer = state.clients
+          .where(
+            (client) =>
+                client.id == message.fromId &&
+                client.uid == message.fromUid &&
+                client.id != state.selfClientId,
+          )
+          .firstOrNull;
+    }
+    if (peer == null) {
+      final matches = state.clients
+          .where(
+            (client) =>
+                client.uid == message.fromUid &&
+                client.id != state.selfClientId,
+          )
+          .toList();
+      if (matches.length == 1) {
+        peer = matches.first;
+      }
+    }
     if (peer == null) {
       _notify(ref.read(_localizationsProvider).chatRecipientUnavailable);
       return;
     }
-    selectDirectRecipient(peer.uid);
+    selectDirectRecipient(
+      peer.uid,
+      clientId: message.fromId > 0 ? peer.id : null,
+    );
   }
 
-  Future<bool> pokeClient(String uid, String message) async {
+  Future<bool> pokeClient(String uid, String message, {int? clientId}) async {
     if (!state.connected || state.busy) return false;
-    final peer = state.clients
-        .where((client) => client.uid == uid && client.id != state.selfClientId)
-        .firstOrNull;
+    final matches = state.clients
+        .where(
+          (client) =>
+              client.uid == uid &&
+              client.id != state.selfClientId &&
+              (clientId == null || client.id == clientId),
+        )
+        .toList();
+    final peer = matches.length == 1 ? matches.first : null;
     final l10n = ref.read(_localizationsProvider);
     if (peer == null) {
       _notify(l10n.chatRecipientUnavailable);
@@ -254,7 +286,7 @@ class SessionController extends Notifier<SessionView> {
     try {
       await ref.read(coreSessionProvider).setMuted(muted: muted);
     } on CoreError catch (error) {
-      _notify(describeCoreError(error));
+      _notify(describeCoreError(error, ref.read(_localizationsProvider)));
     }
   }
 
@@ -262,7 +294,7 @@ class SessionController extends Notifier<SessionView> {
     try {
       await ref.read(coreSessionProvider).setDeafened(deafened: deafened);
     } on CoreError catch (error) {
-      _notify(describeCoreError(error));
+      _notify(describeCoreError(error, ref.read(_localizationsProvider)));
     }
   }
 
@@ -270,7 +302,7 @@ class SessionController extends Notifier<SessionView> {
     try {
       await ref.read(coreSessionProvider).setAway(away: away);
     } on CoreError catch (error) {
-      _notify(describeCoreError(error));
+      _notify(describeCoreError(error, ref.read(_localizationsProvider)));
     }
   }
 
@@ -278,7 +310,7 @@ class SessionController extends Notifier<SessionView> {
     try {
       await ref.read(coreSessionProvider).setPttMode(enabled: enabled);
     } on CoreError catch (error) {
-      _notify(describeCoreError(error));
+      _notify(describeCoreError(error, ref.read(_localizationsProvider)));
     }
   }
 
@@ -289,7 +321,7 @@ class SessionController extends Notifier<SessionView> {
     try {
       await ref.read(coreSessionProvider).setPttActive(active: active);
     } on CoreError catch (error) {
-      _notify(describeCoreError(error));
+      _notify(describeCoreError(error, ref.read(_localizationsProvider)));
     }
   }
 
@@ -297,7 +329,7 @@ class SessionController extends Notifier<SessionView> {
     try {
       await ref.read(coreSessionProvider).cancelIdentityUpgrade();
     } on CoreError catch (error) {
-      _notify(describeCoreError(error));
+      _notify(describeCoreError(error, ref.read(_localizationsProvider)));
     }
   }
 
@@ -326,7 +358,7 @@ class SessionController extends Notifier<SessionView> {
     state.connectionEpoch,
     state.chatScope,
     state.chatScope == ChatScope.direct
-        ? state.directRecipientUid
+        ? (state.directRecipientUid, state.directRecipient?.id)
         : state.chatScope == ChatScope.channel
         ? state.selfChannelId
         : null,
@@ -348,7 +380,9 @@ class SessionController extends Notifier<SessionView> {
         bytes: bytes,
       );
     } on CoreError catch (error) {
-      if (ref.mounted) _notify(describeCoreError(error));
+      if (ref.mounted) {
+        _notify(describeCoreError(error, ref.read(_localizationsProvider)));
+      }
       return null;
     } on Exception {
       if (ref.mounted) _notify(l10n.imageHostStorageFailed);
@@ -377,13 +411,26 @@ class SessionController extends Notifier<SessionView> {
   Future<bool> setMemberGroup(
     String uid,
     MemberGroupView group,
-    bool enabled,
-  ) async {
+    bool enabled, {
+    int? clientId,
+  }) async {
+    final matches = state.clients
+        .where(
+          (client) =>
+              client.uid == uid && (clientId == null || client.id == clientId),
+        )
+        .toList();
+    if (matches.length != 1) {
+      _notify(ref.read(_localizationsProvider).kickTargetUnavailable);
+      return false;
+    }
+    final target = (clientId: matches.single.id, uid: uid);
     final sent = await _run(
       () => ref
           .read(coreSessionProvider)
           .setMemberGroup(
             uid: uid,
+            clientId: target.clientId,
             groupId: group.id,
             channelId: group.channelId,
             kind: group.kind,
@@ -391,7 +438,7 @@ class SessionController extends Notifier<SessionView> {
           ),
     );
     if (ref.mounted) {
-      ref.invalidate(memberGroupsProvider(uid));
+      ref.invalidate(memberGroupsProvider(target));
       ref.invalidate(sessionAccessProvider);
     }
     return sent;
@@ -405,8 +452,13 @@ class SessionController extends Notifier<SessionView> {
     ValueChanged<int>? onStarted,
   }) async {
     final l10n = ref.read(_localizationsProvider);
+    final key = (state.connectionEpoch, channelId);
+    if (state.activeFileDownloads.containsKey(key)) return false;
     final target = (state.activeServerId, state.connectionEpoch);
     final export = ref.read(fileExportProvider);
+    state = state.copyWith(
+      activeFileDownloads: {...state.activeFileDownloads, key: null},
+    );
     Directory? directory;
     try {
       final root = await getTemporaryDirectory();
@@ -423,7 +475,14 @@ class SessionController extends Notifier<SessionView> {
         remotePath,
         path,
         password: password,
-        onStarted: onStarted,
+        onStarted: (id) {
+          if (ref.mounted && state.activeFileDownloads.containsKey(key)) {
+            state = state.copyWith(
+              activeFileDownloads: {...state.activeFileDownloads, key: id},
+            );
+          }
+          onStarted?.call(id);
+        },
       );
       if (!downloaded || !ref.mounted) return false;
       final saved = await export(path, name);
@@ -437,12 +496,16 @@ class SessionController extends Notifier<SessionView> {
       if (ref.mounted) _notify(l10n.fileDownloadFailed);
       return false;
     } finally {
+      if (ref.mounted && state.activeFileDownloads.containsKey(key)) {
+        final next = {...state.activeFileDownloads}..remove(key);
+        state = state.copyWith(activeFileDownloads: next);
+      }
       try {
         if (directory != null && await directory.exists()) {
           await directory.delete(recursive: true);
         }
       } on FileSystemException {
-        if (ref.mounted) _notify(l10n.fileDownloadFailed);
+        if (ref.mounted) _notify(l10n.fileCleanupFailed);
       }
     }
   }
@@ -522,7 +585,7 @@ class SessionController extends Notifier<SessionView> {
     try {
       await ref.read(coreSessionProvider).requestSnapshot();
     } on CoreError catch (error) {
-      _notify(describeCoreError(error));
+      _notify(describeCoreError(error, ref.read(_localizationsProvider)));
     }
   }
 
@@ -548,7 +611,9 @@ class SessionController extends Notifier<SessionView> {
       return true;
     } on CoreError catch (error) {
       if (passwordPrompt && error is CoreError_ChannelPasswordRequired) rethrow;
-      if (ref.mounted) _notify(describeCoreError(error));
+      if (ref.mounted) {
+        _notify(describeCoreError(error, ref.read(_localizationsProvider)));
+      }
       return false;
     } finally {
       if (ref.mounted) state = state.copyWith(busy: false);
@@ -579,6 +644,8 @@ class SessionController extends Notifier<SessionView> {
             identityUpgradeTarget: null,
             chatScope: ChatScope.channel,
             directRecipientUid: null,
+            directRecipientId: null,
+            activeFileDownloads: const {},
             busy: false,
           ),
           _ => current.copyWith(
@@ -601,6 +668,7 @@ class SessionController extends Notifier<SessionView> {
       case CoreEvent_TextMessage(
         :final from,
         :final fromUid,
+        :final fromId,
         :final message,
         :final targetMode,
         :final targetId,
@@ -611,6 +679,7 @@ class SessionController extends Notifier<SessionView> {
           ChatMessage(
             from: from,
             fromUid: fromUid,
+            fromId: fromId,
             text: message,
             at: DateTime.fromMillisecondsSinceEpoch(at),
             scope: ChatScope.fromProtocol(targetMode),

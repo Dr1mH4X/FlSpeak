@@ -34,16 +34,9 @@ FLSPEAK_TEST_NICKNAME=flspeak-probe \
 cargo test -p session --test live_connect -- --ignored --nocapture
 ```
 
-注意：tsclient-rs 走 UDP 9987。`proto::resolve_target` 会先查标准 DNS 的
-`_ts3._udp.<domain>` SRV；最终目标由 `proto::client` 检查一次，DNS 查询失败时回退到档案字面地址。
-TSDNS 尚未实现。服务器对访客关闭 `channellist` 时，测试只验证连接与状态，列表调用
-会打印权限拒绝而不判失败。
+注意：tsclient-rs 走 UDP 9987。`proto::resolve_target` 会先查标准 DNS 的 `_ts3._udp.<domain>` SRV；最终目标由 `proto::client` 检查一次，DNS 查询失败时回退到档案字面地址。TSDNS 尚未实现。服务器对访客关闭 `channellist` 时，测试只验证连接与状态，列表调用会打印权限拒绝而不判失败。
 
 设置 `FLSPEAK_TEST_ICON_DIR` 时，真实连接测试还会通过 actor 下载非零频道图标，并把原始图片和 `channels.json` 保存到该目录；此模式要求目标服务器至少有一个自定义频道图标。
-
-本机 Flutter 渲染验证可显式运行 `lib/live_channel_icons_test.dart`，用 `--dart-define=FLSPEAK_LIVE_SERVER=<地址>` 与 `--dart-define=FLSPEAK_NATIVE_LIBRARY=<本机动态库绝对路径>` 指定目标。该测试关闭音频，用真实 actor、FFI、Provider 和 Flutter 图片解码链路；未设置这两个值时默认跳过。可另设 `FLSPEAK_CAPTURE_DIR` 保存界面截图。
-
-`lib/live_messaging_test.dart` 使用同样的两个 `--dart-define` 参数，建立两个临时测试身份，验证私聊选择与回复、戳一下双向通知、历史保存和离线目标拒绝；只向这两个测试身份发送消息。未配置目标与动态库时默认跳过，不进入 CI 的真实网络测试。仅设置动态库路径时，可独立运行其中的本机 HTTP PUT 图床夹具，无需真实服务器。
 
 ### 最小消息探针（后台等消息）
 
@@ -63,13 +56,4 @@ cargo run -p session --example live_probe
 
 ## CI 测试门
 
-本地提交前的聚合门禁是 `just check`。CI 的 `rust` 作业运行 `cargo fmt --check`、
-`cargo clippy -D warnings` 与 `cargo test --all-features`，`dart` 作业覆盖格式与分析，
-`dart-test` 作业覆盖单测、插件分析与 FFI 生成物一致性，见 [ci-cd.md](ci-cd.md)。
-测试用例本身不写入本文档。
-
-## 受控频道、权限与文件测试
-
-`session` 的 `live_channel_files_and_permissions` 默认忽略，通过 `FLSPEAK_CONTROLLED_FIXTURE` 指向仅本机保存的 JSON 夹具。夹具包含 `server`、`channel_id`、`channel_group_id`、`server_group_id` 与临时频道 `password`；所有对象由测试管理员预先创建，不使用现有用户或业务频道。
-
-在 `plugins/flspeak_ffi/rust` 执行 `cargo test -p session --lib live_channel_files_and_permissions -- --ignored --nocapture`。测试在夹具同目录生成 `ready.json`，控制端只为其中两个临时 UID 授权后创建 `authorized` 文件。测试覆盖密码拒绝与修正、有权身份免密进入、权限组授予/回读/恢复、普通身份被拒，以及小文件上传、目录查询、精确下载和已有文件保护。控制端负责在测试结束后删除专用频道、测试权限组和临时身份；Query 凭据不进入夹具。
+本地提交前的聚合门禁是 `just check`。CI 的 `rust` 作业运行 `cargo fmt --check`、`cargo clippy -D warnings` 与 `cargo test --all-features`，`dart` 作业覆盖格式与分析，`dart-test` 作业覆盖单测、插件分析与 FFI 生成物一致性，见 [ci-cd.md](ci-cd.md)。测试用例本身不写入本文档。

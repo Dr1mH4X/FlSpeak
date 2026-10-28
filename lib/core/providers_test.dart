@@ -48,6 +48,37 @@ class _Core extends Fake implements CoreSession {
   }
 
   final pokes = <({int id, String message})>[];
+  final groupUpdates =
+      <
+        ({
+          String uid,
+          int clientId,
+          int groupId,
+          int channelId,
+          GroupKind kind,
+          bool enabled,
+        })
+      >[];
+  @override
+  Future<void> setMemberGroup({
+    required String uid,
+    required int clientId,
+    required int groupId,
+    required int channelId,
+    required GroupKind kind,
+    required bool enabled,
+  }) async {
+    if (fail) throw const CoreError.connection(message: 'group rejected');
+    groupUpdates.add((
+      uid: uid,
+      clientId: clientId,
+      groupId: groupId,
+      channelId: channelId,
+      kind: kind,
+      enabled: enabled,
+    ));
+  }
+
   @override
   Future<int> downloadFile({
     required String remotePath,
@@ -328,5 +359,84 @@ void main() {
     expect(view.directRecipientUid, isNull);
     expect(view.chatScope, ChatScope.channel);
     expect(await controller.sendMessage('offline'), isFalse);
+  });
+
+  test('shared-identity clones target the exact client id for direct messages, pokes, and group updates', () async {
+    final events = StreamController<CoreEvent>.broadcast(sync: true);
+    final core = _Core(events);
+    final container = ProviderContainer(
+      overrides: [coreSessionProvider.overrideWithValue(core)],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await events.close();
+    });
+    final controller = container.read(sessionViewProvider.notifier);
+    events.add(
+      const CoreEvent.state(
+        state: CoreSessionState.connected(clientId: 1, channelId: 7),
+      ),
+    );
+    events.add(
+      const CoreEvent.snapshot(
+        channels: [],
+        clients: [
+          ClientView(id: 1, nickname: 'Self', uid: 'self', channelId: 7),
+          ClientView(id: 2, nickname: 'CloneA', uid: 'shared', channelId: 7),
+          ClientView(id: 3, nickname: 'CloneB', uid: 'shared', channelId: 7),
+          ClientView(id: 4, nickname: 'SelfClone', uid: 'self', channelId: 7),
+        ],
+      ),
+    );
+    controller.replyToMessage(
+      ChatMessage(
+        from: 'CloneB',
+        fromUid: 'shared',
+        fromId: 3,
+        text: 'from second clone',
+        at: DateTime(2026),
+        scope: ChatScope.direct,
+        targetId: 1,
+      ),
+    );
+    expect(container.read(sessionViewProvider).directRecipient?.id, 3);
+    expect(await controller.sendMessage('reply to B'), isTrue);
+    expect(core.sent.last, (mode: 1, target: 3, text: 'reply to B'));
+
+    controller.replyToMessage(
+      ChatMessage(
+        from: 'SelfClone',
+        fromUid: 'self',
+        fromId: 4,
+        text: 'from my other device',
+        at: DateTime(2026),
+        scope: ChatScope.direct,
+        targetId: 1,
+      ),
+    );
+    expect(container.read(sessionViewProvider).directRecipient?.id, 4);
+    expect(await controller.sendMessage('reply to self clone'), isTrue);
+    expect(core.sent.last, (mode: 1, target: 4, text: 'reply to self clone'));
+
+    expect(
+      await controller.pokeClient('shared', 'poke B', clientId: 3),
+      isTrue,
+    );
+    expect(core.pokes.single, (id: 3, message: 'poke B'));
+
+    const group = MemberGroupView(
+      channelId: 7,
+      id: 9,
+      name: 'Voice',
+      kind: GroupKind.channel,
+      member: false,
+      canAdd: true,
+      canRemove: true,
+    );
+    expect(
+      await controller.setMemberGroup('shared', group, true, clientId: 3),
+      isTrue,
+    );
+    expect(core.groupUpdates.single.clientId, 3);
   });
 }

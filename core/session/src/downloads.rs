@@ -1,5 +1,5 @@
 use crate::{SessionError, SessionEvent};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::{
     Arc,
@@ -47,10 +47,8 @@ pub(crate) async fn receive(
             .await
             .map_err(|error| SessionError::Transfer(error.to_string()))?;
         drop(writer);
-        tokio::fs::hard_link(&staging, &destination)
-            .await
-            .map_err(|error| SessionError::Transfer(error.to_string()))?;
-        Ok(())
+        let link_result = tokio::fs::hard_link(&staging, &destination).await;
+        finish_staging(&staging, &destination, link_result).await
     };
     let cancelled = async {
         while current.load(Ordering::SeqCst) == epoch {
@@ -59,8 +57,36 @@ pub(crate) async fn receive(
     };
     let outcome =
         tokio::select! {result=transfer=>result, ()=cancelled=>Err(SessionError::NotConnected)};
-    let cleanup = tokio::fs::remove_file(&staging).await;
-    outcome.and_then(|()| cleanup.map_err(|error| SessionError::Transfer(error.to_string())))
+    let cleanup = match tokio::fs::remove_file(&staging).await {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(SessionError::Transfer(error.to_string())),
+    };
+    outcome.and(cleanup)
+}
+
+async fn finish_staging(
+    staging: &Path,
+    destination: &Path,
+    link_result: std::io::Result<()>,
+) -> Result<(), SessionError> {
+    match link_result {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            Err(SessionError::Transfer(error.to_string()))
+        }
+        Err(_) => {
+            if destination
+                .try_exists()
+                .map_err(|error| SessionError::Transfer(error.to_string()))?
+            {
+                return Err(SessionError::Transfer("destination already exists".into()));
+            }
+            tokio::fs::rename(staging, destination)
+                .await
+                .map_err(|error| SessionError::Transfer(error.to_string()))
+        }
+    }
 }
 
 /// 下载进度写入器。
@@ -274,6 +300,46 @@ mod tests {
                 .await
                 .unwrap()
                 .is_none()
+        );
+        tokio::fs::remove_dir_all(root).await.unwrap();
+    }
+    #[tokio::test]
+    async fn finish_staging_falls_back_to_rename_when_hard_link_is_blocked() {
+        let root = root().await;
+        let staging = root.join(".flspeak-fallback.part");
+        let destination = root.join("file.txt");
+        tokio::fs::write(&staging, b"android fallback")
+            .await
+            .unwrap();
+        finish_staging(
+            &staging,
+            &destination,
+            Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied)),
+        )
+        .await
+        .unwrap();
+        assert!(!staging.try_exists().unwrap());
+        assert_eq!(
+            tokio::fs::read(&destination).await.unwrap(),
+            b"android fallback"
+        );
+
+        let second_staging = root.join(".flspeak-second.part");
+        tokio::fs::write(&second_staging, b"overwrite attempt")
+            .await
+            .unwrap();
+        assert!(
+            finish_staging(
+                &second_staging,
+                &destination,
+                Err(std::io::Error::from(std::io::ErrorKind::PermissionDenied)),
+            )
+            .await
+            .is_err()
+        );
+        assert_eq!(
+            tokio::fs::read(&destination).await.unwrap(),
+            b"android fallback"
         );
         tokio::fs::remove_dir_all(root).await.unwrap();
     }

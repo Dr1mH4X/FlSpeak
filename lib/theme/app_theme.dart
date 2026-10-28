@@ -423,8 +423,7 @@ ThemeData buildAppTheme(Brightness brightness) {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      // M3 filled field 的容器色是 surfaceContainerHighest；暗色下再往下取
-      // 面阶（旧值 lowest）会在面板上沉积成一整块死黑。
+      // M3 filled field 的容器色；暗色下避免更低面阶在面板上沉积成死黑。
       fillColor: scheme.surfaceContainer,
       hoverColor: scheme.onSurface.withValues(alpha: 0.08),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -524,8 +523,7 @@ ThemeData buildAppTheme(Brightness brightness) {
       ),
     ),
     dialogTheme: DialogThemeData(
-      // M3 dialog 的容器色是 surfaceContainerHigh，比旧的 Low 在暗色下多
-      // 一级分离。
+      // M3 dialog 的容器色是 surfaceContainerHigh，在暗色下与主面板拉开一级分离。
       backgroundColor: scheme.surfaceContainerHigh,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: Radii.xxxlAll),
@@ -558,7 +556,7 @@ ThemeData buildAppTheme(Brightness brightness) {
       style: MenuStyle(
         backgroundColor: WidgetStatePropertyAll(scheme.surfaceContainerLow),
         surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
-        // M3 menu 的档位是 3（level 2），8 是旧 M2 值。
+        // M3 menu 的阴影档位是 3（level 2）。
         elevation: const WidgetStatePropertyAll(3.0),
         shape: WidgetStatePropertyAll(Radii.xxlShape),
         padding: const WidgetStatePropertyAll(EdgeInsets.zero),

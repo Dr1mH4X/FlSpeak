@@ -329,10 +329,12 @@ pub enum SessionCommand {
     },
     MemberGroups {
         uid: String,
+        client_id: i32,
         reply: oneshot::Sender<Result<Vec<MemberGroupView>, SessionError>>,
     },
     SetMemberGroup {
         uid: String,
+        client_id: i32,
         group_id: u64,
         channel_id: u64,
         kind: GroupKind,
@@ -424,7 +426,6 @@ impl SessionHandle {
     ) -> Result<Self, SessionError> {
         let (commands, command_rx) = mpsc::unbounded_channel();
         let (events, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
-        let (signals, signal_rx) = mpsc::unbounded_channel();
         let (audio_events, audio_rx) = mpsc::channel(actor::AUDIO_EVENT_CAPACITY);
         let voice = audio::engine::VoiceEngine::spawn(move |event| {
             let _ = audio_events.try_send(event);
@@ -471,8 +472,6 @@ impl SessionHandle {
                         registry,
                         events,
                         commands,
-                        signals,
-                        signal_rx,
                         voice,
                         audio_rx,
                         options.audio,
@@ -714,14 +713,23 @@ impl SessionHandle {
         })?;
         response.await.map_err(|_| SessionError::Closed)?
     }
-    pub async fn member_groups(&self, uid: String) -> Result<Vec<MemberGroupView>, SessionError> {
+    pub async fn member_groups(
+        &self,
+        uid: String,
+        client_id: i32,
+    ) -> Result<Vec<MemberGroupView>, SessionError> {
         let (reply, response) = oneshot::channel();
-        self.send(SessionCommand::MemberGroups { uid, reply })?;
+        self.send(SessionCommand::MemberGroups {
+            uid,
+            client_id,
+            reply,
+        })?;
         response.await.map_err(|_| SessionError::Closed)?
     }
     pub async fn set_member_group(
         &self,
         uid: String,
+        client_id: i32,
         group_id: u64,
         channel_id: u64,
         kind: GroupKind,
@@ -730,6 +738,7 @@ impl SessionHandle {
         let (reply, response) = oneshot::channel();
         self.send(SessionCommand::SetMemberGroup {
             uid,
+            client_id,
             group_id,
             channel_id,
             kind,
@@ -826,297 +835,5 @@ mod tests {
         ));
         handle.shutdown().await.unwrap();
         let _ = tokio::fs::remove_dir_all(dir).await;
-    }
-
-    async fn transfer_finished(
-        events: &mut broadcast::Receiver<SessionEvent>,
-        id: u64,
-    ) -> Result<(), SessionError> {
-        tokio::time::timeout(Duration::from_secs(30), async {
-            loop {
-                if let SessionEvent::TransferFinished {
-                    id: finished,
-                    error,
-                } = events.recv().await.map_err(|_| SessionError::Closed)?
-                    && finished == id
-                {
-                    return error.map_or(Ok(()), |error| Err(SessionError::Transfer(error)));
-                }
-            }
-        })
-        .await
-        .map_err(|_| SessionError::Timeout)?
-    }
-
-    #[derive(Deserialize)]
-    struct ChannelFixture {
-        server: String,
-        channel_id: u64,
-        channel_group_id: u64,
-        server_group_id: u64,
-        password: String,
-    }
-
-    #[tokio::test]
-    #[ignore]
-    async fn live_channel_files_and_permissions() {
-        let fixture_path = PathBuf::from(
-            std::env::var("FLSPEAK_CONTROLLED_FIXTURE").expect("explicit controlled fixture"),
-        );
-        let fixture: ChannelFixture =
-            serde_json::from_slice(&tokio::fs::read(&fixture_path).await.unwrap()).unwrap();
-        let root = fixture_path.parent().unwrap().to_path_buf();
-        let a = SessionHandle::spawn_with_options(
-            root.join("a/servers.json"),
-            SessionOptions { audio: false },
-        )
-        .unwrap();
-        let b = SessionHandle::spawn_with_options(
-            root.join("b/servers.json"),
-            SessionOptions { audio: false },
-        )
-        .unwrap();
-        let mut diagnostics_a = a.subscribe();
-        let mut diagnostics_b = b.subscribe();
-        let result = async {
-            let ap = a
-                .register_server("channel-audit".into(), fixture.server.clone())
-                .await?;
-            let bp = b
-                .register_server("channel-audit".into(), fixture.server)
-                .await?;
-            a.set_auto_reconnect(false).await?;
-            b.set_auto_reconnect(false).await?;
-            println!("connecting temporary client A");
-            a.connect(ap.id, "FLS-CHANNEL-A".into()).await?;
-            println!("connecting temporary client B");
-            b.connect(bp.id, "FLS-CHANNEL-B".into()).await?;
-            a.request_snapshot().await?;
-            b.request_snapshot().await?;
-            let (aid, home) = match a.state().await? {
-                SessionState::Connected {
-                    client_id,
-                    channel_id,
-                } => (client_id, channel_id),
-                _ => return Err(SessionError::NotConnected),
-            };
-            let bid = match b.state().await? {
-                SessionState::Connected { client_id, .. } => client_id,
-                _ => return Err(SessionError::NotConnected),
-            };
-            let auid = a
-                .list_clients()
-                .await?
-                .into_iter()
-                .find(|client| client.id == aid)
-                .ok_or(SessionError::NotConnected)?
-                .uid;
-            let buid = b
-                .list_clients()
-                .await?
-                .into_iter()
-                .find(|client| client.id == bid)
-                .ok_or(SessionError::NotConnected)?
-                .uid;
-            tokio::fs::write(
-                root.join("ready.json"),
-                serde_json::to_vec(
-                    &serde_json::json!({"a_uid":auid,"b_uid":buid,"a_id":aid,"b_id":bid}),
-                )
-                .unwrap(),
-            )
-            .await
-            .map_err(|e| SessionError::Transfer(e.to_string()))?;
-            tokio::time::timeout(Duration::from_secs(30), async {
-                while !root.join("authorized").exists() {
-                    tokio::time::sleep(Duration::from_millis(100)).await;
-                }
-            })
-            .await
-            .map_err(|_| SessionError::Timeout)?;
-            let cid = fixture.channel_id;
-            let password = &fixture.password;
-            println!("checking ordinary access");
-            let ordinary = b.access().await?;
-            if ordinary.member_add_power.is_some_and(|p| p > 0)
-                || ordinary.member_remove_power.is_some_and(|p| p > 0)
-            {
-                return Err(SessionError::Protocol(
-                    "fixture guest unexpectedly has group powers".into(),
-                ));
-            }
-            println!("joining authorized fixture without password");
-            a.move_to_channel(aid, cid, None).await?;
-            println!("reading manager access");
-            let manager = a.access().await?;
-            if manager.member_add_power.is_none_or(|p| p < 25) {
-                return Err(SessionError::Protocol(format!(
-                    "creator permissions unavailable: {manager:?}"
-                )));
-            }
-            println!(
-                "ordinary user has no management power; authorized channel manager has {:?}",
-                manager
-            );
-            let empty = b.move_to_channel(bid, cid, None).await;
-            if !matches!(empty, Err(SessionError::ChannelPasswordRequired)) {
-                return Err(SessionError::Protocol(format!(
-                    "expected password prompt, got {empty:?}"
-                )));
-            }
-            let wrong = b.move_to_channel(bid, cid, Some("wrong".into())).await;
-            if !matches!(wrong, Err(SessionError::ChannelPasswordRequired)) {
-                return Err(SessionError::Protocol(format!(
-                    "expected wrong-password response, got {wrong:?}"
-                )));
-            }
-            b.move_to_channel(bid, cid, Some(password.clone())).await?;
-            println!("ordinary passwordless/wrong/correct cases passed");
-            a.move_to_channel(aid, home, None).await?;
-            a.move_to_channel(aid, cid, None).await?;
-            println!("authorized password bypass passed");
-            a.request_snapshot().await?;
-            tokio::time::sleep(Duration::from_secs(2)).await;
-            println!("reading manageable groups");
-            let groups = a.member_groups(buid.clone()).await?;
-            println!("group list received; locating fixture role");
-            let role = groups
-                .iter()
-                .find(|g| {
-                    g.kind == GroupKind::Channel && g.id == fixture.channel_group_id && g.can_add
-                })
-                .ok_or_else(|| {
-                    SessionError::Protocol(format!("fixture channel role unavailable: {groups:?}"))
-                })?;
-            let original = groups
-                .iter()
-                .find(|g| g.kind == GroupKind::Channel && g.member)
-                .ok_or_else(|| SessionError::Protocol("initial group missing".into()))?;
-            tokio::time::sleep(Duration::from_secs(2)).await;
-            println!("assigning fixture channel role");
-            a.set_member_group(buid.clone(), role.id, cid, role.kind, true)
-                .await?;
-            tokio::time::sleep(Duration::from_secs(2)).await;
-            let updated = a.member_groups(buid.clone()).await?;
-            if !updated
-                .iter()
-                .any(|g| g.kind == role.kind && g.id == role.id && g.member)
-            {
-                return Err(SessionError::Protocol(
-                    "channel role change not reflected".into(),
-                ));
-            }
-            tokio::time::sleep(Duration::from_secs(2)).await;
-            a.set_member_group(buid.clone(), original.id, cid, original.kind, true)
-                .await?;
-            tokio::time::sleep(Duration::from_secs(2)).await;
-            a.set_member_group(
-                buid.clone(),
-                fixture.server_group_id,
-                cid,
-                GroupKind::Server,
-                true,
-            )
-            .await?;
-            if !a
-                .member_groups(buid.clone())
-                .await?
-                .iter()
-                .any(|g| g.kind == GroupKind::Server && g.id == fixture.server_group_id && g.member)
-            {
-                return Err(SessionError::Protocol(
-                    "server role change not reflected".into(),
-                ));
-            }
-            tokio::time::sleep(Duration::from_secs(2)).await;
-            a.set_member_group(
-                buid.clone(),
-                fixture.server_group_id,
-                cid,
-                GroupKind::Server,
-                false,
-            )
-            .await?;
-            if b.set_member_group(buid, fixture.server_group_id, cid, GroupKind::Server, true)
-                .await
-                .is_ok()
-            {
-                return Err(SessionError::Protocol(
-                    "ordinary client changed a protected role".into(),
-                ));
-            }
-            println!("channel/server role grant, readback, restore and ordinary denial passed");
-            let payload = b"FlSpeak self-hosted file audit\nNo personal data.\n";
-            let source = root.join("fixture.txt");
-            tokio::fs::write(&source, payload)
-                .await
-                .map_err(|e| SessionError::Transfer(e.to_string()))?;
-            let mut events = a.subscribe();
-            let id = a
-                .upload_file(
-                    source.to_string_lossy().into(),
-                    "/fixture.txt".into(),
-                    cid,
-                    Some(password.clone()),
-                    false,
-                )
-                .await?;
-            transfer_finished(&mut events, id).await?;
-            let files = b.list_files(cid, "/".into(), password.clone()).await?;
-            let file = files
-                .iter()
-                .find(|f| f.name == "fixture.txt" && !f.directory)
-                .ok_or_else(|| SessionError::Transfer(format!("fixture not listed: {files:?}")))?;
-            let dest = root.join("received.txt");
-            let mut events = b.subscribe();
-            let id = b
-                .download_file(
-                    file.path.clone(),
-                    dest.to_string_lossy().into(),
-                    cid,
-                    Some(password.clone()),
-                )
-                .await?;
-            transfer_finished(&mut events, id).await?;
-            if tokio::fs::read(&dest)
-                .await
-                .map_err(|e| SessionError::Transfer(e.to_string()))?
-                != payload
-            {
-                return Err(SessionError::Transfer("download bytes mismatch".into()));
-            }
-            if b.download_file(
-                file.path.clone(),
-                dest.to_string_lossy().into(),
-                cid,
-                Some(password.clone()),
-            )
-            .await
-            .is_ok()
-            {
-                return Err(SessionError::Transfer(
-                    "existing destination accepted".into(),
-                ));
-            }
-            println!("file listing, byte-identical download and overwrite protection passed");
-            Ok::<_, SessionError>(())
-        }
-        .await;
-        let _ = b.disconnect().await;
-        let _ = a.disconnect().await;
-        let _ = a.shutdown().await;
-        let _ = b.shutdown().await;
-        if result.is_err() {
-            for events in [&mut diagnostics_a, &mut diagnostics_b] {
-                loop {
-                    match events.try_recv() {
-                        Ok(SessionEvent::Log { level, message }) => println!("{level}: {message}"),
-                        Ok(_) | Err(broadcast::error::TryRecvError::Lagged(_)) => continue,
-                        Err(_) => break,
-                    }
-                }
-            }
-        }
-        assert!(result.is_ok(), "{result:?}");
     }
 }

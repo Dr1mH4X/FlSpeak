@@ -187,4 +187,46 @@ void main() {
       expect(find.text('picked.png'), findsNothing);
     },
   );
+
+  testWidgets(
+    'long channel name falls back to generic channel hint without growing composer height',
+    (tester) async {
+      Widget buildPane(String channelName) => MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: SizedBox(
+            width: 360,
+            height: 600,
+            child: ChatPane(
+              channelName: channelName,
+              messages: const [],
+              scope: ChatScope.channel,
+              canSendChannel: true,
+              busy: false,
+              selfUid: 'self',
+              recipients: const [],
+              recipientUid: null,
+              onRecipientChanged: (_) {},
+              onReply: (_) {},
+              onScopeChanged: (_) {},
+              onSend: (_) async => true,
+            ),
+          ),
+        ),
+      );
+
+      await tester.pumpWidget(buildPane('Lobby'));
+      expect(find.text('发送到 Lobby'), findsOneWidget);
+      final shortHeight = tester.getSize(find.byType(TextField)).height;
+
+      await tester.pumpWidget(
+        buildPane('*入口 Entrance* 墓地 —— 超长频道名称测试 AABBCCDDEEFFGG'),
+      );
+      expect(find.text('发送到 本频道'), findsOneWidget);
+      final longHeight = tester.getSize(find.byType(TextField)).height;
+      expect(longHeight, shortHeight);
+    },
+  );
 }

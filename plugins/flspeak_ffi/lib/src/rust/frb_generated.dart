@@ -147,6 +147,7 @@ abstract class RustLibApi extends BaseApi {
   Future<List<MemberGroupView>> crateApiSessionCoreSessionMemberGroups({
     required CoreSession that,
     required String uid,
+    required int clientId,
   });
 
   Future<void> crateApiSessionCoreSessionMoveToChannel({
@@ -213,6 +214,7 @@ abstract class RustLibApi extends BaseApi {
   Future<void> crateApiSessionCoreSessionSetMemberGroup({
     required CoreSession that,
     required String uid,
+    required int clientId,
     required int groupId,
     required int channelId,
     required GroupKind kind,
@@ -802,6 +804,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Future<List<MemberGroupView>> crateApiSessionCoreSessionMemberGroups({
     required CoreSession that,
     required String uid,
+    required int clientId,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -812,6 +815,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_String(uid, serializer);
+          sse_encode_i_32(clientId, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -824,7 +828,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_core_error,
         ),
         constMeta: kCrateApiSessionCoreSessionMemberGroupsConstMeta,
-        argValues: [that, uid],
+        argValues: [that, uid, clientId],
         apiImpl: this,
       ),
     );
@@ -833,7 +837,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiSessionCoreSessionMemberGroupsConstMeta =>
       const TaskConstMeta(
         debugName: "CoreSession_member_groups",
-        argNames: ["that", "uid"],
+        argNames: ["that", "uid", "clientId"],
       );
 
   @override
@@ -1263,6 +1267,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Future<void> crateApiSessionCoreSessionSetMemberGroup({
     required CoreSession that,
     required String uid,
+    required int clientId,
     required int groupId,
     required int channelId,
     required GroupKind kind,
@@ -1277,6 +1282,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             serializer,
           );
           sse_encode_String(uid, serializer);
+          sse_encode_i_32(clientId, serializer);
           sse_encode_CastedPrimitive_u_64(groupId, serializer);
           sse_encode_CastedPrimitive_u_64(channelId, serializer);
           sse_encode_group_kind(kind, serializer);
@@ -1293,7 +1299,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           decodeErrorData: sse_decode_core_error,
         ),
         constMeta: kCrateApiSessionCoreSessionSetMemberGroupConstMeta,
-        argValues: [that, uid, groupId, channelId, kind, enabled],
+        argValues: [that, uid, clientId, groupId, channelId, kind, enabled],
         apiImpl: this,
       ),
     );
@@ -1302,7 +1308,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiSessionCoreSessionSetMemberGroupConstMeta =>
       const TaskConstMeta(
         debugName: "CoreSession_set_member_group",
-        argNames: ["that", "uid", "groupId", "channelId", "kind", "enabled"],
+        argNames: [
+          "that",
+          "uid",
+          "clientId",
+          "groupId",
+          "channelId",
+          "kind",
+          "enabled",
+        ],
       );
 
   @override
@@ -1889,10 +1903,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         return CoreEvent_TextMessage(
           from: dco_decode_String(raw[1]),
           fromUid: dco_decode_String(raw[2]),
-          message: dco_decode_String(raw[3]),
-          targetMode: dco_decode_i_32(raw[4]),
-          targetId: dco_decode_CastedPrimitive_u_64(raw[5]),
-          at: dco_decode_CastedPrimitive_u_64(raw[6]),
+          fromId: dco_decode_i_32(raw[3]),
+          message: dco_decode_String(raw[4]),
+          targetMode: dco_decode_i_32(raw[5]),
+          targetId: dco_decode_CastedPrimitive_u_64(raw[6]),
+          at: dco_decode_CastedPrimitive_u_64(raw[7]),
         );
       case 6:
         return CoreEvent_Poked(
@@ -1979,15 +1994,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   CoreMessage dco_decode_core_message(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 6)
-      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
     return CoreMessage(
       from: dco_decode_String(arr[0]),
       fromUid: dco_decode_String(arr[1]),
-      message: dco_decode_String(arr[2]),
-      targetMode: dco_decode_i_32(arr[3]),
-      targetId: dco_decode_CastedPrimitive_u_64(arr[4]),
-      at: dco_decode_CastedPrimitive_u_64(arr[5]),
+      fromId: dco_decode_i_32(arr[2]),
+      message: dco_decode_String(arr[3]),
+      targetMode: dco_decode_i_32(arr[4]),
+      targetId: dco_decode_CastedPrimitive_u_64(arr[5]),
+      at: dco_decode_CastedPrimitive_u_64(arr[6]),
     );
   }
 
@@ -2487,6 +2503,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case 5:
         var var_from = sse_decode_String(deserializer);
         var var_fromUid = sse_decode_String(deserializer);
+        var var_fromId = sse_decode_i_32(deserializer);
         var var_message = sse_decode_String(deserializer);
         var var_targetMode = sse_decode_i_32(deserializer);
         var var_targetId = sse_decode_CastedPrimitive_u_64(deserializer);
@@ -2494,6 +2511,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         return CoreEvent_TextMessage(
           from: var_from,
           fromUid: var_fromUid,
+          fromId: var_fromId,
           message: var_message,
           targetMode: var_targetMode,
           targetId: var_targetId,
@@ -2598,6 +2616,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_from = sse_decode_String(deserializer);
     var var_fromUid = sse_decode_String(deserializer);
+    var var_fromId = sse_decode_i_32(deserializer);
     var var_message = sse_decode_String(deserializer);
     var var_targetMode = sse_decode_i_32(deserializer);
     var var_targetId = sse_decode_CastedPrimitive_u_64(deserializer);
@@ -2605,6 +2624,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     return CoreMessage(
       from: var_from,
       fromUid: var_fromUid,
+      fromId: var_fromId,
       message: var_message,
       targetMode: var_targetMode,
       targetId: var_targetId,
@@ -3190,6 +3210,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case CoreEvent_TextMessage(
         from: final from,
         fromUid: final fromUid,
+        fromId: final fromId,
         message: final message,
         targetMode: final targetMode,
         targetId: final targetId,
@@ -3198,6 +3219,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_i_32(5, serializer);
         sse_encode_String(from, serializer);
         sse_encode_String(fromUid, serializer);
+        sse_encode_i_32(fromId, serializer);
         sse_encode_String(message, serializer);
         sse_encode_i_32(targetMode, serializer);
         sse_encode_CastedPrimitive_u_64(targetId, serializer);
@@ -3299,6 +3321,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.from, serializer);
     sse_encode_String(self.fromUid, serializer);
+    sse_encode_i_32(self.fromId, serializer);
     sse_encode_String(self.message, serializer);
     sse_encode_i_32(self.targetMode, serializer);
     sse_encode_CastedPrimitive_u_64(self.targetId, serializer);
@@ -3722,10 +3745,14 @@ class CoreSessionImpl extends RustOpaque implements CoreSession {
   Future<List<ServerProfileView>> listServers() =>
       RustLib.instance.api.crateApiSessionCoreSessionListServers(that: this);
 
-  Future<List<MemberGroupView>> memberGroups({required String uid}) => RustLib
-      .instance
-      .api
-      .crateApiSessionCoreSessionMemberGroups(that: this, uid: uid);
+  Future<List<MemberGroupView>> memberGroups({
+    required String uid,
+    required int clientId,
+  }) => RustLib.instance.api.crateApiSessionCoreSessionMemberGroups(
+    that: this,
+    uid: uid,
+    clientId: clientId,
+  );
 
   Future<void> moveToChannel({
     required int clientId,
@@ -3791,6 +3818,7 @@ class CoreSessionImpl extends RustOpaque implements CoreSession {
 
   Future<void> setMemberGroup({
     required String uid,
+    required int clientId,
     required int groupId,
     required int channelId,
     required GroupKind kind,
@@ -3798,6 +3826,7 @@ class CoreSessionImpl extends RustOpaque implements CoreSession {
   }) => RustLib.instance.api.crateApiSessionCoreSessionSetMemberGroup(
     that: this,
     uid: uid,
+    clientId: clientId,
     groupId: groupId,
     channelId: channelId,
     kind: kind,

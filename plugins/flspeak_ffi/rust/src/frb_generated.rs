@@ -848,6 +848,7 @@ fn wire__crate__api__session__CoreSession_member_groups_impl(
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<CoreSession>,
             >>::sse_decode(&mut deserializer);
             let api_uid = <String>::sse_decode(&mut deserializer);
+            let api_client_id = <i32>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| async move {
                 transform_result_sse::<_, crate::api::session::CoreError>(
@@ -872,6 +873,7 @@ fn wire__crate__api__session__CoreSession_member_groups_impl(
                         let output_ok = crate::api::session::CoreSession::member_groups(
                             &*api_that_guard,
                             api_uid,
+                            api_client_id,
                         )
                         .await?;
                         std::result::Result::Ok(output_ok)
@@ -1549,6 +1551,7 @@ fn wire__crate__api__session__CoreSession_set_member_group_impl(
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<CoreSession>,
             >>::sse_decode(&mut deserializer);
             let api_uid = <String>::sse_decode(&mut deserializer);
+            let api_client_id = <i32>::sse_decode(&mut deserializer);
             let api_group_id = <u64>::sse_decode(&mut deserializer);
             let api_channel_id = <u64>::sse_decode(&mut deserializer);
             let api_kind = <crate::api::session::GroupKind>::sse_decode(&mut deserializer);
@@ -1577,6 +1580,7 @@ fn wire__crate__api__session__CoreSession_set_member_group_impl(
                         let output_ok = crate::api::session::CoreSession::set_member_group(
                             &*api_that_guard,
                             api_uid,
+                            api_client_id,
                             api_group_id,
                             api_channel_id,
                             api_kind,
@@ -2321,6 +2325,7 @@ impl SseDecode for crate::api::session::CoreEvent {
             5 => {
                 let mut var_from = <String>::sse_decode(deserializer);
                 let mut var_fromUid = <String>::sse_decode(deserializer);
+                let mut var_fromId = <i32>::sse_decode(deserializer);
                 let mut var_message = <String>::sse_decode(deserializer);
                 let mut var_targetMode = <i32>::sse_decode(deserializer);
                 let mut var_targetId = <u64>::sse_decode(deserializer);
@@ -2328,6 +2333,7 @@ impl SseDecode for crate::api::session::CoreEvent {
                 return crate::api::session::CoreEvent::TextMessage {
                     from: var_from,
                     from_uid: var_fromUid,
+                    from_id: var_fromId,
                     message: var_message,
                     target_mode: var_targetMode,
                     target_id: var_targetId,
@@ -2479,6 +2485,7 @@ impl SseDecode for crate::api::session::CoreMessage {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_from = <String>::sse_decode(deserializer);
         let mut var_fromUid = <String>::sse_decode(deserializer);
+        let mut var_fromId = <i32>::sse_decode(deserializer);
         let mut var_message = <String>::sse_decode(deserializer);
         let mut var_targetMode = <i32>::sse_decode(deserializer);
         let mut var_targetId = <u64>::sse_decode(deserializer);
@@ -2486,6 +2493,7 @@ impl SseDecode for crate::api::session::CoreMessage {
         return crate::api::session::CoreMessage {
             from: var_from,
             from_uid: var_fromUid,
+            from_id: var_fromId,
             message: var_message,
             target_mode: var_targetMode,
             target_id: var_targetId,
@@ -3258,6 +3266,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::session::CoreEvent {
             crate::api::session::CoreEvent::TextMessage {
                 from,
                 from_uid,
+                from_id,
                 message,
                 target_mode,
                 target_id,
@@ -3266,6 +3275,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::session::CoreEvent {
                 5.into_dart(),
                 from.into_into_dart().into_dart(),
                 from_uid.into_into_dart().into_dart(),
+                from_id.into_into_dart().into_dart(),
                 message.into_into_dart().into_dart(),
                 target_mode.into_into_dart().into_dart(),
                 target_id.into_into_dart().into_dart(),
@@ -3404,6 +3414,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::session::CoreMessage {
         [
             self.from.into_into_dart().into_dart(),
             self.from_uid.into_into_dart().into_dart(),
+            self.from_id.into_into_dart().into_dart(),
             self.message.into_into_dart().into_dart(),
             self.target_mode.into_into_dart().into_dart(),
             self.target_id.into_into_dart().into_dart(),
@@ -3774,6 +3785,7 @@ impl SseEncode for crate::api::session::CoreEvent {
             crate::api::session::CoreEvent::TextMessage {
                 from,
                 from_uid,
+                from_id,
                 message,
                 target_mode,
                 target_id,
@@ -3782,6 +3794,7 @@ impl SseEncode for crate::api::session::CoreEvent {
                 <i32>::sse_encode(5, serializer);
                 <String>::sse_encode(from, serializer);
                 <String>::sse_encode(from_uid, serializer);
+                <i32>::sse_encode(from_id, serializer);
                 <String>::sse_encode(message, serializer);
                 <i32>::sse_encode(target_mode, serializer);
                 <u64>::sse_encode(target_id, serializer);
@@ -3905,6 +3918,7 @@ impl SseEncode for crate::api::session::CoreMessage {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(self.from, serializer);
         <String>::sse_encode(self.from_uid, serializer);
+        <i32>::sse_encode(self.from_id, serializer);
         <String>::sse_encode(self.message, serializer);
         <i32>::sse_encode(self.target_mode, serializer);
         <u64>::sse_encode(self.target_id, serializer);

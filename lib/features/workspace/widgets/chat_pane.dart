@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
@@ -29,6 +31,9 @@ class ChatPane extends StatefulWidget {
     required this.recipientUid,
     required this.onRecipientChanged,
     required this.onReply,
+    this.selfClientId,
+    this.recipientId,
+    this.onRecipientSelected,
     this.description = '',
     this.onPickImage,
     this.onPasteImage,
@@ -45,9 +50,12 @@ class ChatPane extends StatefulWidget {
   final ValueChanged<ChatScope> onScopeChanged;
   final Future<bool> Function(String) onSend;
   final String selfUid;
+  final int? selfClientId;
   final List<ClientView> recipients;
   final String? recipientUid;
+  final int? recipientId;
   final ValueChanged<String> onRecipientChanged;
+  final ValueChanged<ClientView>? onRecipientSelected;
   final ValueChanged<ChatMessage> onReply;
   final String description;
   final Future<PickedChatImage?> Function()? onPickImage;
@@ -86,12 +94,37 @@ class _ChatPaneState extends State<ChatPane> {
     }
   }
 
+  ClientView? get _selectedRecipient {
+    if (widget.recipientId != null) {
+      for (final peer in widget.recipients) {
+        if (peer.id == widget.recipientId && peer.uid == widget.recipientUid) {
+          return peer;
+        }
+      }
+      return null;
+    }
+    final matches = widget.recipients
+        .where((peer) => peer.uid == widget.recipientUid)
+        .toList();
+    return matches.length == 1 ? matches.first : null;
+  }
+
+  bool _isOwnMessage(ChatMessage message) {
+    if (message.fromId > 0 && widget.selfClientId != null) {
+      return message.fromId == widget.selfClientId;
+    }
+    if (message.scope == ChatScope.direct &&
+        widget.selfClientId != null &&
+        message.targetId > 0) {
+      return message.targetId != widget.selfClientId;
+    }
+    return widget.selfUid.isNotEmpty && message.fromUid == widget.selfUid;
+  }
+
   bool get _canSend => switch (widget.scope) {
     ChatScope.server => true,
     ChatScope.channel => widget.canSendChannel,
-    ChatScope.direct => widget.recipients.any(
-      (peer) => peer.uid == widget.recipientUid,
-    ),
+    ChatScope.direct => _selectedRecipient != null,
   };
 
   @override
@@ -137,7 +170,12 @@ class _ChatPaneState extends State<ChatPane> {
 
   Future<void> _send() async {
     final draft = _input.value;
-    final destination = (widget.scope, widget.recipientUid, widget.channelName);
+    final destination = (
+      widget.scope,
+      widget.recipientUid,
+      widget.recipientId,
+      widget.channelName,
+    );
     final send = widget.onSend;
     var text = draft.text.trim();
     final image = _image;
@@ -155,7 +193,12 @@ class _ChatPaneState extends State<ChatPane> {
         if (!mounted || url == null) return;
         if (identical(_image, image)) _uploadedImageUrl = url;
         if (destination !=
-            (widget.scope, widget.recipientUid, widget.channelName)) {
+            (
+              widget.scope,
+              widget.recipientUid,
+              widget.recipientId,
+              widget.channelName,
+            )) {
           return;
         }
         text = [if (text.isNotEmpty) text, '![](<$url>)'].join('\n');
@@ -165,7 +208,12 @@ class _ChatPaneState extends State<ChatPane> {
           sent &&
           _input.value == draft &&
           destination ==
-              (widget.scope, widget.recipientUid, widget.channelName)) {
+              (
+                widget.scope,
+                widget.recipientUid,
+                widget.recipientId,
+                widget.channelName,
+              )) {
         _input.clear();
         setState(() {
           _image = null;
@@ -236,8 +284,7 @@ class _ChatPaneState extends State<ChatPane> {
                       onReply:
                           _sending ||
                               widget.busy ||
-                              widget.messages[index - 1].fromUid ==
-                                  widget.selfUid
+                              _isOwnMessage(widget.messages[index - 1])
                           ? null
                           : widget.onReply,
                     );
@@ -313,11 +360,7 @@ class _ChatPaneState extends State<ChatPane> {
       ChatScope.server => l10n.chatScopeServer,
       ChatScope.channel => widget.channelName,
       ChatScope.direct =>
-        widget.recipients
-                .where((peer) => peer.uid == widget.recipientUid)
-                .firstOrNull
-                ?.nickname ??
-            l10n.chatRecipientUnavailable,
+        _selectedRecipient?.nickname ?? l10n.chatRecipientUnavailable,
     };
 
     return Padding(
@@ -342,6 +385,7 @@ class _ChatPaneState extends State<ChatPane> {
                   onChanged: widget.onScopeChanged,
                   recipients: widget.recipients,
                   onRecipientChanged: widget.onRecipientChanged,
+                  onRecipientSelected: widget.onRecipientSelected,
                   enabled: !_sending && !widget.busy,
                 ),
                 if (widget.onPickImage != null || widget.onPasteImage != null)
@@ -376,42 +420,68 @@ class _ChatPaneState extends State<ChatPane> {
                   ),
                 const SizedBox(width: 4),
                 Expanded(
-                  child: Focus(
-                    canRequestFocus: false,
-                    skipTraversal: true,
-                    onKeyEvent: _handleKeyEvent,
-                    child: TextField(
-                      controller: _input,
-                      focusNode: _focus,
-                      enabled: !_sending && !widget.busy && _canSend,
-                      minLines: 1,
-                      maxLines: 5,
-                      keyboardType: TextInputType.multiline,
-                      // 触屏没有 Tab 键：点输入框外收起键盘。
-                      onTapOutside: (_) =>
-                          FocusManager.instance.primaryFocus?.unfocus(),
-                      style: texts.bodyMedium?.copyWith(
-                        color: scheme.onSurface,
-                      ),
-                      decoration: InputDecoration(
-                        hintText: l10n.chatComposerHintTo(target),
-                        hintStyle: texts.bodyMedium?.copyWith(
-                          color: scheme.onSurfaceVariant,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final hintStyle = texts.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      );
+                      var hintText = l10n.chatComposerHintTo(target);
+                      if (scope == ChatScope.channel) {
+                        final textWidth = math.max(
+                          0.0,
+                          constraints.maxWidth - 44,
+                        );
+                        final painter = TextPainter(
+                          text: TextSpan(text: hintText, style: hintStyle),
+                          maxLines: 1,
+                          textDirection: Directionality.of(context),
+                          textScaler: MediaQuery.textScalerOf(context),
+                        )..layout(maxWidth: textWidth);
+                        final overflows = painter.didExceedMaxLines;
+                        painter.dispose();
+                        if (overflows) {
+                          hintText = l10n.chatComposerHintTo(
+                            l10n.chatScopeChannel,
+                          );
+                        }
+                      }
+                      return Focus(
+                        canRequestFocus: false,
+                        skipTraversal: true,
+                        onKeyEvent: _handleKeyEvent,
+                        child: TextField(
+                          controller: _input,
+                          focusNode: _focus,
+                          enabled: !_sending && !widget.busy && _canSend,
+                          minLines: 1,
+                          maxLines: 5,
+                          keyboardType: TextInputType.multiline,
+                          // 触屏没有 Tab 键：点输入框外收起键盘。
+                          onTapOutside: (_) =>
+                              FocusManager.instance.primaryFocus?.unfocus(),
+                          style: texts.bodyMedium?.copyWith(
+                            color: scheme.onSurface,
+                          ),
+                          decoration: InputDecoration(
+                            hintText: hintText,
+                            hintMaxLines: 1,
+                            hintStyle: hintStyle,
+                            filled: false,
+                            isDense: true,
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            disabledBorder: InputBorder.none,
+                            // 文本距弧边的总内边距 = 容器 8 + 22 = 30，
+                            // 与有效圆角半径（60 高钳制后的 30）光学对齐。
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 22,
+                              vertical: 11,
+                            ),
+                          ),
                         ),
-                        filled: false,
-                        isDense: true,
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        disabledBorder: InputBorder.none,
-                        // 文本距弧边的总内边距 = 容器 8 + 22 = 30，
-                        // 与有效圆角半径（60 高钳制后的 30）光学对齐。
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 22,
-                          vertical: 11,
-                        ),
-                      ),
-                    ),
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(width: 4),
@@ -452,12 +522,14 @@ class _ScopeButton extends StatelessWidget {
     required this.recipients,
     required this.onRecipientChanged,
     required this.enabled,
+    this.onRecipientSelected,
   });
 
   final ChatScope scope;
   final ValueChanged<ChatScope> onChanged;
   final List<ClientView> recipients;
   final ValueChanged<String> onRecipientChanged;
+  final ValueChanged<ClientView>? onRecipientSelected;
   final bool enabled;
 
   @override
@@ -507,7 +579,11 @@ class _ScopeButton extends StatelessWidget {
                           subtitle: Text(l10n.chatDirectTag),
                           onTap: () {
                             Navigator.pop(context);
-                            onRecipientChanged(peer.uid);
+                            if (onRecipientSelected != null) {
+                              onRecipientSelected!(peer);
+                            } else {
+                              onRecipientChanged(peer.uid);
+                            }
                           },
                         ),
                     ],

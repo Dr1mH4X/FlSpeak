@@ -133,18 +133,16 @@ pub(crate) struct Actor {
 }
 
 impl Actor {
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         store_path: PathBuf,
         registry: ServerRegistry,
         events: broadcast::Sender<SessionEvent>,
         commands: mpsc::UnboundedSender<SessionCommand>,
-        signals: mpsc::UnboundedSender<SessionSignal>,
-        signal_rx: mpsc::UnboundedReceiver<SessionSignal>,
         voice: VoiceEngine,
         audio_events: mpsc::Receiver<AudioEvent>,
         audio_enabled: bool,
     ) -> Self {
+        let (signals, signal_rx) = mpsc::unbounded_channel();
         let logger: Arc<dyn Logger> = Arc::new(EventLogger {
             events: events.clone(),
         });
@@ -353,11 +351,20 @@ impl Actor {
                 };
                 let _ = reply.send(result);
             }
-            SessionCommand::MemberGroups { uid, reply } => {
+            SessionCommand::MemberGroups {
+                uid,
+                client_id,
+                reply,
+            } => {
                 let result = match self.connected() {
                     Ok(client) => {
-                        crate::channel_tools::member_groups(&client, &uid, &mut self.channel_tools)
-                            .await
+                        crate::channel_tools::member_groups(
+                            &client,
+                            &uid,
+                            client_id,
+                            &mut self.channel_tools,
+                        )
+                        .await
                     }
                     Err(error) => Err(error),
                 };
@@ -365,6 +372,7 @@ impl Actor {
             }
             SessionCommand::SetMemberGroup {
                 uid,
+                client_id,
                 group_id,
                 channel_id,
                 kind,
@@ -375,7 +383,7 @@ impl Actor {
                     Ok(client) => {
                         crate::channel_tools::set_member_group(
                             &client,
-                            &uid,
+                            (&uid, client_id),
                             group_id,
                             channel_id,
                             kind,
