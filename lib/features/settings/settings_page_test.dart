@@ -76,4 +76,54 @@ void main() {
       },
     );
   }
+
+  testWidgets('picking motion preference updates provider state', (
+    tester,
+  ) async {
+    final container = ProviderContainer(
+      overrides: [
+        coreSessionProvider.overrideWithValue(_Core()),
+        sessionViewProvider.overrideWith(_Session.new),
+        storePathProvider.overrideWithValue('/tmp/flspeak-test/servers.json'),
+        preferencesStoreProvider.overrideWithValue(
+          PreferencesStore.inMemory(
+            preferences: const SessionPreferences(nickname: 'Test'),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const SettingsPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final row = find.text('动效');
+    await tester.ensureVisible(row);
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+
+    // 弹层中选择「关闭」
+    await tester.tap(find.text('关闭').last);
+    await tester.pumpAndSettle();
+
+    expect(container.read(preferencesProvider).motion, AppMotionPreference.off);
+
+    // 再次点击切回「开启」
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('开启').last);
+    await tester.pumpAndSettle();
+
+    expect(container.read(preferencesProvider).motion, AppMotionPreference.on);
+  });
 }

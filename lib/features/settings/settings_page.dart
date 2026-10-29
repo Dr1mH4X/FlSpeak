@@ -86,6 +86,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             subtitle: _localeLabel(l10n, preferences.locale),
             onTap: () => unawaited(_pickLanguage(preferences.locale)),
           ),
+          SettingsRow(
+            icon: Icons.animation_rounded,
+            title: l10n.settingsMotion,
+            subtitle: _motionLabel(l10n, preferences.motion),
+            onTap: () => unawaited(_pickMotion(preferences.motion)),
+          ),
         ],
       ),
       SettingsGroup(
@@ -302,6 +308,21 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     ref
         .read(preferencesProvider.notifier)
         .setLocale(code.isEmpty ? null : code);
+  }
+
+  Future<void> _pickMotion(AppMotionPreference current) async {
+    final l10n = AppLocalizations.of(context);
+    final motion = await showSettingsOptions<AppMotionPreference>(
+      context,
+      title: l10n.settingsMotion,
+      options: AppMotionPreference.values,
+      current: current,
+      labelBuilder: (context, value) => _motionLabel(l10n, value),
+    );
+    if (!mounted || motion == null) {
+      return;
+    }
+    ref.read(preferencesProvider.notifier).setMotion(motion);
   }
 
   Future<void> _pickVoiceMeter(VoiceMeterSource current) async {
@@ -538,6 +559,13 @@ String _voiceMeterLabel(AppLocalizations l10n, VoiceMeterSource source) =>
     switch (source) {
       VoiceMeterSource.microphone => l10n.settingsVoiceMeterMic,
       VoiceMeterSource.received => l10n.settingsVoiceMeterReceived,
+    };
+
+String _motionLabel(AppLocalizations l10n, AppMotionPreference motion) =>
+    switch (motion) {
+      AppMotionPreference.system => l10n.settingsMotionSystem,
+      AppMotionPreference.on => l10n.settingsMotionOn,
+      AppMotionPreference.off => l10n.settingsMotionOff,
     };
 
 /// 快捷键录制面板：按下任意受支持的键即保存并关闭，Esc 取消。

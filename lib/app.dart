@@ -147,12 +147,24 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
       },
       theme: buildAppTheme(Brightness.light),
       darkTheme: buildAppTheme(Brightness.dark),
-      builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
-        value: appSystemUiOverlayStyle(Theme.of(context)),
-        child: _WindowBackgroundSync(
-          child: _WindowFrame(child: child ?? const SizedBox.shrink()),
-        ),
-      ),
+      builder: (context, child) {
+        final systemDisableAnimations = MediaQuery.disableAnimationsOf(context);
+        final disableAnimations = switch (preferences.motion) {
+          AppMotionPreference.system => systemDisableAnimations,
+          AppMotionPreference.on => false,
+          AppMotionPreference.off => true,
+        };
+        return MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(disableAnimations: disableAnimations),
+          child: AnnotatedRegion<SystemUiOverlayStyle>(
+            value: appSystemUiOverlayStyle(Theme.of(context)),
+            child: _WindowBackgroundSync(
+              child: _WindowFrame(child: child ?? const SizedBox.shrink()),
+            ),
+          ),
+        );
+      },
       routerConfig: router,
     );
   }

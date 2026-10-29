@@ -704,6 +704,30 @@ abstract class AppLocalizations {
   /// **'Dark'**
   String get settingsThemeDark;
 
+  /// No description provided for @settingsMotion.
+  ///
+  /// In en, this message translates to:
+  /// **'Motion'**
+  String get settingsMotion;
+
+  /// No description provided for @settingsMotionSystem.
+  ///
+  /// In en, this message translates to:
+  /// **'System'**
+  String get settingsMotionSystem;
+
+  /// No description provided for @settingsMotionOn.
+  ///
+  /// In en, this message translates to:
+  /// **'On'**
+  String get settingsMotionOn;
+
+  /// No description provided for @settingsMotionOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get settingsMotionOff;
+
   /// No description provided for @settingsPttMode.
   ///
   /// In en, this message translates to:

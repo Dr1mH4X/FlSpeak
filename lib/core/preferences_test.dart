@@ -112,4 +112,31 @@ void main() {
       );
     },
   );
+
+  test(
+    'motion preference serializes, deserializes, and falls back to system',
+    () {
+      for (final mode in AppMotionPreference.values) {
+        final json = SessionPreferences(
+          nickname: 'test',
+          motion: mode,
+        ).toJson();
+        expect(json['motion'], mode.id);
+        final restored = SessionPreferences.fromJson(json);
+        expect(restored.motion, mode);
+      }
+
+      expect(
+        SessionPreferences.fromJson({'nickname': 'test'}).motion,
+        AppMotionPreference.system,
+      );
+      expect(
+        SessionPreferences.fromJson({
+          'nickname': 'test',
+          'motion': 'invalid_mode',
+        }).motion,
+        AppMotionPreference.system,
+      );
+    },
+  );
 }

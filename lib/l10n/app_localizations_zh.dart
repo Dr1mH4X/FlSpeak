@@ -344,6 +344,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsThemeDark => '深色';
 
   @override
+  String get settingsMotion => '动效';
+
+  @override
+  String get settingsMotionSystem => '跟随系统';
+
+  @override
+  String get settingsMotionOn => '开启';
+
+  @override
+  String get settingsMotionOff => '关闭';
+
+  @override
   String get settingsPttMode => '按住说话';
 
   @override

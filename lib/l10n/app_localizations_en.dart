@@ -347,6 +347,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsThemeDark => 'Dark';
 
   @override
+  String get settingsMotion => 'Motion';
+
+  @override
+  String get settingsMotionSystem => 'System';
+
+  @override
+  String get settingsMotionOn => 'On';
+
+  @override
+  String get settingsMotionOff => 'Off';
+
+  @override
   String get settingsPttMode => 'Push to talk';
 
   @override

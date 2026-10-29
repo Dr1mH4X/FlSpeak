@@ -27,6 +27,26 @@ enum AppThemePreference {
   }
 }
 
+/// 动效偏好的三档。JSON 存稳定字符串。
+enum AppMotionPreference {
+  system('system'),
+  on('on'),
+  off('off');
+
+  const AppMotionPreference(this.id);
+
+  final String id;
+
+  static AppMotionPreference fromId(Object? value) {
+    for (final mode in values) {
+      if (mode.id == value) {
+        return mode;
+      }
+    }
+    return AppMotionPreference.system;
+  }
+}
+
 /// 用户卡电平条跟随的音频源。JSON 存稳定字符串，改枚举名不毁旧文件。
 enum VoiceMeterSource {
   microphone('microphone'),
@@ -57,6 +77,7 @@ class SessionPreferences {
     this.lastConnected = const <String, DateTime>{},
     this.locale,
     this.theme = AppThemePreference.dark,
+    this.motion = AppMotionPreference.system,
     this.pttHotkey,
     this.channelPanelWidth,
     this.voiceMeterSource = VoiceMeterSource.microphone,
@@ -78,6 +99,7 @@ class SessionPreferences {
   final String? locale;
 
   final AppThemePreference theme;
+  final AppMotionPreference motion;
 
   /// 按住说话快捷键：Flutter `LogicalKeyboardKey.keyId`，`null` 表示未设置。
   /// keyId 跨平台稳定，注册到系统时再按平台换算成原生键码。
@@ -94,6 +116,7 @@ class SessionPreferences {
     Map<String, DateTime>? lastConnected,
     Object? locale = _unset,
     AppThemePreference? theme,
+    AppMotionPreference? motion,
     Object? pttHotkey = _unset,
     Object? channelPanelWidth = _unset,
     VoiceMeterSource? voiceMeterSource,
@@ -103,6 +126,7 @@ class SessionPreferences {
     lastConnected: lastConnected ?? this.lastConnected,
     locale: identical(locale, _unset) ? this.locale : locale as String?,
     theme: theme ?? this.theme,
+    motion: motion ?? this.motion,
     pttHotkey: identical(pttHotkey, _unset)
         ? this.pttHotkey
         : pttHotkey as int?,
@@ -122,6 +146,7 @@ class SessionPreferences {
     },
     'locale': locale,
     'theme': theme.id,
+    'motion': motion.id,
     'pttHotkey': pttHotkey,
     'channelPanelWidth': channelPanelWidth,
     'voiceMeterSource': voiceMeterSource.id,
@@ -161,6 +186,7 @@ class SessionPreferences {
       lastConnected: lastConnected,
       locale: rawLocale is String && rawLocale.isNotEmpty ? rawLocale : null,
       theme: AppThemePreference.fromId(json['theme']),
+      motion: AppMotionPreference.fromId(json['motion']),
       pttHotkey: rawPttHotkey is int ? rawPttHotkey : null,
       // 文件可能被手改或跨版本：不是有限数就当未设置，尺寸交给渲染时的夹取。
       channelPanelWidth: rawPanelWidth is num && rawPanelWidth.isFinite
