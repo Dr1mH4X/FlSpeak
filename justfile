@@ -107,4 +107,5 @@ ci: fmt-check rust-clippy rust-test analyze analyze-plugin test
 # 清理构建产物
 clean:
     flutter clean
-    cargo clean
+    cd plugins/flspeak_ffi && flutter clean
+    cd plugins/flspeak_ffi/rust && cargo clean

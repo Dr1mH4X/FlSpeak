@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/preferences.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/press_feedback.dart';
 
 class AppearancePicker extends StatelessWidget {
   const AppearancePicker({
@@ -38,7 +39,7 @@ class AppearancePicker extends StatelessWidget {
                   button: true,
                   child: Material(
                     color: Colors.transparent,
-                    child: InkWell(
+                    child: AnimatedInkWell(
                       onTap: () => onChanged(mode),
                       borderRadius: Radii.largeAll,
                       child: Column(

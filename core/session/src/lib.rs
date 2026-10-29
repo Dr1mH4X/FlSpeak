@@ -427,9 +427,16 @@ impl SessionHandle {
         let (commands, command_rx) = mpsc::unbounded_channel();
         let (events, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
         let (audio_events, audio_rx) = mpsc::channel(actor::AUDIO_EVENT_CAPACITY);
-        let voice = audio::engine::VoiceEngine::spawn(move |event| {
-            let _ = audio_events.try_send(event);
-        })?;
+        let level_events = events.clone();
+        let voice = audio::engine::VoiceEngine::spawn(
+            move |event| {
+                let _ = audio_events.try_send(event);
+            },
+            move |mic, received| {
+                // 只转发两个标量，不能等待可能正在执行网络命令的 actor。
+                let _ = level_events.send(SessionEvent::Levels { mic, received });
+            },
+        )?;
 
         let handle = Self {
             commands: commands.clone(),

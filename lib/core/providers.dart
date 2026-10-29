@@ -38,7 +38,7 @@ final sessionViewProvider = NotifierProvider<SessionController, SessionView>(
   SessionController.new,
 );
 
-/// 电平独立成流：10Hz 的更新只让电平条重建，不碰整个 `SessionView`。
+/// 电平独立成流：50Hz 的更新只让电平条重建，不碰整个 `SessionView`。
 final voiceLevelsProvider = StreamProvider<VoiceLevels>((ref) {
   return ref.watch(sessionViewProvider.notifier).levels;
 });
@@ -792,6 +792,8 @@ class SessionController extends Notifier<SessionView> {
       case CoreEvent_SelfSpeaking(:final speaking):
         state = current.copyWith(selfSpeaking: speaking);
       case CoreEvent_Levels(:final mic, :final received):
+        // 断开后可能仍有在途的轻量指标，不能让它重新点亮电平条。
+        if (!current.connected) return;
         _latestLevels = VoiceLevels(mic: mic, received: received);
         _levels.add(_latestLevels);
       case CoreEvent_IdentityUpgrade(:final to):

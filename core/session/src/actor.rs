@@ -1694,9 +1694,6 @@ impl Actor {
             AudioEvent::SelfSpeaking { speaking } => {
                 self.emit(SessionEvent::SelfSpeaking { speaking });
             }
-            AudioEvent::Levels { mic, received } => {
-                self.emit(SessionEvent::Levels { mic, received });
-            }
             AudioEvent::CaptureState {
                 ready,
                 ptt_mode,
@@ -1789,6 +1786,7 @@ impl Actor {
     }
 
     fn invalidate_handlers(&mut self) {
+        self.voice.set_meter_enabled(false);
         self.channel_tools = Default::default();
         self.transfer_target = None;
         self.connection_epoch = self.connection_epoch.wrapping_add(1);
@@ -1796,6 +1794,8 @@ impl Actor {
     }
 
     fn set_state(&mut self, state: SessionState) {
+        self.voice
+            .set_meter_enabled(matches!(&state, SessionState::Connected { .. }));
         self.state = state.clone();
         self.emit(SessionEvent::State(state));
     }

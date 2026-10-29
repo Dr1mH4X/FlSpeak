@@ -4,7 +4,7 @@
 //! 两条线程之间没有共享锁，控制命令走独立的有界通道，语音包走另一条有界通道。
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, TrySendError, sync_channel};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -38,11 +38,6 @@ pub enum AudioEvent {
     /// 本端 VAD/PTT 是否在发送，低频。
     SelfSpeaking {
         speaking: bool,
-    },
-    /// 本端采集与远端混音电平（0–1），≤10Hz。
-    Levels {
-        mic: f32,
-        received: f32,
     },
     /// 远端活跃说话人集合变化。
     Talkers {
@@ -96,23 +91,30 @@ impl IncomingVoiceSender {
 }
 
 type EventSink = Arc<dyn Fn(AudioEvent) + Send + Sync>;
+type LevelSink = Arc<dyn Fn(f32, f32) + Send + Sync>;
 
 /// 音频引擎句柄。Drop 时关闭两条线程并等待 cpal 流释放。
 pub struct VoiceEngine {
     capture: SyncSender<CaptureCommand>,
     playback: SyncSender<PlaybackCommand>,
     incoming: IncomingVoiceSender,
+    meter_enabled: Arc<AtomicBool>,
     capture_thread: Option<JoinHandle<()>>,
     playback_thread: Option<JoinHandle<()>>,
 }
 
 impl VoiceEngine {
-    pub fn spawn(sink: impl Fn(AudioEvent) + Send + Sync + 'static) -> Result<Self, AudioError> {
+    pub fn spawn(
+        sink: impl Fn(AudioEvent) + Send + Sync + 'static,
+        levels: impl Fn(f32, f32) + Send + Sync + 'static,
+    ) -> Result<Self, AudioError> {
         let sink: EventSink = Arc::new(sink);
+        let levels: LevelSink = Arc::new(levels);
+        let meter_enabled = Arc::new(AtomicBool::new(false));
         let (capture, capture_rx) = sync_channel(CONTROL_CAPACITY);
         let (playback, playback_rx) = sync_channel(CONTROL_CAPACITY);
         let (incoming, incoming_rx) = sync_channel(INCOMING_CAPACITY);
-        // capture 线程写入、playback 线程按 10Hz 读出并合成一个事件。
+        // capture 线程写入，playback 线程合并成两路轻量电平。
         let mic_level = Arc::new(AtomicU32::new(0));
 
         let capture_thread = thread::Builder::new()
@@ -127,7 +129,17 @@ impl VoiceEngine {
             .name("voice-playback".into())
             .spawn({
                 let sink = Arc::clone(&sink);
-                move || playback_loop(playback_rx, incoming_rx, sink, mic_level)
+                let meter_enabled = Arc::clone(&meter_enabled);
+                move || {
+                    playback_loop(
+                        playback_rx,
+                        incoming_rx,
+                        sink,
+                        mic_level,
+                        levels,
+                        meter_enabled,
+                    )
+                }
             })
             .map_err(|err| AudioError::Engine(err.to_string()))?;
 
@@ -135,6 +147,7 @@ impl VoiceEngine {
             capture,
             playback,
             incoming: IncomingVoiceSender { sender: incoming },
+            meter_enabled,
             capture_thread: Some(capture_thread),
             playback_thread: Some(playback_thread),
         })
@@ -142,6 +155,11 @@ impl VoiceEngine {
 
     pub fn incoming_sender(&self) -> IncomingVoiceSender {
         self.incoming.clone()
+    }
+
+    /// 由会话状态控制指标发布；指标不排入协议 actor 的音频事件队列。
+    pub fn set_meter_enabled(&self, enabled: bool) {
+        self.meter_enabled.store(enabled, Ordering::Relaxed);
     }
 
     pub fn start_playback(&self, device: Option<String>) -> Result<(), AudioError> {
@@ -495,6 +513,8 @@ fn playback_loop(
     incoming: Receiver<PlaybackCommand>,
     sink: EventSink,
     mic_level: Arc<AtomicU32>,
+    levels: LevelSink,
+    meter_enabled: Arc<AtomicBool>,
 ) {
     let mut pipeline = PlaybackPipeline::new();
     let mut stream: Option<PlaybackStream> = None;
@@ -551,11 +571,8 @@ fn playback_loop(
             } else {
                 received_meter.silence()
             };
-            if received_clock.due(now) {
-                sink(AudioEvent::Levels {
-                    mic: load_level(&mic_level),
-                    received: received_level,
-                });
+            if meter_enabled.load(Ordering::Relaxed) && received_clock.due(now) {
+                levels(load_level(&mic_level), received_level);
             }
             if tick.talkers != last_talkers {
                 last_talkers = tick.talkers.clone();
@@ -650,4 +667,38 @@ fn handle_playback_command(
         }
     }
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn level_reporting_does_not_wait_for_the_control_event_consumer() {
+        let (control, pending) = sync_channel(1);
+        control
+            .try_send(AudioEvent::SelfSpeaking { speaking: false })
+            .unwrap();
+        let (levels, readings) = std::sync::mpsc::channel();
+        let engine = VoiceEngine::spawn(
+            move |event| {
+                let _ = control.try_send(event);
+            },
+            move |mic, received| {
+                let _ = levels.send((mic, received));
+            },
+        )
+        .unwrap();
+        engine.set_meter_enabled(true);
+
+        // 控制事件始终未被消费；未启动任何输入或输出设备。
+        assert_eq!(
+            readings.recv_timeout(Duration::from_secs(2)),
+            Ok((0.0, 0.0))
+        );
+        assert!(matches!(
+            pending.try_recv(),
+            Ok(AudioEvent::SelfSpeaking { speaking: false })
+        ));
+    }
 }

@@ -18,6 +18,7 @@ import '../workspace_state.dart';
 import 'client_actions.dart';
 import 'channel_password_dialog.dart';
 import 'voice_activity_ribbon.dart';
+import '../../../widgets/press_feedback.dart';
 
 /// 频道栏：服务器身份、统一的频道树、当前用户。
 ///
@@ -357,7 +358,7 @@ class _ChannelTile extends StatelessWidget {
             ),
             child: Material(
               color: Colors.transparent,
-              child: InkWell(
+              child: AnimatedInkWell(
                 onTap: onTap,
                 borderRadius: Radii.mediumAll,
                 child: SizedBox(
@@ -760,7 +761,7 @@ class _IconToggle extends StatelessWidget {
       label: label,
       button: true,
       toggled: active,
-      child: InkWell(
+      child: AnimatedInkWell(
         onTap: onTap,
         customBorder: const CircleBorder(),
         child: SizedBox(
@@ -778,10 +779,25 @@ class _IconToggle extends StatelessWidget {
                 shape: BoxShape.circle,
                 color: active ? activeBackground : Colors.transparent,
               ),
-              child: Icon(
-                icon,
-                size: 20,
-                color: active ? activeForeground : scheme.onSurfaceVariant,
+              child: AnimatedSwitcher(
+                duration: MediaQuery.disableAnimationsOf(context)
+                    ? Duration.zero
+                    : Motion.effectsFast,
+                switchInCurve: Motion.effectsFastCurve,
+                switchOutCurve: Motion.effectsFastCurve.flipped,
+                transitionBuilder: (child, animation) => FadeTransition(
+                  opacity: animation,
+                  child: ScaleTransition(
+                    scale: animation.drive(Tween(begin: 0.8, end: 1.0)),
+                    child: child,
+                  ),
+                ),
+                child: Icon(
+                  icon,
+                  key: ValueKey(icon),
+                  size: 20,
+                  color: active ? activeForeground : scheme.onSurfaceVariant,
+                ),
               ),
             ),
           ),

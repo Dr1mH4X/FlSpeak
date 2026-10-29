@@ -5,8 +5,8 @@
 
 use std::time::{Duration, Instant};
 
-/// 电平事件的最小间隔：10Hz，符合音频边界对聚合指标的上限。
-pub const METER_INTERVAL: Duration = Duration::from_millis(100);
+/// 聚合电平每 20ms 发布一次，音频样本不随事件传输。
+pub const METER_INTERVAL: Duration = Duration::from_millis(20);
 
 const FLOOR_DB: f32 = -60.0;
 const NOISE_GATE: f32 = 0.05;
@@ -36,18 +36,22 @@ pub fn level_from_rms(rms: f32) -> f32 {
 /// 按 [`METER_INTERVAL`] 放行事件；首次调用立即放行。
 #[derive(Debug, Default)]
 pub struct MeterClock {
-    last: Option<Instant>,
+    next: Option<Instant>,
 }
 
 impl MeterClock {
     pub fn due(&mut self, now: Instant) -> bool {
-        if self
-            .last
-            .is_some_and(|last| now.saturating_duration_since(last) < METER_INTERVAL)
-        {
+        let deadline = self.next.unwrap_or(now);
+        if now < deadline {
             return false;
         }
-        self.last = Some(now);
+        let next = deadline + METER_INTERVAL;
+        // 保持节拍，线程被延后时只报告最新值，不补发过期读数。
+        self.next = Some(if next > now {
+            next
+        } else {
+            now + METER_INTERVAL
+        });
         true
     }
 }
@@ -61,7 +65,7 @@ pub struct LevelMeter {
 impl LevelMeter {
     pub fn update(&mut self, rms: f32) -> f32 {
         let target = level_from_rms(rms);
-        let coefficient = if target > self.level { 0.65 } else { 0.22 };
+        let coefficient = if target > self.level { 0.85 } else { 0.22 };
         self.level += (target - self.level) * coefficient;
         self.level = self.level.clamp(0.0, 1.0);
         self.level
@@ -106,18 +110,40 @@ mod tests {
         let mut meter = LevelMeter::default();
         let attack = meter.update(0.1);
         let release = meter.update(0.0);
-        assert!(attack > 0.4);
+        assert!(attack >= level_from_rms(0.1) * 0.8);
         assert!(release > 0.0);
         assert!(release < attack);
         assert_eq!(meter.silence(), 0.0);
     }
 
     #[test]
-    fn clock_limits_events_to_ten_hertz() {
+    fn clock_limits_events_to_fifty_hertz() {
         let mut clock = MeterClock::default();
         let start = Instant::now();
         assert!(clock.due(start));
-        assert!(!clock.due(start + Duration::from_millis(50)));
+        assert!(!clock.due(start + Duration::from_millis(19)));
         assert!(clock.due(start + METER_INTERVAL));
+    }
+
+    #[test]
+    fn clock_keeps_phase_despite_tick_jitter() {
+        let mut clock = MeterClock::default();
+        let start = Instant::now();
+        assert!(clock.due(start));
+        assert!(!clock.due(start + Duration::from_millis(11)));
+        assert!(clock.due(start + Duration::from_millis(21)));
+        assert!(!clock.due(start + Duration::from_millis(31)));
+        assert!(clock.due(start + Duration::from_millis(40)));
+    }
+
+    #[test]
+    fn clock_does_not_replay_missed_ticks() {
+        let mut clock = MeterClock::default();
+        let start = Instant::now();
+        assert!(clock.due(start));
+        assert!(clock.due(start + Duration::from_millis(205)));
+        assert!(!clock.due(start + Duration::from_millis(205)));
+        assert!(!clock.due(start + Duration::from_millis(215)));
+        assert!(clock.due(start + Duration::from_millis(225)));
     }
 }

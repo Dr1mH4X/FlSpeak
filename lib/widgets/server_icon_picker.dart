@@ -5,6 +5,7 @@ import '../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
 import 'common.dart';
 import 'expressive_frame.dart';
+import 'press_feedback.dart';
 
 Future<ServerIcon?> showServerIconPicker(
   BuildContext context,
@@ -42,7 +43,7 @@ class ServerIconGrid extends StatelessWidget {
             child: Semantics(
               button: true,
               selected: selected == icon,
-              child: InkWell(
+              child: AnimatedInkWell(
                 onTap: () => onSelected(icon),
                 borderRadius: Radii.largeAll,
                 child: Padding(

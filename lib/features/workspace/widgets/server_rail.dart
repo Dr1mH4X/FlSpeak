@@ -12,6 +12,7 @@ import '../../../widgets/monogram.dart';
 import '../../../widgets/server_icon_picker.dart';
 import '../../../widgets/view_scope.dart';
 import '../../../widgets/window_header.dart';
+import '../../../widgets/press_feedback.dart';
 
 /// Discord 式服务器栏：顶部社区入口、服务器磁贴与底部设置。
 class ServerRail extends ConsumerWidget {
@@ -70,7 +71,7 @@ class ServerRail extends ConsumerWidget {
               label: l10n.homeTitle,
               excludeSemantics: true,
               onTap: () => runFromRail(onHome ?? onAdd),
-              child: InkWell(
+              child: AnimatedInkWell(
                 onTap: () => runFromRail(onHome ?? onAdd),
                 borderRadius: Radii.largeAll,
                 child: Padding(
@@ -301,7 +302,7 @@ class _ServerTile extends StatelessWidget {
                       onDisconnect,
                 }
               : null,
-          child: InkWell(
+          child: AnimatedInkWell(
             onTap: onTap,
             // 触屏没有右键：长按打开同一个断开菜单。
             onLongPress: menuController.open,

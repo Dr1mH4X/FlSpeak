@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
+import '../../../widgets/press_feedback.dart';
 
 /// 单选选项对话框：点一条就关闭并返回该值；用户直接关掉对话框时返回 null。
 ///
@@ -45,7 +46,7 @@ class SettingsOptionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = context.scheme;
-    return InkWell(
+    return AnimatedInkWell(
       onTap: onTap,
       // 同心圆角：面板 35 − 横向内边距 20 ≈ 16（Radii.large），取整到现有档位。
       borderRadius: Radii.largeAll,

@@ -11,6 +11,7 @@ import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
 import '../../../widgets/monogram.dart';
 import 'relative_time.dart';
+import '../../../widgets/press_feedback.dart';
 
 /// 连接页的一行服务器：整行是主落点，右键弹统一的二级菜单放「从列表移除」。
 ///
@@ -98,7 +99,7 @@ class _ServerRowState extends ConsumerState<ServerRow> {
                 child: Semantics(
                   button: true,
                   enabled: active,
-                  child: InkWell(
+                  child: AnimatedInkWell(
                     onTap: widget.enabled ? widget.onTap : null,
                     // M3 state layer：hover 是 onSurface 8%，不再自定底色。
                     hoverColor: scheme.onSurface.withValues(alpha: 0.08),

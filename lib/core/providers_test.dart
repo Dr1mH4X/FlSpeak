@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'models.dart';
 import 'providers.dart';
 import 'notices.dart';
+import 'voice_levels.dart';
 
 class _Core extends Fake implements CoreSession {
   _Core(this.eventsController);
@@ -130,6 +131,38 @@ class _Core extends Fake implements CoreSession {
 }
 
 void main() {
+  test('电平不改变会话快照，断开后丢弃在途指标', () async {
+    final events = StreamController<CoreEvent>.broadcast(sync: true);
+    final container = ProviderContainer(
+      overrides: [coreSessionProvider.overrideWithValue(_Core(events))],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await events.close();
+    });
+    final controller = container.read(sessionViewProvider.notifier);
+    final received = <VoiceLevels>[];
+    final subscription = controller.levels.listen(received.add);
+    addTearDown(subscription.cancel);
+    events.add(
+      const CoreEvent.state(
+        state: CoreSessionState.connected(clientId: 1, channelId: 5),
+      ),
+    );
+    final before = container.read(sessionViewProvider);
+    events.add(const CoreEvent.levels(mic: 0.9, received: 0.6));
+    expect(identical(container.read(sessionViewProvider), before), isTrue);
+    await Future<void>.value();
+    expect(received.last.mic, 0.9);
+    events.add(const CoreEvent.state(state: CoreSessionState.disconnected()));
+    await Future<void>.value();
+    expect(received.last, VoiceLevels.silent);
+    final count = received.length;
+    events.add(const CoreEvent.levels(mic: 1, received: 1));
+    await Future<void>.value();
+    expect(received.length, count);
+  });
+
   test('kick preserves UID and native epoch, rejects moved/offline/self targets and retains members on refusal', () async {
     const peer = ClientView(id: 2, nickname: 'Peer', uid: 'peer', channelId: 5);
     const myself = ClientView(id: 1, nickname: 'Me', uid: 'self', channelId: 5);

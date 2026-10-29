@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../widgets/press_feedback.dart';
+
 /// 连接与错误使用独立语义色，避免与导航的蓝紫强调色混淆。
 @immutable
 class StatusColors extends ThemeExtension<StatusColors> {
@@ -454,6 +456,7 @@ ThemeData buildAppTheme(Brightness brightness) {
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: ButtonStyle(
+        foregroundBuilder: pressFeedback,
         minimumSize: const WidgetStatePropertyAll(Size(0, Sizes.touch)),
         // h48 + r22 接近胶囊：光学对齐要求左右内边距 ≥ 半径（22）。
         padding: const WidgetStatePropertyAll(
@@ -470,6 +473,7 @@ ThemeData buildAppTheme(Brightness brightness) {
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: ButtonStyle(
+        foregroundBuilder: pressFeedback,
         minimumSize: const WidgetStatePropertyAll(Size(0, Sizes.touch)),
         padding: const WidgetStatePropertyAll(
           EdgeInsets.symmetric(horizontal: 16),
@@ -492,6 +496,7 @@ ThemeData buildAppTheme(Brightness brightness) {
     ),
     textButtonTheme: TextButtonThemeData(
       style: ButtonStyle(
+        foregroundBuilder: pressFeedback,
         minimumSize: const WidgetStatePropertyAll(Size(0, Sizes.touch)),
         shape: const WidgetStatePropertyAll(
           RoundedRectangleBorder(
@@ -503,6 +508,7 @@ ThemeData buildAppTheme(Brightness brightness) {
     ),
     iconButtonTheme: IconButtonThemeData(
       style: ButtonStyle(
+        foregroundBuilder: pressFeedback,
         shape: const WidgetStatePropertyAll(CircleBorder()),
         side: focusRing,
       ),
@@ -564,6 +570,7 @@ ThemeData buildAppTheme(Brightness brightness) {
     ),
     menuButtonTheme: MenuButtonThemeData(
       style: ButtonStyle(
+        foregroundBuilder: pressFeedback,
         shape: WidgetStatePropertyAll(Radii.smallShape),
         textStyle: WidgetStatePropertyAll(text.bodyMedium),
       ),

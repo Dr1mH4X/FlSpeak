@@ -4,6 +4,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
 import '../../../widgets/monogram.dart';
+import '../../../widgets/press_feedback.dart';
 
 /// 桌面端身份卡：连接页左侧的「你是谁」。
 ///
@@ -147,7 +148,7 @@ class IdentityStrip extends StatelessWidget {
 
     return HairlineCard(
       clip: true,
-      child: InkWell(
+      child: AnimatedInkWell(
         onTap: onManage,
         child: Padding(
           padding: const EdgeInsets.all(12),

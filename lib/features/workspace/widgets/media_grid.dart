@@ -4,6 +4,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/remote_image.dart';
 import 'media_viewer.dart';
+import '../../../widgets/press_feedback.dart';
 
 /// 频道媒体墙：把聊天里出现过的图片按顺序铺成方格，点击进入全屏浏览。
 ///
@@ -83,7 +84,7 @@ class _MediaTile extends StatelessWidget {
         color: scheme.surfaceContainer,
         borderRadius: Radii.xxlAll,
         clipBehavior: Clip.antiAlias,
-        child: InkWell(
+        child: AnimatedInkWell(
           onTap: onTap,
           child: RemoteImage(
             url: url,
