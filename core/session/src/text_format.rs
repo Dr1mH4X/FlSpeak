@@ -193,6 +193,21 @@ fn markdown_to_bbcode_blocks(markdown: &str) -> Vec<String> {
                     current_block.push_str("\n[hr]\n");
                 }
             }
+            Event::Html(html) | Event::InlineHtml(html) => {
+                let trimmed = html.trim();
+                let lower = trimmed.to_ascii_lowercase();
+                if lower == "<u>" {
+                    current_block.push_str("[u]");
+                } else if lower == "</u>" {
+                    current_block.push_str("[/u]");
+                } else if lower.starts_with("<color") && lower.ends_with('>') {
+                    if let Some(hex) = extract_hex_attr(trimmed) {
+                        current_block.push_str(&format!("[color={hex}]"));
+                    }
+                } else if lower == "</color>" {
+                    current_block.push_str("[/color]");
+                }
+            }
             _ => {}
         }
     }
@@ -225,21 +240,22 @@ fn split_oversized_block(block: &str, max_escaped_bytes: usize) -> Vec<String> {
     chunks
 }
 
-/// 将接收自 TS3 服务端的 BBCode 文本归一化转为标准 Markdown。
+/// 将接收自 TS3 服务端的 BBCode 文本归一化转为标准 Markdown 与扩展内联标记。
 ///
 /// 遵循 YAGNI：
 /// 1. 核心常用子集映射为 Markdown（`[b]`, `[i]`, `[u]`, `[s]`, `[url]`, `[img]`, `[code]`, `[quote]`, `[list]`, `[hr]`）。
 /// 2. `[size=...]` 较大字号转为 `### ` 标题，其余剥离。
-/// 3. `[color=...]` 坚决拒绝 HTML `<span>`，直接剥离标签并保留内部纯文本。
-/// 4. 其余冷门标签平滑剥离。
+/// 3. `[color=...]` 统一归一化为 `<color hex="#RRGGBB">...</color>`，非法颜色剥离。
+/// 4. `[u]...[/u]` 转为 `<u>...</u>`，保留给前端内联下划线渲染。
+/// 5. 其余冷门标签平滑剥离。
 pub fn bbcode_to_markdown(raw: &str) -> String {
     let mut text = Cow::Borrowed(raw);
 
     // 1. [hr] -> ---
     text = Cow::Owned(replace_tag_simple(&text, "[hr]", "---"));
 
-    // 2. 颜色 [color=...]...[/color] -> 剥离标签，保留纯文本
-    text = Cow::Owned(strip_paired_tag(&text, "color"));
+    // 2. 颜色 [color=...]...[/color] -> 归一化为统一的 <color hex="#RRGGBB">...</color>
+    text = Cow::Owned(transform_color_tag(&text));
 
     // 3. 字号 [size=...]...[/size] -> 若为大字号映射为 ###，其余保留内部文本
     text = Cow::Owned(transform_size_tag(&text));
@@ -250,8 +266,8 @@ pub fn bbcode_to_markdown(raw: &str) -> String {
     // 5. [i]...[/i] -> *...*
     text = Cow::Owned(replace_paired_tag(&text, "i", "*", "*"));
 
-    // 6. [u]...[/u] -> _..._
-    text = Cow::Owned(replace_paired_tag(&text, "u", "_", "_"));
+    // 6. [u]...[/u] -> <u>...</u>
+    text = Cow::Owned(replace_paired_tag(&text, "u", "<u>", "</u>"));
 
     // 7. [s]...[/s] -> ~~...~~
     text = Cow::Owned(replace_paired_tag(&text, "s", "~~", "~~"));
@@ -350,6 +366,150 @@ fn strip_paired_tag(source: &str, tag: &str) -> String {
                 if let Some(close_rel) = lower[content_start..].find(&close_tag) {
                     let close_pos = content_start + close_rel;
                     result.push_str(&source[content_start..close_pos]);
+                    idx = close_pos + close_tag.len();
+                } else {
+                    result.push_str(&source[open_pos..content_start]);
+                    idx = content_start;
+                }
+            } else {
+                result.push_str(&source[open_pos..]);
+                break;
+            }
+        } else {
+            result.push_str(&source[idx..]);
+            break;
+        }
+    }
+
+    result
+}
+
+fn normalize_color_name(name: &str) -> Option<&'static str> {
+    match name.to_ascii_lowercase().as_str() {
+        "black" => Some("#000000"),
+        "white" => Some("#ffffff"),
+        "red" => Some("#f44336"),
+        "green" => Some("#4caf50"),
+        "blue" => Some("#2196f3"),
+        "yellow" => Some("#ffeb3b"),
+        "orange" => Some("#ff9800"),
+        "purple" => Some("#9c27b0"),
+        "pink" => Some("#e91e63"),
+        "cyan" | "aqua" => Some("#00bcd4"),
+        "brown" => Some("#795548"),
+        "gray" | "grey" => Some("#9e9e9e"),
+        "silver" => Some("#c0c0c0"),
+        "gold" => Some("#ffd700"),
+        "navy" => Some("#000080"),
+        "teal" => Some("#008080"),
+        "lime" => Some("#00ff00"),
+        "magenta" => Some("#ff00ff"),
+        "maroon" => Some("#800000"),
+        "olive" => Some("#808000"),
+        _ => None,
+    }
+}
+
+fn normalize_color_hex(raw: &str) -> Option<String> {
+    let trimmed = raw.trim().trim_matches(['"', '\'']);
+    if let Some(named) = normalize_color_name(trimmed) {
+        return Some(named.to_string());
+    }
+    let hex_part = trimmed.strip_prefix('#').unwrap_or(trimmed);
+    if hex_part.is_empty() || !hex_part.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    match hex_part.len() {
+        3 => {
+            let mut out = String::with_capacity(7);
+            out.push('#');
+            for c in hex_part.chars() {
+                out.push(c);
+                out.push(c);
+            }
+            Some(out.to_ascii_lowercase())
+        }
+        6 => Some(format!("#{}", hex_part.to_ascii_lowercase())),
+        8 => Some(format!("#{}", hex_part.to_ascii_lowercase())),
+        _ => None,
+    }
+}
+
+fn extract_hex_attr(html: &str) -> Option<String> {
+    let lower = html.to_ascii_lowercase();
+    let pos = lower.find("hex=")?;
+    let rest = &html[pos + 4..];
+    let trimmed = rest.trim_start_matches(['"', '\'']);
+    let raw = trimmed
+        .chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || *c == '#')
+        .collect::<String>();
+    normalize_color_hex(&raw)
+}
+
+fn find_matching_close(source: &str, open_prefix: &str, close_tag: &str) -> Option<usize> {
+    let lower = source.to_lowercase();
+    let mut depth = 1;
+    let mut idx = 0;
+
+    while idx < source.len() && depth > 0 {
+        let next_open = lower[idx..].find(open_prefix);
+        let next_close = lower[idx..].find(close_tag);
+
+        match (next_open, next_close) {
+            (Some(o), Some(c)) if o < c => {
+                depth += 1;
+                idx += o + open_prefix.len();
+            }
+            (Some(_), Some(c)) => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(idx + c);
+                }
+                idx += c + close_tag.len();
+            }
+            (None, Some(c)) => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(idx + c);
+                }
+                idx += c + close_tag.len();
+            }
+            _ => break,
+        }
+    }
+    None
+}
+
+fn transform_color_tag(source: &str) -> String {
+    let lower = source.to_lowercase();
+    let open_prefix = "[color=";
+    let close_tag = "[/color]";
+    let mut result = String::with_capacity(source.len());
+    let mut idx = 0;
+
+    while idx < source.len() {
+        if let Some(open_rel) = lower[idx..].find(open_prefix) {
+            let open_pos = idx + open_rel;
+            result.push_str(&source[idx..open_pos]);
+
+            if let Some(bracket_rel) = lower[open_pos..].find(']') {
+                let raw_val = &source[open_pos + open_prefix.len()..open_pos + bracket_rel];
+                let content_start = open_pos + bracket_rel + 1;
+
+                if let Some(close_rel) =
+                    find_matching_close(&source[content_start..], open_prefix, close_tag)
+                {
+                    let close_pos = content_start + close_rel;
+                    let inner = &source[content_start..close_pos];
+                    let transformed_inner = transform_color_tag(inner);
+
+                    if let Some(hex) = normalize_color_hex(raw_val) {
+                        result
+                            .push_str(&format!("<color hex=\"{hex}\">{transformed_inner}</color>"));
+                    } else {
+                        result.push_str(&transformed_inner);
+                    }
                     idx = close_pos + close_tag.len();
                 } else {
                     result.push_str(&source[open_pos..content_start]);
@@ -639,10 +799,36 @@ mod tests {
     }
 
     #[test]
-    fn bbcode_to_markdown_normalizes_core_tags_and_strips_color() {
-        let raw = "[b]Bold[/b] [color=red]red text[/color] [url=https://example.com]Example[/url]";
+    fn bbcode_to_markdown_normalizes_color_and_underline() {
+        let raw = "[b]Bold[/b] [color=red]red text[/color] [u]underlined[/u] [color=#00ff00]green[/color]";
         let md = bbcode_to_markdown(raw);
-        assert_eq!(md, "**Bold** red text [Example](https://example.com)");
+        assert_eq!(
+            md,
+            "**Bold** <color hex=\"#f44336\">red text</color> <u>underlined</u> <color hex=\"#00ff00\">green</color>"
+        );
+    }
+
+    #[test]
+    fn bbcode_to_markdown_handles_nested_and_invalid_colors() {
+        let nested = "[color=red]outer [color=blue]inner[/color] outer[/color]";
+        assert_eq!(
+            bbcode_to_markdown(nested),
+            "<color hex=\"#f44336\">outer <color hex=\"#2196f3\">inner</color> outer</color>"
+        );
+
+        let invalid = "[color=invalid_val]plain text[/color]";
+        assert_eq!(bbcode_to_markdown(invalid), "plain text");
+    }
+
+    #[test]
+    fn markdown_to_bbcode_converts_color_and_underline() {
+        let md = r##"<u>underline</u> and <color hex="#f44336">red</color>"##;
+        let packets = markdown_to_bbcode_packets(md, 1024);
+        assert_eq!(packets.len(), 1);
+        assert_eq!(
+            packets[0],
+            "[u]underline[/u] and [color=#f44336]red[/color]"
+        );
     }
 
     #[test]

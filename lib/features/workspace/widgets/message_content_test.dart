@@ -77,5 +77,82 @@ void main() {
         );
       },
     );
+    testWidgets('custom color and underline syntax render correctly', (
+      tester,
+    ) async {
+      const text =
+          'Normal <color hex="#f44336">red text</color> and <u>underlined text</u> and <color hex="#2196f3">**bold blue**</color>';
+      await tester.pumpWidget(
+        buildFrame(
+          const MessageContent(text: text, style: TextStyle(fontSize: 14)),
+        ),
+      );
+      expect(find.byType(MarkdownBody), findsOneWidget);
+      expect(
+        find.textContaining('red text', findRichText: true),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('underlined text', findRichText: true),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('bold blue', findRichText: true),
+        findsOneWidget,
+      );
+
+      // Verify the TextSpan styles on SelectableText widgets
+      final selectableFinder = find.byType(SelectableText);
+      expect(selectableFinder, findsWidgets);
+
+      bool foundRed = false;
+      bool foundUnderline = false;
+      bool foundBoldBlue = false;
+
+      void checkSpan(InlineSpan span) {
+        if (span is TextSpan) {
+          if (span.text?.contains('red text') ?? false) {
+            if (span.style?.color == const Color(0xFFF44336)) {
+              foundRed = true;
+            }
+          }
+          if (span.text?.contains('underlined text') ?? false) {
+            if (span.style?.decoration == TextDecoration.underline) {
+              foundUnderline = true;
+            }
+          }
+          if (span.text?.contains('bold blue') ?? false) {
+            if (span.style?.color == const Color(0xFF2196F3) &&
+                span.style?.fontWeight == FontWeight.bold) {
+              foundBoldBlue = true;
+            }
+          }
+          if (span.children != null) {
+            for (final child in span.children!) {
+              checkSpan(child);
+            }
+          }
+        }
+      }
+
+      for (final element in tester.elementList(selectableFinder)) {
+        final st = element.widget as SelectableText;
+        if (st.textSpan != null) {
+          checkSpan(st.textSpan!);
+        }
+      }
+
+      expect(foundRed, isTrue, reason: 'Should find span with color #F44336');
+      expect(
+        foundUnderline,
+        isTrue,
+        reason: 'Should find span with TextDecoration.underline',
+      );
+      expect(
+        foundBoldBlue,
+        isTrue,
+        reason: 'Should find span with color #2196F3 and bold',
+      );
+    });
   });
 }

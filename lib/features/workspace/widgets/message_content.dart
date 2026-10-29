@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:markdown/markdown.dart' as md;
 
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
@@ -186,11 +187,142 @@ class MessageContent extends StatelessWidget {
       data: text,
       selectable: true,
       styleSheet: sheet,
+      inlineSyntaxes: [ColorInlineSyntax(), UnderlineInlineSyntax()],
+      builders: {
+        'color': ColorElementBuilder(),
+        'u': UnderlineElementBuilder(),
+      },
       imageBuilder: (uri, title, alt) {
         return _UrlImage(url: uri.toString(), onTap: onImageTap);
       },
     );
   }
+}
+
+/// 解析 `<color hex="#RRGGBB">...</color>` 自定义内联颜色语法。
+class ColorInlineSyntax extends md.InlineSyntax {
+  ColorInlineSyntax()
+    : super(
+        r'<color\s+hex="([^"]+)">([\s\S]*?)</color>',
+        caseSensitive: false,
+        startCharacter: 0x3C,
+      );
+
+  @override
+  bool onMatch(md.InlineParser parser, Match match) {
+    final hex = match.group(1)!;
+    final content = match.group(2)!;
+    final children = parser.document.parseInline(content);
+    parser.addNode(md.Element('color', children)..attributes['hex'] = hex);
+    return true;
+  }
+}
+
+/// 解析 `<u>...</u>` 自定义内联下划线语法。
+class UnderlineInlineSyntax extends md.InlineSyntax {
+  UnderlineInlineSyntax()
+    : super(r'<u>([\s\S]*?)</u>', caseSensitive: false, startCharacter: 0x3C);
+
+  @override
+  bool onMatch(md.InlineParser parser, Match match) {
+    final content = match.group(1)!;
+    final children = parser.document.parseInline(content);
+    parser.addNode(md.Element('u', children));
+    return true;
+  }
+}
+
+/// 渲染带颜色的内联文本。
+class ColorElementBuilder extends MarkdownElementBuilder {
+  @override
+  Widget visitElementAfterWithContext(
+    BuildContext context,
+    md.Element element,
+    TextStyle? preferredStyle,
+    TextStyle? parentStyle,
+  ) {
+    final hex = element.attributes['hex'] ?? '';
+    final color = _parseHexColor(hex);
+    final targetStyle = (parentStyle ?? const TextStyle()).copyWith(
+      color: color,
+    );
+    final spans = _buildInlineSpans(element, targetStyle);
+    return Text.rich(TextSpan(children: spans));
+  }
+}
+
+/// 渲染带下划线的内联文本。
+class UnderlineElementBuilder extends MarkdownElementBuilder {
+  @override
+  Widget visitElementAfterWithContext(
+    BuildContext context,
+    md.Element element,
+    TextStyle? preferredStyle,
+    TextStyle? parentStyle,
+  ) {
+    final targetStyle = (parentStyle ?? const TextStyle()).copyWith(
+      decoration: TextDecoration.underline,
+    );
+    final spans = _buildInlineSpans(element, targetStyle);
+    return Text.rich(TextSpan(children: spans));
+  }
+}
+
+List<InlineSpan> _buildInlineSpans(md.Node node, TextStyle style) {
+  if (node is md.Text) {
+    return [TextSpan(text: node.text, style: style)];
+  }
+  if (node is md.Element) {
+    var childStyle = style;
+    switch (node.tag) {
+      case 'strong':
+      case 'b':
+        childStyle = childStyle.copyWith(fontWeight: FontWeight.bold);
+      case 'em':
+      case 'i':
+        childStyle = childStyle.copyWith(fontStyle: FontStyle.italic);
+      case 'u':
+        childStyle = childStyle.copyWith(decoration: TextDecoration.underline);
+      case 'del':
+      case 's':
+        childStyle = childStyle.copyWith(
+          decoration: TextDecoration.lineThrough,
+        );
+      case 'color':
+        final color = _parseHexColor(node.attributes['hex'] ?? '');
+        if (color != null) {
+          childStyle = childStyle.copyWith(color: color);
+        }
+    }
+    final children = node.children;
+    if (children != null && children.isNotEmpty) {
+      return children.expand((c) => _buildInlineSpans(c, childStyle)).toList();
+    }
+    return [TextSpan(text: node.textContent, style: childStyle)];
+  }
+  return const [];
+}
+
+Color? _parseHexColor(String raw) {
+  var clean = raw.trim();
+  if (clean.startsWith('#')) {
+    clean = clean.substring(1);
+  }
+  if (clean.length == 3) {
+    clean = clean.split('').map((c) => '$c$c').join();
+  }
+  if (clean.length == 6) {
+    final val = int.tryParse(clean, radix: 16);
+    if (val != null) {
+      return Color(0xFF000000 | val);
+    }
+  } else if (clean.length == 8) {
+    final val = int.tryParse(clean, radix: 16);
+    if (val != null) {
+      return Color(val);
+    }
+  }
+  return null;
 }
 
 class _UrlImage extends StatelessWidget {
