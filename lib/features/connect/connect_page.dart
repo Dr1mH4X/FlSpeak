@@ -240,10 +240,6 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
     final header = ConnectHeader(
       desktop: desktop,
       connected: view.connected,
-      status: _statusText(l10n, view),
-      statusColor: view.connected
-          ? context.status.live
-          : (busy ? scheme.primary : scheme.outline),
       onWorkspace: () => context.go(AppRoutes.workspace),
       onSettings: () => context.push(AppRoutes.settings),
     );
@@ -287,29 +283,6 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
         ),
       ),
     );
-  }
-
-  String _statusText(AppLocalizations l10n, SessionView view) {
-    if (view.reconnecting) {
-      return l10n.voiceReconnectingAttempt(view.reconnectAttempt ?? 1);
-    }
-    final active = view.activeServer;
-    if (view.connected) {
-      return active == null
-          ? l10n.sessionConnected
-          : l10n.sessionConnectedTo(active.label);
-    }
-    final pending = _pendingServerId;
-    if (pending != null) {
-      final target = _serverById(view.servers, pending);
-      if (target != null) {
-        return l10n.sessionConnectingTo(target.label);
-      }
-    }
-    if ((view.connecting || view.busy) && active != null) {
-      return l10n.sessionConnectingTo(active.label);
-    }
-    return l10n.sessionDisconnected;
   }
 }
 

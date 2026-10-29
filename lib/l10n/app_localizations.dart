@@ -278,24 +278,6 @@ abstract class AppLocalizations {
   /// **'Connecting…'**
   String get sessionConnecting;
 
-  /// No description provided for @sessionDisconnected.
-  ///
-  /// In en, this message translates to:
-  /// **'Offline'**
-  String get sessionDisconnected;
-
-  /// No description provided for @sessionConnectedTo.
-  ///
-  /// In en, this message translates to:
-  /// **'Connected to {name}'**
-  String sessionConnectedTo(String name);
-
-  /// No description provided for @sessionConnectingTo.
-  ///
-  /// In en, this message translates to:
-  /// **'Connecting to {name}…'**
-  String sessionConnectingTo(String name);
-
   /// No description provided for @sessionLastConnectedNever.
   ///
   /// In en, this message translates to:
@@ -578,6 +560,12 @@ abstract class AppLocalizations {
   /// **'Whole server'**
   String get chatScopeServer;
 
+  /// No description provided for @chatScopeDirect.
+  ///
+  /// In en, this message translates to:
+  /// **'Direct'**
+  String get chatScopeDirect;
+
   /// No description provided for @chatUnsupportedImage.
   ///
   /// In en, this message translates to:
@@ -854,18 +842,6 @@ abstract class AppLocalizations {
   /// **'No matching servers'**
   String get serverSearchEmpty;
 
-  /// No description provided for @connectIdentityBody.
-  ///
-  /// In en, this message translates to:
-  /// **'One identity. All your communities.'**
-  String get connectIdentityBody;
-
-  /// No description provided for @connectLocalIdentity.
-  ///
-  /// In en, this message translates to:
-  /// **'Identity stored on this device'**
-  String get connectLocalIdentity;
-
   /// No description provided for @membersTitle.
   ///
   /// In en, this message translates to:
@@ -985,6 +961,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Join this channel before sending a message.'**
   String get chatChannelUnavailable;
+
+  /// No description provided for @chatDirectAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Direct message'**
+  String get chatDirectAction;
 
   /// No description provided for @pokeAction.
   ///

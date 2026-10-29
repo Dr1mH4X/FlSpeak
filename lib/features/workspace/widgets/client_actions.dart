@@ -39,6 +39,25 @@ class ClientActionsButton extends ConsumerWidget {
       ),
       menuChildren: [
         MenuItemButton(
+          leadingIcon: const Icon(Icons.chat_bubble_outline_rounded),
+          onPressed: () {
+            ref
+                .read(sessionViewProvider.notifier)
+                .selectDirectRecipient(client.uid, clientId: client.id);
+            ref.read(routerProvider).go(AppRoutes.workspace);
+          },
+          child: Text(l10n.chatDirectAction),
+        ),
+        MenuItemButton(
+          leadingIcon: const Icon(Icons.touch_app_rounded),
+          onPressed: () => showAppModal<void>(
+            context,
+            title: l10n.pokeTitle(client.nickname),
+            builder: (_) => _PokeForm(client: client),
+          ),
+          child: Text(l10n.pokeAction),
+        ),
+        MenuItemButton(
           leadingIcon: const Icon(Icons.admin_panel_settings_outlined),
           onPressed: canManage
               ? () => showMemberPermissions(context, client)
@@ -71,25 +90,6 @@ class ClientActionsButton extends ConsumerWidget {
               target == KickTarget.channel ? l10n.kickChannel : l10n.kickServer,
             ),
           ),
-        MenuItemButton(
-          leadingIcon: const Icon(Icons.chat_bubble_outline_rounded),
-          onPressed: () {
-            ref
-                .read(sessionViewProvider.notifier)
-                .selectDirectRecipient(client.uid, clientId: client.id);
-            ref.read(routerProvider).go(AppRoutes.workspace);
-          },
-          child: Text(l10n.chatDirectTag),
-        ),
-        MenuItemButton(
-          leadingIcon: const Icon(Icons.touch_app_rounded),
-          onPressed: () => showAppModal<void>(
-            context,
-            title: l10n.pokeTitle(client.nickname),
-            builder: (_) => _PokeForm(client: client),
-          ),
-          child: Text(l10n.pokeAction),
-        ),
       ],
     );
   }

@@ -84,14 +84,7 @@ class IdentityCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: context.texts.titleLarge,
                 ),
-                const SizedBox(height: 10),
-                Text(
-                  l10n.connectIdentityBody,
-                  style: context.texts.bodyMedium?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
                 OutlinedButton.icon(
                   onPressed: onManage,
                   style: OutlinedButton.styleFrom(
@@ -102,25 +95,6 @@ class IdentityCard extends StatelessWidget {
                     size: IconSizes.medium,
                   ),
                   label: Text(l10n.identityManage),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.verified_user_outlined,
-                      size: IconSizes.small,
-                      color: scheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        l10n.connectLocalIdentity,
-                        style: context.texts.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                  ],
                 ),
               ],
             ),

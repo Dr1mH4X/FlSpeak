@@ -109,19 +109,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sessionConnecting => '正在连接…';
 
   @override
-  String get sessionDisconnected => '未连接';
-
-  @override
-  String sessionConnectedTo(String name) {
-    return '已连接到 $name';
-  }
-
-  @override
-  String sessionConnectingTo(String name) {
-    return '正在连接 $name…';
-  }
-
-  @override
   String get sessionLastConnectedNever => '还没连接过';
 
   @override
@@ -281,6 +268,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatScopeServer => '整个服务器';
 
   @override
+  String get chatScopeDirect => '私聊';
+
+  @override
   String get chatUnsupportedImage => '不支持的图片格式';
 
   @override
@@ -419,12 +409,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get serverSearchEmpty => '没有匹配的服务器';
 
   @override
-  String get connectIdentityBody => '一个身份，连接你熟悉的每个社区。';
-
-  @override
-  String get connectLocalIdentity => '身份保存在本机';
-
-  @override
   String get membersTitle => '频道成员';
 
   @override
@@ -485,14 +469,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatChannelUnavailable => '请先进入此频道再发送消息';
 
   @override
-  String get pokeAction => '戳一下';
+  String get chatDirectAction => '私信';
+
+  @override
+  String get pokeAction => '戳一戳';
 
   @override
   String get pokeMessage => '消息';
 
   @override
   String pokeTitle(String name) {
-    return '戳一下 $name';
+    return '戳一戳 $name';
   }
 
   @override

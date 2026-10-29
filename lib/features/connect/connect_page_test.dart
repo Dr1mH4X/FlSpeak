@@ -274,4 +274,31 @@ void main() {
 
     expect(stripTop, greaterThan(titleBottom));
   });
+
+  testWidgets('连接页不显示未连接状态及身份冗余文案', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_FakeCore()),
+          sessionViewProvider.overrideWith(_TestSessionController.new),
+        ],
+        child: const MaterialApp(
+          locale: Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: ConnectPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('未连接'), findsNothing);
+    expect(find.text('一个身份，连接你熟悉的每个社区。'), findsNothing);
+    expect(find.text('身份保存在本机'), findsNothing);
+  });
 }

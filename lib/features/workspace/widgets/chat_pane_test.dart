@@ -327,11 +327,54 @@ void main() {
       expect(find.text('发送到 Peer'), findsOneWidget);
       await tester.tap(find.byIcon(Icons.person_rounded));
       await tester.pumpAndSettle();
+      // 用户选项默认收起，点击展开后方可选中对应私聊成员。
+      await tester.tap(find.text('私聊'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Peer'));
       await tester.pumpAndSettle();
       expect(chosen, 'peer');
     },
   );
+
+  testWidgets('scope picker direct recipient list is collapsed by default', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: ChatPane(
+            channelName: 'Lobby',
+            messages: const [],
+            scope: ChatScope.channel,
+            canSendChannel: true,
+            busy: false,
+            selfUid: 'self',
+            recipients: const [
+              ClientView(id: 2, nickname: 'Alice', uid: 'alice', channelId: 1),
+            ],
+            recipientUid: null,
+            onRecipientChanged: (_) {},
+            onReply: (_) {},
+            onScopeChanged: (_) {},
+            onSend: (_) async => true,
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byIcon(Icons.chat_bubble_rounded));
+    await tester.pumpAndSettle();
+
+    final tile = tester.widget<ExpansionTile>(find.byType(ExpansionTile));
+    expect(tile.initiallyExpanded, isFalse);
+    expect(find.text('Alice'), findsNothing);
+
+    await tester.tap(find.text('私聊'));
+    await tester.pumpAndSettle();
+    expect(find.text('Alice'), findsOneWidget);
+  });
   testWidgets(
     'image send preserves uploaded URL and draft on failure; retry does not upload twice',
     (tester) async {

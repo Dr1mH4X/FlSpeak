@@ -2,14 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
-import '../../../widgets/monogram.dart';
 
 class ConnectHeader extends StatelessWidget {
   const ConnectHeader({
     required this.desktop,
     required this.connected,
-    required this.status,
-    required this.statusColor,
     required this.onWorkspace,
     required this.onSettings,
     super.key,
@@ -17,8 +14,6 @@ class ConnectHeader extends StatelessWidget {
 
   final bool desktop;
   final bool connected;
-  final String status;
-  final Color statusColor;
   final VoidCallback onWorkspace;
   final VoidCallback onSettings;
 
@@ -48,33 +43,6 @@ class ConnectHeader extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (desktop)
-            Flexible(
-              child: Semantics(
-                liveRegion: true,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    StatusDot(
-                      color: statusColor,
-                      ringColor: context.pageColor,
-                      size: 8,
-                    ),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        status,
-                        style: context.texts.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
           if (connected) ...[
             const SizedBox(width: 12),
             if (desktop)

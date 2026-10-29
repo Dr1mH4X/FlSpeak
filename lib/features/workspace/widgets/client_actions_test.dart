@@ -54,11 +54,16 @@ void main() {
       );
       await tester.tap(find.byIcon(Icons.more_horiz_rounded));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('戳一下'));
+      final menuItems = tester
+          .widgetList<MenuItemButton>(find.byType(MenuItemButton))
+          .map((item) => (item.child as Text).data)
+          .toList();
+      expect(menuItems, ['私信', '戳一戳', '权限管理', '踢出频道', '踢出服务器']);
+      await tester.tap(find.text('戳一戳'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), 'hello 🌍');
       await tester.pump();
-      await tester.tap(find.widgetWithText(FilledButton, '戳一下'));
+      await tester.tap(find.widgetWithText(FilledButton, '戳一戳'));
       await tester.pumpAndSettle();
       expect(find.byType(TextField), findsOneWidget);
       expect(
@@ -68,7 +73,7 @@ void main() {
       final controller =
           container.read(sessionViewProvider.notifier) as _Controller;
       controller.succeed = true;
-      await tester.tap(find.widgetWithText(FilledButton, '戳一下'));
+      await tester.tap(find.widgetWithText(FilledButton, '戳一戳'));
       await tester.pumpAndSettle();
       expect(find.byType(TextField), findsNothing);
       expect(controller.calls, [

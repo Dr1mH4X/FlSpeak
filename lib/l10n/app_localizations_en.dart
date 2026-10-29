@@ -110,19 +110,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sessionConnecting => 'Connecting…';
 
   @override
-  String get sessionDisconnected => 'Offline';
-
-  @override
-  String sessionConnectedTo(String name) {
-    return 'Connected to $name';
-  }
-
-  @override
-  String sessionConnectingTo(String name) {
-    return 'Connecting to $name…';
-  }
-
-  @override
   String get sessionLastConnectedNever => 'Never connected';
 
   @override
@@ -283,6 +270,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatScopeServer => 'Whole server';
 
   @override
+  String get chatScopeDirect => 'Direct';
+
+  @override
   String get chatUnsupportedImage => 'Unsupported image format';
 
   @override
@@ -424,12 +414,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get serverSearchEmpty => 'No matching servers';
 
   @override
-  String get connectIdentityBody => 'One identity. All your communities.';
-
-  @override
-  String get connectLocalIdentity => 'Identity stored on this device';
-
-  @override
   String get membersTitle => 'Channel members';
 
   @override
@@ -490,6 +474,9 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get chatChannelUnavailable =>
       'Join this channel before sending a message.';
+
+  @override
+  String get chatDirectAction => 'Direct message';
 
   @override
   String get pokeAction => 'Poke';

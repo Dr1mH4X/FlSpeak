@@ -478,6 +478,7 @@ class _ChatPaneState extends State<ChatPane> {
                   recipients: widget.recipients,
                   onRecipientChanged: widget.onRecipientChanged,
                   onRecipientSelected: widget.onRecipientSelected,
+                  selectedRecipient: _selectedRecipient,
                   enabled: !_sending && !widget.busy,
                 ),
                 if (widget.onPickImage != null || widget.onPasteImage != null)
@@ -631,6 +632,7 @@ class _ScopeButton extends StatelessWidget {
     required this.recipients,
     required this.onRecipientChanged,
     required this.enabled,
+    this.selectedRecipient,
     this.onRecipientSelected,
   });
 
@@ -639,11 +641,14 @@ class _ScopeButton extends StatelessWidget {
   final List<ClientView> recipients;
   final ValueChanged<String> onRecipientChanged;
   final ValueChanged<ClientView>? onRecipientSelected;
+  final ClientView? selectedRecipient;
   final bool enabled;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final scheme = context.scheme;
+    final isDirect = scope == ChatScope.direct;
     return IconButton(
       onPressed: !enabled
           ? null
@@ -680,21 +685,39 @@ class _ScopeButton extends StatelessWidget {
                             onChanged(entry.$1);
                           },
                         ),
-                      if (recipients.isNotEmpty) const Divider(),
-                      for (final peer in recipients)
-                        ListTile(
+                      if (recipients.isNotEmpty) ...[
+                        const Divider(),
+                        ExpansionTile(
                           leading: const Icon(Icons.person_rounded),
-                          title: Text(peer.nickname),
-                          subtitle: Text(l10n.chatDirectTag),
-                          onTap: () {
-                            Navigator.pop(context);
-                            if (onRecipientSelected != null) {
-                              onRecipientSelected!(peer);
-                            } else {
-                              onRecipientChanged(peer.uid);
-                            }
-                          },
+                          title: Text(l10n.chatScopeDirect),
+                          initiallyExpanded: false,
+                          shape: const Border(),
+                          collapsedShape: const Border(),
+                          textColor: isDirect ? scheme.primary : null,
+                          iconColor: isDirect ? scheme.primary : null,
+                          collapsedTextColor: isDirect ? scheme.primary : null,
+                          collapsedIconColor: isDirect ? scheme.primary : null,
+                          children: [
+                            for (final peer in recipients)
+                              ListTile(
+                                leading: const Icon(Icons.person_rounded),
+                                title: Text(peer.nickname),
+                                subtitle: Text(l10n.chatDirectTag),
+                                selected:
+                                    isDirect &&
+                                    peer.uid == selectedRecipient?.uid,
+                                onTap: () {
+                                  Navigator.pop(context);
+                                  if (onRecipientSelected != null) {
+                                    onRecipientSelected!(peer);
+                                  } else {
+                                    onRecipientChanged(peer.uid);
+                                  }
+                                },
+                              ),
+                          ],
                         ),
+                      ],
                     ],
                   ),
                 ),

@@ -44,23 +44,6 @@
   },
   "sessionConnected": "Connected",
   "sessionConnecting": "Connecting…",
-  "sessionDisconnected": "Offline",
-  "sessionConnectedTo": "Connected to {name}",
-  "@sessionConnectedTo": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "sessionConnectingTo": "Connecting to {name}…",
-  "@sessionConnectingTo": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
   "sessionLastConnectedNever": "Never connected",
   "sessionLastConnectedJustNow": "Just now",
   "sessionLastConnectedMinutes": "{count} min ago",
@@ -164,6 +147,7 @@
   "chatScopeTitle": "Send to",
   "chatScopeChannel": "This channel",
   "chatScopeServer": "Whole server",
+  "chatScopeDirect": "Direct",
   "chatUnsupportedImage": "Unsupported image format",
   "chatImageLoading": "Loading image…",
   "chatImageLoadFailed": "Image failed to load",
@@ -210,8 +194,6 @@
   "serverEmptyBody": "Add a server address to join your people in a channel.",
   "serverSearchLabel": "Search servers",
   "serverSearchEmpty": "No matching servers",
-  "connectIdentityBody": "One identity. All your communities.",
-  "connectLocalIdentity": "Identity stored on this device",
   "membersTitle": "Channel members",
   "voiceConnected": "Voice connected",
   "memberListening": "In this channel",
@@ -232,6 +214,7 @@
   "chatReply": "Reply privately",
   "chatRecipientUnavailable": "Recipient is offline. Choose another recipient.",
   "chatChannelUnavailable": "Join this channel before sending a message.",
+  "chatDirectAction": "Direct message",
   "pokeAction": "Poke",
   "pokeMessage": "Message",
   "pokeTitle": "Poke {name}",
