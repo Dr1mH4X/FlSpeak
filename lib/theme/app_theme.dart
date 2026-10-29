@@ -422,7 +422,7 @@ ThemeData buildAppTheme(Brightness brightness) {
     textTheme: text,
     extensions: [status],
     visualDensity: VisualDensity.standard,
-    iconTheme: const IconThemeData(size: IconSizes.toolbar),
+    iconTheme: IconThemeData(size: IconSizes.toolbar, color: scheme.onSurface),
     splashFactory: InkSparkle.splashFactory,
     dividerTheme: DividerThemeData(
       color: scheme.outlineVariant,
@@ -447,6 +447,8 @@ ThemeData buildAppTheme(Brightness brightness) {
       ),
     ),
     inputDecorationTheme: InputDecorationTheme(
+      prefixIconColor: scheme.onSurfaceVariant,
+      suffixIconColor: scheme.onSurfaceVariant,
       filled: true,
       // M3 filled field 的容器色；暗色下避免更低面阶在面板上沉积成死黑。
       fillColor: scheme.surfaceContainer,
@@ -529,6 +531,15 @@ ThemeData buildAppTheme(Brightness brightness) {
     iconButtonTheme: IconButtonThemeData(
       style: ButtonStyle(
         iconSize: const WidgetStatePropertyAll(IconSizes.toolbar),
+        foregroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.disabled)) {
+            return scheme.onSurface.withValues(alpha: 0.38);
+          }
+          if (states.contains(WidgetState.selected)) {
+            return scheme.primary;
+          }
+          return scheme.onSurfaceVariant;
+        }),
         shape: const WidgetStatePropertyAll(CircleBorder()),
         side: focusRing,
       ),
