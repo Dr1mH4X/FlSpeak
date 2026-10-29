@@ -12,15 +12,11 @@ import '../../../widgets/monogram.dart';
 class IdentityCard extends StatelessWidget {
   const IdentityCard({
     required this.nickname,
-    required this.identityCount,
-    required this.serverCount,
     required this.onManage,
     super.key,
   });
 
   final String nickname;
-  final int identityCount;
-  final int serverCount;
   final VoidCallback onManage;
 
   @override
@@ -29,84 +25,103 @@ class IdentityCard extends StatelessWidget {
     final scheme = context.scheme;
 
     return HairlineCard(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            IdentityAvatar(nickname: nickname, size: 64),
-            const SizedBox(height: 16),
-            Semantics(
-              header: true,
-              child: Text(
-                l10n.identityCurrent.toUpperCase(),
-                style: context.texts.labelSmall?.copyWith(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  letterSpacing: 0.9,
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              nickname,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: context.texts.titleLarge?.copyWith(height: 1.25),
-            ),
-            const SizedBox(height: 4),
-            if (serverCount > 0)
-              Text(
-                l10n.serversUsedBy(serverCount),
-                maxLines: 2,
-                style: context.texts.bodyMedium?.copyWith(
-                  fontSize: 13,
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            const SizedBox(height: 16),
-            OutlinedButton(
-              onPressed: onManage,
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size.fromHeight(Sizes.touch),
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                foregroundColor: scheme.onSurface,
-                backgroundColor: scheme.surface,
-                textStyle: context.texts.bodyMedium?.copyWith(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
+      clip: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            height: 100,
+            color: scheme.primaryContainer,
+            child: Center(
               child: Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Flexible(
-                    child: Text(
-                      l10n.identityManage,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                  for (final height in [
+                    12.0,
+                    24.0,
+                    42.0,
+                    58.0,
+                    34.0,
+                    18.0,
+                    44.0,
+                    66.0,
+                    42.0,
+                    24.0,
+                    12.0,
+                  ])
+                    Container(
+                      width: 5,
+                      height: height,
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      decoration: BoxDecoration(
+                        color: scheme.onPrimaryContainer.withValues(alpha: 0.3),
+                        borderRadius: Radii.pillAll,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '$identityCount',
-                    style: context.texts.bodyMedium?.copyWith(
-                      fontSize: 13,
-                      color: scheme.onSurfaceVariant,
-                      fontFeatures: tabularFigures,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    size: 14,
-                    color: scheme.onSurfaceVariant,
-                  ),
                 ],
               ),
             ),
-          ],
-        ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                IdentityAvatar(nickname: nickname, size: 56),
+                const SizedBox(height: 20),
+                Text(
+                  l10n.identityCurrent,
+                  style: context.texts.labelMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  nickname,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.texts.titleLarge,
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  l10n.connectIdentityBody,
+                  style: context.texts.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                OutlinedButton.icon(
+                  onPressed: onManage,
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(Sizes.touch),
+                  ),
+                  icon: const Icon(Icons.badge_outlined, size: 18),
+                  label: Text(l10n.identityManage),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.verified_user_outlined,
+                      size: 16,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        l10n.connectLocalIdentity,
+                        style: context.texts.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

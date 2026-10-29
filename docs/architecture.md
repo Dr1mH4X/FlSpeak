@@ -14,7 +14,7 @@ session      命令队列 + 事件广播，独占 Client
 proto        SRV 解析 + 最终连接边界 + deny-all 解析器 + 建连
   ├────────> server   服务器档案、地址解析与本地登记
   ▼
-tsclient-rs           协议实现（crates.io 依赖 0.1.5）
+tsclient-rs           协议实现（版本见 Cargo.toml）
 ```
 
 Flutter 负责界面，Rust 负责协议、连接边界与音频。Dart 不持有身份私钥，
@@ -52,13 +52,12 @@ Dart: listChannels() / moveToChannel() / sendText()
 
 ## 事件流
 
-Rust 侧把协议事件收敛成 `SessionEvent`，FFI 翻成 `CoreEvent`（freezed），Dart 的
-`SessionController` 再收敛成一个不可变 `SessionView`：
+Rust 侧把协议事件收敛成 `SessionEvent`，FFI 翻成 `CoreEvent`（freezed），Dart 的 `SessionController` 再收敛成一个不可变 `SessionView`：
 
 ```text
 State / Servers / Snapshot / History / TextMessage / ClientJoined / ClientLeft /
 ClientMoved / Voice / Speaking / SelfSpeaking / IdentityUpgrade / IdentityUpgraded /
-Transfer* / Log / Denied / Failed
+Poked / AccessChanged / Transfer* / Log / Denied / Failed
 ```
 
 - 广播通道容量 256；订阅慢时旧事件被丢弃，订阅者收到 `Lagged` 后继续。
@@ -84,20 +83,18 @@ tsclient-rs 的建连 future 不是 `Send`。
 | --- | --- |
 | `core/server` | `ServerProfile`、`ServerRegistry`、地址解析；无网络、无协议依赖 |
 | `core/proto` | `resolve_target`、`DenyResolver`、最终连接边界、`client()`、`check_transfer_host()` |
-| `core/session` | `SessionHandle` / actor / 档案与身份持久化 / 第三方图片 URL 抓取 |
+| `core/session` | `SessionHandle` / actor / 档案与身份持久化 / 第三方图片抓取与自托管上传 |
 | `core/audio` | 设备枚举、双线程采集/播放、Opus、VAD、jitter/PLC、软削波 |
 | `plugins/flspeak_ffi` | Dart 侧类型、转发、事件桥、生成物 |
 | `lib/` | UI、状态收敛、本地化 |
 
 ## 尚未接线
 
-- 聊天图片：TS6 官方图片是 `ts.file.myts` JSON，字节在 myTS 附件服务；FlSpeak 不带
-  myTS token，只显示“不支持的图片格式”。第三方 URL 经 `fetchImage` 安全抓取；图床上传
-  未接线。边界见 `docs/connection-boundary.md`。
+- 聊天图片：官方 myTS 附件只显示“不支持的图片格式”；第三方 URL 抓取与自托管 HTTP PUT 图床上传已接线，磁盘缓存与解码像素上限尚未接线。详见 [images.md](images.md)。
 - 聊天正文：Dart `MessageContent` 渲染 TS6 Markdown 的一个子集；原始文本不做转换，
   历史里保留原样。
 - TSDNS：可选 legacy fallback，当前只做 SRV，未实现 TSDNS。
-- 文件传输 UI：FFI 已暴露上传/下载与进度事件，Dart 还没有文件选择器和传输列表。
+- 文件传输：频道文件浏览、下载和进度已接线；普通文件上传 UI、断点续传尚未接线。详见 [channels.md](channels.md)。
 - 历史清除入口：历史已持久化并回放，设置页还不能清除。
 - 音频处理：没有 AEC/降噪/AGC；语音包没有 seq，播放只能按到达顺序做固定延迟 jitter。
 - 频道创建/删除没有实时事件，靠 30s 轮询快照兜底。

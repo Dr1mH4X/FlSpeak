@@ -27,6 +27,8 @@ CMAKE_POLICY_VERSION_MINIMUM=3.5 cargo test --workspace --all-features   # 或�
 仓库根 `.cargo/config.toml` 已设置 `CMAKE_POLICY_VERSION_MINIMUM=3.5`；`session` 依赖
 `audio` 的 `audio` feature（Opus/cpal），跑它的测试同样需要 Opus 工具链。
 
+Linux 桌面构建需要 `libsecret-1-dev`，用于图片上传配置的安全存储。开发机使用系统包管理器安装；CI 与发布流水线的 Linux 依赖步骤包含该包。
+
 ## FFI 绑定
 
 改了 `plugins/flspeak_ffi/rust/src/api/**` 或其中的类型，就要重跑生成：
@@ -71,12 +73,12 @@ cd plugins/flspeak_ffi && flutter analyze
 
 ## git 约定
 
-提交用 Conventional Commits 格式，标题 ≤100 字符，描述小写开头、结尾不加句号，中文可用：
+提交用 Conventional Commits 格式，标题 ≤100 字符，描述小写开头、结尾不加句号，使用英文：
 
 ```text
-feat(session): 增加频道切换命令
+feat(session): add a channel switch command
 fix(proto): reject look-alike official domains
-docs(boundary): 记录 SRV 与 TSDNS 的取舍
+docs(boundary): record the SRV and TSDNS trade-offs
 ```
 
 不要写 `Co-authored-by:` 署名编码代理。破坏性改动用 `!` 加 `BREAKING CHANGE:` 页脚。发版日志按这些提交归纳，规则见 [release/AGENTS.md](release/AGENTS.md)。
@@ -94,9 +96,9 @@ Android 的 debug 与 release 签名分开配置，都写进 `android/key.proper
 ## 本地改上游 tsclient-rs
 
 ```toml
-# Cargo.toml，临时用，不要提交
+# 根 Cargo.toml 末尾临时加上，不要提交
 [patch.crates-io]
 tsclient-rs = { path = "../tsclient-rs" }
 ```
 
-用完删掉，不要提交（CI 上没有那个路径）。上游关系的其余约定见 `.agents/project.md`。
+调试结束后恢复 `Cargo.toml` 中的版本号及对应 `Cargo.lock`，不提交本地路径。上游关系的其余约定见 [项目结构](../.agents/project.md)。

@@ -4,26 +4,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../../../core/providers.dart';
+import '../../../core/server_icon.dart';
 import '../../../l10n/app_localizations.dart';
-import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
 import '../../../widgets/monogram.dart';
+import '../../../widgets/server_icon_picker.dart';
+import '../../../widgets/view_scope.dart';
+import '../../../widgets/window_header.dart';
 
-/// 最左侧的服务器栏：已登记的服务器、添加与设置。
-///
-/// 宽度固定 80：它是全局导航，不参与内容区的伸缩；服务器列表从顶部开始，
-/// 设置按钮压在底部，扫视顺序稳定。设置放在最底部是用户明确要求的位置
-/// （`设置按钮移动到左下角`），这样频道栏底部就留给了语音状态。
-///
-/// 两个工具入口都不占面：添加与设置都是透明的图标按钮，交互只在状态层上
-/// 表达。rail 的实心重量留给选中的服务器，投影一处也不画。
+/// Discord 式服务器栏：顶部社区入口、服务器磁贴与底部设置。
 class ServerRail extends ConsumerWidget {
   const ServerRail({
     required this.onSelect,
     required this.onAdd,
     required this.onSettings,
     required this.onDisconnect,
+    this.onHome,
+    this.homeSelected = false,
     super.key,
   });
 
@@ -32,6 +30,8 @@ class ServerRail extends ConsumerWidget {
   final ValueChanged<ServerProfileView> onSelect;
   final VoidCallback onAdd;
   final VoidCallback onSettings;
+  final VoidCallback? onHome;
+  final bool homeSelected;
 
   /// 断开当前连接；外壳负责断开后回到服务器列表。
   final VoidCallback onDisconnect;
@@ -41,6 +41,9 @@ class ServerRail extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
     final view = ref.watch(sessionViewProvider);
+    // 宽屏时红绿灯压在轨道左上角，列表整体让到 32px 之下；
+    // 窄屏与全屏由标题条或系统接管，保持原来的 16px。
+    final windowControls = ViewScope.windowControlsOf(context);
 
     // 抽屉里必须先收起再跳转：抽屉不属于路由栈，直接跳转会让旧页面的抽屉
     // 盖在新页面上。桌面没有打开中的抽屉，这一步是空操作。
@@ -49,13 +52,78 @@ class ServerRail extends ConsumerWidget {
       action();
     }
 
-    return ColoredBox(
-      color: scheme.surfaceContainer,
+    return Material(
+      color: scheme.surfaceContainerLowest,
       child: SizedBox(
         width: width,
         child: Column(
           children: [
-            const SizedBox(height: 16),
+            WindowDragRegion(
+              child: SizedBox(
+                width: double.infinity,
+                height: windowControls.isEmpty ? 16 : windowControls.height + 4,
+              ),
+            ),
+            Semantics(
+              button: true,
+              selected: homeSelected,
+              label: l10n.homeTitle,
+              excludeSemantics: true,
+              onTap: () => runFromRail(onHome ?? onAdd),
+              child: InkWell(
+                onTap: () => runFromRail(onHome ?? onAdd),
+                borderRadius: Radii.largeAll,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Ink(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: homeSelected
+                              ? scheme.primaryContainer
+                              : scheme.surfaceContainerHigh,
+                          borderRadius: Radii.largeAll,
+                        ),
+                        child: Icon(
+                          homeSelected
+                              ? Icons.home_rounded
+                              : Icons.home_outlined,
+                          color: homeSelected
+                              ? scheme.onPrimaryContainer
+                              : scheme.onSurfaceVariant,
+                          size: 26,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      SizedBox(
+                        width: 48,
+                        child: Text(
+                          l10n.homeTitle,
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: context.texts.labelSmall?.copyWith(
+                            color: homeSelected
+                                ? scheme.onSurface
+                                : scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              child: Divider(color: scheme.outlineVariant),
+            ),
             Expanded(
               child: ListView.builder(
                 // 底部 12 把最后一个服务器与下面的添加槽位分开：列表结束 /
@@ -73,6 +141,25 @@ class ServerRail extends ConsumerWidget {
                           view.connected && server.id == view.activeServerId,
                       onTap: () => runFromRail(() => onSelect(server)),
                       onDisconnect: () => runFromRail(onDisconnect),
+                      loading:
+                          server.id == view.activeServerId &&
+                          (view.connecting || view.reconnecting),
+                      onChangeIcon: () async {
+                        final current =
+                            ref
+                                .read(preferencesProvider)
+                                .serverIcons[server.id] ??
+                            ServerIcon.community;
+                        final icon = await showServerIconPicker(
+                          context,
+                          current,
+                        );
+                        if (icon != null) {
+                          ref
+                              .read(preferencesProvider.notifier)
+                              .setServerIcon(server.id, icon);
+                        }
+                      },
                     ),
                   );
                 },
@@ -98,11 +185,11 @@ class ServerRail extends ConsumerWidget {
                   shape: WidgetStatePropertyAll(
                     RoundedRectangleBorder(borderRadius: Radii.largeAll),
                   ),
-                  backgroundColor: const WidgetStatePropertyAll(
-                    Colors.transparent,
+                  backgroundColor: WidgetStatePropertyAll(
+                    scheme.secondaryContainer,
                   ),
                   foregroundColor: WidgetStatePropertyAll(
-                    scheme.onSurfaceVariant,
+                    scheme.onSecondaryContainer,
                   ),
                   // M3 state layer：hover 8%、press 12%，不换底色。
                   overlayColor: WidgetStateProperty.resolveWith(
@@ -123,8 +210,7 @@ class ServerRail extends ConsumerWidget {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(0, 8, 0, 16),
-              // 设置是常驻 chrome，不是「选中的东西」：无底色，交互只走
-              // state layer，与连接页 LoginRail 的同一个按钮同形。
+              // 连接页与工作区共享同一个设置入口。
               child: IconButton(
                 onPressed: () => runFromRail(onSettings),
                 iconSize: 20,
@@ -155,6 +241,8 @@ class _ServerTile extends StatelessWidget {
     required this.connected,
     required this.onTap,
     required this.onDisconnect,
+    required this.onChangeIcon,
+    required this.loading,
   });
 
   final ServerProfileView server;
@@ -166,13 +254,14 @@ class _ServerTile extends StatelessWidget {
   final bool connected;
   final VoidCallback onTap;
   final VoidCallback onDisconnect;
+  final VoidCallback onChangeIcon;
+  final bool loading;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
     final texts = context.texts;
-    final monogram = serverMonogram(server.label, server.host);
 
     final semanticsLabel = StringBuffer(
       '${server.label} · ${server.host}:${server.port}',
@@ -184,14 +273,19 @@ class _ServerTile extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: SecondaryMenu(
-        enabled: connected,
         openOnSecondaryTap: true,
         items: [
           MenuItemButton(
-            leadingIcon: const Icon(Icons.logout_rounded),
-            onPressed: onDisconnect,
-            child: Text(l10n.serverDisconnect),
+            leadingIcon: const Icon(Icons.palette_outlined),
+            onPressed: onChangeIcon,
+            child: Text(l10n.serverIconChange),
           ),
+          if (connected)
+            MenuItemButton(
+              leadingIcon: const Icon(Icons.logout_rounded),
+              onPressed: onDisconnect,
+              child: Text(l10n.serverDisconnect),
+            ),
         ],
         builder: (context, menuController) => Semantics(
           button: true,
@@ -210,7 +304,7 @@ class _ServerTile extends StatelessWidget {
           child: InkWell(
             onTap: onTap,
             // 触屏没有右键：长按打开同一个断开菜单。
-            onLongPress: connected ? menuController.open : null,
+            onLongPress: menuController.open,
             borderRadius: Radii.largeAll,
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),
@@ -220,38 +314,24 @@ class _ServerTile extends StatelessWidget {
                   Stack(
                     clipBehavior: Clip.none,
                     children: [
-                      AnimatedContainer(
-                        duration: MediaQuery.disableAnimationsOf(context)
-                            ? Duration.zero
-                            : Motion.effectsFast,
-                        curve: Motion.effectsFastCurve,
-                        width: 56,
-                        height: 32,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: online
-                              ? scheme.primaryContainer
-                              : Colors.transparent,
-                          borderRadius: Radii.pillAll,
-                        ),
-                        child: Text(
-                          monogram,
-                          style: texts.labelLarge?.copyWith(
-                            color: online
-                                ? scheme.onPrimaryContainer
-                                : scheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                      ServerBadge(
+                        id: server.id,
+                        size: 48,
+                        selected: online,
+                        loading: loading,
+                        online: connected,
                       ),
-                      if (connected)
+                      if (online)
                         Positioned(
-                          right: -2,
-                          bottom: -2,
-                          child: StatusDot(
-                            color: context.status.live,
-                            ringColor: scheme.surfaceContainer,
-                            size: 10,
+                          left: -16,
+                          top: 10,
+                          bottom: 10,
+                          child: Container(
+                            width: 4,
+                            decoration: BoxDecoration(
+                              color: scheme.primary,
+                              borderRadius: Radii.pillAll,
+                            ),
                           ),
                         ),
                     ],

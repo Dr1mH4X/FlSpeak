@@ -2,13 +2,13 @@
   "@@locale": "zh",
   "appTitle": "自托管 TeamSpeak",
   "appName": "FlSpeak",
+  "homeTitle": "主页",
   "commonClose": "关闭",
   "commonCancel": "取消",
   "commonDone": "完成",
   "commonCopy": "复制",
   "commonCopied": "已复制",
   "commonRetry": "重试",
-  
   "connectAddressLabel": "服务器地址",
   "connectAddressHint": "ts.example.com 或 ts.example.com:9987",
   "connectNicknameLabel": "昵称",
@@ -104,15 +104,14 @@
       }
     }
   },
-  "channelsEmpty": "尚未连接。",
+  "workspaceDropped": "连接丢失",
+  "workspaceRetrying": "正在重试…",
   "channelsSection": "频道",
   "workspaceNoChannels": "服务器还没有频道。",
   "workspaceOpenMenu": "打开频道菜单",
-  
   "channelPasswordProtected": "需要频道密码",
   "channelJoinMenu": "加入频道",
   "channelPaneResize": "调整频道栏宽度",
-  
   "voiceMute": "静音",
   "voiceUnmute": "取消静音",
   "voiceDeafen": "关闭声音",
@@ -193,5 +192,143 @@
   "settingsDeviceDefault": "系统默认",
   "settingsAudioUnavailable": "音频设备不可用",
   "settingsAudioLoading": "正在读取音频设备…",
-  "settingsStorePath": "存储目录"
+  "settingsStorePath": "存储目录",
+  "connectTitle": "找到你的声音",
+  "connectSubtitle": "加入熟悉的频道，让对话自然发生。",
+  "serverEmptyBody": "添加服务器地址，和伙伴在同一个频道相聚。",
+  "serverSearchLabel": "搜索服务器",
+  "serverSearchEmpty": "没有匹配的服务器",
+  "connectIdentityBody": "一个身份，连接你熟悉的每个社区。",
+  "connectLocalIdentity": "身份保存在本机",
+  "membersTitle": "频道成员",
+  "voiceConnected": "语音已连接",
+  "memberListening": "正在频道中",
+  "appearancePreview": "外观",
+  "serverIconTitle": "选择服务器图标",
+  "serverIconChange": "更换图标",
+  "serverIconCommunity": "社区",
+  "serverIconGaming": "游戏",
+  "serverIconMusic": "音乐",
+  "serverIconWork": "工作",
+  "serverIconTerminal": "终端",
+  "serverIconFavorite": "喜爱",
+  "serverIconPlanet": "星球",
+  "serverIconCoffee": "咖啡",
+  "serverIconRocket": "火箭",
+  "serverIconScience": "探索",
+  "channelIconRetry": "重新加载频道图标",
+  "chatReply": "回复私聊",
+  "chatRecipientUnavailable": "私聊对象已离线，请重新选择",
+  "chatChannelUnavailable": "请先进入此频道再发送消息",
+  "pokeAction": "戳一下",
+  "pokeMessage": "消息",
+  "pokeTitle": "戳一下 {name}",
+  "@pokeTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "pokeSent": "已戳了 {name} 一下",
+  "@pokeSent": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "pokeReceived": "{name} 戳了你一下：{message}",
+  "@pokeReceived": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "memberActions": "{name} 的操作",
+  "@memberActions": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "chatDestinationChanged": "发送目标已改变，草稿已保留，请确认后重试",
+  "chatImageTooLarge": "图片不能超过 20 MiB",
+  "chatClipboardEmpty": "剪贴板中没有图片",
+  "chatImageInputFailed": "无法读取图片，请重新选择",
+  "chatAttachImage": "添加图片",
+  "chatChooseImage": "选择图片",
+  "chatPasteImage": "粘贴图片",
+  "chatRemoveImage": "移除图片",
+  "imageHostTitle": "图片上传",
+  "imageHostRequired": "请先在图片上传设置中配置自托管图床",
+  "imageHostStorageFailed": "无法访问图片上传的安全存储",
+  "imageHostUploadBase": "HTTP PUT 上传地址",
+  "imageHostPublicBase": "图片访问地址",
+  "imageHostToken": "访问令牌（可选）",
+  "imageHostRemove": "清除配置",
+  "imageHostSave": "保存",
+  "imageHostUploadHint": "https://upload.example.com/images/",
+  "imageHostPublicHint": "https://images.example.com/",
+  "channelPasswordTitle": "频道需要密码",
+  "channelPasswordLabel": "频道密码",
+  "channelPasswordWrong": "密码不正确，请重试",
+  "memberPermissions": "权限管理",
+  "permissionsUnavailable": "暂时无法读取权限",
+  "serverGroups": "服务器权限组",
+  "channelGroups": "频道权限组",
+  "groupCurrent": "当前",
+  "groupAssign": "设置",
+  "chatTabFiles": "文件",
+  "fileParent": "上级目录",
+  "fileDownload": "下载文件",
+  "fileUnlock": "打开",
+  "fileListEmpty": "此频道暂无文件",
+  "fileDownloadFailed": "文件下载或保存失败，请重试",
+  "fileDownloadSaved": "文件已保存",
+  "fileSizeBytes": "{count} 字节",
+  "@fileSizeBytes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "fileConnectionChanged": "连接已变化，请重新下载",
+  "fileCleanupFailed": "临时下载文件未能清理",
+  "kickChannel": "踢出频道",
+  "kickServer": "踢出服务器",
+  "kickChannelConfirm": "将 {nickname} 移出当前频道？对方将返回服务器默认频道。",
+  "kickServerConfirm": "将 {nickname} 踢出服务器？此操作不会封禁对方。",
+  "kickReason": "原因（可选）",
+  "kickConfirm": "确认踢出",
+  "kickSent": "已踢出 {nickname}",
+  "kickTargetUnavailable": "成员已离线或更换频道，请重新选择",
+  "kickConnectionChanged": "连接已变化，请关闭后重新操作",
+  "@kickChannelConfirm": {
+    "placeholders": {
+      "nickname": {
+        "type": "String"
+      }
+    }
+  },
+  "@kickServerConfirm": {
+    "placeholders": {
+      "nickname": {
+        "type": "String"
+      }
+    }
+  },
+  "@kickSent": {
+    "placeholders": {
+      "nickname": {
+        "type": "String"
+      }
+    }
+  }
 }

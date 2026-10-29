@@ -110,6 +110,12 @@ abstract class AppLocalizations {
   /// **'FlSpeak'**
   String get appName;
 
+  /// No description provided for @homeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Home'**
+  String get homeTitle;
+
   /// No description provided for @commonClose.
   ///
   /// In en, this message translates to:
@@ -380,11 +386,17 @@ abstract class AppLocalizations {
   /// **'Upgrading identity level to {target}…'**
   String identityUpgrading(int target);
 
-  /// No description provided for @channelsEmpty.
+  /// No description provided for @workspaceDropped.
   ///
   /// In en, this message translates to:
-  /// **'Not connected.'**
-  String get channelsEmpty;
+  /// **'Disconnected'**
+  String get workspaceDropped;
+
+  /// No description provided for @workspaceRetrying.
+  ///
+  /// In en, this message translates to:
+  /// **'Retrying…'**
+  String get workspaceRetrying;
 
   /// No description provided for @channelsSection.
   ///
@@ -781,6 +793,480 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Storage directory'**
   String get settingsStorePath;
+
+  /// No description provided for @connectTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Find your people'**
+  String get connectTitle;
+
+  /// No description provided for @connectSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your communities, one conversation away.'**
+  String get connectSubtitle;
+
+  /// No description provided for @serverEmptyBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a server address to join your people in a channel.'**
+  String get serverEmptyBody;
+
+  /// No description provided for @serverSearchLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Search servers'**
+  String get serverSearchLabel;
+
+  /// No description provided for @serverSearchEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching servers'**
+  String get serverSearchEmpty;
+
+  /// No description provided for @connectIdentityBody.
+  ///
+  /// In en, this message translates to:
+  /// **'One identity. All your communities.'**
+  String get connectIdentityBody;
+
+  /// No description provided for @connectLocalIdentity.
+  ///
+  /// In en, this message translates to:
+  /// **'Identity stored on this device'**
+  String get connectLocalIdentity;
+
+  /// No description provided for @membersTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Channel members'**
+  String get membersTitle;
+
+  /// No description provided for @voiceConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice connected'**
+  String get voiceConnected;
+
+  /// No description provided for @memberListening.
+  ///
+  /// In en, this message translates to:
+  /// **'In this channel'**
+  String get memberListening;
+
+  /// No description provided for @appearancePreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance'**
+  String get appearancePreview;
+
+  /// No description provided for @serverIconTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose server icon'**
+  String get serverIconTitle;
+
+  /// No description provided for @serverIconChange.
+  ///
+  /// In en, this message translates to:
+  /// **'Change icon'**
+  String get serverIconChange;
+
+  /// No description provided for @serverIconCommunity.
+  ///
+  /// In en, this message translates to:
+  /// **'Community'**
+  String get serverIconCommunity;
+
+  /// No description provided for @serverIconGaming.
+  ///
+  /// In en, this message translates to:
+  /// **'Gaming'**
+  String get serverIconGaming;
+
+  /// No description provided for @serverIconMusic.
+  ///
+  /// In en, this message translates to:
+  /// **'Music'**
+  String get serverIconMusic;
+
+  /// No description provided for @serverIconWork.
+  ///
+  /// In en, this message translates to:
+  /// **'Work'**
+  String get serverIconWork;
+
+  /// No description provided for @serverIconTerminal.
+  ///
+  /// In en, this message translates to:
+  /// **'Terminal'**
+  String get serverIconTerminal;
+
+  /// No description provided for @serverIconFavorite.
+  ///
+  /// In en, this message translates to:
+  /// **'Favorite'**
+  String get serverIconFavorite;
+
+  /// No description provided for @serverIconPlanet.
+  ///
+  /// In en, this message translates to:
+  /// **'Planet'**
+  String get serverIconPlanet;
+
+  /// No description provided for @serverIconCoffee.
+  ///
+  /// In en, this message translates to:
+  /// **'Coffee'**
+  String get serverIconCoffee;
+
+  /// No description provided for @serverIconRocket.
+  ///
+  /// In en, this message translates to:
+  /// **'Rocket'**
+  String get serverIconRocket;
+
+  /// No description provided for @serverIconScience.
+  ///
+  /// In en, this message translates to:
+  /// **'Explore'**
+  String get serverIconScience;
+
+  /// No description provided for @channelIconRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry channel icon'**
+  String get channelIconRetry;
+
+  /// No description provided for @chatReply.
+  ///
+  /// In en, this message translates to:
+  /// **'Reply privately'**
+  String get chatReply;
+
+  /// No description provided for @chatRecipientUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Recipient is offline. Choose another recipient.'**
+  String get chatRecipientUnavailable;
+
+  /// No description provided for @chatChannelUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Join this channel before sending a message.'**
+  String get chatChannelUnavailable;
+
+  /// No description provided for @pokeAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Poke'**
+  String get pokeAction;
+
+  /// No description provided for @pokeMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Message'**
+  String get pokeMessage;
+
+  /// No description provided for @pokeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Poke {name}'**
+  String pokeTitle(String name);
+
+  /// No description provided for @pokeSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Poked {name}'**
+  String pokeSent(String name);
+
+  /// No description provided for @pokeReceived.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} poked you: {message}'**
+  String pokeReceived(String name, String message);
+
+  /// No description provided for @memberActions.
+  ///
+  /// In en, this message translates to:
+  /// **'Actions for {name}'**
+  String memberActions(String name);
+
+  /// No description provided for @chatDestinationChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'The destination changed. Your draft was kept; confirm the recipient and retry.'**
+  String get chatDestinationChanged;
+
+  /// No description provided for @chatImageTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'Images must be no larger than 20 MiB'**
+  String get chatImageTooLarge;
+
+  /// No description provided for @chatClipboardEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No image in the clipboard'**
+  String get chatClipboardEmpty;
+
+  /// No description provided for @chatImageInputFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read the image. Please choose it again.'**
+  String get chatImageInputFailed;
+
+  /// No description provided for @chatAttachImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Attach image'**
+  String get chatAttachImage;
+
+  /// No description provided for @chatChooseImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose image'**
+  String get chatChooseImage;
+
+  /// No description provided for @chatPasteImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste image'**
+  String get chatPasteImage;
+
+  /// No description provided for @chatRemoveImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove image'**
+  String get chatRemoveImage;
+
+  /// No description provided for @imageHostTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Image uploads'**
+  String get imageHostTitle;
+
+  /// No description provided for @imageHostRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Configure a self-hosted image host in Image uploads first'**
+  String get imageHostRequired;
+
+  /// No description provided for @imageHostStorageFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not access secure storage for image uploads'**
+  String get imageHostStorageFailed;
+
+  /// No description provided for @imageHostUploadBase.
+  ///
+  /// In en, this message translates to:
+  /// **'HTTP PUT upload base URL'**
+  String get imageHostUploadBase;
+
+  /// No description provided for @imageHostPublicBase.
+  ///
+  /// In en, this message translates to:
+  /// **'Public image base URL'**
+  String get imageHostPublicBase;
+
+  /// No description provided for @imageHostToken.
+  ///
+  /// In en, this message translates to:
+  /// **'Bearer token (optional)'**
+  String get imageHostToken;
+
+  /// No description provided for @imageHostRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear configuration'**
+  String get imageHostRemove;
+
+  /// No description provided for @imageHostSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get imageHostSave;
+
+  /// No description provided for @imageHostUploadHint.
+  ///
+  /// In en, this message translates to:
+  /// **'https://upload.example.com/images/'**
+  String get imageHostUploadHint;
+
+  /// No description provided for @imageHostPublicHint.
+  ///
+  /// In en, this message translates to:
+  /// **'https://images.example.com/'**
+  String get imageHostPublicHint;
+
+  /// No description provided for @channelPasswordTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Channel password required'**
+  String get channelPasswordTitle;
+
+  /// No description provided for @channelPasswordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Channel password'**
+  String get channelPasswordLabel;
+
+  /// No description provided for @channelPasswordWrong.
+  ///
+  /// In en, this message translates to:
+  /// **'Incorrect password. Try again.'**
+  String get channelPasswordWrong;
+
+  /// No description provided for @memberPermissions.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage permissions'**
+  String get memberPermissions;
+
+  /// No description provided for @permissionsUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Permissions are unavailable'**
+  String get permissionsUnavailable;
+
+  /// No description provided for @serverGroups.
+  ///
+  /// In en, this message translates to:
+  /// **'Server groups'**
+  String get serverGroups;
+
+  /// No description provided for @channelGroups.
+  ///
+  /// In en, this message translates to:
+  /// **'Channel groups'**
+  String get channelGroups;
+
+  /// No description provided for @groupCurrent.
+  ///
+  /// In en, this message translates to:
+  /// **'Current'**
+  String get groupCurrent;
+
+  /// No description provided for @groupAssign.
+  ///
+  /// In en, this message translates to:
+  /// **'Assign'**
+  String get groupAssign;
+
+  /// No description provided for @chatTabFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Files'**
+  String get chatTabFiles;
+
+  /// No description provided for @fileParent.
+  ///
+  /// In en, this message translates to:
+  /// **'Parent folder'**
+  String get fileParent;
+
+  /// No description provided for @fileDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Download file'**
+  String get fileDownload;
+
+  /// No description provided for @fileUnlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Open'**
+  String get fileUnlock;
+
+  /// No description provided for @fileListEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'This channel has no files'**
+  String get fileListEmpty;
+
+  /// No description provided for @fileDownloadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not download or save the file. Try again.'**
+  String get fileDownloadFailed;
+
+  /// No description provided for @fileDownloadSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'File saved'**
+  String get fileDownloadSaved;
+
+  /// No description provided for @fileSizeBytes.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} bytes'**
+  String fileSizeBytes(int count);
+
+  /// No description provided for @fileConnectionChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection changed. Start the download again.'**
+  String get fileConnectionChanged;
+
+  /// No description provided for @fileCleanupFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Temporary download files could not be removed'**
+  String get fileCleanupFailed;
+
+  /// No description provided for @kickChannel.
+  ///
+  /// In en, this message translates to:
+  /// **'Kick from channel'**
+  String get kickChannel;
+
+  /// No description provided for @kickServer.
+  ///
+  /// In en, this message translates to:
+  /// **'Kick from server'**
+  String get kickServer;
+
+  /// No description provided for @kickChannelConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove {nickname} from their current channel? They will return to the server’s default channel.'**
+  String kickChannelConfirm(String nickname);
+
+  /// No description provided for @kickServerConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Kick {nickname} from the server? This does not ban them.'**
+  String kickServerConfirm(String nickname);
+
+  /// No description provided for @kickReason.
+  ///
+  /// In en, this message translates to:
+  /// **'Reason (optional)'**
+  String get kickReason;
+
+  /// No description provided for @kickConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm kick'**
+  String get kickConfirm;
+
+  /// No description provided for @kickSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Kicked {nickname}'**
+  String kickSent(String nickname);
+
+  /// No description provided for @kickTargetUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'The member is offline or has changed channel. Select them again.'**
+  String get kickTargetUnavailable;
+
+  /// No description provided for @kickConnectionChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'The connection changed. Close this dialog and try again.'**
+  String get kickConnectionChanged;
 }
 
 class _AppLocalizationsDelegate

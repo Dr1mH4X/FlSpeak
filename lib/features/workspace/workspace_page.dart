@@ -9,12 +9,15 @@ import '../../l10n/app_localizations.dart';
 import '../../theme/app_motion.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common.dart';
+import '../settings/widgets/image_host_dialog.dart';
 import 'widgets/chat_pane.dart';
+import 'widgets/channel_files_pane.dart';
 import 'widgets/media_grid.dart';
 import 'widgets/media_viewer.dart';
+import 'widgets/members_pane.dart';
 import 'workspace_state.dart';
 
-/// 主区域：频道标题 + 消息 / 媒体两个视图，以及未连接时的下一步。
+/// 主区域：频道标题 + 消息 / 媒体两个视图，以及掉线后的空状态。
 class WorkspacePage extends ConsumerStatefulWidget {
   const WorkspacePage({super.key});
 
@@ -22,13 +25,13 @@ class WorkspacePage extends ConsumerStatefulWidget {
   ConsumerState<WorkspacePage> createState() => _WorkspacePageState();
 }
 
-enum _MainTab { chat, media }
+enum _MainTab { chat, media, files }
 
 class _WorkspacePageState extends ConsumerState<WorkspacePage>
     with SingleTickerProviderStateMixin {
   // M3 primary tabs：页签状态由 TabController 持有，指示器动画随组件自带。
   late final TabController _tabController = TabController(
-    length: 2,
+    length: 3,
     vsync: this,
   )..addListener(_handleTabChanged);
   _MainTab _tab = _MainTab.chat;
@@ -72,6 +75,19 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
       });
     });
 
+    ref.listen(
+      sessionViewProvider.select(
+        (view) =>
+            (view.chatScope, view.directRecipientUid, view.directRecipientId),
+      ),
+      (previous, next) {
+        if (next.$1 != ChatScope.direct) return;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _tabController.index != 0) _tabController.index = 0;
+        });
+      },
+    );
+
     final channel = channelId == null ? null : view.channelById(channelId);
     final compact = MediaQuery.sizeOf(context).width < Breakpoints.compact;
 
@@ -94,15 +110,28 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
         Expanded(
           // 视图替换走 crossfade（M3 effects default）：同一容器内换内容
           // 不做位移，避免整块内容跳来跳去。
-          child: AnimatedSwitcher(
-            duration: MediaQuery.disableAnimationsOf(context)
-                ? Duration.zero
-                : Motion.effectsDefault,
-            switchInCurve: Motion.effectsDefaultCurve,
-            switchOutCurve: Motion.effectsDefaultCurve.flipped,
-            child: KeyedSubtree(
-              key: ValueKey(_tab),
-              child: _buildBody(context, l10n, view, channel),
+          child: LayoutBuilder(
+            builder: (context, constraints) => Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: AnimatedSwitcher(
+                    duration: MediaQuery.disableAnimationsOf(context)
+                        ? Duration.zero
+                        : Motion.effectsDefault,
+                    switchInCurve: Motion.effectsDefaultCurve,
+                    switchOutCurve: Motion.effectsDefaultCurve.flipped,
+                    child: KeyedSubtree(
+                      key: ValueKey(_tab),
+                      child: _buildBody(context, l10n, view, channel),
+                    ),
+                  ),
+                ),
+                if (constraints.maxWidth >= 900 &&
+                    channel != null &&
+                    view.connected)
+                  MembersPane(view: view, channelId: channel.id),
+              ],
             ),
           ),
         ),
@@ -139,13 +168,18 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
 
     if (channel == null) {
       return EmptyState(
-        icon: Icons.forum_rounded,
-        body: l10n.workspaceNoChannels,
+        icon: view.connected ? Icons.forum_rounded : Icons.link_off_rounded,
+        body: view.connected ? l10n.workspaceNoChannels : l10n.workspaceDropped,
       );
     }
 
     final controller = ref.read(sessionViewProvider.notifier);
     switch (_tab) {
+      case _MainTab.files:
+        return ChannelFilesPane(
+          key: ValueKey((view.connectionEpoch, channel.id)),
+          channelId: channel.id,
+        );
       case _MainTab.media:
         final urls = imageUrlsInMessages(
           view.visibleMessages(channelId: channel.id),
@@ -164,7 +198,25 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
           canSendChannel: view.selfChannelId == channel.id,
           busy: view.busy,
           onScopeChanged: controller.selectChatScope,
-          onSend: controller.sendMessage,
+          onSend: controller.prepareMessageSender(),
+          onPickImage: () => controller.pickChatImage(paste: false),
+          onPasteImage: () => controller.pickChatImage(paste: true),
+          onUploadImage: controller.uploadChatImage,
+          onConfigureImageHost: () => showImageHostSettings(context),
+          description: channel.description,
+          recipients: view.clients
+              .where(
+                (peer) => peer.id != view.selfClientId && peer.uid.isNotEmpty,
+              )
+              .toList(),
+          recipientUid: view.directRecipientUid,
+          recipientId: view.directRecipientId,
+          selfUid: view.selfUid,
+          selfClientId: view.selfClientId,
+          onRecipientChanged: controller.selectDirectRecipient,
+          onRecipientSelected: (peer) =>
+              controller.selectDirectRecipient(peer.uid, clientId: peer.id),
+          onReply: controller.replyToMessage,
         );
     }
   }
@@ -188,6 +240,11 @@ List<_TabSpec> _tabSpecs(AppLocalizations l10n) => [
     tab: _MainTab.media,
     label: l10n.chatTabMedia,
     icon: Icons.photo_library_rounded,
+  ),
+  _TabSpec(
+    tab: _MainTab.files,
+    label: l10n.chatTabFiles,
+    icon: Icons.folder_rounded,
   ),
 ];
 
@@ -242,8 +299,13 @@ class _ChannelHeader extends StatelessWidget {
     final horizontal = compact ? 8.0 : 24.0;
     final hasChannel = channelName != null;
 
-    return SizedBox(
+    return Container(
       height: Sizes.header,
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: context.scheme.outlineVariant),
+        ),
+      ),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final tabs = _tabSpecs(l10n);
@@ -298,11 +360,8 @@ class _ChannelHeader extends StatelessWidget {
   }
 }
 
-/// 频道头里的视图切换：M3 primary tabs（`TabBar`）。
-///
-/// 之前是手写的胶囊按钮组；segmented button 在 M3 Expressive 里已不再
-/// 推荐，替代的 connected button group 在 Flutter 上不可用，primary tabs
-/// 是同级视图切换的规范组件，指示器动画与语义由组件自带。
+/// 频道头里的视图切换：M3 primary tabs（`TabBar`），是同级视图切换的规范组件，
+/// 指示器动画与语义由组件自带。
 class _ViewTabs extends StatelessWidget {
   const _ViewTabs({
     required this.tabs,
@@ -320,7 +379,7 @@ class _ViewTabs extends StatelessWidget {
       controller: controller,
       isScrollable: true,
       // M3 scrollable tabs 的默认对齐：首签偏移一个 tab 边距。
-      tabAlignment: TabAlignment.startOffset,
+      tabAlignment: TabAlignment.start,
       // 频道头只有 64 高，页签压到 40 贴标题基线。
       splashBorderRadius: Radii.pillAll,
       tabs: [

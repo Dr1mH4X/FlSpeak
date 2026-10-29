@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/models.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/remote_image.dart';
 import 'message_content.dart';
 
 /// 全屏浏览层的底色。图片浏览固定用深色底：图片本身的亮暗不可控，只有深底能
@@ -35,7 +36,7 @@ String mediaFileName(String url) {
   if (segments.isEmpty) {
     return '';
   }
-  return Uri.decodeComponent(segments.last);
+  return segments.last;
 }
 
 /// 打开全屏媒体浏览层。没有任何图片时直接返回，避免打开一个空对话框。
@@ -188,7 +189,10 @@ class _MediaViewerState extends State<MediaViewer> {
                           child: GestureDetector(
                             behavior: HitTestBehavior.opaque,
                             onTap: () {},
-                            child: _ViewerImage(url: widget.urls[index]),
+                            child: RemoteImage(
+                              url: widget.urls[index],
+                              foregroundColor: _viewerForeground,
+                            ),
                           ),
                         ),
                       ),
@@ -224,63 +228,6 @@ class _MediaViewerState extends State<MediaViewer> {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ViewerImage extends StatelessWidget {
-  const _ViewerImage({required this.url});
-
-  final String url;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    return Image.network(
-      url,
-      fit: BoxFit.contain,
-      loadingBuilder: (context, child, progress) {
-        if (progress == null) {
-          return child;
-        }
-        final total = progress.expectedTotalBytes;
-        return Center(
-          child: SizedBox.square(
-            dimension: 44,
-            child: CircularProgressIndicator(
-              strokeWidth: 2.5,
-              color: _viewerForeground,
-              value: total == null
-                  ? null
-                  : progress.cumulativeBytesLoaded / total,
-            ),
-          ),
-        );
-      },
-      errorBuilder: (context, error, stackTrace) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.broken_image_rounded,
-                size: 40,
-                color: _viewerMutedForeground,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                l10n.chatImageLoadFailed,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: _viewerMutedForeground,
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );

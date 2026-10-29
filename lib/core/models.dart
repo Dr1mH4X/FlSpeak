@@ -1,5 +1,6 @@
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
+import '../l10n/app_localizations.dart';
 import 'channel_display.dart';
 
 /// 文字消息的投递范围，由协议里的 `targetMode` 归一化而来。
@@ -29,10 +30,12 @@ class ChatMessage {
     required this.at,
     required this.scope,
     required this.targetId,
+    this.fromId = 0,
   });
 
   final String from;
   final String fromUid;
+  final int fromId;
   final String text;
   final DateTime at;
   final ChatScope scope;
@@ -43,6 +46,7 @@ class ChatMessage {
   factory ChatMessage.fromCore(CoreMessage message) => ChatMessage(
     from: message.from,
     fromUid: message.fromUid,
+    fromId: message.fromId,
     text: message.message,
     at: DateTime.fromMillisecondsSinceEpoch(message.at),
     scope: ChatScope.fromProtocol(message.targetMode),
@@ -62,8 +66,11 @@ class SessionView {
     this.messages = const <ChatMessage>[],
     this.activeServerId,
     this.chatScope = ChatScope.channel,
+    this.directRecipientUid,
+    this.directRecipientId,
     this.busy = false,
     this.failureSeq = 0,
+    this.connectionEpoch = 0,
     this.muted = false,
     this.deafened = false,
     this.away = false,
@@ -73,8 +80,12 @@ class SessionView {
     this.selfSpeaking = false,
     this.pttMode = false,
     this.identityUpgradeTarget,
+    this.transfers = const {},
+    this.activeFileDownloads = const {},
   });
 
+  final Map<int, FileTransfer> transfers;
+  final Map<(int, int), int?> activeFileDownloads;
   final CoreSessionState state;
   final List<ServerProfileView> servers;
   final List<ChannelView> channels;
@@ -86,11 +97,48 @@ class SessionView {
 
   /// 输入框当前投递范围。
   final ChatScope chatScope;
+  final String? directRecipientUid;
+  final int? directRecipientId;
+
+  ClientView? get directRecipient {
+    if (directRecipientId != null) {
+      for (final client in clients) {
+        if (client.id == directRecipientId &&
+            client.uid == directRecipientUid &&
+            client.id != selfClientId) {
+          return client;
+        }
+      }
+      return null;
+    }
+    final matches = clients
+        .where(
+          (client) =>
+              client.uid == directRecipientUid && client.id != selfClientId,
+        )
+        .toList();
+    return matches.length == 1 ? matches.first : null;
+  }
+
+  bool isOwnMessage(ChatMessage message) {
+    if (message.fromId > 0 && selfClientId != null) {
+      return message.fromId == selfClientId;
+    }
+    if (message.scope == ChatScope.direct &&
+        selfClientId != null &&
+        message.targetId > 0) {
+      return message.targetId != selfClientId;
+    }
+    final uid = selfUid;
+    return uid.isNotEmpty && message.fromUid == uid;
+  }
 
   final bool busy;
 
   /// 连接失败或被拒事件的序号。只给连接页判断等待状态，不渲染。
   final int failureSeq;
+
+  final int connectionEpoch;
 
   /// 自己是否处于静音/聋听状态；由 Rust 的 Voice 事件确认。
   final bool muted;
@@ -230,6 +278,8 @@ class SessionView {
   }
 
   SessionView copyWith({
+    Map<int, FileTransfer>? transfers,
+    Map<(int, int), int?>? activeFileDownloads,
     CoreSessionState? state,
     List<ServerProfileView>? servers,
     List<ChannelView>? channels,
@@ -237,8 +287,11 @@ class SessionView {
     List<ChatMessage>? messages,
     Object? activeServerId = _unset,
     ChatScope? chatScope,
+    Object? directRecipientUid = _unset,
+    Object? directRecipientId = _unset,
     bool? busy,
     int? failureSeq,
+    int? connectionEpoch,
     bool? muted,
     bool? deafened,
     bool? away,
@@ -249,6 +302,8 @@ class SessionView {
     bool? pttMode,
     Object? identityUpgradeTarget = _unset,
   }) => SessionView(
+    transfers: transfers ?? this.transfers,
+    activeFileDownloads: activeFileDownloads ?? this.activeFileDownloads,
     state: state ?? this.state,
     servers: servers ?? this.servers,
     channels: channels ?? this.channels,
@@ -258,8 +313,15 @@ class SessionView {
         ? this.activeServerId
         : activeServerId as String?,
     chatScope: chatScope ?? this.chatScope,
+    directRecipientUid: identical(directRecipientUid, _unset)
+        ? this.directRecipientUid
+        : directRecipientUid as String?,
+    directRecipientId: identical(directRecipientId, _unset)
+        ? this.directRecipientId
+        : directRecipientId as int?,
     busy: busy ?? this.busy,
     failureSeq: failureSeq ?? this.failureSeq,
+    connectionEpoch: connectionEpoch ?? this.connectionEpoch,
     muted: muted ?? this.muted,
     deafened: deafened ?? this.deafened,
     away: away ?? this.away,
@@ -274,10 +336,28 @@ class SessionView {
   );
 }
 
-/// 把 FFI 错误翻成可以直接显示给用户的中文文案。
-String describeCoreError(CoreError error) => switch (error) {
-  CoreError_InvalidAddress(:final message) => '服务器地址不可用：$message',
-  CoreError_BlockedAddress(:final message) => '已阻止该地址：$message',
-  CoreError_Connection(:final message) => '连接失败：$message',
-  CoreError_Internal(:final message) => '内部错误：$message',
-};
+/// 把 FFI 错误翻成可以直接显示给用户的文案。
+String describeCoreError(CoreError error, [AppLocalizations? l10n]) =>
+    switch (error) {
+      CoreError_InvalidAddress(:final message) => '服务器地址不可用：$message',
+      CoreError_BlockedAddress(:final message) => '已阻止该地址：$message',
+      CoreError_Connection(:final message) => '连接失败：$message',
+      CoreError_ChannelPasswordRequired(:final message) =>
+        l10n?.channelPasswordWrong ?? message,
+      CoreError_Internal(:final message) => '内部错误：$message',
+    };
+
+class FileTransfer {
+  const FileTransfer({
+    required this.remotePath,
+    required this.total,
+    this.transferred = 0,
+    this.finished = false,
+    this.error,
+  });
+  final String remotePath;
+  final int total;
+  final int transferred;
+  final bool finished;
+  final String? error;
+}

@@ -1,68 +1,70 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../core/providers.dart';
+import '../core/server_icon.dart';
+import 'expressive_frame.dart';
 
 import '../theme/app_motion.dart';
 import '../theme/app_theme.dart';
 
-/// 服务器磁贴：圆形，颜色由档案 id 稳定散列而来，连接态用右下角的状态点表达。
-///
-/// 与身份头像同形（圆），靠颜色语义区分——身份用主色实底，服务器用各自
-/// 的散列色，扫一眼就能在同一批服务器之间认出彼此。色相与
-/// `refer/components/login/monogram.tsx` 共用一张表。
-class ServerMonogram extends StatelessWidget {
-  const ServerMonogram({
+class ServerBadge extends ConsumerWidget {
+  const ServerBadge({
     required this.id,
-    required this.label,
-    required this.host,
     this.size = 44,
     this.online = false,
+    this.selected = false,
+    this.loading = false,
     super.key,
   });
 
   final String id;
-  final String label;
-  final String host;
   final double size;
   final bool online;
+  final bool selected;
+  final bool loading;
 
   @override
-  Widget build(BuildContext context) {
-    final background = ServerPalette.of(id, Theme.of(context).brightness);
-    final dotSize = size * 0.27;
-
-    return SizedBox.square(
-      dimension: size,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: background,
-              shape: BoxShape.circle,
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = context.scheme;
+    final icon = ref.watch(
+      preferencesProvider.select(
+        (preferences) => preferences.serverIcons[id] ?? ServerIcon.community,
+      ),
+    );
+    return ExcludeSemantics(
+      child: SizedBox.square(
+        dimension: size,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            ExpressiveFrame(
+              size: size,
+              loading: loading,
+              shapeSeed: icon.index,
+              color: selected
+                  ? scheme.primaryContainer
+                  : scheme.surfaceContainerHigh,
+              child: Icon(
+                icon.icon,
+                size: size * 0.5,
+                color: selected
+                    ? scheme.onPrimaryContainer
+                    : scheme.onSurfaceVariant,
+              ),
             ),
-            child: Center(
-              child: Text(
-                serverMonogram(label, host),
-                style: TextStyle(
-                  color: readableOn(background),
-                  fontSize: size * 0.42,
-                  fontWeight: FontWeight.w700,
-                  height: 1,
-                  letterSpacing: 0,
+            if (online)
+              Positioned(
+                right: -2,
+                bottom: -2,
+                child: StatusDot(
+                  color: context.status.live,
+                  ringColor: context.cardColor,
+                  size: size * 0.25,
                 ),
               ),
-            ),
-          ),
-          if (online)
-            Positioned(
-              right: -2,
-              bottom: -2,
-              child: StatusDot(
-                color: context.status.live,
-                ringColor: context.cardColor,
-                size: dotSize,
-              ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -143,7 +145,7 @@ class MemberAvatar extends StatelessWidget {
         color: scheme.primaryContainer,
         shape: BoxShape.circle,
         border: Border.all(
-          color: speaking ? scheme.primary : Colors.transparent,
+          color: speaking ? context.status.live : Colors.transparent,
           width: 2,
         ),
       ),
@@ -205,7 +207,7 @@ class _SpeakingHaloState extends State<_SpeakingHalo>
 
   @override
   Widget build(BuildContext context) {
-    final primary = context.scheme.primary;
+    final primary = context.status.live;
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {

@@ -13,7 +13,7 @@ use reqwest::redirect::Policy;
 use reqwest::{Client, Url};
 use thiserror::Error;
 
-const MAX_IMAGE_BYTES: usize = 20 * 1024 * 1024;
+pub(crate) const MAX_IMAGE_BYTES: usize = 20 * 1024 * 1024;
 const MAX_REDIRECTS: usize = 3;
 const TIMEOUT: Duration = Duration::from_secs(15);
 
@@ -37,6 +37,12 @@ pub enum ImageError {
 
 /// 抓取一张第三方 URL 图片，返回原始字节。
 pub async fn fetch_image(raw_url: &str) -> Result<Vec<u8>, ImageError> {
+    tokio::time::timeout(TIMEOUT, fetch_image_inner(raw_url))
+        .await
+        .map_err(|_| ImageError::Request("图片加载超时".into()))?
+}
+
+async fn fetch_image_inner(raw_url: &str) -> Result<Vec<u8>, ImageError> {
     let mut current = validate_url(raw_url)?;
 
     for redirects in 0..=MAX_REDIRECTS {
@@ -149,7 +155,11 @@ async fn build_client(url: &Url) -> Result<Client, ImageError> {
         .port_or_known_default()
         .ok_or_else(|| ImageError::InvalidUrl("缺少端口".into()))?;
 
-    let mut builder = Client::builder().timeout(TIMEOUT).redirect(Policy::none());
+    // 环境代理可自行解析原始域名，绕过已校验并固定的地址；透明网卡代理不受影响。
+    let mut builder = Client::builder()
+        .no_proxy()
+        .timeout(TIMEOUT)
+        .redirect(Policy::none());
 
     let literal_host = host.trim_start_matches('[').trim_end_matches(']');
     if let Ok(ip) = literal_host.parse::<IpAddr>() {
@@ -160,7 +170,7 @@ async fn build_client(url: &Url) -> Result<Client, ImageError> {
         let addresses = tokio::net::lookup_host((host, port))
             .await
             .map_err(|err| ImageError::Request(format!("DNS 解析失败: {err}")))?;
-        let mut first: Option<SocketAddr> = None;
+        let mut public_addresses: Vec<SocketAddr> = Vec::new();
         for address in addresses {
             if !is_public_ip(address.ip()) {
                 return Err(ImageError::BlockedAddress(format!(
@@ -168,10 +178,12 @@ async fn build_client(url: &Url) -> Result<Client, ImageError> {
                     address.ip()
                 )));
             }
-            first.get_or_insert(address);
+            public_addresses.push(address);
         }
-        let address = first.ok_or_else(|| ImageError::Request("DNS 无结果".into()))?;
-        builder = builder.resolve(host, address);
+        if public_addresses.is_empty() {
+            return Err(ImageError::Request("DNS 无结果".into()));
+        }
+        builder = builder.resolve_to_addrs(host, &public_addresses);
     }
 
     builder
@@ -215,12 +227,23 @@ fn is_public_v6(ip: Ipv6Addr) -> bool {
 }
 
 fn looks_like_image(bytes: &[u8]) -> bool {
-    bytes.starts_with(b"\x89PNG\r\n\x1a\n")
-        || bytes.starts_with(&[0xFF, 0xD8, 0xFF])
-        || bytes.starts_with(b"GIF87a")
-        || bytes.starts_with(b"GIF89a")
-        || (bytes.len() >= 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WEBP")
-        || (bytes.len() >= 12 && &bytes[4..8] == b"ftyp" && &bytes[8..12] == b"avif")
+    image_format(bytes).is_some()
+}
+
+pub(crate) fn image_format(bytes: &[u8]) -> Option<(&'static str, &'static str)> {
+    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        Some(("image/png", "png"))
+    } else if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        Some(("image/jpeg", "jpg"))
+    } else if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
+        Some(("image/gif", "gif"))
+    } else if bytes.len() >= 12 && &bytes[..4] == b"RIFF" && &bytes[8..12] == b"WEBP" {
+        Some(("image/webp", "webp"))
+    } else if bytes.len() >= 12 && &bytes[4..8] == b"ftyp" && &bytes[8..12] == b"avif" {
+        Some(("image/avif", "avif"))
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -255,7 +278,10 @@ mod tests {
             "http://127.0.0.1/a.png",
             "http://10.0.0.1/a.png",
             "http://192.168.1.1/a.png",
+            "http://198.18.0.4/a.png",
+            "http://100.64.0.1/a.png",
             "http://[::1]/a.png",
+            "http://[::ffff:127.0.0.1]/a.png",
         ] {
             let parsed = validate_url(url).unwrap();
             assert!(matches!(

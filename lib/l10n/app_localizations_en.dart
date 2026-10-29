@@ -16,6 +16,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appName => 'FlSpeak';
 
   @override
+  String get homeTitle => 'Home';
+
+  @override
   String get commonClose => 'Close';
 
   @override
@@ -173,7 +176,10 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get channelsEmpty => 'Not connected.';
+  String get workspaceDropped => 'Disconnected';
+
+  @override
+  String get workspaceRetrying => 'Retrying…';
 
   @override
   String get channelsSection => 'Channels';
@@ -383,4 +389,269 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsStorePath => 'Storage directory';
+
+  @override
+  String get connectTitle => 'Find your people';
+
+  @override
+  String get connectSubtitle => 'Your communities, one conversation away.';
+
+  @override
+  String get serverEmptyBody =>
+      'Add a server address to join your people in a channel.';
+
+  @override
+  String get serverSearchLabel => 'Search servers';
+
+  @override
+  String get serverSearchEmpty => 'No matching servers';
+
+  @override
+  String get connectIdentityBody => 'One identity. All your communities.';
+
+  @override
+  String get connectLocalIdentity => 'Identity stored on this device';
+
+  @override
+  String get membersTitle => 'Channel members';
+
+  @override
+  String get voiceConnected => 'Voice connected';
+
+  @override
+  String get memberListening => 'In this channel';
+
+  @override
+  String get appearancePreview => 'Appearance';
+
+  @override
+  String get serverIconTitle => 'Choose server icon';
+
+  @override
+  String get serverIconChange => 'Change icon';
+
+  @override
+  String get serverIconCommunity => 'Community';
+
+  @override
+  String get serverIconGaming => 'Gaming';
+
+  @override
+  String get serverIconMusic => 'Music';
+
+  @override
+  String get serverIconWork => 'Work';
+
+  @override
+  String get serverIconTerminal => 'Terminal';
+
+  @override
+  String get serverIconFavorite => 'Favorite';
+
+  @override
+  String get serverIconPlanet => 'Planet';
+
+  @override
+  String get serverIconCoffee => 'Coffee';
+
+  @override
+  String get serverIconRocket => 'Rocket';
+
+  @override
+  String get serverIconScience => 'Explore';
+
+  @override
+  String get channelIconRetry => 'Retry channel icon';
+
+  @override
+  String get chatReply => 'Reply privately';
+
+  @override
+  String get chatRecipientUnavailable =>
+      'Recipient is offline. Choose another recipient.';
+
+  @override
+  String get chatChannelUnavailable =>
+      'Join this channel before sending a message.';
+
+  @override
+  String get pokeAction => 'Poke';
+
+  @override
+  String get pokeMessage => 'Message';
+
+  @override
+  String pokeTitle(String name) {
+    return 'Poke $name';
+  }
+
+  @override
+  String pokeSent(String name) {
+    return 'Poked $name';
+  }
+
+  @override
+  String pokeReceived(String name, String message) {
+    return '$name poked you: $message';
+  }
+
+  @override
+  String memberActions(String name) {
+    return 'Actions for $name';
+  }
+
+  @override
+  String get chatDestinationChanged =>
+      'The destination changed. Your draft was kept; confirm the recipient and retry.';
+
+  @override
+  String get chatImageTooLarge => 'Images must be no larger than 20 MiB';
+
+  @override
+  String get chatClipboardEmpty => 'No image in the clipboard';
+
+  @override
+  String get chatImageInputFailed =>
+      'Could not read the image. Please choose it again.';
+
+  @override
+  String get chatAttachImage => 'Attach image';
+
+  @override
+  String get chatChooseImage => 'Choose image';
+
+  @override
+  String get chatPasteImage => 'Paste image';
+
+  @override
+  String get chatRemoveImage => 'Remove image';
+
+  @override
+  String get imageHostTitle => 'Image uploads';
+
+  @override
+  String get imageHostRequired =>
+      'Configure a self-hosted image host in Image uploads first';
+
+  @override
+  String get imageHostStorageFailed =>
+      'Could not access secure storage for image uploads';
+
+  @override
+  String get imageHostUploadBase => 'HTTP PUT upload base URL';
+
+  @override
+  String get imageHostPublicBase => 'Public image base URL';
+
+  @override
+  String get imageHostToken => 'Bearer token (optional)';
+
+  @override
+  String get imageHostRemove => 'Clear configuration';
+
+  @override
+  String get imageHostSave => 'Save';
+
+  @override
+  String get imageHostUploadHint => 'https://upload.example.com/images/';
+
+  @override
+  String get imageHostPublicHint => 'https://images.example.com/';
+
+  @override
+  String get channelPasswordTitle => 'Channel password required';
+
+  @override
+  String get channelPasswordLabel => 'Channel password';
+
+  @override
+  String get channelPasswordWrong => 'Incorrect password. Try again.';
+
+  @override
+  String get memberPermissions => 'Manage permissions';
+
+  @override
+  String get permissionsUnavailable => 'Permissions are unavailable';
+
+  @override
+  String get serverGroups => 'Server groups';
+
+  @override
+  String get channelGroups => 'Channel groups';
+
+  @override
+  String get groupCurrent => 'Current';
+
+  @override
+  String get groupAssign => 'Assign';
+
+  @override
+  String get chatTabFiles => 'Files';
+
+  @override
+  String get fileParent => 'Parent folder';
+
+  @override
+  String get fileDownload => 'Download file';
+
+  @override
+  String get fileUnlock => 'Open';
+
+  @override
+  String get fileListEmpty => 'This channel has no files';
+
+  @override
+  String get fileDownloadFailed =>
+      'Could not download or save the file. Try again.';
+
+  @override
+  String get fileDownloadSaved => 'File saved';
+
+  @override
+  String fileSizeBytes(int count) {
+    return '$count bytes';
+  }
+
+  @override
+  String get fileConnectionChanged =>
+      'Connection changed. Start the download again.';
+
+  @override
+  String get fileCleanupFailed =>
+      'Temporary download files could not be removed';
+
+  @override
+  String get kickChannel => 'Kick from channel';
+
+  @override
+  String get kickServer => 'Kick from server';
+
+  @override
+  String kickChannelConfirm(String nickname) {
+    return 'Remove $nickname from their current channel? They will return to the server’s default channel.';
+  }
+
+  @override
+  String kickServerConfirm(String nickname) {
+    return 'Kick $nickname from the server? This does not ban them.';
+  }
+
+  @override
+  String get kickReason => 'Reason (optional)';
+
+  @override
+  String get kickConfirm => 'Confirm kick';
+
+  @override
+  String kickSent(String nickname) {
+    return 'Kicked $nickname';
+  }
+
+  @override
+  String get kickTargetUnavailable =>
+      'The member is offline or has changed channel. Select them again.';
+
+  @override
+  String get kickConnectionChanged =>
+      'The connection changed. Close this dialog and try again.';
 }

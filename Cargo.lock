@@ -2362,11 +2362,14 @@ name = "session"
 version = "0.0.0"
 dependencies = [
  "audio",
+ "base64 0.22.1",
  "proto",
+ "rand 0.10.3",
  "reqwest",
  "serde",
  "serde_json",
  "server",
+ "sha1",
  "thiserror 2.0.21",
  "tokio",
  "tsclient-rs",
@@ -2773,9 +2776,9 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tsclient-rs"
-version = "0.2.2"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "239b078cb9c29174c58cf928f067d928e159b38df66cb06be3f08b2868c2ba4e"
+checksum = "663ea4b41ab4c483244572dc888087d69186f33fcd3db3938928ddb3902f20c0"
 dependencies = [
  "aes",
  "async-trait",

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,10 +9,13 @@ import 'core/global_hotkey.dart';
 import 'core/preferences.dart';
 import 'core/providers.dart';
 import 'core/window_chrome.dart';
+import 'core/window_metrics.dart';
 import 'l10n/app_localizations.dart';
 import 'router.dart';
 import 'theme/app_theme.dart';
 import 'widgets/notice_host.dart';
+import 'widgets/view_scope.dart';
+import 'widgets/window_header.dart';
 
 class TsClientApp extends ConsumerStatefulWidget {
   const TsClientApp({super.key});
@@ -111,6 +115,7 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
     final preferences = ref.watch(preferencesProvider);
 
     return MaterialApp.router(
+      debugShowCheckedModeBanner: false,
       onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
@@ -125,12 +130,7 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
       builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
         value: appSystemUiOverlayStyle(Theme.of(context)),
         child: _WindowBackgroundSync(
-          child: Stack(
-            children: [
-              child ?? const SizedBox.shrink(),
-              const Positioned(top: 0, right: 0, child: NoticeHost()),
-            ],
-          ),
+          child: _WindowFrame(child: child ?? const SizedBox.shrink()),
         ),
       ),
       routerConfig: router,
@@ -187,4 +187,41 @@ class _WindowBackgroundSyncState extends State<_WindowBackgroundSync> {
 
   @override
   Widget build(BuildContext context) => widget.child;
+}
+
+/// 窗口框架：macOS 窄屏画 28px 标题条，宽屏让页面铺到窗口上沿。
+/// 红绿灯的让位通过 [ViewScope] 传给侧栏与通栏页面。
+class _WindowFrame extends StatelessWidget {
+  const _WindowFrame({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final isMacOS = !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
+    final size = MediaQuery.sizeOf(context);
+    final isMobileView = size.width < Breakpoints.compact;
+    return ValueListenableBuilder<bool>(
+      valueListenable: WindowChrome.fullScreen,
+      builder: (context, fullScreen, _) => ViewScope(
+        size: size,
+        isMobile: isMobileView,
+        windowControls: windowControlsOverPage(
+          isMacOS: isMacOS,
+          isMobileView: isMobileView,
+          isFullScreen: fullScreen,
+        ),
+        child: WindowHeaderContainer(
+          isMacOS: isMacOS,
+          isMobileView: isMobileView,
+          child: Stack(
+            children: [
+              child,
+              const Positioned(top: 0, right: 0, child: NoticeHost()),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

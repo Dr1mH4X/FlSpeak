@@ -66,12 +66,7 @@ class _ServerPreview extends StatelessWidget {
       ),
       child: Row(
         children: [
-          ServerMonogram(
-            id: server.id,
-            label: server.label,
-            host: server.host,
-            size: 40,
-          ),
+          ServerBadge(id: server.id, size: 40),
           const SizedBox(width: 12),
           Expanded(
             child: Column(

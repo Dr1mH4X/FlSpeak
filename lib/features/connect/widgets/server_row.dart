@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../../../l10n/app_localizations.dart';
+import '../../../core/providers.dart';
+import '../../../core/server_icon.dart';
+import '../../../widgets/server_icon_picker.dart';
 import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
@@ -11,7 +15,7 @@ import 'relative_time.dart';
 /// 连接页的一行服务器：整行是主落点，右键弹统一的二级菜单放「从列表移除」。
 ///
 /// 连接中整行变暗（除了正在连接的那行），避免用户连点两个目标。
-class ServerRow extends StatefulWidget {
+class ServerRow extends ConsumerStatefulWidget {
   const ServerRow({
     required this.profile,
     required this.lastConnected,
@@ -32,10 +36,10 @@ class ServerRow extends StatefulWidget {
   final VoidCallback onRemove;
 
   @override
-  State<ServerRow> createState() => _ServerRowState();
+  ConsumerState<ServerRow> createState() => _ServerRowState();
 }
 
-class _ServerRowState extends State<ServerRow> {
+class _ServerRowState extends ConsumerState<ServerRow> {
   bool _hovered = false;
 
   @override
@@ -59,6 +63,23 @@ class _ServerRowState extends State<ServerRow> {
       child: SecondaryMenu(
         openOnSecondaryTap: true,
         items: [
+          MenuItemButton(
+            leadingIcon: const Icon(Icons.palette_outlined),
+            onPressed: () async {
+              final current =
+                  ref
+                      .read(preferencesProvider)
+                      .serverIcons[widget.profile.id] ??
+                  ServerIcon.community;
+              final icon = await showServerIconPicker(context, current);
+              if (icon != null) {
+                ref
+                    .read(preferencesProvider.notifier)
+                    .setServerIcon(widget.profile.id, icon);
+              }
+            },
+            child: Text(l10n.serverIconChange),
+          ),
           MenuItemButton(
             leadingIcon: const Icon(Icons.delete_rounded),
             onPressed: connected ? null : widget.onRemove,
@@ -95,12 +116,12 @@ class _ServerRowState extends State<ServerRow> {
                         ),
                         child: Row(
                           children: [
-                            ServerMonogram(
+                            ServerBadge(
                               id: widget.profile.id,
-                              label: widget.profile.label,
-                              host: widget.profile.host,
                               size: 44,
                               online: connected,
+                              selected: connected,
+                              loading: widget.connecting,
                             ),
                             SizedBox(width: narrow ? 12 : 16),
                             Expanded(

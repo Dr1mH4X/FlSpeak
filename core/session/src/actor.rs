@@ -12,9 +12,9 @@ use audio::engine::{AudioEvent, AudioStage, VoiceEngine};
 use audio::format::{VOICE_CODEC, is_supported_codec};
 use audio::playback::VoiceFrame;
 use proto::ConnectError;
-use server::{ServerError, ServerProfile, ServerRegistry};
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use tokio::sync::{broadcast, mpsc};
+use server::{ServerError, ServerProfile, ServerRegistry, ServerTarget};
+use tokio::io::{AsyncRead, ReadBuf};
+use tokio::sync::{broadcast, mpsc, oneshot};
 use tsclient_rs::{
     AbortSignal, ChannelInfo, Client, ClientInfo, Event as ProtocolEvent, FileDownloadInfo, Logger,
 };
@@ -109,6 +109,7 @@ pub(crate) struct Actor {
     self_client_id: Option<i32>,
     self_channel_id: u64,
     active_server_id: Option<String>,
+    transfer_target: Option<ServerTarget>,
     last_target: Option<ConnectTarget>,
     generation: u64,
     reconnect_attempt: u32,
@@ -120,6 +121,7 @@ pub(crate) struct Actor {
     audio_enabled: bool,
     last_snapshot: Option<(Vec<ChannelView>, Vec<ClientView>)>,
     channel_codecs: HashMap<u64, i32>,
+    channel_tools: crate::channel_tools::ChannelTools,
     current_codec: i32,
     ever_connected: bool,
     consecutive_timeouts: u32,
@@ -131,18 +133,16 @@ pub(crate) struct Actor {
 }
 
 impl Actor {
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         store_path: PathBuf,
         registry: ServerRegistry,
         events: broadcast::Sender<SessionEvent>,
         commands: mpsc::UnboundedSender<SessionCommand>,
-        signals: mpsc::UnboundedSender<SessionSignal>,
-        signal_rx: mpsc::UnboundedReceiver<SessionSignal>,
         voice: VoiceEngine,
         audio_events: mpsc::Receiver<AudioEvent>,
         audio_enabled: bool,
     ) -> Self {
+        let (signals, signal_rx) = mpsc::unbounded_channel();
         let logger: Arc<dyn Logger> = Arc::new(EventLogger {
             events: events.clone(),
         });
@@ -161,6 +161,7 @@ impl Actor {
             self_client_id: None,
             self_channel_id: 0,
             active_server_id: None,
+            transfer_target: None,
             last_target: None,
             generation: 0,
             reconnect_attempt: 0,
@@ -172,6 +173,7 @@ impl Actor {
             audio_enabled,
             last_snapshot: None,
             channel_codecs: HashMap::new(),
+            channel_tools: Default::default(),
             current_codec: VOICE_CODEC,
             ever_connected: false,
             consecutive_timeouts: 0,
@@ -273,6 +275,19 @@ impl Actor {
             } => {
                 let _ = reply.send(self.send_text(target_mode, target_id, message).await);
             }
+            SessionCommand::Poke {
+                client_id,
+                message,
+                reply,
+            } => {
+                let result = match self.connected() {
+                    Ok(client) => tsclient_rs::poke(&client, client_id, &message)
+                        .await
+                        .map_err(protocol_error),
+                    Err(err) => Err(err),
+                };
+                let _ = reply.send(result);
+            }
             SessionCommand::Move {
                 client_id,
                 channel_id,
@@ -293,6 +308,107 @@ impl Actor {
             }
             SessionCommand::RequestSnapshot { reply } => {
                 let _ = reply.send(self.refresh_snapshot(true).await);
+            }
+            SessionCommand::Access { reply } => {
+                let result = match self.connected() {
+                    Ok(client) => crate::channel_tools::access(&client, &mut self.channel_tools)
+                        .await
+                        .map(|mut access| {
+                            access.connection_epoch = Some(self.connection_epoch);
+                            access
+                        }),
+                    Err(error) => Err(error),
+                };
+                let _ = reply.send(result);
+            }
+            SessionCommand::Kick {
+                uid,
+                client_id,
+                channel_id,
+                target,
+                reason,
+                connection_epoch,
+                reply,
+            } => {
+                let result = if connection_epoch != self.connection_epoch {
+                    Err(SessionError::Protocol("connection changed".into()))
+                } else {
+                    match self.connected() {
+                        Ok(client) => {
+                            crate::channel_tools::kick(
+                                &client,
+                                &mut self.channel_tools,
+                                &uid,
+                                client_id,
+                                channel_id,
+                                target,
+                                &reason,
+                            )
+                            .await
+                        }
+                        Err(error) => Err(error),
+                    }
+                };
+                let _ = reply.send(result);
+            }
+            SessionCommand::MemberGroups {
+                uid,
+                client_id,
+                reply,
+            } => {
+                let result = match self.connected() {
+                    Ok(client) => {
+                        crate::channel_tools::member_groups(
+                            &client,
+                            &uid,
+                            client_id,
+                            &mut self.channel_tools,
+                        )
+                        .await
+                    }
+                    Err(error) => Err(error),
+                };
+                let _ = reply.send(result);
+            }
+            SessionCommand::SetMemberGroup {
+                uid,
+                client_id,
+                group_id,
+                channel_id,
+                kind,
+                enabled,
+                reply,
+            } => {
+                let result = match self.connected() {
+                    Ok(client) => {
+                        crate::channel_tools::set_member_group(
+                            &client,
+                            (&uid, client_id),
+                            group_id,
+                            channel_id,
+                            kind,
+                            enabled,
+                            &mut self.channel_tools,
+                        )
+                        .await
+                    }
+                    Err(error) => Err(error),
+                };
+                let _ = reply.send(result);
+            }
+            SessionCommand::ListFiles {
+                channel_id,
+                path,
+                password,
+                reply,
+            } => {
+                let result = match self.connected() {
+                    Ok(client) => {
+                        crate::channel_tools::files(&client, channel_id, &path, &password).await
+                    }
+                    Err(error) => Err(error),
+                };
+                let _ = reply.send(result);
             }
             SessionCommand::SetMuted { muted, reply } => {
                 let _ = reply.send(self.set_muted(muted).await);
@@ -369,6 +485,9 @@ impl Actor {
                     self.upload_file(local_path, remote_path, channel_id, password, overwrite)
                         .await,
                 );
+            }
+            SessionCommand::FetchIcon { icon_id, reply } => {
+                self.fetch_icon(icon_id, reply).await;
             }
             SessionCommand::DownloadFile {
                 remote_path,
@@ -508,6 +627,7 @@ impl Actor {
                 let client_id = client.client_id();
                 let channel_id = client.channel_id();
                 self.client = Some(Arc::new(client));
+                self.transfer_target = Some(resolved.target);
                 self.self_client_id = Some(client_id);
                 self.self_channel_id = channel_id;
                 self.active_server_id = Some(profile.id.clone());
@@ -619,7 +739,14 @@ impl Actor {
         // ServerQuery 的单行上限是 8192 字节。长文本按 UTF-8 边界分片，
         // 每一片单独走 sendtextmessage，避免整条消息被服务端截断。
         for chunk in split_text_message(&message, MAX_TEXT_MESSAGE_BYTES) {
-            tsclient_rs::sendTextMessage(&client, target_mode, target_id, &chunk)
+            client
+                .exec_command(
+                    &format!(
+                        "sendtextmessage targetmode={target_mode} target={target_id} msg={}",
+                        tsclient_rs::escape(&chunk).0
+                    ),
+                    5_000,
+                )
                 .await
                 .map_err(protocol_error)?;
         }
@@ -633,10 +760,10 @@ impl Actor {
         password: Option<String>,
     ) -> Result<(), SessionError> {
         let client = self.connected()?;
-        let password = password.unwrap_or_default();
+        let password = crate::channel_tools::channel_password(&password.unwrap_or_default());
         tsclient_rs::clientMove(&client, client_id, channel_id, &password)
             .await
-            .map_err(protocol_error)
+            .map_err(crate::channel_tools::protocol_error)
     }
 
     async fn list_channels(&self) -> Result<Vec<ChannelView>, SessionError> {
@@ -1161,6 +1288,63 @@ impl Actor {
         self.emit_voice_state();
     }
 
+    async fn fetch_icon(
+        &self,
+        icon_id: u32,
+        reply: oneshot::Sender<Result<Vec<u8>, SessionError>>,
+    ) {
+        let negotiated = async {
+            if icon_id == 0 {
+                return Err(SessionError::Transfer("icon id must be nonzero".into()));
+            }
+            let client = self.connected()?;
+            let target = self
+                .transfer_target
+                .as_ref()
+                .ok_or(SessionError::NotConnected)?;
+            proto::check_transfer_host(target, &target.host)?;
+            let info = client
+                .file_transfer_init_download(0, &tsclient_rs::icon_file_name(icon_id), "")
+                .await
+                .map_err(protocol_error)?;
+            validate_port(info.port)?;
+            if info.size == 0 || info.size > 1024 * 1024 {
+                return Err(SessionError::Transfer(
+                    "icon size must be between 1 byte and 1 MiB".into(),
+                ));
+            }
+            Ok((target.host.clone(), info))
+        }
+        .await;
+        let (host, info) = match negotiated {
+            Ok(value) => value,
+            Err(error) => {
+                let _ = reply.send(Err(error));
+                return;
+            }
+        };
+        let epoch = self.connection_epoch;
+        let current_epoch = Arc::clone(&self.epoch);
+        // 仅 TCP 字节传输离开 actor；Client 的协商仍在命令队列中串行执行。
+        tokio::task::spawn_local(async move {
+            let outcome = tokio::time::timeout(Duration::from_secs(20), async {
+                let mut bytes = Vec::with_capacity(info.size as usize);
+                tsclient_rs::downloadFileData(&host, &info, &mut bytes)
+                    .await
+                    .map_err(protocol_error)?;
+                Ok(bytes)
+            })
+            .await
+            .unwrap_or(Err(SessionError::Timeout));
+            let outcome = if current_epoch.load(Ordering::SeqCst) == epoch {
+                outcome
+            } else {
+                Err(SessionError::NotConnected)
+            };
+            let _ = reply.send(outcome);
+        });
+    }
+
     async fn upload_file(
         &mut self,
         local_path: String,
@@ -1173,9 +1357,11 @@ impl Actor {
             return Err(SessionError::NotInChannel);
         }
         let client = self.connected()?;
-        let profile = self.active_profile()?;
-        let target = profile.target()?;
-        proto::check_transfer_host(&target, &profile.host)?;
+        let target = self
+            .transfer_target
+            .as_ref()
+            .ok_or(SessionError::NotConnected)?;
+        proto::check_transfer_host(target, &target.host)?;
 
         let file = tokio::fs::File::open(&local_path)
             .await
@@ -1189,7 +1375,7 @@ impl Actor {
             .file_transfer_init_upload(
                 channel_id,
                 &remote_path,
-                password.as_deref().unwrap_or(""),
+                &crate::channel_tools::channel_password(password.as_deref().unwrap_or("")),
                 size,
                 overwrite,
             )
@@ -1210,7 +1396,7 @@ impl Actor {
         let host = target.host.clone();
         tokio::task::spawn_local(async move {
             let reader = ProgressReader::new(file, id, size, events.clone());
-            let outcome = client.upload_file_data(&host, &info, reader).await;
+            let outcome = tsclient_rs::uploadFileData(&host, &info, reader).await;
             let _ = events.send(SessionEvent::TransferFinished {
                 id,
                 error: outcome.err().map(|err| err.to_string()),
@@ -1226,31 +1412,33 @@ impl Actor {
         channel_id: u64,
         password: Option<String>,
     ) -> Result<u64, SessionError> {
+        crate::channel_tools::remote_path(&remote_path)?;
+        if PathBuf::from(&local_path)
+            .try_exists()
+            .map_err(|error| SessionError::Transfer(error.to_string()))?
+        {
+            return Err(SessionError::Transfer("destination already exists".into()));
+        }
         if channel_id == 0 {
             return Err(SessionError::NotInChannel);
         }
         let client = self.connected()?;
-        let profile = self.active_profile()?;
-        let target = profile.target()?;
-        proto::check_transfer_host(&target, &profile.host)?;
+        let target = self
+            .transfer_target
+            .as_ref()
+            .ok_or(SessionError::NotConnected)?;
+        proto::check_transfer_host(target, &target.host)?;
 
         let info: FileDownloadInfo = client
             .file_transfer_init_download(
                 channel_id,
                 &remote_path,
-                password.as_deref().unwrap_or(""),
+                &crate::channel_tools::channel_password(password.as_deref().unwrap_or("")),
             )
             .await
             .map_err(protocol_error)?;
         validate_port(info.port)?;
 
-        let file = tokio::fs::File::create(&local_path)
-            .await
-            .map_err(|err| SessionError::Transfer(format!("创建本地文件失败: {err}")))?;
-        let truncate = file
-            .try_clone()
-            .await
-            .map_err(|err| SessionError::Transfer(format!("复制文件句柄失败: {err}")))?;
         let id = self.next_transfer_id;
         self.next_transfer_id = self.next_transfer_id.wrapping_add(1);
         self.emit(SessionEvent::TransferStarted {
@@ -1259,26 +1447,24 @@ impl Actor {
             remote_path: remote_path.clone(),
             total: info.size,
         });
-
         let events = self.events.clone();
         let host = target.host.clone();
+        let epoch = self.connection_epoch;
+        let current = Arc::clone(&self.epoch);
         tokio::task::spawn_local(async move {
-            let writer = ProgressWriter::new(file, id, info.size, events.clone());
-            let outcome = client.download_file_data(&host, &info, writer).await;
-            let error = match &outcome {
-                Ok(()) => {
-                    // 下载流同样按 16 字节块解密，多出的补零要按服务器声明的 size 截掉。
-                    truncate
-                        .set_len(info.size)
-                        .await
-                        .err()
-                        .map(|err| err.to_string())
-                }
-                Err(_) => None,
-            };
+            let outcome = crate::downloads::receive(
+                host,
+                info,
+                PathBuf::from(local_path),
+                id,
+                events.clone(),
+                epoch,
+                current,
+            )
+            .await;
             let _ = events.send(SessionEvent::TransferFinished {
                 id,
-                error: error.or_else(|| outcome.err().map(|err| err.to_string())),
+                error: outcome.err().map(|error| error.to_string()),
             });
         });
         Ok(id)
@@ -1602,15 +1788,9 @@ impl Actor {
         self.client.clone().ok_or(SessionError::NotConnected)
     }
 
-    fn active_profile(&self) -> Result<ServerProfile, SessionError> {
-        let id = self
-            .active_server_id
-            .as_ref()
-            .ok_or(SessionError::NotConnected)?;
-        self.registry.require(id).cloned().map_err(Into::into)
-    }
-
     fn invalidate_handlers(&mut self) {
+        self.channel_tools = Default::default();
+        self.transfer_target = None;
         self.connection_epoch = self.connection_epoch.wrapping_add(1);
         self.epoch.store(self.connection_epoch, Ordering::SeqCst);
     }
@@ -1678,8 +1858,8 @@ fn parse_channel_metadata(rows: &[HashMap<String, String>]) -> HashMap<u64, Chan
                     .get("channel_order")
                     .and_then(|value| value.parse::<u64>().ok()),
                 description: row
-                    .get("channel_topic")
-                    .or_else(|| row.get("channel_description"))
+                    .get("channel_description")
+                    .or_else(|| row.get("channel_topic"))
                     .cloned(),
                 codec: row
                     .get("channel_codec")
@@ -1698,6 +1878,7 @@ fn parse_channel_metadata(rows: &[HashMap<String, String>]) -> HashMap<u64, Chan
 fn channel_view(channel: ChannelInfo, metadata: Option<&ChannelMetadata>) -> ChannelView {
     let metadata = metadata.cloned().unwrap_or_default();
     ChannelView {
+        icon_id: channel.icon_id,
         id: channel.id,
         parent_id: channel.parent_id,
         order: metadata.order.or(Some(channel.order)),
@@ -1758,7 +1939,7 @@ impl From<audio::device::DeviceInfo> for AudioDeviceView {
 }
 
 fn protocol_error(err: tsclient_rs::Error) -> SessionError {
-    SessionError::Protocol(err.to_string())
+    crate::channel_tools::protocol_error(err)
 }
 
 /// 按 UTF-8 字节上限切分文本消息。
@@ -1860,7 +2041,7 @@ fn merged_clients(listed: Vec<ClientInfo>, directory: Vec<ClientInfo>) -> Vec<Cl
 }
 
 /// TeamSpeak 转义的常用子集；上游没导出 `unescape`，clientinfo 的原始行需要它。
-fn unescape_text(raw: &str) -> String {
+pub(crate) fn unescape_text(raw: &str) -> String {
     let mut out = String::with_capacity(raw.len());
     let mut chars = raw.chars();
     while let Some(c) = chars.next() {
@@ -1916,6 +2097,31 @@ fn register_handlers(
                     at: now_millis(),
                 },
             });
+        }
+    }));
+
+    let channel = events.clone();
+    let live = Arc::clone(&current);
+    client.on_own_permissions_changed(Arc::new(move |_| {
+        if live.load(Ordering::Relaxed) == epoch {
+            emit(&channel, SessionEvent::AccessChanged);
+        }
+    }));
+
+    let channel = events.clone();
+    let live = Arc::clone(&current);
+    client.on_poked(Arc::new(move |event: ProtocolEvent| {
+        if live.load(Ordering::Relaxed) != epoch {
+            return;
+        }
+        if let ProtocolEvent::Poked(poke) = event {
+            emit(
+                &channel,
+                SessionEvent::Poked {
+                    from: poke.invoker_name,
+                    message: poke.message,
+                },
+            );
         }
     }));
 
@@ -2097,8 +2303,6 @@ struct ProgressReader {
     transferred: u64,
     last_emit_bytes: u64,
     last_emit_at: Instant,
-    padding: usize,
-    padding_sent: bool,
     events: broadcast::Sender<SessionEvent>,
 }
 
@@ -2109,7 +2313,6 @@ impl ProgressReader {
         total: u64,
         events: broadcast::Sender<SessionEvent>,
     ) -> Self {
-        let padding = (16 - (total % 16) as usize) % 16;
         Self {
             inner,
             id,
@@ -2117,8 +2320,6 @@ impl ProgressReader {
             transferred: 0,
             last_emit_bytes: 0,
             last_emit_at: Instant::now(),
-            padding,
-            padding_sent: false,
             events,
         }
     }
@@ -2150,88 +2351,10 @@ impl AsyncRead for ProgressReader {
         let poll = Pin::new(&mut this.inner).poll_read(cx, buf);
         if let Poll::Ready(Ok(())) = &poll {
             let read = buf.filled().len() - before;
-            if read == 0 && !this.padding_sent && this.padding > 0 {
-                // tsclient-rs 的 AES 数据流按 16 字节块加密，尾部不足一块会被静默丢掉；
-                // 补零到块边界，服务端按声明的原始 size 截断。
-                const ZEROS: [u8; 16] = [0; 16];
-                let count = this.padding.min(buf.remaining());
-                buf.put_slice(&ZEROS[..count]);
-                this.padding_sent = count == this.padding;
-                return Poll::Ready(Ok(()));
-            }
             this.transferred += read as u64;
             this.maybe_emit();
         }
         poll
-    }
-}
-
-/// 下载进度写入器。
-struct ProgressWriter {
-    inner: tokio::fs::File,
-    id: u64,
-    total: u64,
-    transferred: u64,
-    last_emit_bytes: u64,
-    last_emit_at: Instant,
-    events: broadcast::Sender<SessionEvent>,
-}
-
-impl ProgressWriter {
-    fn new(
-        inner: tokio::fs::File,
-        id: u64,
-        total: u64,
-        events: broadcast::Sender<SessionEvent>,
-    ) -> Self {
-        Self {
-            inner,
-            id,
-            total,
-            transferred: 0,
-            last_emit_bytes: 0,
-            last_emit_at: Instant::now(),
-            events,
-        }
-    }
-
-    fn record(&mut self, written: usize) {
-        self.transferred += written as u64;
-        if self.transferred.saturating_sub(self.last_emit_bytes) < TRANSFER_PROGRESS_BYTES
-            && self.last_emit_at.elapsed() < TRANSFER_PROGRESS_INTERVAL
-        {
-            return;
-        }
-        self.last_emit_bytes = self.transferred;
-        self.last_emit_at = Instant::now();
-        let _ = self.events.send(SessionEvent::TransferProgress {
-            id: self.id,
-            transferred: self.transferred,
-            total: self.total,
-        });
-    }
-}
-
-impl AsyncWrite for ProgressWriter {
-    fn poll_write(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<std::io::Result<usize>> {
-        let this = self.get_mut();
-        let poll = Pin::new(&mut this.inner).poll_write(cx, buf);
-        if let Poll::Ready(Ok(written)) = &poll {
-            this.record(*written);
-        }
-        poll
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        Pin::new(&mut self.get_mut().inner).poll_flush(cx)
-    }
-
-    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        Pin::new(&mut self.get_mut().inner).poll_shutdown(cx)
     }
 }
 
@@ -2349,10 +2472,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn upload_reader_pads_the_last_aes_block() {
+    async fn upload_reader_preserves_exact_payload() {
         use tokio::io::AsyncReadExt;
 
-        let dir = std::env::temp_dir().join("flspeak-transfer-padding-test");
+        let dir = std::env::temp_dir().join("flspeak-transfer-payload-test");
         let path = dir.join("payload.bin");
         let _ = tokio::fs::remove_dir_all(&dir).await;
         tokio::fs::create_dir_all(&dir).await.unwrap();
@@ -2364,9 +2487,7 @@ mod tests {
         let mut output = Vec::new();
         reader.read_to_end(&mut output).await.unwrap();
 
-        assert_eq!(output.len(), 16, "不足 16 字节的尾部必须补零");
-        assert_eq!(&output[..5], b"hello");
-        assert!(output[5..].iter().all(|byte| *byte == 0));
+        assert_eq!(output, b"hello");
 
         let _ = tokio::fs::remove_dir_all(&dir).await;
     }
@@ -2377,6 +2498,10 @@ mod tests {
         first.insert("cid".to_string(), "7".to_string());
         first.insert("channel_order".to_string(), "3".to_string());
         first.insert("channel_topic".to_string(), "Welcome".to_string());
+        first.insert(
+            "channel_description".to_string(),
+            "Full description".to_string(),
+        );
         first.insert("channel_maxclients".to_string(), "25".to_string());
         first.insert(
             "channel_flag_maxclients_unlimited".to_string(),
@@ -2397,7 +2522,7 @@ mod tests {
         let metadata = parse_channel_metadata(&[first, second, third]);
         let first = metadata.get(&7).expect("first channel");
         assert_eq!(first.order, Some(3));
-        assert_eq!(first.description.as_deref(), Some("Welcome"));
+        assert_eq!(first.description.as_deref(), Some("Full description"));
         assert_eq!(first.codec, Some(5));
         assert_eq!(first.max_clients, Some(25));
         assert_eq!(first.max_clients_limited, Some(true));
@@ -2412,6 +2537,7 @@ mod tests {
     #[test]
     fn channel_view_merges_directory_rows_with_optional_flags() {
         let channel = ChannelInfo {
+            icon_id: Some(3763318035),
             id: 9,
             parent_id: 2,
             order: 1,
@@ -2432,6 +2558,7 @@ mod tests {
         };
 
         let view = channel_view(channel.clone(), Some(&metadata));
+        assert_eq!(view.icon_id, Some(3763318035));
         assert_eq!(view.order, Some(12));
         assert_eq!(view.description, "Public topic");
         assert_eq!(view.max_clients, Some(10));

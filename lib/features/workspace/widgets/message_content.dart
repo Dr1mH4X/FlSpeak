@@ -1,12 +1,10 @@
-import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/remote_image.dart';
 
 /// TS6 官方客户端发图时使用的消息结构。
 ///
@@ -145,7 +143,7 @@ class MessageContent extends StatelessWidget {
     if (attachment != null) {
       return _AttachmentCard(attachment: attachment, style: style);
     }
-    if (!_looksRich(text)) {
+    if (parseImageUrl(text) == null && !_looksRich(text)) {
       return SelectableText(text, style: style);
     }
     return Column(
@@ -219,7 +217,7 @@ List<Widget> _blocks(
 
     final imageUrl = parseImageUrl(line);
     if (imageUrl != null) {
-      widgets.add(_UrlImage(url: imageUrl, style: style, onTap: onImageTap));
+      widgets.add(_UrlImage(url: imageUrl, onTap: onImageTap));
       index++;
       continue;
     }
@@ -816,122 +814,23 @@ const _emoji = <String, String>{
   'sunglasses': '😎',
 };
 
-final _imageFutures = <String, Future<Uint8List>>{};
-
-Future<Uint8List> _loadImage(String url) async {
-  final cached = _imageFutures[url];
-  if (cached != null) {
-    return cached;
-  }
-  final future = fetchImage(url: url);
-  _imageFutures[url] = future;
-  try {
-    return await future;
-  } catch (_) {
-    // 失败不永久缓存，允许用户重试/图床恢复。
-    unawaited(_imageFutures.remove(url));
-    rethrow;
-  }
-}
-
-class _UrlImage extends StatefulWidget {
-  const _UrlImage({
-    required this.url,
-    required this.style,
-    required this.onTap,
-  });
+class _UrlImage extends StatelessWidget {
+  const _UrlImage({required this.url, required this.onTap});
 
   final String url;
-  final TextStyle style;
   final ValueChanged<String>? onTap;
 
   @override
-  State<_UrlImage> createState() => _UrlImageState();
-}
-
-class _UrlImageState extends State<_UrlImage> {
-  late Future<Uint8List> _future;
-
-  @override
-  void initState() {
-    super.initState();
-    _future = _loadImage(widget.url);
-  }
-
-  @override
-  void didUpdateWidget(_UrlImage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.url != widget.url) {
-      _future = _loadImage(widget.url);
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final scheme = Theme.of(context).colorScheme;
-    return FutureBuilder<Uint8List>(
-      future: _future,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return _ImageFrame(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  l10n.chatImageLoading,
-                  style: widget.style.copyWith(color: scheme.onSurfaceVariant),
-                ),
-              ],
+    final image = RemoteImage(url: url);
+    return _ImageFrame(
+      child: onTap == null
+          ? image
+          : GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => onTap!(url),
+              child: image,
             ),
-          );
-        }
-        if (snapshot.hasError || snapshot.data == null) {
-          return _ImageFrame(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  l10n.chatImageLoadFailed,
-                  style: widget.style.copyWith(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 4),
-                SelectableText(
-                  widget.url,
-                  style: widget.style.copyWith(
-                    color: scheme.onSurfaceVariant,
-                    fontSize: (widget.style.fontSize ?? 14) - 1,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-        final image = Image.memory(
-          snapshot.data!,
-          fit: BoxFit.contain,
-          gaplessPlayback: true,
-          errorBuilder: (context, error, stackTrace) =>
-              Text(l10n.chatImageLoadFailed, style: widget.style),
-        );
-        final onTap = widget.onTap;
-        return _ImageFrame(
-          child: onTap == null
-              ? image
-              : GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => onTap(widget.url),
-                  child: image,
-                ),
-        );
-      },
     );
   }
 }

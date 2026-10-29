@@ -2,13 +2,13 @@
   "@@locale": "en",
   "appTitle": "Self-hosted TeamSpeak",
   "appName": "FlSpeak",
+  "homeTitle": "Home",
   "commonClose": "Close",
   "commonCancel": "Cancel",
   "commonDone": "Done",
   "commonCopy": "Copy",
   "commonCopied": "Copied",
   "commonRetry": "Retry",
-  
   "connectAddressLabel": "Server address",
   "connectAddressHint": "ts.example.com or ts.example.com:9987",
   "connectNicknameLabel": "Nickname",
@@ -104,15 +104,14 @@
       }
     }
   },
-  "channelsEmpty": "Not connected.",
+  "workspaceDropped": "Disconnected",
+  "workspaceRetrying": "Retrying…",
   "channelsSection": "Channels",
   "workspaceNoChannels": "This server has no channels yet.",
   "workspaceOpenMenu": "Open channel menu",
-  
   "channelPasswordProtected": "Channel password required",
   "channelJoinMenu": "Join channel",
   "channelPaneResize": "Resize channel pane",
-  
   "voiceMute": "Mute",
   "voiceUnmute": "Unmute",
   "voiceDeafen": "Deafen",
@@ -193,5 +192,143 @@
   "settingsDeviceDefault": "System default",
   "settingsAudioUnavailable": "Audio devices unavailable",
   "settingsAudioLoading": "Reading audio devices…",
-  "settingsStorePath": "Storage directory"
+  "settingsStorePath": "Storage directory",
+  "connectTitle": "Find your people",
+  "connectSubtitle": "Your communities, one conversation away.",
+  "serverEmptyBody": "Add a server address to join your people in a channel.",
+  "serverSearchLabel": "Search servers",
+  "serverSearchEmpty": "No matching servers",
+  "connectIdentityBody": "One identity. All your communities.",
+  "connectLocalIdentity": "Identity stored on this device",
+  "membersTitle": "Channel members",
+  "voiceConnected": "Voice connected",
+  "memberListening": "In this channel",
+  "appearancePreview": "Appearance",
+  "serverIconTitle": "Choose server icon",
+  "serverIconChange": "Change icon",
+  "serverIconCommunity": "Community",
+  "serverIconGaming": "Gaming",
+  "serverIconMusic": "Music",
+  "serverIconWork": "Work",
+  "serverIconTerminal": "Terminal",
+  "serverIconFavorite": "Favorite",
+  "serverIconPlanet": "Planet",
+  "serverIconCoffee": "Coffee",
+  "serverIconRocket": "Rocket",
+  "serverIconScience": "Explore",
+  "channelIconRetry": "Retry channel icon",
+  "chatReply": "Reply privately",
+  "chatRecipientUnavailable": "Recipient is offline. Choose another recipient.",
+  "chatChannelUnavailable": "Join this channel before sending a message.",
+  "pokeAction": "Poke",
+  "pokeMessage": "Message",
+  "pokeTitle": "Poke {name}",
+  "@pokeTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "pokeSent": "Poked {name}",
+  "@pokeSent": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "pokeReceived": "{name} poked you: {message}",
+  "@pokeReceived": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "memberActions": "Actions for {name}",
+  "@memberActions": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "chatDestinationChanged": "The destination changed. Your draft was kept; confirm the recipient and retry.",
+  "chatImageTooLarge": "Images must be no larger than 20 MiB",
+  "chatClipboardEmpty": "No image in the clipboard",
+  "chatImageInputFailed": "Could not read the image. Please choose it again.",
+  "chatAttachImage": "Attach image",
+  "chatChooseImage": "Choose image",
+  "chatPasteImage": "Paste image",
+  "chatRemoveImage": "Remove image",
+  "imageHostTitle": "Image uploads",
+  "imageHostRequired": "Configure a self-hosted image host in Image uploads first",
+  "imageHostStorageFailed": "Could not access secure storage for image uploads",
+  "imageHostUploadBase": "HTTP PUT upload base URL",
+  "imageHostPublicBase": "Public image base URL",
+  "imageHostToken": "Bearer token (optional)",
+  "imageHostRemove": "Clear configuration",
+  "imageHostSave": "Save",
+  "imageHostUploadHint": "https://upload.example.com/images/",
+  "imageHostPublicHint": "https://images.example.com/",
+  "channelPasswordTitle": "Channel password required",
+  "channelPasswordLabel": "Channel password",
+  "channelPasswordWrong": "Incorrect password. Try again.",
+  "memberPermissions": "Manage permissions",
+  "permissionsUnavailable": "Permissions are unavailable",
+  "serverGroups": "Server groups",
+  "channelGroups": "Channel groups",
+  "groupCurrent": "Current",
+  "groupAssign": "Assign",
+  "chatTabFiles": "Files",
+  "fileParent": "Parent folder",
+  "fileDownload": "Download file",
+  "fileUnlock": "Open",
+  "fileListEmpty": "This channel has no files",
+  "fileDownloadFailed": "Could not download or save the file. Try again.",
+  "fileDownloadSaved": "File saved",
+  "fileSizeBytes": "{count} bytes",
+  "@fileSizeBytes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "fileConnectionChanged": "Connection changed. Start the download again.",
+  "fileCleanupFailed": "Temporary download files could not be removed",
+  "kickChannel": "Kick from channel",
+  "kickServer": "Kick from server",
+  "kickChannelConfirm": "Remove {nickname} from their current channel? They will return to the server’s default channel.",
+  "kickServerConfirm": "Kick {nickname} from the server? This does not ban them.",
+  "kickReason": "Reason (optional)",
+  "kickConfirm": "Confirm kick",
+  "kickSent": "Kicked {nickname}",
+  "kickTargetUnavailable": "The member is offline or has changed channel. Select them again.",
+  "kickConnectionChanged": "The connection changed. Close this dialog and try again.",
+  "@kickChannelConfirm": {
+    "placeholders": {
+      "nickname": {
+        "type": "String"
+      }
+    }
+  },
+  "@kickServerConfirm": {
+    "placeholders": {
+      "nickname": {
+        "type": "String"
+      }
+    }
+  },
+  "@kickSent": {
+    "placeholders": {
+      "nickname": {
+        "type": "String"
+      }
+    }
+  }
 }

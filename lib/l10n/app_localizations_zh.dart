@@ -16,6 +16,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appName => 'FlSpeak';
 
   @override
+  String get homeTitle => '主页';
+
+  @override
   String get commonClose => '关闭';
 
   @override
@@ -172,7 +175,10 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get channelsEmpty => '尚未连接。';
+  String get workspaceDropped => '连接丢失';
+
+  @override
+  String get workspaceRetrying => '正在重试…';
 
   @override
   String get channelsSection => '频道';
@@ -379,4 +385,257 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsStorePath => '存储目录';
+
+  @override
+  String get connectTitle => '找到你的声音';
+
+  @override
+  String get connectSubtitle => '加入熟悉的频道，让对话自然发生。';
+
+  @override
+  String get serverEmptyBody => '添加服务器地址，和伙伴在同一个频道相聚。';
+
+  @override
+  String get serverSearchLabel => '搜索服务器';
+
+  @override
+  String get serverSearchEmpty => '没有匹配的服务器';
+
+  @override
+  String get connectIdentityBody => '一个身份，连接你熟悉的每个社区。';
+
+  @override
+  String get connectLocalIdentity => '身份保存在本机';
+
+  @override
+  String get membersTitle => '频道成员';
+
+  @override
+  String get voiceConnected => '语音已连接';
+
+  @override
+  String get memberListening => '正在频道中';
+
+  @override
+  String get appearancePreview => '外观';
+
+  @override
+  String get serverIconTitle => '选择服务器图标';
+
+  @override
+  String get serverIconChange => '更换图标';
+
+  @override
+  String get serverIconCommunity => '社区';
+
+  @override
+  String get serverIconGaming => '游戏';
+
+  @override
+  String get serverIconMusic => '音乐';
+
+  @override
+  String get serverIconWork => '工作';
+
+  @override
+  String get serverIconTerminal => '终端';
+
+  @override
+  String get serverIconFavorite => '喜爱';
+
+  @override
+  String get serverIconPlanet => '星球';
+
+  @override
+  String get serverIconCoffee => '咖啡';
+
+  @override
+  String get serverIconRocket => '火箭';
+
+  @override
+  String get serverIconScience => '探索';
+
+  @override
+  String get channelIconRetry => '重新加载频道图标';
+
+  @override
+  String get chatReply => '回复私聊';
+
+  @override
+  String get chatRecipientUnavailable => '私聊对象已离线，请重新选择';
+
+  @override
+  String get chatChannelUnavailable => '请先进入此频道再发送消息';
+
+  @override
+  String get pokeAction => '戳一下';
+
+  @override
+  String get pokeMessage => '消息';
+
+  @override
+  String pokeTitle(String name) {
+    return '戳一下 $name';
+  }
+
+  @override
+  String pokeSent(String name) {
+    return '已戳了 $name 一下';
+  }
+
+  @override
+  String pokeReceived(String name, String message) {
+    return '$name 戳了你一下：$message';
+  }
+
+  @override
+  String memberActions(String name) {
+    return '$name 的操作';
+  }
+
+  @override
+  String get chatDestinationChanged => '发送目标已改变，草稿已保留，请确认后重试';
+
+  @override
+  String get chatImageTooLarge => '图片不能超过 20 MiB';
+
+  @override
+  String get chatClipboardEmpty => '剪贴板中没有图片';
+
+  @override
+  String get chatImageInputFailed => '无法读取图片，请重新选择';
+
+  @override
+  String get chatAttachImage => '添加图片';
+
+  @override
+  String get chatChooseImage => '选择图片';
+
+  @override
+  String get chatPasteImage => '粘贴图片';
+
+  @override
+  String get chatRemoveImage => '移除图片';
+
+  @override
+  String get imageHostTitle => '图片上传';
+
+  @override
+  String get imageHostRequired => '请先在图片上传设置中配置自托管图床';
+
+  @override
+  String get imageHostStorageFailed => '无法访问图片上传的安全存储';
+
+  @override
+  String get imageHostUploadBase => 'HTTP PUT 上传地址';
+
+  @override
+  String get imageHostPublicBase => '图片访问地址';
+
+  @override
+  String get imageHostToken => '访问令牌（可选）';
+
+  @override
+  String get imageHostRemove => '清除配置';
+
+  @override
+  String get imageHostSave => '保存';
+
+  @override
+  String get imageHostUploadHint => 'https://upload.example.com/images/';
+
+  @override
+  String get imageHostPublicHint => 'https://images.example.com/';
+
+  @override
+  String get channelPasswordTitle => '频道需要密码';
+
+  @override
+  String get channelPasswordLabel => '频道密码';
+
+  @override
+  String get channelPasswordWrong => '密码不正确，请重试';
+
+  @override
+  String get memberPermissions => '权限管理';
+
+  @override
+  String get permissionsUnavailable => '暂时无法读取权限';
+
+  @override
+  String get serverGroups => '服务器权限组';
+
+  @override
+  String get channelGroups => '频道权限组';
+
+  @override
+  String get groupCurrent => '当前';
+
+  @override
+  String get groupAssign => '设置';
+
+  @override
+  String get chatTabFiles => '文件';
+
+  @override
+  String get fileParent => '上级目录';
+
+  @override
+  String get fileDownload => '下载文件';
+
+  @override
+  String get fileUnlock => '打开';
+
+  @override
+  String get fileListEmpty => '此频道暂无文件';
+
+  @override
+  String get fileDownloadFailed => '文件下载或保存失败，请重试';
+
+  @override
+  String get fileDownloadSaved => '文件已保存';
+
+  @override
+  String fileSizeBytes(int count) {
+    return '$count 字节';
+  }
+
+  @override
+  String get fileConnectionChanged => '连接已变化，请重新下载';
+
+  @override
+  String get fileCleanupFailed => '临时下载文件未能清理';
+
+  @override
+  String get kickChannel => '踢出频道';
+
+  @override
+  String get kickServer => '踢出服务器';
+
+  @override
+  String kickChannelConfirm(String nickname) {
+    return '将 $nickname 移出当前频道？对方将返回服务器默认频道。';
+  }
+
+  @override
+  String kickServerConfirm(String nickname) {
+    return '将 $nickname 踢出服务器？此操作不会封禁对方。';
+  }
+
+  @override
+  String get kickReason => '原因（可选）';
+
+  @override
+  String get kickConfirm => '确认踢出';
+
+  @override
+  String kickSent(String nickname) {
+    return '已踢出 $nickname';
+  }
+
+  @override
+  String get kickTargetUnavailable => '成员已离线或更换频道，请重新选择';
+
+  @override
+  String get kickConnectionChanged => '连接已变化，请关闭后重新操作';
 }

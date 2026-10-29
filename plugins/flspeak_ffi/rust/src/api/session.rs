@@ -30,6 +30,7 @@ pub struct ServerProfileView {
 
 #[derive(Debug, Clone)]
 pub struct ChannelView {
+    pub icon_id: Option<u32>,
     pub id: u64,
     pub parent_id: u64,
     pub order: Option<u64>,
@@ -60,6 +61,7 @@ pub struct ClientView {
 pub struct CoreMessage {
     pub from: String,
     pub from_uid: String,
+    pub from_id: i32,
     pub message: String,
     pub target_mode: i32,
     pub target_id: u64,
@@ -108,6 +110,7 @@ pub enum CoreSessionState {
 /// 送往 Dart 的事件。语音帧不走这里，它在 Rust 侧直接进音频后端。
 #[derive(Debug, Clone)]
 pub enum CoreEvent {
+    AccessChanged,
     State {
         state: CoreSessionState,
     },
@@ -124,10 +127,15 @@ pub enum CoreEvent {
     TextMessage {
         from: String,
         from_uid: String,
+        from_id: i32,
         message: String,
         target_mode: i32,
         target_id: u64,
         at: u64,
+    },
+    Poked {
+        from: String,
+        message: String,
     },
     ClientJoined {
         id: i32,
@@ -202,13 +210,60 @@ pub enum CoreEvent {
 #[derive(Debug, Clone)]
 pub enum CoreError {
     /// 地址为空、格式非法或不是 IP/域名。
-    InvalidAddress { message: String },
+    InvalidAddress {
+        message: String,
+    },
     /// 地址或图片主机被最终连接边界拒绝。
-    BlockedAddress { message: String },
+    BlockedAddress {
+        message: String,
+    },
     /// 建连或协议层失败。
-    Connection { message: String },
+    Connection {
+        message: String,
+    },
+    ChannelPasswordRequired {
+        message: String,
+    },
     /// 桥自身的问题。
-    Internal { message: String },
+    Internal {
+        message: String,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub struct AccessView {
+    pub member_add_power: Option<i32>,
+    pub member_remove_power: Option<i32>,
+    pub kick_channel_power: Option<i32>,
+    pub kick_server_power: Option<i32>,
+    pub connection_epoch: Option<u64>,
+}
+#[derive(Debug, Clone)]
+pub enum KickTarget {
+    Channel,
+    Server,
+}
+#[derive(Debug, Clone)]
+pub enum GroupKind {
+    Server,
+    Channel,
+}
+#[derive(Debug, Clone)]
+pub struct MemberGroupView {
+    pub channel_id: u64,
+    pub id: u64,
+    pub name: String,
+    pub kind: GroupKind,
+    pub member: bool,
+    pub can_add: bool,
+    pub can_remove: bool,
+}
+#[derive(Debug, Clone)]
+pub struct ChannelFileView {
+    pub name: String,
+    pub path: String,
+    pub directory: bool,
+    pub size: u64,
 }
 
 /// Dart 侧持有的核心句柄。
@@ -219,9 +274,14 @@ pub struct CoreSession {
 
 impl CoreSession {
     #[frb(sync)]
-    pub fn new(store_path: String) -> Result<CoreSession, CoreError> {
+    pub fn new(store_path: String, audio_enabled: Option<bool>) -> Result<CoreSession, CoreError> {
         Ok(CoreSession {
-            handle: SessionHandle::spawn(PathBuf::from(store_path))?,
+            handle: SessionHandle::spawn_with_options(
+                PathBuf::from(store_path),
+                session::SessionOptions {
+                    audio: audio_enabled.unwrap_or(true),
+                },
+            )?,
         })
     }
 
@@ -288,6 +348,10 @@ impl CoreSession {
             .handle
             .send_text(target_mode, target_id, message)
             .await?)
+    }
+
+    pub async fn poke(&self, client_id: i32, message: String) -> Result<(), CoreError> {
+        Ok(self.handle.poke(client_id, message).await?)
     }
 
     pub async fn move_to_channel(
@@ -371,6 +435,112 @@ impl CoreSession {
             .await?)
     }
 
+    pub async fn fetch_icon(&self, icon_id: u32) -> Result<Vec<u8>, CoreError> {
+        Ok(self.handle.fetch_icon(icon_id).await?)
+    }
+
+    pub async fn access(&self) -> Result<AccessView, CoreError> {
+        let access = self.handle.access().await?;
+        Ok(AccessView {
+            member_add_power: access.member_add_power,
+            member_remove_power: access.member_remove_power,
+            kick_channel_power: access.kick_channel_power,
+            kick_server_power: access.kick_server_power,
+            connection_epoch: access.connection_epoch,
+        })
+    }
+    pub async fn kick(
+        &self,
+        uid: String,
+        client_id: i32,
+        channel_id: u64,
+        target: KickTarget,
+        reason: String,
+        connection_epoch: u64,
+    ) -> Result<(), CoreError> {
+        self.handle
+            .kick(
+                uid,
+                client_id,
+                channel_id,
+                match target {
+                    KickTarget::Channel => session::KickTarget::Channel,
+                    KickTarget::Server => session::KickTarget::Server,
+                },
+                reason,
+                connection_epoch,
+            )
+            .await?;
+        Ok(())
+    }
+    pub async fn member_groups(
+        &self,
+        uid: String,
+        client_id: i32,
+    ) -> Result<Vec<MemberGroupView>, CoreError> {
+        Ok(self
+            .handle
+            .member_groups(uid, client_id)
+            .await?
+            .into_iter()
+            .map(|g| MemberGroupView {
+                channel_id: g.channel_id,
+                id: g.id,
+                name: g.name,
+                kind: match g.kind {
+                    session::GroupKind::Server => GroupKind::Server,
+                    session::GroupKind::Channel => GroupKind::Channel,
+                },
+                member: g.member,
+                can_add: g.can_add,
+                can_remove: g.can_remove,
+            })
+            .collect())
+    }
+    pub async fn set_member_group(
+        &self,
+        uid: String,
+        client_id: i32,
+        group_id: u64,
+        channel_id: u64,
+        kind: GroupKind,
+        enabled: bool,
+    ) -> Result<(), CoreError> {
+        self.handle
+            .set_member_group(
+                uid,
+                client_id,
+                group_id,
+                channel_id,
+                match kind {
+                    GroupKind::Server => session::GroupKind::Server,
+                    GroupKind::Channel => session::GroupKind::Channel,
+                },
+                enabled,
+            )
+            .await?;
+        Ok(())
+    }
+    pub async fn list_files(
+        &self,
+        channel_id: u64,
+        path: String,
+        password: Option<String>,
+    ) -> Result<Vec<ChannelFileView>, CoreError> {
+        Ok(self
+            .handle
+            .list_files(channel_id, path, password.unwrap_or_default())
+            .await?
+            .into_iter()
+            .map(|f| ChannelFileView {
+                name: f.name,
+                path: f.path,
+                directory: f.directory,
+                size: f.size,
+            })
+            .collect())
+    }
+
     pub async fn download_file(
         &self,
         remote_path: String,
@@ -391,19 +561,38 @@ impl CoreSession {
 
 /// 抓取第三方图片 URL。myTS 的 `ts.file.myts` 附件不经过这里。
 pub async fn fetch_image(url: String) -> Result<Vec<u8>, CoreError> {
-    session::fetch_image(&url).await.map_err(|err| match err {
-        session::ImageError::InvalidUrl(_) => CoreError::InvalidAddress {
-            message: err.to_string(),
-        },
-        session::ImageError::BlockedHost(_) | session::ImageError::BlockedAddress(_) => {
-            CoreError::BlockedAddress {
+    Ok(session::fetch_image(&url).await?)
+}
+
+pub fn validate_image_host(upload_base: String, public_base: String) -> Result<(), CoreError> {
+    Ok(session::validate_image_host(&upload_base, &public_base)?)
+}
+
+pub async fn upload_image(
+    upload_base: String,
+    public_base: String,
+    token: Option<String>,
+    bytes: Vec<u8>,
+) -> Result<String, CoreError> {
+    Ok(session::upload_image(&upload_base, &public_base, token.as_deref(), bytes).await?)
+}
+
+impl From<session::ImageError> for CoreError {
+    fn from(err: session::ImageError) -> Self {
+        match err {
+            session::ImageError::InvalidUrl(_) => CoreError::InvalidAddress {
                 message: err.to_string(),
+            },
+            session::ImageError::BlockedHost(_) | session::ImageError::BlockedAddress(_) => {
+                CoreError::BlockedAddress {
+                    message: err.to_string(),
+                }
             }
+            _ => CoreError::Connection {
+                message: err.to_string(),
+            },
         }
-        _ => CoreError::Connection {
-            message: err.to_string(),
-        },
-    })
+    }
 }
 
 fn runtime() -> Result<&'static Runtime, CoreError> {
@@ -439,6 +628,7 @@ impl From<ServerProfileCore> for ServerProfileView {
 impl From<CoreChannelView> for ChannelView {
     fn from(view: CoreChannelView) -> Self {
         Self {
+            icon_id: view.icon_id,
             id: view.id,
             parent_id: view.parent_id,
             order: view.order,
@@ -471,6 +661,7 @@ impl From<CoreTextMessage> for CoreMessage {
         Self {
             from: message.from,
             from_uid: message.from_uid,
+            from_id: message.from_id,
             message: message.message,
             target_mode: message.target_mode,
             target_id: message.target_id,
@@ -544,6 +735,7 @@ impl From<session::AudioDevicesView> for AudioDevicesView {
 impl From<SessionEvent> for CoreEvent {
     fn from(event: SessionEvent) -> Self {
         match event {
+            SessionEvent::AccessChanged => CoreEvent::AccessChanged,
             SessionEvent::State(state) => CoreEvent::State {
                 state: state.into(),
             },
@@ -560,11 +752,13 @@ impl From<SessionEvent> for CoreEvent {
             SessionEvent::TextMessage(message) => CoreEvent::TextMessage {
                 from: message.from,
                 from_uid: message.from_uid,
+                from_id: message.from_id,
                 message: message.message,
                 target_mode: message.target_mode,
                 target_id: message.target_id,
                 at: message.at,
             },
+            SessionEvent::Poked { from, message } => CoreEvent::Poked { from, message },
             SessionEvent::ClientJoined(client) => CoreEvent::ClientJoined {
                 id: client.id,
                 nickname: client.nickname,
@@ -638,6 +832,9 @@ impl From<SessionError> for CoreError {
                 message: err.to_string(),
             },
             SessionError::Connect(ConnectError::Blocked { .. }) => CoreError::BlockedAddress {
+                message: err.to_string(),
+            },
+            SessionError::ChannelPasswordRequired => CoreError::ChannelPasswordRequired {
                 message: err.to_string(),
             },
             SessionError::Closed | SessionError::Spawn(_) => CoreError::Internal {

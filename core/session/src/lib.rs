@@ -8,8 +8,13 @@
 //! `Client::send_voice`；音频帧本身不进入这条事件流。
 
 mod actor;
+mod downloads;
+mod image_upload;
 mod images;
 mod store;
+
+mod channel_tools;
+pub use channel_tools::{AccessView, ChannelFileView, GroupKind, KickTarget, MemberGroupView};
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -20,6 +25,7 @@ use tokio::runtime::Builder;
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::task::LocalSet;
 
+pub use image_upload::{upload_image, validate_image_host};
 pub use images::{ImageError, fetch_image};
 pub use proto::ConnectError;
 
@@ -58,6 +64,7 @@ pub struct TextMessageView {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChannelView {
+    pub icon_id: Option<u32>,
     pub id: u64,
     pub parent_id: u64,
     /// TeamSpeak 的同级排序位置；频道标志不可读时为空。
@@ -128,6 +135,11 @@ pub enum SessionEvent {
         messages: Vec<TextMessageView>,
     },
     TextMessage(TextMessageView),
+    AccessChanged,
+    Poked {
+        from: String,
+        message: String,
+    },
     ClientJoined(ClientView),
     ClientLeft {
         id: i32,
@@ -224,6 +236,11 @@ pub enum SessionCommand {
         message: String,
         reply: oneshot::Sender<Result<(), SessionError>>,
     },
+    Poke {
+        client_id: i32,
+        message: String,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
     Move {
         client_id: i32,
         channel_id: u64,
@@ -294,6 +311,42 @@ pub enum SessionCommand {
         password: Option<String>,
         reply: oneshot::Sender<Result<u64, SessionError>>,
     },
+    FetchIcon {
+        icon_id: u32,
+        reply: oneshot::Sender<Result<Vec<u8>, SessionError>>,
+    },
+    Access {
+        reply: oneshot::Sender<Result<AccessView, SessionError>>,
+    },
+    Kick {
+        uid: String,
+        client_id: i32,
+        channel_id: u64,
+        target: KickTarget,
+        reason: String,
+        connection_epoch: u64,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
+    MemberGroups {
+        uid: String,
+        client_id: i32,
+        reply: oneshot::Sender<Result<Vec<MemberGroupView>, SessionError>>,
+    },
+    SetMemberGroup {
+        uid: String,
+        client_id: i32,
+        group_id: u64,
+        channel_id: u64,
+        kind: GroupKind,
+        enabled: bool,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
+    ListFiles {
+        channel_id: u64,
+        path: String,
+        password: String,
+        reply: oneshot::Sender<Result<Vec<ChannelFileView>, SessionError>>,
+    },
     Shutdown,
 }
 
@@ -325,6 +378,9 @@ pub enum SessionError {
 
     #[error("尚未连接到服务器")]
     NotConnected,
+
+    #[error("频道密码错误或需要密码")]
+    ChannelPasswordRequired,
 
     #[error("尚未进入频道")]
     NotInChannel,
@@ -370,7 +426,6 @@ impl SessionHandle {
     ) -> Result<Self, SessionError> {
         let (commands, command_rx) = mpsc::unbounded_channel();
         let (events, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
-        let (signals, signal_rx) = mpsc::unbounded_channel();
         let (audio_events, audio_rx) = mpsc::channel(actor::AUDIO_EVENT_CAPACITY);
         let voice = audio::engine::VoiceEngine::spawn(move |event| {
             let _ = audio_events.try_send(event);
@@ -417,8 +472,6 @@ impl SessionHandle {
                         registry,
                         events,
                         commands,
-                        signals,
-                        signal_rx,
                         voice,
                         audio_rx,
                         options.audio,
@@ -502,6 +555,16 @@ impl SessionHandle {
         self.send(SessionCommand::SendText {
             target_mode,
             target_id,
+            message,
+            reply,
+        })?;
+        rx.await.map_err(|_| SessionError::Closed)?
+    }
+
+    pub async fn poke(&self, client_id: i32, message: String) -> Result<(), SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::Poke {
+            client_id,
             message,
             reply,
         })?;
@@ -624,6 +687,82 @@ impl SessionHandle {
         rx.await.map_err(|_| SessionError::Closed)?
     }
 
+    pub async fn access(&self) -> Result<AccessView, SessionError> {
+        let (reply, response) = oneshot::channel();
+        self.send(SessionCommand::Access { reply })?;
+        response.await.map_err(|_| SessionError::Closed)?
+    }
+    pub async fn kick(
+        &self,
+        uid: String,
+        client_id: i32,
+        channel_id: u64,
+        target: KickTarget,
+        reason: String,
+        connection_epoch: u64,
+    ) -> Result<(), SessionError> {
+        let (reply, response) = oneshot::channel();
+        self.send(SessionCommand::Kick {
+            uid,
+            client_id,
+            channel_id,
+            target,
+            reason,
+            connection_epoch,
+            reply,
+        })?;
+        response.await.map_err(|_| SessionError::Closed)?
+    }
+    pub async fn member_groups(
+        &self,
+        uid: String,
+        client_id: i32,
+    ) -> Result<Vec<MemberGroupView>, SessionError> {
+        let (reply, response) = oneshot::channel();
+        self.send(SessionCommand::MemberGroups {
+            uid,
+            client_id,
+            reply,
+        })?;
+        response.await.map_err(|_| SessionError::Closed)?
+    }
+    pub async fn set_member_group(
+        &self,
+        uid: String,
+        client_id: i32,
+        group_id: u64,
+        channel_id: u64,
+        kind: GroupKind,
+        enabled: bool,
+    ) -> Result<(), SessionError> {
+        let (reply, response) = oneshot::channel();
+        self.send(SessionCommand::SetMemberGroup {
+            uid,
+            client_id,
+            group_id,
+            channel_id,
+            kind,
+            enabled,
+            reply,
+        })?;
+        response.await.map_err(|_| SessionError::Closed)?
+    }
+    pub async fn list_files(
+        &self,
+        channel_id: u64,
+        path: String,
+        password: String,
+    ) -> Result<Vec<ChannelFileView>, SessionError> {
+        let (reply, response) = oneshot::channel();
+        self.send(SessionCommand::ListFiles {
+            channel_id,
+            path,
+            password,
+            reply,
+        })?;
+        response.await.map_err(|_| SessionError::Closed)?
+    }
+
     pub async fn download_file(
         &self,
         remote_path: String,
@@ -639,6 +778,12 @@ impl SessionHandle {
             password,
             reply,
         })?;
+        rx.await.map_err(|_| SessionError::Closed)?
+    }
+
+    pub async fn fetch_icon(&self, icon_id: u32) -> Result<Vec<u8>, SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::FetchIcon { icon_id, reply })?;
         rx.await.map_err(|_| SessionError::Closed)?
     }
 
@@ -670,5 +815,25 @@ mod tests {
         handle.shutdown().await.expect("shutdown");
         tokio::time::sleep(Duration::from_millis(50)).await;
         let _ = tokio::fs::remove_dir_all(&dir).await;
+    }
+    #[tokio::test]
+    async fn kick_rejects_another_connection_before_any_protocol_operation() {
+        let dir = std::env::temp_dir().join(format!("flspeak-kick-test-{}", rand::random::<u64>()));
+        let handle = SessionHandle::spawn_with_options(
+            dir.join("servers.json"),
+            SessionOptions { audio: false },
+        )
+        .unwrap();
+        assert!(
+            matches!(handle.kick("peer".into(), 2, 5, KickTarget::Server, String::new(), u64::MAX).await, Err(SessionError::Protocol(message)) if message == "connection changed")
+        );
+        assert!(matches!(
+            handle
+                .kick("peer".into(), 2, 5, KickTarget::Channel, String::new(), 0)
+                .await,
+            Err(SessionError::NotConnected)
+        ));
+        handle.shutdown().await.unwrap();
+        let _ = tokio::fs::remove_dir_all(dir).await;
     }
 }

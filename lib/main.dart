@@ -8,9 +8,11 @@ import 'app.dart';
 import 'core/preferences.dart';
 import 'core/providers.dart';
 import 'core/store_path.dart';
+import 'core/window_chrome.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  WindowChrome.attach();
   if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
     // Android 15 起系统强制 edge-to-edge；旧版本也统一成同一套 inset 行为，
     // 页面里的 SafeArea 才能在所有版本上对齐。

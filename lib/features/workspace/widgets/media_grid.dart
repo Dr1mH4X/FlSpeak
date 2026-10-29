@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/remote_image.dart';
 import 'media_viewer.dart';
 
 /// 频道媒体墙：把聊天里出现过的图片按顺序铺成方格，点击进入全屏浏览。
 ///
-/// 没有上传入口——媒体服务不在自托管范围内，这里只做展示。
+/// 展示已收到的 URL 图片；本地图片由聊天输入框上传。
 class MediaGrid extends StatelessWidget {
   const MediaGrid({required this.urls, required this.onOpen, super.key});
 
@@ -84,47 +85,13 @@ class _MediaTile extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,
-          child: Image.network(
-            url,
+          child: RemoteImage(
+            url: url,
             width: double.infinity,
             height: double.infinity,
             fit: BoxFit.cover,
-            loadingBuilder: (context, child, progress) => progress == null
-                ? child
-                : const _TilePlaceholder(loading: true),
-            errorBuilder: (context, error, stackTrace) =>
-                const _TilePlaceholder(loading: false),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _TilePlaceholder extends StatelessWidget {
-  const _TilePlaceholder({required this.loading});
-
-  final bool loading;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    return ColoredBox(
-      color: scheme.surfaceContainer,
-      child: Center(
-        child: loading
-            ? SizedBox.square(
-                dimension: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: scheme.onSurfaceVariant,
-                ),
-              )
-            : Icon(
-                Icons.broken_image_rounded,
-                size: 24,
-                color: scheme.onSurfaceVariant,
-              ),
       ),
     );
   }
