@@ -96,6 +96,24 @@ class _Core extends Fake implements CoreSession {
     pokes.add((id: clientId, message: message));
   }
 
+  int accessCalls = 0;
+  int memberGroupsCalls = 0;
+
+  @override
+  Future<AccessView> access() async {
+    accessCalls++;
+    return const AccessView(kickChannelPower: 10, kickServerPower: 10);
+  }
+
+  @override
+  Future<List<MemberGroupView>> memberGroups({
+    required String uid,
+    int? clientId,
+  }) async {
+    memberGroupsCalls++;
+    return const [];
+  }
+
   @override
   Stream<CoreEvent> events() => eventsController.stream;
   @override
@@ -438,5 +456,75 @@ void main() {
       isTrue,
     );
     expect(core.groupUpdates.single.clientId, 3);
+  });
+
+  test('sessionAccessProvider and memberGroupsProvider update via accessRevision without circular dependency', () async {
+    final events = StreamController<CoreEvent>.broadcast(sync: true);
+    final core = _Core(events);
+    final container = ProviderContainer(
+      overrides: [coreSessionProvider.overrideWithValue(core)],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await events.close();
+    });
+
+    final controller = container.read(sessionViewProvider.notifier);
+    final accessSub = container.listen(sessionAccessProvider, (_, _) {});
+    final groupsSub = container.listen(
+      memberGroupsProvider((clientId: 2, uid: 'peer')),
+      (_, _) {},
+    );
+    addTearDown(() {
+      accessSub.close();
+      groupsSub.close();
+    });
+
+    expect(container.read(sessionViewProvider).accessRevision, 0);
+
+    events.add(
+      const CoreEvent.state(
+        state: CoreSessionState.connected(clientId: 1, channelId: 5),
+      ),
+    );
+    await pumpEventQueue();
+
+    events.add(
+      const CoreEvent.snapshot(
+        channels: [],
+        clients: [
+          ClientView(id: 1, nickname: 'Me', uid: 'self', channelId: 5),
+          ClientView(id: 2, nickname: 'Peer', uid: 'peer', channelId: 5),
+        ],
+      ),
+    );
+    await pumpEventQueue();
+    expect(container.read(sessionViewProvider).accessRevision, 1);
+    expect(core.accessCalls, greaterThanOrEqualTo(1));
+
+    final previousAccessCalls = core.accessCalls;
+    events.add(const CoreEvent.accessChanged());
+    await pumpEventQueue();
+    expect(container.read(sessionViewProvider).accessRevision, 2);
+    expect(core.accessCalls, greaterThan(previousAccessCalls));
+
+    const group = MemberGroupView(
+      channelId: 5,
+      id: 9,
+      name: 'Voice',
+      kind: GroupKind.channel,
+      member: false,
+      canAdd: true,
+      canRemove: true,
+    );
+    expect(
+      await controller.setMemberGroup('peer', group, true, clientId: 2),
+      isTrue,
+    );
+    expect(container.read(sessionViewProvider).accessRevision, 3);
+
+    events.add(const CoreEvent.state(state: CoreSessionState.disconnected()));
+    await pumpEventQueue();
+    expect(container.read(sessionViewProvider).accessRevision, 3);
   });
 }

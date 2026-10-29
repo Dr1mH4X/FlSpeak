@@ -71,6 +71,7 @@ class SessionView {
     this.busy = false,
     this.failureSeq = 0,
     this.connectionEpoch = 0,
+    this.accessRevision = 0,
     this.muted = false,
     this.deafened = false,
     this.away = false,
@@ -139,6 +140,9 @@ class SessionView {
   final int failureSeq;
 
   final int connectionEpoch;
+
+  /// 权限与成员组快照的单调递增版本号；用于通知下游衍生 Provider 触发重查。
+  final int accessRevision;
 
   /// 自己是否处于静音/聋听状态；由 Rust 的 Voice 事件确认。
   final bool muted;
@@ -292,6 +296,7 @@ class SessionView {
     bool? busy,
     int? failureSeq,
     int? connectionEpoch,
+    int? accessRevision,
     bool? muted,
     bool? deafened,
     bool? away,
@@ -322,6 +327,7 @@ class SessionView {
     busy: busy ?? this.busy,
     failureSeq: failureSeq ?? this.failureSeq,
     connectionEpoch: connectionEpoch ?? this.connectionEpoch,
+    accessRevision: accessRevision ?? this.accessRevision,
     muted: muted ?? this.muted,
     deafened: deafened ?? this.deafened,
     away: away ?? this.away,

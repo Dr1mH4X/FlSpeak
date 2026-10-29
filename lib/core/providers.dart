@@ -48,7 +48,8 @@ final sessionAccessProvider = FutureProvider.autoDispose<AccessView>((
 ) async {
   final target = ref.watch(
     sessionViewProvider.select(
-      (v) => (v.connected, v.connectionEpoch, v.selfChannelId),
+      (v) =>
+          (v.connected, v.connectionEpoch, v.selfChannelId, v.accessRevision),
     ),
   );
   if (!target.$1) return const AccessView();
@@ -61,7 +62,12 @@ final memberGroupsProvider = FutureProvider.autoDispose
     .family<List<MemberGroupView>, MemberGroupTarget>((ref, target) {
       ref.watch(
         sessionViewProvider.select(
-          (v) => (v.connectionEpoch, v.selfChannelId, v.connected),
+          (v) => (
+            v.connectionEpoch,
+            v.selfChannelId,
+            v.connected,
+            v.accessRevision,
+          ),
         ),
       );
       return ref
@@ -437,9 +443,8 @@ class SessionController extends Notifier<SessionView> {
             enabled: enabled,
           ),
     );
-    if (ref.mounted) {
-      ref.invalidate(memberGroupsProvider(target));
-      ref.invalidate(sessionAccessProvider);
+    if (sent && ref.mounted) {
+      state = state.copyWith(accessRevision: state.accessRevision + 1);
     }
     return sent;
   }
@@ -624,8 +629,7 @@ class SessionController extends Notifier<SessionView> {
     final current = state;
     switch (event) {
       case CoreEvent_AccessChanged():
-        ref.invalidate(sessionAccessProvider);
-        ref.invalidate(memberGroupsProvider);
+        state = current.copyWith(accessRevision: current.accessRevision + 1);
       case CoreEvent_State(state: final next):
         if (next is CoreSessionState_Disconnected) {
           // 采集/播放随断开停止，电平流不会再来新样本；主动清零，
@@ -659,8 +663,11 @@ class SessionController extends Notifier<SessionView> {
       case CoreEvent_Servers(:final profiles):
         state = current.copyWith(servers: profiles);
       case CoreEvent_Snapshot(:final channels, :final clients):
-        ref.invalidate(sessionAccessProvider);
-        state = current.copyWith(channels: channels, clients: clients);
+        state = current.copyWith(
+          channels: channels,
+          clients: clients,
+          accessRevision: current.accessRevision + 1,
+        );
       case CoreEvent_History(:final messages):
         state = current.copyWith(
           messages: messages.map(ChatMessage.fromCore).toList(),
