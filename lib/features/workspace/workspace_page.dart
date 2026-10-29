@@ -259,40 +259,6 @@ class _ChannelHeader extends StatelessWidget {
   final String? channelName;
   final TabController tabController;
 
-  /// 三个页签的文字宽度随语言和字号变化；放不下时退回「图标 + 语义标签」，
-  /// 否则英文长标签或放大字号会把标题挤成零宽。
-  bool _tabsFit(
-    BuildContext context,
-    double availableWidth,
-    List<_TabSpec> tabs,
-  ) {
-    final style = context.texts.labelMedium?.copyWith(
-      fontSize: 13,
-      fontWeight: FontWeight.w500,
-    );
-    final direction = Directionality.of(context);
-    final scaler = MediaQuery.textScalerOf(context);
-    var tabWidth = 0.0;
-    for (final tab in tabs) {
-      final painter = TextPainter(
-        text: TextSpan(text: tab.label, style: style),
-        textDirection: direction,
-        textScaler: scaler,
-        maxLines: 1,
-      )..layout();
-      tabWidth += 16 + 6 + painter.width + 36; // 图标 + 间距 + 左右内边距
-    }
-    final chrome =
-        2 * (compact ? 8.0 : 24.0) +
-        (compact ? Sizes.touch + 8 : 0) +
-        20 +
-        6 +
-        6;
-    // 标题至少要留出两三个字的位置，否则宁可用图标页签保住频道名。
-    const minTitleWidth = 64.0;
-    return tabWidth <= availableWidth - chrome - minTitleWidth;
-  }
-
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -306,55 +272,44 @@ class _ChannelHeader extends StatelessWidget {
           bottom: BorderSide(color: context.scheme.outlineVariant),
         ),
       ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final tabs = _tabSpecs(l10n);
-          final labeledTabs =
-              hasChannel && _tabsFit(context, constraints.maxWidth, tabs);
-          return Padding(
-            padding: EdgeInsets.symmetric(horizontal: horizontal),
-            child: Row(
-              children: [
-                if (compact) ...[
-                  IconButton(
-                    onPressed: () => Scaffold.of(context).openDrawer(),
-                    style: IconButton.styleFrom(
-                      minimumSize: const Size(Sizes.touch, Sizes.touch),
-                    ),
-                    icon: Icon(
-                      Icons.menu_rounded,
-                      size: 24,
-                      semanticLabel: l10n.workspaceOpenMenu,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                Expanded(
-                  child: Semantics(
-                    header: true,
-                    child: Text(
-                      channelName ?? l10n.appName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: context.texts.titleMedium?.copyWith(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: horizontal),
+        child: Row(
+          children: [
+            if (compact) ...[
+              IconButton(
+                onPressed: () => Scaffold.of(context).openDrawer(),
+                style: IconButton.styleFrom(
+                  minimumSize: const Size(Sizes.touch, Sizes.touch),
+                ),
+                icon: Icon(
+                  Icons.menu_rounded,
+                  size: 24,
+                  semanticLabel: l10n.workspaceOpenMenu,
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+            Expanded(
+              child: Semantics(
+                header: true,
+                child: Text(
+                  channelName ?? l10n.appName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.texts.titleMedium?.copyWith(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
-                if (hasChannel) ...[
-                  const SizedBox(width: 6),
-                  _ViewTabs(
-                    tabs: tabs,
-                    controller: tabController,
-                    labeled: labeledTabs,
-                  ),
-                ],
-              ],
+              ),
             ),
-          );
-        },
+            if (hasChannel) ...[
+              const SizedBox(width: 6),
+              _ViewTabs(tabs: _tabSpecs(l10n), controller: tabController),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -363,15 +318,10 @@ class _ChannelHeader extends StatelessWidget {
 /// 频道头里的视图切换：M3 primary tabs（`TabBar`），是同级视图切换的规范组件，
 /// 指示器动画与语义由组件自带。
 class _ViewTabs extends StatelessWidget {
-  const _ViewTabs({
-    required this.tabs,
-    required this.controller,
-    required this.labeled,
-  });
+  const _ViewTabs({required this.tabs, required this.controller});
 
   final List<_TabSpec> tabs;
   final TabController controller;
-  final bool labeled;
 
   @override
   Widget build(BuildContext context) {
@@ -386,16 +336,7 @@ class _ViewTabs extends StatelessWidget {
         for (final tab in tabs)
           Tab(
             height: 48,
-            child: labeled
-                ? Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(tab.icon, size: 16),
-                      const SizedBox(width: 6),
-                      Text(tab.label, maxLines: 1),
-                    ],
-                  )
-                : Icon(tab.icon, size: 18, semanticLabel: tab.label),
+            child: Icon(tab.icon, size: 18, semanticLabel: tab.label),
           ),
       ],
     );
