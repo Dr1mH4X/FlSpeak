@@ -12,7 +12,7 @@ import '../../widgets/common.dart';
 import '../settings/widgets/image_host_dialog.dart';
 import 'widgets/chat_pane.dart';
 import 'widgets/channel_files_pane.dart';
-import 'widgets/channel_details_dialog.dart';
+import 'widgets/channel_details_pane.dart';
 import 'widgets/media_grid.dart';
 import 'widgets/media_viewer.dart';
 import 'widgets/members_pane.dart';
@@ -26,13 +26,13 @@ class WorkspacePage extends ConsumerStatefulWidget {
   ConsumerState<WorkspacePage> createState() => _WorkspacePageState();
 }
 
-enum _MainTab { chat, media, files }
+enum _MainTab { chat, media, files, details }
 
 class _WorkspacePageState extends ConsumerState<WorkspacePage>
     with SingleTickerProviderStateMixin {
   // M3 primary tabs：页签状态由 TabController 持有，指示器动画随组件自带。
   late final TabController _tabController = TabController(
-    length: 3,
+    length: 4,
     vsync: this,
   )..addListener(_handleTabChanged);
   _MainTab _tab = _MainTab.chat;
@@ -57,22 +57,6 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
     final l10n = AppLocalizations.of(context);
     final view = ref.watch(sessionViewProvider);
     final channelId = ref.watch(activeChannelIdProvider);
-
-    // 换频道时回到消息页，和原型一致；延迟一帧避免在构建期触发 setState。
-    ref.listen<int?>(activeChannelIdProvider, (previous, next) {
-      if (previous == next || _tabController.index == 0) {
-        return;
-      }
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _tabController.index != 0) {
-          if (MediaQuery.disableAnimationsOf(context)) {
-            _tabController.index = 0;
-          } else {
-            _tabController.animateTo(0);
-          }
-        }
-      });
-    });
 
     ref.listen(
       sessionViewProvider.select(
@@ -193,6 +177,11 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
 
     final controller = ref.read(sessionViewProvider.notifier);
     switch (_tab) {
+      case _MainTab.details:
+        return ChannelDetailsPane(
+          key: ValueKey((channel.id, channel.iconId, channel.name)),
+          channel: channel,
+        );
       case _MainTab.files:
         return ChannelFilesPane(
           key: ValueKey((view.connectionEpoch, channel.id)),
@@ -264,6 +253,11 @@ List<_TabSpec> _tabSpecs(AppLocalizations l10n) => [
     label: l10n.chatTabFiles,
     icon: Icons.folder_rounded,
   ),
+  _TabSpec(
+    tab: _MainTab.details,
+    label: l10n.channelDetails,
+    icon: Icons.info_outline_rounded,
+  ),
 ];
 
 class _ChannelHeader extends StatelessWidget {
@@ -302,7 +296,7 @@ class _ChannelHeader extends StatelessWidget {
                 ),
                 icon: Icon(
                   Icons.menu_rounded,
-                  size: 24,
+                  size: IconSizes.standard,
                   semanticLabel: l10n.workspaceOpenMenu,
                 ),
               ),
@@ -325,18 +319,6 @@ class _ChannelHeader extends StatelessWidget {
             if (hasChannel) ...[
               const SizedBox(width: 6),
               _ViewTabs(tabs: _tabSpecs(l10n), controller: tabController),
-              const SizedBox(width: 4),
-              IconButton(
-                onPressed: () => showChannelDetailsDialog(context, channel!),
-                style: IconButton.styleFrom(
-                  minimumSize: const Size(Sizes.touch, Sizes.touch),
-                ),
-                icon: Icon(
-                  Icons.info_outline_rounded,
-                  size: 20,
-                  semanticLabel: l10n.channelDetails,
-                ),
-              ),
             ],
           ],
         ),
@@ -366,7 +348,11 @@ class _ViewTabs extends StatelessWidget {
         for (final tab in tabs)
           Tab(
             height: 48,
-            child: Icon(tab.icon, size: 18, semanticLabel: tab.label),
+            child: Icon(
+              tab.icon,
+              size: IconSizes.medium,
+              semanticLabel: tab.label,
+            ),
           ),
       ],
     );
@@ -395,7 +381,7 @@ class _IdentityBanner extends StatelessWidget {
         children: [
           Icon(
             Icons.workspace_premium_rounded,
-            size: 18,
+            size: IconSizes.medium,
             color: scheme.onSecondaryContainer,
           ),
           const SizedBox(width: 8),
@@ -474,7 +460,7 @@ class _DeviceChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: scheme.onErrorContainer),
+          Icon(icon, size: IconSizes.state, color: scheme.onErrorContainer),
           const SizedBox(width: 6),
           Flexible(
             child: Text(

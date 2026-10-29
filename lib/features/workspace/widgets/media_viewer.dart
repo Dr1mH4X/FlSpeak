@@ -138,7 +138,7 @@ class _MediaViewerState extends State<MediaViewer> {
                       ),
                       icon: Icon(
                         Icons.close_rounded,
-                        size: 24,
+                        size: IconSizes.standard,
                         semanticLabel: l10n.commonClose,
                       ),
                     ),
@@ -260,7 +260,7 @@ class _ViewerNavButton extends StatelessWidget {
             foregroundColor: _viewerForeground,
             minimumSize: const Size(48, 48),
           ),
-          icon: Icon(icon, size: 26, semanticLabel: label),
+          icon: Icon(icon, size: IconSizes.standard, semanticLabel: label),
         ),
       ),
     );

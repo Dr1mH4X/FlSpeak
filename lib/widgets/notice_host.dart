@@ -247,7 +247,11 @@ class _NoticeCardState extends State<_NoticeCard> {
                   Padding(
                     padding: const EdgeInsets.only(top: 1),
                     child: ExcludeSemantics(
-                      child: Icon(icon, size: 16, color: foreground),
+                      child: Icon(
+                        icon,
+                        size: IconSizes.small,
+                        color: foreground,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -263,7 +267,7 @@ class _NoticeCardState extends State<_NoticeCard> {
                   SizedBox.square(
                     dimension: Sizes.touch,
                     child: IconButton(
-                      iconSize: 16,
+                      iconSize: IconSizes.small,
                       padding: EdgeInsets.zero,
                       color: foreground,
                       onPressed: _dismiss,

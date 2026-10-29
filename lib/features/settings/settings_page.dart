@@ -148,7 +148,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               onPressed: () => unawaited(_copyStorePath(storePath)),
               icon: Icon(
                 Icons.copy_rounded,
-                size: 18,
+                size: IconSizes.medium,
                 semanticLabel: l10n.commonCopy,
               ),
               padding: EdgeInsets.zero,
@@ -260,7 +260,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                       context.scheme.primaryContainer,
                                   selectedColor:
                                       context.scheme.onPrimaryContainer,
-                                  leading: Icon(icons[index], size: 20),
+                                  leading: Icon(
+                                    icons[index],
+                                    size: IconSizes.toolbar,
+                                  ),
                                   title: Text(
                                     titles[index],
                                     style: context.texts.bodyMedium,
@@ -410,7 +413,7 @@ class _SettingsTopBar extends StatelessWidget {
               children: [
                 IconButton(
                   onPressed: onBack,
-                  iconSize: 20,
+                  iconSize: IconSizes.toolbar,
                   icon: Icon(
                     Icons.arrow_back_rounded,
                     semanticLabel: MaterialLocalizations.of(context)
@@ -477,7 +480,7 @@ class _AudioDevicePicker extends ConsumerWidget {
           children: [
             Icon(
               Icons.error_outline_rounded,
-              size: 18,
+              size: IconSizes.medium,
               color: context.scheme.error,
             ),
             const SizedBox(width: 10),
@@ -645,7 +648,7 @@ class _PttHotkeyRecorderState extends ConsumerState<_PttHotkeyRecorder> {
               children: [
                 Icon(
                   Icons.keyboard_rounded,
-                  size: 20,
+                  size: IconSizes.toolbar,
                   color: scheme.onSurfaceVariant,
                 ),
                 const SizedBox(width: 10),

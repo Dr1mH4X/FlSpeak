@@ -33,7 +33,11 @@ class EmptyState extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 40, color: scheme.onSurfaceVariant),
+              Icon(
+                icon,
+                size: IconSizes.display,
+                color: scheme.onSurfaceVariant,
+              ),
               const SizedBox(height: 12),
               if (title != null) ...[
                 Text(
@@ -254,7 +258,7 @@ class _ModalPanel extends StatelessWidget {
               ),
               IconButton(
                 onPressed: () => Navigator.of(context).maybePop(),
-                iconSize: 20,
+                iconSize: IconSizes.toolbar,
                 color: scheme.onSurfaceVariant,
                 icon: Icon(
                   Icons.close_rounded,

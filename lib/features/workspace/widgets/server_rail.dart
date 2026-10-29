@@ -218,7 +218,7 @@ class ServerRail extends ConsumerWidget {
               // 连接页与工作区共享同一个设置入口。
               child: IconButton(
                 onPressed: () => runFromRail(onSettings),
-                iconSize: 20,
+                iconSize: IconSizes.toolbar,
                 color: scheme.onSurfaceVariant,
                 style: IconButton.styleFrom(
                   minimumSize: const Size(Sizes.touch, Sizes.touch),

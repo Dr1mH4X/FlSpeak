@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../router.dart';
+import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
 import 'member_permissions_dialog.dart';
 import 'kick_client_dialog.dart';
@@ -30,7 +31,7 @@ class ClientActionsButton extends ConsumerWidget {
         onPressed: !view.connected || view.busy
             ? null
             : () => menu.isOpen ? menu.close() : menu.open(),
-        iconSize: 18,
+        iconSize: IconSizes.medium,
         icon: Icon(
           Icons.more_horiz_rounded,
           semanticLabel: l10n.memberActions(client.nickname),

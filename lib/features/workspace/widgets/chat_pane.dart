@@ -488,7 +488,7 @@ class _ChatPaneState extends State<ChatPane> {
                           : () => menu.isOpen ? menu.close() : menu.open(),
                       icon: Icon(
                         Icons.add_photo_alternate_outlined,
-                        size: 20,
+                        size: IconSizes.toolbar,
                         semanticLabel: l10n.chatAttachImage,
                       ),
                     ),
@@ -579,7 +579,7 @@ class _ChatPaneState extends State<ChatPane> {
                 const SizedBox(width: 4),
                 ValueListenableBuilder<TextEditingValue>(
                   valueListenable: _input,
-                  builder: (context, value, child) => IconButton.filled(
+                  builder: (context, value, child) => IconButton(
                     onPressed:
                         !widget.busy &&
                             !_sending &&
@@ -588,12 +588,11 @@ class _ChatPaneState extends State<ChatPane> {
                         ? _send
                         : null,
                     style: IconButton.styleFrom(
-                      minimumSize: const Size(Sizes.touch, Sizes.touch),
-                      shape: const CircleBorder(),
+                      foregroundColor: scheme.primary,
                     ),
                     icon: Icon(
                       Icons.send_rounded,
-                      size: 20,
+                      size: IconSizes.toolbar,
                       semanticLabel: l10n.chatSend,
                     ),
                   ),
@@ -707,7 +706,7 @@ class _ScopeButton extends StatelessWidget {
           ChatScope.channel => Icons.chat_bubble_rounded,
           ChatScope.direct => Icons.person_rounded,
         },
-        size: 20,
+        size: IconSizes.toolbar,
         semanticLabel: l10n.chatScopeTitle,
       ),
     );
@@ -860,7 +859,7 @@ class _MessageRowState extends State<_MessageRow>
                             : () => widget.onReply!(message),
                         icon: Icon(
                           Icons.reply_rounded,
-                          size: 18,
+                          size: IconSizes.medium,
                           semanticLabel: l10n.chatReply,
                         ),
                       ),

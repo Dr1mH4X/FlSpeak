@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/channel_icons.dart';
 import '../core/providers.dart';
 import '../l10n/app_localizations.dart';
+import '../theme/app_theme.dart';
 import 'expressive_frame.dart';
 
 class ChannelIcon extends ConsumerWidget {
@@ -21,7 +22,11 @@ class ChannelIcon extends ConsumerWidget {
       return ExpressiveFrame(
         size: 28,
         color: color.withValues(alpha: 0.08),
-        child: Icon(Icons.volume_up_outlined, size: 18, color: color),
+        child: Icon(
+          Icons.volume_up_outlined,
+          size: IconSizes.medium,
+          color: color,
+        ),
       );
     }
     final data = ref.watch(channelIconProvider(id));
@@ -88,7 +93,7 @@ class _IconImageState extends State<_IconImage> {
         (!widget.data.isLoading && widget.data.hasError) || _decodeFailed;
     final fallback = Icon(
       failed ? Icons.refresh_rounded : Icons.volume_up_outlined,
-      size: 18,
+      size: IconSizes.medium,
       color: widget.color,
     );
     final content = bytes == null || _decodeFailed

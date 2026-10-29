@@ -34,7 +34,11 @@ class ConnectHeader extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.forum_outlined, size: 22, color: scheme.primary),
+          Icon(
+            Icons.forum_outlined,
+            size: IconSizes.toolbar,
+            color: scheme.primary,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -76,7 +80,10 @@ class ConnectHeader extends StatelessWidget {
             if (desktop)
               TextButton.icon(
                 onPressed: onWorkspace,
-                icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+                icon: const Icon(
+                  Icons.arrow_forward_rounded,
+                  size: IconSizes.medium,
+                ),
                 label: Text(l10n.workspaceReturn),
               )
             else

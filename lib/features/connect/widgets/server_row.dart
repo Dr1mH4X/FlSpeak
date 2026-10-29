@@ -218,7 +218,7 @@ class _ServerRowState extends ConsumerState<ServerRow> {
                               ),
                               child: Icon(
                                 Icons.arrow_forward_rounded,
-                                size: 18,
+                                size: IconSizes.medium,
                                 color: connected
                                     ? scheme.primary
                                     : scheme.onSurfaceVariant,
@@ -237,7 +237,7 @@ class _ServerRowState extends ConsumerState<ServerRow> {
                   padding: const EdgeInsets.only(right: 8),
                   child: IconButton(
                     onPressed: menuController.open,
-                    iconSize: 18,
+                    iconSize: IconSizes.medium,
                     color: scheme.onSurfaceVariant,
                     style: IconButton.styleFrom(
                       minimumSize: const Size(Sizes.touch, Sizes.touch),

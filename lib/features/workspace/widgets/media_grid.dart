@@ -25,7 +25,7 @@ class MediaGrid extends StatelessWidget {
           children: [
             Icon(
               Icons.photo_library_rounded,
-              size: 40,
+              size: IconSizes.display,
               color: context.scheme.onSurfaceVariant,
             ),
             const SizedBox(height: 12),
