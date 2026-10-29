@@ -216,6 +216,16 @@ void main() {
       ]);
       await tester.pumpAndSettle();
       expect(scroll.position.extentAfter, lessThan(1));
+
+      key.currentState!.replaceMessages([
+        ...messages,
+        message(42, text: List.filled(16, 'another long message').join('\n')),
+      ]);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 20));
+      await tester.drag(find.byType(ListView), const Offset(0, 300));
+      await tester.pumpAndSettle();
+      expect(scroll.position.extentAfter, greaterThan(72));
     },
   );
 

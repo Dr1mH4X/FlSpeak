@@ -287,8 +287,8 @@ impl CoreSession {
 
     /// 订阅事件流。
     ///
-    /// 取消订阅要在 `shutdown()` 之后：`shutdown()` 关闭广播通道，转发任务随即退出，
-    /// 这时 Dart 侧取消订阅会立刻完成；反过来先取消，要等下一次 `add` 失败才收尾。
+    /// 取消订阅放在 `shutdown()` 之后：会话和音频线程收尾后，订阅结束并释放转发任务。
+    /// 先取消时要等下一次 `add` 失败或会话退出才能收尾。
     pub fn events(&self, sink: StreamSink<CoreEvent, SseCodec>) -> Result<(), CoreError> {
         let mut events = self.handle.subscribe();
         runtime()?.spawn(async move {
@@ -369,6 +369,10 @@ impl CoreSession {
     pub async fn list_channels(&self) -> Result<Vec<ChannelView>, CoreError> {
         let channels = self.handle.list_channels().await?;
         Ok(channels.into_iter().map(ChannelView::from).collect())
+    }
+
+    pub async fn channel_description(&self, channel_id: u64) -> Result<String, CoreError> {
+        Ok(self.handle.channel_description(channel_id).await?)
     }
 
     pub async fn list_clients(&self) -> Result<Vec<ClientView>, CoreError> {
@@ -736,7 +740,7 @@ impl From<SessionEvent> for CoreEvent {
     fn from(event: SessionEvent) -> Self {
         match event {
             SessionEvent::AccessChanged => CoreEvent::AccessChanged,
-            SessionEvent::State(state) => CoreEvent::State {
+            SessionEvent::State { state, .. } => CoreEvent::State {
                 state: state.into(),
             },
             SessionEvent::Servers(profiles) => CoreEvent::Servers {

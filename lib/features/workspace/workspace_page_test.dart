@@ -95,7 +95,9 @@ void main() {
     );
     await tester.tap(field);
     await tester.pump();
-    final input = tester.widget<EditableText>(find.byType(EditableText));
+    final input = tester.widget<EditableText>(
+      find.descendant(of: field, matching: find.byType(EditableText)),
+    );
     expect(input.focusNode.hasFocus, isTrue);
     container
         .read(selectedChannelProvider.notifier)

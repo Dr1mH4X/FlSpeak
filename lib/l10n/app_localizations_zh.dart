@@ -643,4 +643,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get kickConnectionChanged => '连接已变化，请关闭后重新操作';
+
+  @override
+  String get channelDetails => '频道详情';
+
+  @override
+  String get channelDescription => '频道简介';
+
+  @override
+  String get channelDescriptionEmpty => '此频道暂无简介';
+
+  @override
+  String get channelDescriptionFailed => '获取频道简介失败';
 }

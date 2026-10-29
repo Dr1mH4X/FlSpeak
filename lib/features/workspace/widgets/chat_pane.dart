@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
@@ -73,6 +74,9 @@ class _ChatPaneState extends State<ChatPane> {
   final _input = TextEditingController();
   final _focus = FocusNode();
   final _scroll = ScrollController();
+  int _scrollRequest = 0;
+  bool _followingMessages = true;
+  bool _scrollingToEnd = false;
 
   bool _sending = false;
   PickedChatImage? _image;
@@ -174,7 +178,10 @@ class _ChatPaneState extends State<ChatPane> {
     final latest = widget.messages.lastOrNull;
     final newMessage =
         latest != null && !identical(latest, oldWidget.messages.lastOrNull);
-    final following = !_scroll.hasClients || _scroll.position.extentAfter < 72;
+    final following =
+        _followingMessages &&
+        (!_scroll.hasClients ||
+            _scroll.position.userScrollDirection == ScrollDirection.idle);
     if (changed || (newMessage && (following || _isOwnMessage(latest)))) {
       _scheduleScrollToEnd();
     }
@@ -189,21 +196,35 @@ class _ChatPaneState extends State<ChatPane> {
   }
 
   void _scheduleScrollToEnd() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scroll.hasClients) {
+    final request = ++_scrollRequest;
+    _followingMessages = true;
+    _scrollingToEnd = true;
+
+    void follow(Duration _) async {
+      if (!mounted || request != _scrollRequest || !_scroll.hasClients) {
+        return;
+      }
+      if (_scroll.position.extentAfter < 1) {
+        _scrollingToEnd = false;
         return;
       }
       final target = _scroll.position.maxScrollExtent;
       if (MediaQuery.disableAnimationsOf(context)) {
         _scroll.jumpTo(target);
       } else {
-        _scroll.animateTo(
+        await _scroll.animateTo(
           target,
           duration: Motion.effectsFast,
           curve: Motion.effectsFastCurve,
         );
       }
-    });
+      if (mounted && request == _scrollRequest) {
+        _scrollingToEnd = false;
+      }
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback(follow);
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   Future<void> _send() async {
@@ -305,35 +326,67 @@ class _ChatPaneState extends State<ChatPane> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
-          child: ListView.builder(
-            controller: _scroll,
-            // 拖动消息列表时收起键盘，避免触屏上键盘挡住输入区。
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: EdgeInsets.fromLTRB(horizontal, 24, horizontal, 24),
-            itemCount: widget.messages.length + 1,
-            itemBuilder: (context, index) {
-              final child = index == 0
-                  ? _Welcome(
-                      channelName: widget.channelName,
-                      description: widget.description,
-                    )
-                  : _MessageRow(
-                      message: widget.messages[index - 1],
-                      onImageTap: _openImage,
-                      onReply:
-                          _sending ||
-                              widget.busy ||
-                              _isOwnMessage(widget.messages[index - 1])
-                          ? null
-                          : widget.onReply,
-                    );
-              return Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: _contentMaxWidth),
-                  child: child,
-                ),
-              );
+          child: NotificationListener<ScrollMetricsNotification>(
+            onNotification: (notification) {
+              // 富文本、图片与惰性列表布局都可能修正底部的实际位置。
+              if (notification.depth == 0 &&
+                  _followingMessages &&
+                  _scroll.hasClients &&
+                  _scroll.position.userScrollDirection ==
+                      ScrollDirection.idle) {
+                _scheduleScrollToEnd();
+              }
+              return false;
             },
+            child: NotificationListener<ScrollNotification>(
+              onNotification: (notification) {
+                if (notification.depth == 0) {
+                  if (notification is UserScrollNotification &&
+                      notification.direction != ScrollDirection.idle) {
+                    _scrollRequest++;
+                    _scrollingToEnd = false;
+                  }
+                  if (notification is ScrollUpdateNotification &&
+                      !_scrollingToEnd) {
+                    _followingMessages = notification.metrics.extentAfter < 72;
+                  }
+                }
+                return false;
+              },
+              child: ListView.builder(
+                controller: _scroll,
+                // 拖动消息列表时收起键盘，避免触屏上键盘挡住输入区。
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: EdgeInsets.fromLTRB(horizontal, 24, horizontal, 24),
+                itemCount: widget.messages.length + 1,
+                itemBuilder: (context, index) {
+                  final child = index == 0
+                      ? _Welcome(
+                          channelName: widget.channelName,
+                          description: widget.description,
+                        )
+                      : _MessageRow(
+                          message: widget.messages[index - 1],
+                          onImageTap: _openImage,
+                          onReply:
+                              _sending ||
+                                  widget.busy ||
+                                  _isOwnMessage(widget.messages[index - 1])
+                              ? null
+                              : widget.onReply,
+                        );
+                  return Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        maxWidth: _contentMaxWidth,
+                      ),
+                      child: child,
+                    ),
+                  );
+                },
+              ),
+            ),
           ),
         ),
         // 没有当前投递目标时保留范围选择入口，禁止发送。
@@ -688,12 +741,14 @@ class _Welcome extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 4),
-            Text(
-              description.isEmpty ? l10n.chatWelcomeBody : description,
-              style: texts.bodyMedium?.copyWith(
-                fontSize: 14,
-                color: scheme.onSurfaceVariant,
-              ),
+            MessageContent(
+              text: description.isEmpty ? l10n.chatWelcomeBody : description,
+              style:
+                  texts.bodyMedium?.copyWith(
+                    fontSize: 14,
+                    color: scheme.onSurfaceVariant,
+                  ) ??
+                  const TextStyle(),
             ),
           ],
         ),

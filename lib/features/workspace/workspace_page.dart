@@ -12,6 +12,7 @@ import '../../widgets/common.dart';
 import '../settings/widgets/image_host_dialog.dart';
 import 'widgets/chat_pane.dart';
 import 'widgets/channel_files_pane.dart';
+import 'widgets/channel_details_dialog.dart';
 import 'widgets/media_grid.dart';
 import 'widgets/media_viewer.dart';
 import 'widgets/members_pane.dart';
@@ -94,7 +95,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
       children: [
         _ChannelHeader(
           compact: compact,
-          channelName: channel == null ? null : channelDisplayName(channel),
+          channel: channel,
           tabController: _tabController,
         ),
         if (view.identityUpgradeTarget != null)
@@ -268,19 +269,19 @@ List<_TabSpec> _tabSpecs(AppLocalizations l10n) => [
 class _ChannelHeader extends StatelessWidget {
   const _ChannelHeader({
     required this.compact,
-    required this.channelName,
+    required this.channel,
     required this.tabController,
   });
 
   final bool compact;
-  final String? channelName;
+  final ChannelView? channel;
   final TabController tabController;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final horizontal = compact ? 8.0 : 24.0;
-    final hasChannel = channelName != null;
+    final hasChannel = channel != null;
 
     return Container(
       height: Sizes.header,
@@ -311,7 +312,7 @@ class _ChannelHeader extends StatelessWidget {
               child: Semantics(
                 header: true,
                 child: Text(
-                  channelName ?? l10n.appName,
+                  channel != null ? channelDisplayName(channel!) : l10n.appName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: context.texts.titleMedium?.copyWith(
@@ -324,6 +325,18 @@ class _ChannelHeader extends StatelessWidget {
             if (hasChannel) ...[
               const SizedBox(width: 6),
               _ViewTabs(tabs: _tabSpecs(l10n), controller: tabController),
+              const SizedBox(width: 4),
+              IconButton(
+                onPressed: () => showChannelDetailsDialog(context, channel!),
+                style: IconButton.styleFrom(
+                  minimumSize: const Size(Sizes.touch, Sizes.touch),
+                ),
+                icon: Icon(
+                  Icons.info_outline_rounded,
+                  size: 20,
+                  semanticLabel: l10n.channelDetails,
+                ),
+              ),
             ],
           ],
         ),

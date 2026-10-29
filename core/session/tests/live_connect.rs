@@ -39,7 +39,7 @@ async fn live_connect_chain() {
                 }
                 Ok(SessionEvent::Denied { message }) => println!("[denied] {message}"),
                 Ok(SessionEvent::Failed { message }) => println!("[failed] {message}"),
-                Ok(SessionEvent::State(state)) => println!("[state] {state:?}"),
+                Ok(SessionEvent::State { state, .. }) => println!("[state] {state:?}"),
                 Ok(_) => {}
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
                 Err(_) => break,

@@ -9,12 +9,15 @@
 
 mod actor;
 mod downloads;
+mod events;
 mod image_upload;
 mod images;
 mod store;
 
 mod channel_tools;
+pub mod text_format;
 pub use channel_tools::{AccessView, ChannelFileView, GroupKind, KickTarget, MemberGroupView};
+pub use events::SessionSubscription;
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -22,7 +25,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use server::{AddressError, ServerError, ServerProfile};
 use tokio::runtime::Builder;
-use tokio::sync::{broadcast, mpsc, oneshot};
+use tokio::sync::{broadcast, mpsc, oneshot, watch};
 use tokio::task::LocalSet;
 
 pub use image_upload::{upload_image, validate_image_host};
@@ -125,7 +128,10 @@ pub enum TransferDirection {
 
 #[derive(Debug, Clone)]
 pub enum SessionEvent {
-    State(SessionState),
+    State {
+        state: SessionState,
+        connection_epoch: u64,
+    },
     Servers(Vec<ServerProfile>),
     Snapshot {
         channels: Vec<ChannelView>,
@@ -249,6 +255,10 @@ pub enum SessionCommand {
     },
     ListChannels {
         reply: oneshot::Sender<Result<Vec<ChannelView>, SessionError>>,
+    },
+    ChannelDescription {
+        channel_id: u64,
+        reply: oneshot::Sender<Result<String, SessionError>>,
     },
     ListClients {
         reply: oneshot::Sender<Result<Vec<ClientView>, SessionError>>,
@@ -408,6 +418,7 @@ impl Default for SessionOptions {
 pub struct SessionHandle {
     commands: mpsc::UnboundedSender<SessionCommand>,
     events: broadcast::Sender<SessionEvent>,
+    levels: watch::Receiver<audio::level::LevelReading>,
     store_path: PathBuf,
 }
 
@@ -430,20 +441,21 @@ impl SessionHandle {
         let (commands, command_rx) = mpsc::unbounded_channel();
         let (events, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
         let (audio_events, audio_rx) = mpsc::channel(actor::AUDIO_EVENT_CAPACITY);
-        let level_events = events.clone();
+        let (level_publisher, levels) = events::level_channel();
+        let audio_levels = level_publisher.clone();
         let voice = audio::engine::VoiceEngine::spawn(
             move |event| {
                 let _ = audio_events.try_send(event);
             },
-            move |mic, received| {
-                // 只转发两个标量，不能等待可能正在执行网络命令的 actor。
-                let _ = level_events.send(SessionEvent::Levels { mic, received });
+            move |reading| {
+                audio_levels.publish(reading);
             },
         )?;
 
         let handle = Self {
             commands: commands.clone(),
             events: events.clone(),
+            levels,
             store_path: store_path.clone(),
         };
 
@@ -482,9 +494,12 @@ impl SessionHandle {
                         registry,
                         events,
                         commands,
-                        voice,
-                        audio_rx,
-                        options.audio,
+                        actor::SessionAudio {
+                            voice,
+                            events: audio_rx,
+                            levels: level_publisher,
+                            enabled: options.audio,
+                        },
                     )
                     .run(command_rx)
                     .await;
@@ -495,8 +510,8 @@ impl SessionHandle {
         Ok(handle)
     }
 
-    pub fn subscribe(&self) -> broadcast::Receiver<SessionEvent> {
-        self.events.subscribe()
+    pub fn subscribe(&self) -> SessionSubscription {
+        SessionSubscription::new(self.events.subscribe(), self.levels.clone())
     }
 
     pub fn store_path(&self) -> &Path {
@@ -596,6 +611,12 @@ impl SessionHandle {
     pub async fn list_channels(&self) -> Result<Vec<ChannelView>, SessionError> {
         let (reply, rx) = oneshot::channel();
         self.send(SessionCommand::ListChannels { reply })?;
+        rx.await.map_err(|_| SessionError::Closed)?
+    }
+
+    pub async fn channel_description(&self, channel_id: u64) -> Result<String, SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::ChannelDescription { channel_id, reply })?;
         rx.await.map_err(|_| SessionError::Closed)?
     }
 
@@ -793,7 +814,7 @@ impl SessionHandle {
         rx.await.map_err(|_| SessionError::Closed)?
     }
 
-    /// 关闭 actor 并等待连接收尾。
+    /// 请求关闭 actor；订阅在连接与音频线程收尾后结束。
     pub async fn shutdown(&self) -> Result<(), SessionError> {
         self.send(SessionCommand::Shutdown)
     }
@@ -805,9 +826,52 @@ impl SessionHandle {
     }
 }
 
+impl Drop for SessionHandle {
+    fn drop(&mut self) {
+        let _ = self.commands.send(SessionCommand::Shutdown);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn explicit_shutdown_and_dropping_the_handle_both_close_subscriptions() {
+        for explicit in [true, false] {
+            let root = std::env::temp_dir().join(format!(
+                "flspeak-subscription-close-{:x}",
+                rand::random::<u64>()
+            ));
+            tokio::fs::create_dir_all(&root).await.unwrap();
+            let handle = SessionHandle::spawn_with_options(
+                root.join("servers.json"),
+                SessionOptions { audio: false },
+            )
+            .unwrap();
+            handle.list_servers().await.unwrap();
+            let mut events = handle.subscribe();
+            let retained = if explicit {
+                handle.shutdown().await.unwrap();
+                Some(handle)
+            } else {
+                drop(handle);
+                None
+            };
+            tokio::time::timeout(Duration::from_secs(2), async {
+                loop {
+                    match events.recv().await {
+                        Err(broadcast::error::RecvError::Closed) => break,
+                        Err(broadcast::error::RecvError::Lagged(_)) | Ok(_) => {}
+                    }
+                }
+            })
+            .await
+            .unwrap();
+            drop(retained);
+            tokio::fs::remove_dir_all(root).await.unwrap();
+        }
+    }
 
     #[tokio::test]
     async fn invalid_registry_stops_startup_without_exposing_an_empty_writable_registry() {

@@ -9,8 +9,8 @@ Status: implemented
 ## Decision
 
 - `core/audio` 以 20ms 节拍合并麦克风与远端混音的两个 0–1 响度标量。节拍允许调度抖动，延后时只发布最新值，不补发过期读数。
-- `VoiceEngine::spawn` 把控制事件回调与电平回调分开。控制事件仍进入 `core/session` actor；电平回调直接发送既有 `SessionEvent::Levels`，避免等待协议命令。所有 `Client` 调用仍由 actor 串行执行。
-- actor 用 `VoiceEngine::set_meter_enabled` 按连接状态控制电平发布；Dart 丢弃断开后的在途指标。音频设备回调与音频样本留在 Rust，FFI 仍使用单个 `CoreEvent` 流。
+- `VoiceEngine::spawn` 把控制事件回调与电平回调分开。控制事件仍进入 `core/session` actor；电平回调写入最新值缓存，在订阅出口合成既有 `SessionEvent::Levels`，避免等待协议命令。所有 `Client` 调用仍由 actor 串行执行。
+- actor 用 `VoiceEngine::set_meter_epoch` 按连接代次控制电平发布，订阅出口过滤旧代次；Dart 丢弃断开后的在途指标。音频设备回调与音频样本留在 Rust，FFI 仍使用单个 `CoreEvent` 流。
 - RMS 映射、噪声门与快速上升、平滑回落留在 Rust。Dart 在下一帧直接绘制新指标，保留约半秒响度历史；切换声源与断开时清空历史。减少动态效果只控制装饰动画，电平仍反映实时输入。
 - 电平写入独立的 `voiceLevelsProvider`，不写 `SessionView`，避免以指标刷新率重建频道树与聊天区域。
 
@@ -34,4 +34,4 @@ Status: implemented
 
 ## Related
 
-本篇持有电平刷新频率与投递路径的决策。[音频帧不过 FFI](2026-10-08-audio-boundary.md)持有样本隔离规则，[用户卡电平条与可选声源](../feature/2026-10-26-voice-meter-ribbon.md)持有声源选择与界面取舍，运行机制见[音频链路](../../../../docs/audio.md)。
+本篇持有电平刷新频率与绘制方式的决策；缓存、优先级与连接代次由[电平缓存与连接代次](../../implemented/architecture/2026-10-29-meter-delivery-scope.md)规定。[音频帧不过 FFI](2026-10-08-audio-boundary.md)持有样本隔离规则，[用户卡电平条与可选声源](../feature/2026-10-26-voice-meter-ribbon.md)持有声源选择与界面取舍，运行机制见[音频链路](../../../../docs/audio.md)。
