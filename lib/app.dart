@@ -48,7 +48,7 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
       onKeyUp: () => _setPtt(false),
     );
     ref.listenManual(
-      preferencesProvider.select((preferences) => preferences.pttHotkey),
+      activePttHotkeyProvider,
       (previous, keyId) => unawaited(_syncRegistration(keyId)),
       fireImmediately: true,
     );
@@ -80,7 +80,7 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
   /// 应用内兜底：原生全局热键不可用（Android / Wayland / 注册失败）时，
   /// 应用在前台仍能用快捷键说话。
   bool _handleInAppKey(KeyEvent event) {
-    final keyId = ref.read(preferencesProvider).pttHotkey;
+    final keyId = ref.read(activePttHotkeyProvider);
     if (keyId == null || event.logicalKey.keyId != keyId) {
       return false;
     }
@@ -105,6 +105,7 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
     if (_pttDown == active) {
       return;
     }
+    if (ref.read(pttHotkeyRecordingProvider)) return;
     _pttDown = active;
     final view = ref.read(sessionViewProvider);
     // 未连接或没开按住说话时不发命令，避免弹出无关的错误提示条。

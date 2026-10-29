@@ -104,6 +104,14 @@
       }
     }
   },
+  "identityUpgraded": "Identity upgraded to level {level}. Reconnecting…",
+  "@identityUpgraded": {
+    "placeholders": {
+      "level": {
+        "type": "int"
+      }
+    }
+  },
   "workspaceDropped": "Disconnected",
   "workspaceRetrying": "Retrying…",
   "channelsSection": "Channels",

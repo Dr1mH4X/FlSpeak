@@ -512,18 +512,26 @@ impl Actor {
         &mut self,
         label: String,
         address: String,
-    ) -> Result<ServerProfile, ServerError> {
-        let profile = self.registry.register(&label, &address)?;
-        self.persist().await;
+    ) -> Result<ServerProfile, SessionError> {
+        let mut registry = self.registry.clone();
+        let profile = registry.register(&label, &address)?;
+        store::save_registry(&self.store_path, &registry)
+            .await
+            .map_err(SessionError::Storage)?;
+        self.registry = registry;
         self.emit(SessionEvent::Servers(self.registry.profiles().to_vec()));
         Ok(profile)
     }
 
-    async fn remove(&mut self, id: String) -> Result<(), ServerError> {
-        if !self.registry.remove(&id) {
-            return Err(ServerError::NotRegistered(id));
+    async fn remove(&mut self, id: String) -> Result<(), SessionError> {
+        let mut registry = self.registry.clone();
+        if !registry.remove(&id) {
+            return Err(ServerError::NotRegistered(id).into());
         }
-        self.persist().await;
+        store::save_registry(&self.store_path, &registry)
+            .await
+            .map_err(SessionError::Storage)?;
+        self.registry = registry;
         self.emit(SessionEvent::Servers(self.registry.profiles().to_vec()));
         Ok(())
     }
@@ -1805,14 +1813,6 @@ impl Actor {
         self.set_state(SessionState::Disconnected);
     }
 
-    async fn persist(&self) {
-        if let Err(message) = store::save_registry(&self.store_path, &self.registry).await {
-            self.emit(SessionEvent::Failed {
-                message: format!("档案保存失败: {message}"),
-            });
-        }
-    }
-
     fn connected(&self) -> Result<Arc<Client>, SessionError> {
         self.client.clone().ok_or(SessionError::NotConnected)
     }
@@ -2394,6 +2394,42 @@ impl AsyncRead for ProgressReader {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn failed_registry_writes_reject_the_operation_and_preserve_memory() {
+        for removing in [false, true] {
+            let root = std::env::temp_dir().join(format!(
+                "flspeak-registry-operation-{:x}",
+                rand::random::<u64>()
+            ));
+            let path = root.join("servers.json");
+            tokio::fs::create_dir_all(&path).await.unwrap();
+            tokio::fs::write(path.join("keep"), b"preserve")
+                .await
+                .unwrap();
+            let mut actor = audio_actor();
+            actor.store_path = path;
+            let original = actor
+                .registry
+                .register("Original", "a.example.com")
+                .unwrap();
+            let mut events = actor.events.subscribe();
+            let rejected = if removing {
+                actor.remove(original.id.clone()).await.is_err()
+            } else {
+                actor
+                    .register("New".into(), "b.example.com".into())
+                    .await
+                    .is_err()
+            };
+            let profiles = actor.registry.profiles().to_vec();
+            let emitted = events.try_recv().is_ok();
+            tokio::fs::remove_dir_all(&root).await.unwrap();
+            assert!(rejected);
+            assert_eq!(profiles, vec![original]);
+            assert!(!emitted);
+        }
+    }
 
     fn audio_actor() -> Actor {
         let (events, _) = broadcast::channel(16);

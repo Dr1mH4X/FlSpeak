@@ -837,9 +837,11 @@ impl From<SessionError> for CoreError {
             SessionError::ChannelPasswordRequired => CoreError::ChannelPasswordRequired {
                 message: err.to_string(),
             },
-            SessionError::Closed | SessionError::Spawn(_) => CoreError::Internal {
-                message: err.to_string(),
-            },
+            SessionError::Closed | SessionError::Spawn(_) | SessionError::Storage(_) => {
+                CoreError::Internal {
+                    message: err.to_string(),
+                }
+            }
             _ => CoreError::Connection {
                 message: err.to_string(),
             },

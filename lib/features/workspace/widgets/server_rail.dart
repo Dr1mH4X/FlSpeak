@@ -140,8 +140,12 @@ class ServerRail extends ConsumerWidget {
                       online: server.id == view.activeServerId,
                       connected:
                           view.connected && server.id == view.activeServerId,
-                      onTap: () => runFromRail(() => onSelect(server)),
-                      onDisconnect: () => runFromRail(onDisconnect),
+                      onTap: view.busy || view.connecting || view.reconnecting
+                          ? null
+                          : () => runFromRail(() => onSelect(server)),
+                      onDisconnect: view.busy
+                          ? null
+                          : () => runFromRail(onDisconnect),
                       loading:
                           server.id == view.activeServerId &&
                           (view.connecting || view.reconnecting),
@@ -155,7 +159,7 @@ class ServerRail extends ConsumerWidget {
                           context,
                           current,
                         );
-                        if (icon != null) {
+                        if (context.mounted && icon != null) {
                           ref
                               .read(preferencesProvider.notifier)
                               .setServerIcon(server.id, icon);
@@ -253,8 +257,8 @@ class _ServerTile extends StatelessWidget {
 
   /// 已连上：侧边栏唯一的连接状态表达（右下角状态点）+ 右键菜单的开关。
   final bool connected;
-  final VoidCallback onTap;
-  final VoidCallback onDisconnect;
+  final VoidCallback? onTap;
+  final VoidCallback? onDisconnect;
   final VoidCallback onChangeIcon;
   final bool loading;
 
@@ -290,16 +294,17 @@ class _ServerTile extends StatelessWidget {
         ],
         builder: (context, menuController) => Semantics(
           button: true,
+          enabled: onTap != null,
           selected: online,
           excludeSemantics: true,
           label: semanticsLabel.toString(),
           // `excludeSemantics` 会丢掉 InkWell 的点击动作，必须在这里补回来；
           // 否则读屏用户听到「按钮」却无法选中服务器。
           onTap: onTap,
-          customSemanticsActions: connected
+          customSemanticsActions: connected && onDisconnect != null
               ? {
                   CustomSemanticsAction(label: l10n.serverDisconnect):
-                      onDisconnect,
+                      onDisconnect!,
                 }
               : null,
           child: AnimatedInkWell(

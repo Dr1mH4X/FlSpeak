@@ -126,6 +126,8 @@ Connected ──非主动断开──> Reconnecting{attempt, delay}
 
 服务器档案读取失败会中止会话启动并报告错误，避免把空列表写回损坏的档案。界面偏好按提交顺序写盘，保存失败后后续操作仍可重试。
 
+档案增删先保存修改后的副本，成功后替换内存列表并发布 `Servers`；失败返回 `SessionError::Storage`，内存列表保持原值。
+
 ## 文本消息
 
 - 发送由 actor 通过 `Client::exec_command` 提交转义后的 `sendtextmessage` 并等待服务器确认（5 秒超时）：`target_mode=1` 私聊、`2` 频道、`3` 服务器；频道消息的 `target` 是频道 id，服务器广播是 0。Dart 仅在确认成功后清空草稿，私聊同时核对收件人的在线客户端 id 与 UID。
@@ -180,6 +182,7 @@ downloadFile(remotePath, localPath, channelId, password?) -> transferId
 
 ## 失败语义
 
+- 界面的连接生命周期由 `State` 事件控制；切换服务器先断开旧连接，再连接新目标。仍然连接时收到 `Failed` 只显示提示，不清空频道与成员；重连会清除过期的说话指示和电平。
 - 音频设备失败：`Voice` 带错误 + 连接保持。
 - 轮询失败：发 `Log`，不清空现有快照；下一次继续。
 - 重连失败：退避耗尽后 `State(Disconnected)` + `Failed`。

@@ -16,6 +16,7 @@ import 'theme/app_theme.dart';
 import 'core/models.dart';
 import 'core/providers.dart';
 import 'core/preferences.dart';
+import 'router.dart';
 
 class _PttSession extends SessionController {
   final presses = <bool>[];
@@ -39,11 +40,13 @@ Future<ProviderContainer> _mountPtt(
   final container = ProviderContainer(
     overrides: [
       coreSessionProvider.overrideWithValue(_PttCore()),
+      storePathProvider.overrideWithValue('/tmp/flspeak-test/servers.json'),
       sessionViewProvider.overrideWith(() => controller),
       preferencesStoreProvider.overrideWithValue(
         PreferencesStore.inMemory(
           preferences: SessionPreferences(
             nickname: 'Test',
+            locale: 'zh',
             pttHotkey: LogicalKeyboardKey.keyA.keyId,
           ),
         ),
@@ -60,6 +63,52 @@ Future<ProviderContainer> _mountPtt(
 
 void main() {
   const hotkey = MethodChannel('flspeak/global_hotkey');
+  for (final recordedKey in [
+    LogicalKeyboardKey.keyA,
+    LogicalKeyboardKey.keyB,
+  ]) {
+    testWidgets(
+      'recording ${recordedKey.keyLabel} releases PTT and suppresses it until the recorder closes',
+      (tester) async {
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          hotkey,
+          (call) async => call.method == 'register' ? true : null,
+        );
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            hotkey,
+            null,
+          ),
+        );
+        final controller = _PttSession();
+        final container = await _mountPtt(tester, controller);
+        container.read(routerProvider).go(AppRoutes.settings);
+        await tester.pumpAndSettle();
+        final shortcut = find.text('按住说话快捷键');
+        await tester.ensureVisible(shortcut);
+        await tester.pumpAndSettle();
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.keyA);
+        await tester.tap(shortcut);
+        await tester.pumpAndSettle();
+        expect(controller.presses, [true, false]);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.keyA);
+        await tester.sendKeyDownEvent(recordedKey);
+        await tester.pumpAndSettle();
+        expect(controller.presses, [true, false]);
+        expect(find.text('录制快捷键'), findsNothing);
+        expect(
+          container.read(preferencesProvider).pttHotkey,
+          recordedKey.keyId,
+        );
+        await tester.sendKeyUpEvent(recordedKey);
+        await tester.sendKeyDownEvent(recordedKey);
+        expect(controller.presses, [true, false, true]);
+        await tester.sendKeyUpEvent(recordedKey);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
   testWidgets(
     'changing the PTT key and disposing the app release the held microphone',
     (tester) async {

@@ -176,6 +176,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String identityUpgraded(int level) {
+    return 'Identity upgraded to level $level. Reconnecting…';
+  }
+
+  @override
   String get workspaceDropped => 'Disconnected';
 
   @override

@@ -207,11 +207,11 @@ pub enum SessionCommand {
     RegisterServer {
         label: String,
         address: String,
-        reply: oneshot::Sender<Result<ServerProfile, ServerError>>,
+        reply: oneshot::Sender<Result<ServerProfile, SessionError>>,
     },
     RemoveServer {
         id: String,
-        reply: oneshot::Sender<Result<(), ServerError>>,
+        reply: oneshot::Sender<Result<(), SessionError>>,
     },
     ListServers {
         reply: oneshot::Sender<Vec<ServerProfile>>,
@@ -370,6 +370,9 @@ pub enum SessionError {
     #[error("{0}")]
     Transfer(String),
 
+    #[error("档案保存失败: {0}")]
+    Storage(String),
+
     #[error("会话 actor 已退出")]
     Closed,
 
@@ -511,17 +514,13 @@ impl SessionHandle {
             address,
             reply,
         })?;
-        rx.await
-            .map_err(|_| SessionError::Closed)?
-            .map_err(Into::into)
+        rx.await.map_err(|_| SessionError::Closed)?
     }
 
     pub async fn remove_server(&self, id: String) -> Result<(), SessionError> {
         let (reply, rx) = oneshot::channel();
         self.send(SessionCommand::RemoveServer { id, reply })?;
-        rx.await
-            .map_err(|_| SessionError::Closed)?
-            .map_err(Into::into)
+        rx.await.map_err(|_| SessionError::Closed)?
     }
 
     pub async fn list_servers(&self) -> Result<Vec<ServerProfile>, SessionError> {

@@ -30,6 +30,16 @@ class SelectedChannelController extends Notifier<SelectedChannel?> {
     required SelectedChannel? fallback,
     Future<bool> Function()? requestPassword,
   }) async {
+    final origin = ref.read(sessionViewProvider);
+    if (!origin.connected || origin.activeServerId != serverId) return;
+    bool current() {
+      if (!ref.mounted) return false;
+      final view = ref.read(sessionViewProvider);
+      return view.connected &&
+          view.activeServerId == origin.activeServerId &&
+          view.connectionEpoch == origin.connectionEpoch;
+    }
+
     select(channelId, serverId: serverId);
     bool moved;
     try {
@@ -37,10 +47,13 @@ class SelectedChannelController extends Notifier<SelectedChannel?> {
           .read(sessionViewProvider.notifier)
           .joinChannel(channelId);
     } on CoreError_ChannelPasswordRequired {
+      if (!current()) return;
       moved = await requestPassword?.call() ?? false;
     }
     // 期间用户又换了目标时以新的为准，不回滚。
-    if (!moved && state == (serverId: serverId, channelId: channelId)) {
+    if (current() &&
+        !moved &&
+        state == (serverId: serverId, channelId: channelId)) {
       state = fallback;
     }
   }

@@ -1,6 +1,7 @@
 // ignore_for_file: depend_on_referenced_packages
 
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'models.dart';
 import 'providers.dart';
 import 'notices.dart';
+import 'preferences.dart';
 import 'voice_levels.dart';
 
 class _Core extends Fake implements CoreSession {
@@ -143,7 +145,383 @@ class _ConcurrentCore extends _Core {
   Future<void> setMuted({required bool muted}) => this.muted.future;
 }
 
+class _SwitchCore extends _Core {
+  _SwitchCore(super.eventsController) {
+    disconnectReply.future.ignore();
+  }
+  final calls = <String>[];
+  final disconnectReply = Completer<void>();
+  final connectReply = Completer<void>();
+  @override
+  Future<void> disconnect() {
+    calls.add('disconnect');
+    return disconnectReply.future;
+  }
+
+  @override
+  Future<void> connect({required String id, required String nickname}) {
+    calls.add('connect:$id');
+    if (calls.length == 1) {
+      return Future.error(
+        const CoreError.connection(message: 'already connected'),
+      );
+    }
+    return connectReply.future;
+  }
+}
+
+class _ConnectedSession extends SessionController {
+  @override
+  SessionView build() => super.build().copyWith(
+    state: const CoreSessionState.connected(clientId: 1, channelId: 5),
+    activeServerId: 'server-a',
+    connectionEpoch: 1,
+    channels: const [
+      ChannelView(id: 5, parentId: 0, name: 'A', description: ''),
+    ],
+    clients: const [ClientView(id: 1, nickname: 'Me', uid: 'me', channelId: 5)],
+  );
+}
+
+class _LateServersCore extends _Core {
+  _LateServersCore(super.eventsController);
+  final initialServers = Completer<List<ServerProfileView>>();
+  @override
+  Future<List<ServerProfileView>> listServers() => initialServers.future;
+}
+
 void main() {
+  test(
+    'events queued before the reset cannot adopt the pending server profile',
+    () async {
+      final events = StreamController<CoreEvent>.broadcast(sync: true);
+      final core = _SwitchCore(events);
+      final container = ProviderContainer(
+        overrides: [coreSessionProvider.overrideWithValue(core)],
+      );
+      addTearDown(() async {
+        container.dispose();
+        await events.close();
+      });
+      final attempt = container
+          .read(sessionViewProvider.notifier)
+          .connect(id: 'server-b', nickname: 'Me');
+      events.add(const CoreEvent.state(state: CoreSessionState.connecting()));
+      events.add(
+        const CoreEvent.state(
+          state: CoreSessionState.reconnecting(attempt: 1, delayMs: 1000),
+        ),
+      );
+      events.add(
+        const CoreEvent.state(
+          state: CoreSessionState.connected(clientId: 1, channelId: 5),
+        ),
+      );
+      expect(container.read(sessionViewProvider).activeServerId, isNull);
+      core.disconnectReply.complete();
+      events.add(const CoreEvent.state(state: CoreSessionState.disconnected()));
+      await Future<void>.value();
+      events.add(const CoreEvent.state(state: CoreSessionState.connecting()));
+      core.connectReply.complete();
+      expect(await attempt, isTrue);
+      events.add(
+        const CoreEvent.state(
+          state: CoreSessionState.connected(clientId: 2, channelId: 9),
+        ),
+      );
+      expect(container.read(sessionViewProvider).activeServerId, 'server-b');
+    },
+  );
+
+  test(
+    'startup retries retain their requested server after the first API failure',
+    () async {
+      final events = StreamController<CoreEvent>.broadcast(sync: true);
+      final core = _SwitchCore(events);
+      final container = ProviderContainer(
+        overrides: [coreSessionProvider.overrideWithValue(core)],
+      );
+      addTearDown(() async {
+        container.dispose();
+        await events.close();
+      });
+      final attempt = container
+          .read(sessionViewProvider.notifier)
+          .connect(id: 'server-b', nickname: 'Me');
+      expect(core.calls, ['disconnect']);
+      core.disconnectReply.complete();
+      events.add(const CoreEvent.state(state: CoreSessionState.disconnected()));
+      await Future<void>.value();
+      events.add(const CoreEvent.state(state: CoreSessionState.connecting()));
+      events.add(const CoreEvent.state(state: CoreSessionState.disconnected()));
+      core.connectReply.completeError(
+        const CoreError.connection(message: 'first attempt timed out'),
+      );
+      expect(await attempt, isFalse);
+      events.add(
+        const CoreEvent.state(
+          state: CoreSessionState.reconnecting(attempt: 1, delayMs: 1000),
+        ),
+      );
+      expect(container.read(sessionViewProvider).activeServerId, 'server-b');
+      events.add(
+        const CoreEvent.state(
+          state: CoreSessionState.connected(clientId: 1, channelId: 5),
+        ),
+      );
+      expect(container.read(sessionViewProvider).activeServerId, 'server-b');
+    },
+  );
+
+  test('identity notices follow the selected English locale', () async {
+    final events = StreamController<CoreEvent>.broadcast(sync: true);
+    final container = ProviderContainer(
+      overrides: [
+        coreSessionProvider.overrideWithValue(_Core(events)),
+        preferencesStoreProvider.overrideWithValue(
+          PreferencesStore.inMemory(
+            preferences: const SessionPreferences(
+              nickname: 'Test',
+              locale: 'en',
+            ),
+          ),
+        ),
+      ],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await events.close();
+    });
+    container.read(sessionViewProvider);
+    events.add(const CoreEvent.identityUpgrade(from: 8, to: 13));
+    expect(
+      container.read(noticeCenterProvider).first.message,
+      'Upgrading identity level to 13…',
+    );
+    events.add(const CoreEvent.identityUpgraded(level: 13));
+    expect(
+      container.read(noticeCenterProvider).first.message,
+      'Identity upgraded to level 13. Reconnecting…',
+    );
+  });
+
+  test(
+    'choosing the live server preserves its snapshot and does not reconnect',
+    () async {
+      final events = StreamController<CoreEvent>.broadcast(sync: true);
+      final core = _SwitchCore(events);
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(core),
+          sessionViewProvider.overrideWith(_ConnectedSession.new),
+        ],
+      );
+      addTearDown(() async {
+        container.dispose();
+        await events.close();
+      });
+      expect(
+        await container
+            .read(sessionViewProvider.notifier)
+            .connect(id: 'server-a', nickname: 'Me'),
+        isTrue,
+      );
+      expect(core.calls, isEmpty);
+      expect(container.read(sessionViewProvider).channels, hasLength(1));
+    },
+  );
+
+  test(
+    'a failed replacement connection does not retain a live server label',
+    () async {
+      final events = StreamController<CoreEvent>.broadcast(sync: true);
+      final core = _SwitchCore(events);
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(core),
+          sessionViewProvider.overrideWith(_ConnectedSession.new),
+        ],
+      );
+      addTearDown(() async {
+        container.dispose();
+        await events.close();
+      });
+      final switching = container
+          .read(sessionViewProvider.notifier)
+          .connect(id: 'server-b', nickname: 'Me');
+      core.disconnectReply.complete();
+      events.add(const CoreEvent.state(state: CoreSessionState.disconnected()));
+      await Future<void>.value();
+      core.connectReply.completeError(
+        const CoreError.connection(message: 'replacement rejected'),
+      );
+      expect(await switching, isFalse);
+      expect(container.read(sessionViewProvider).connected, isFalse);
+      expect(container.read(sessionViewProvider).activeServerId, isNull);
+    },
+  );
+
+  test('server switching disconnects first and uses ordered state events for the active profile', () async {
+    final events = StreamController<CoreEvent>.broadcast(sync: true);
+    final core = _SwitchCore(events);
+    final container = ProviderContainer(
+      overrides: [
+        coreSessionProvider.overrideWithValue(core),
+        sessionViewProvider.overrideWith(_ConnectedSession.new),
+      ],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await events.close();
+    });
+    final controller = container.read(sessionViewProvider.notifier);
+    final switching = controller.connect(id: 'server-b', nickname: 'Me');
+    expect(core.calls, ['disconnect']);
+    expect(container.read(sessionViewProvider).activeServerId, 'server-a');
+    expect(container.read(sessionViewProvider).channels, hasLength(1));
+    expect(await controller.connect(id: 'server-c', nickname: 'Me'), isFalse);
+    core.disconnectReply.complete();
+    await Future<void>.value();
+    expect(core.calls, ['disconnect', 'connect:server-b']);
+    events.add(
+      const CoreEvent.state(
+        state: CoreSessionState.reconnecting(attempt: 1, delayMs: 1000),
+      ),
+    );
+    events.add(
+      const CoreEvent.state(
+        state: CoreSessionState.connected(clientId: 1, channelId: 6),
+      ),
+    );
+    expect(container.read(sessionViewProvider).activeServerId, 'server-a');
+    events.add(const CoreEvent.state(state: CoreSessionState.disconnected()));
+    expect(container.read(sessionViewProvider).activeServerId, isNull);
+    expect(container.read(sessionViewProvider).busy, isTrue);
+    events.add(const CoreEvent.state(state: CoreSessionState.connecting()));
+    expect(container.read(sessionViewProvider).activeServerId, 'server-b');
+    core.connectReply.complete();
+    expect(await switching, isTrue);
+    events.add(
+      const CoreEvent.state(
+        state: CoreSessionState.connected(clientId: 2, channelId: 9),
+      ),
+    );
+    expect(container.read(sessionViewProvider).activeServerId, 'server-b');
+    expect(container.read(sessionViewProvider).connectionEpoch, 3);
+  });
+
+  test('failed disconnect aborts a server switch without relabelling the live connection', () async {
+    final events = StreamController<CoreEvent>.broadcast(sync: true);
+    final core = _SwitchCore(events);
+    final container = ProviderContainer(
+      overrides: [
+        coreSessionProvider.overrideWithValue(core),
+        sessionViewProvider.overrideWith(_ConnectedSession.new),
+      ],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await events.close();
+    });
+    final switching = container
+        .read(sessionViewProvider.notifier)
+        .connect(id: 'server-b', nickname: 'Me');
+    core.disconnectReply.completeError(
+      const CoreError.connection(message: 'disconnect failed'),
+    );
+    expect(await switching, isFalse);
+    expect(core.calls, ['disconnect']);
+    expect(container.read(sessionViewProvider).activeServerId, 'server-a');
+  });
+
+  test('an operation failure preserves a connected snapshot and does not report a connection failure', () async {
+    final events = StreamController<CoreEvent>.broadcast(sync: true);
+    final container = ProviderContainer(
+      overrides: [
+        coreSessionProvider.overrideWithValue(_Core(events)),
+        sessionViewProvider.overrideWith(_ConnectedSession.new),
+      ],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await events.close();
+    });
+    container.read(sessionViewProvider);
+    events.add(const CoreEvent.failed(message: 'history could not be saved'));
+    final view = container.read(sessionViewProvider);
+    expect(view.connected, isTrue);
+    expect(view.channels, hasLength(1));
+    expect(view.clients, hasLength(1));
+    expect(view.failureSeq, 0);
+    expect(
+      container.read(noticeCenterProvider).single.message,
+      'history could not be saved',
+    );
+  });
+
+  test(
+    'an old initial server list cannot overwrite a newer server event',
+    () async {
+      final events = StreamController<CoreEvent>.broadcast(sync: true);
+      final core = _LateServersCore(events);
+      final container = ProviderContainer(
+        overrides: [coreSessionProvider.overrideWithValue(core)],
+      );
+      addTearDown(() async {
+        container.dispose();
+        await events.close();
+      });
+      container.read(sessionViewProvider);
+      events.add(
+        const CoreEvent.servers(
+          profiles: [
+            ServerProfileView(
+              id: 'new',
+              label: 'New',
+              host: 'new.example.com',
+              port: 9987,
+            ),
+          ],
+        ),
+      );
+      core.initialServers.complete([]);
+      await Future<void>.value();
+      expect(container.read(sessionViewProvider).servers.single.id, 'new');
+    },
+  );
+
+  test('reconnecting clears speaking indicators and levels without dropping the server target', () async {
+    final events = StreamController<CoreEvent>.broadcast(sync: true);
+    final container = ProviderContainer(
+      overrides: [
+        coreSessionProvider.overrideWithValue(_Core(events)),
+        sessionViewProvider.overrideWith(_ConnectedSession.new),
+      ],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await events.close();
+    });
+    final controller = container.read(sessionViewProvider.notifier);
+    final levels = <VoiceLevels>[];
+    final subscription = controller.levels.listen(levels.add);
+    addTearDown(subscription.cancel);
+    events.add(const CoreEvent.levels(mic: 1, received: 1));
+    events.add(const CoreEvent.selfSpeaking(speaking: true));
+    events.add(CoreEvent.speaking(clientIds: Int32List.fromList([1])));
+    events.add(
+      const CoreEvent.state(
+        state: CoreSessionState.reconnecting(attempt: 1, delayMs: 1000),
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+    final view = container.read(sessionViewProvider);
+    expect(view.activeServerId, 'server-a');
+    expect(view.selfSpeaking, isFalse);
+    expect(view.speaking, isEmpty);
+    expect(levels.last, VoiceLevels.silent);
+  });
+
   test('late voice failures do not read a disposed provider', () async {
     final events = StreamController<CoreEvent>.broadcast(sync: true);
     final core = _ConcurrentCore(events);
