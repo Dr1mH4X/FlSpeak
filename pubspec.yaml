@@ -15,6 +15,7 @@ dependencies:
   file_selector: ^1.1.0
   pasteboard: ^0.6.0
   flutter_secure_storage: ^11.2.0
+  flutter_markdown_plus: ^1.0.12
   flutter:
     sdk: flutter
   flutter_localizations:

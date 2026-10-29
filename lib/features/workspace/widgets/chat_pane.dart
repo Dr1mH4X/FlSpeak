@@ -631,12 +631,14 @@ class _Welcome extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 4),
-            Text(
-              description.isEmpty ? l10n.chatWelcomeBody : description,
-              style: texts.bodyMedium?.copyWith(
-                fontSize: 14,
-                color: scheme.onSurfaceVariant,
-              ),
+            MessageContent(
+              text: description.isEmpty ? l10n.chatWelcomeBody : description,
+              style:
+                  texts.bodyMedium?.copyWith(
+                    fontSize: 14,
+                    color: scheme.onSurfaceVariant,
+                  ) ??
+                  const TextStyle(),
             ),
           ],
         ),

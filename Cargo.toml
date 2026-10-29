@@ -34,6 +34,7 @@ reqwest = { version = "0.12.28", default-features = false, features = ["rustls-t
 rand = "0.10"
 sha1 = "0.10"
 base64 = "0.22"
+pulldown-cmark = { version = "0.13", default-features = false }
 
 audio = { path = "core/audio" }
 proto = { path = "core/proto" }

@@ -39,7 +39,8 @@ const STARTUP_RECONNECT_LIMIT: u32 = 5;
 const MAX_VOICE_PAYLOAD: usize = 484;
 const _: () = assert!(MAX_VOICE_PAYLOAD < 500);
 
-/// ServerQuery 单行消息上限。超过这个长度的文本必须分片发送。
+/// ServerQuery 单行消息上限。
+#[allow(dead_code)]
 const MAX_TEXT_MESSAGE_BYTES: usize = 8192;
 
 /// 音频线程到 actor 的事件队列，溢出时丢的是语音包而不是协议命令。
@@ -739,9 +740,10 @@ impl Actor {
         message: String,
     ) -> Result<(), SessionError> {
         let client = self.connected()?;
-        // ServerQuery 的单行上限是 8192 字节。长文本按 UTF-8 边界分片，
-        // 每一片单独走 sendtextmessage，避免整条消息被服务端截断。
-        for chunk in split_text_message(&message, MAX_TEXT_MESSAGE_BYTES) {
+        // 将 Markdown 转换为安全 BBCode，并在 Block 级别按转义后预算完成分片，
+        // 杜绝 BBCode 标签跨包断开和 ServerQuery 转义膨胀导致的截断。
+        let packets = crate::text_format::markdown_to_bbcode_packets(&message, 1024);
+        for chunk in packets {
             client
                 .exec_command(
                     &format!(
@@ -783,15 +785,16 @@ impl Actor {
 
     async fn channel_description(&self, channel_id: u64) -> Result<String, SessionError> {
         let client = self.connected()?;
-        match tsclient_rs::get_channel_description(&client, channel_id).await {
-            Ok(desc) => Ok(desc),
+        let desc = match tsclient_rs::get_channel_description(&client, channel_id).await {
+            Ok(desc) => desc,
             Err(_) => {
                 let info = tsclient_rs::get_channel_info(&client, channel_id)
                     .await
                     .map_err(crate::channel_tools::protocol_error)?;
-                Ok(info.description)
+                info.description
             }
-        }
+        };
+        Ok(crate::text_format::bbcode_to_markdown(&desc))
     }
 
     async fn list_clients(&self) -> Result<Vec<ClientView>, SessionError> {
@@ -1899,7 +1902,12 @@ fn channel_view(channel: ChannelInfo, metadata: Option<&ChannelMetadata>) -> Cha
         parent_id: channel.parent_id,
         order: metadata.order.or(Some(channel.order)),
         name: channel.name,
-        description: metadata.description.unwrap_or(channel.description),
+        description: crate::text_format::bbcode_to_markdown(
+            metadata
+                .description
+                .as_deref()
+                .unwrap_or(&channel.description),
+        ),
         max_clients: metadata.max_clients.or(channel.max_clients),
         max_clients_limited: metadata.max_clients_limited.or(channel.max_clients_limited),
         password_protected: metadata.password_protected.or(channel.password_protected),
@@ -1962,6 +1970,7 @@ fn protocol_error(err: tsclient_rs::Error) -> SessionError {
 ///
 /// 优先在空白处断开；找不到合适空白时退到字符边界。单个字符本身超过上限时
 /// 独占一片，不切断 UTF-8。片与片之间的空白会被丢弃，语义与 TeamSpeakClaw 一致。
+#[allow(dead_code)]
 fn split_text_message(message: &str, max_bytes: usize) -> Vec<String> {
     assert!(max_bytes > 0, "max_bytes must be > 0");
     if message.len() <= max_bytes {
@@ -2107,7 +2116,7 @@ fn register_handlers(
                     from: message.invoker_name,
                     from_uid: message.invoker_uid,
                     from_id: message.invoker_id,
-                    message: message.message,
+                    message: crate::text_format::bbcode_to_markdown(&message.message),
                     target_mode: message.target_mode,
                     target_id: message.target_id,
                     at: now_millis(),

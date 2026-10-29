@@ -14,6 +14,7 @@ mod images;
 mod store;
 
 mod channel_tools;
+pub mod text_format;
 pub use channel_tools::{AccessView, ChannelFileView, GroupKind, KickTarget, MemberGroupView};
 
 use std::path::{Path, PathBuf};
