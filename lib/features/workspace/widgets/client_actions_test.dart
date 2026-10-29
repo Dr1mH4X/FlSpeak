@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../../core/models.dart';
 import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../theme/app_theme.dart';
 import 'client_actions.dart';
 
 class _Controller extends SessionController {
@@ -35,11 +36,12 @@ void main() {
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
-          child: const MaterialApp(
-            locale: Locale('zh'),
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            locale: const Locale('zh'),
             localizationsDelegates: AppLocalizations.localizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
-            home: Scaffold(
+            home: const Scaffold(
               body: ClientActionsButton(
                 client: ClientView(
                   id: 2,
@@ -54,11 +56,28 @@ void main() {
       );
       await tester.tap(find.byIcon(Icons.more_horiz_rounded));
       await tester.pumpAndSettle();
-      final menuItems = tester
+      final menuButtons = tester
           .widgetList<MenuItemButton>(find.byType(MenuItemButton))
+          .toList();
+      final menuItems = menuButtons
           .map((item) => (item.child as Text).data)
           .toList();
       expect(menuItems, ['私信', '戳一戳', '权限管理', '踢出频道', '踢出服务器']);
+      final menuThemeStyle = MenuButtonTheme.of(
+        tester.element(find.byType(MenuItemButton).first),
+      ).style;
+      expect(menuThemeStyle?.iconSize?.resolve({}), IconSizes.medium);
+      expect(menuThemeStyle?.textStyle?.resolve({})?.fontSize, 12.5);
+      expect(
+        IconTheme.of(
+          tester.element(find.byIcon(Icons.chat_bubble_outline_rounded)),
+        ).size,
+        IconSizes.medium,
+      );
+      expect(
+        DefaultTextStyle.of(tester.element(find.text('私信'))).style.fontSize,
+        12.5,
+      );
       await tester.tap(find.text('戳一戳'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), 'hello 🌍');

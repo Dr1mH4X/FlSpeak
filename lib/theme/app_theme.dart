@@ -609,7 +609,8 @@ ThemeData buildAppTheme(Brightness brightness) {
       style: ButtonStyle(
         foregroundBuilder: pressFeedback,
         shape: WidgetStatePropertyAll(Radii.smallShape),
-        textStyle: WidgetStatePropertyAll(text.bodyMedium),
+        iconSize: const WidgetStatePropertyAll(IconSizes.medium),
+        textStyle: WidgetStatePropertyAll(text.bodySmall),
       ),
     ),
     switchTheme: SwitchThemeData(

@@ -342,10 +342,7 @@ class _ChannelTile extends StatelessWidget {
         openOnSecondaryTap: true,
         items: [
           MenuItemButton(
-            leadingIcon: const Icon(
-              Icons.login_rounded,
-              size: IconSizes.medium,
-            ),
+            leadingIcon: const Icon(Icons.login_rounded),
             onPressed: canJoin ? onJoin : null,
             child: Text(l10n.channelJoinMenu),
           ),

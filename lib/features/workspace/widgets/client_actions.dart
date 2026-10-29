@@ -26,18 +26,8 @@ class ClientActionsButton extends ConsumerWidget {
     final canManage =
         (access?.memberAddPower ?? 0) > 0 ||
         (access?.memberRemovePower ?? 0) > 0;
-    return MenuAnchor(
-      builder: (context, menu, child) => IconButton(
-        onPressed: !view.connected || view.busy
-            ? null
-            : () => menu.isOpen ? menu.close() : menu.open(),
-        iconSize: IconSizes.medium,
-        icon: Icon(
-          Icons.more_horiz_rounded,
-          semanticLabel: l10n.memberActions(client.nickname),
-        ),
-      ),
-      menuChildren: [
+    return SecondaryMenu(
+      items: [
         MenuItemButton(
           leadingIcon: const Icon(Icons.chat_bubble_outline_rounded),
           onPressed: () {
@@ -91,6 +81,16 @@ class ClientActionsButton extends ConsumerWidget {
             ),
           ),
       ],
+      builder: (context, controller) => IconButton(
+        onPressed: !view.connected || view.busy
+            ? null
+            : () => controller.isOpen ? controller.close() : controller.open(),
+        iconSize: IconSizes.medium,
+        icon: Icon(
+          Icons.more_horiz_rounded,
+          semanticLabel: l10n.memberActions(client.nickname),
+        ),
+      ),
     );
   }
 }
