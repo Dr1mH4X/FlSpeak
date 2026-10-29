@@ -151,9 +151,7 @@ pub async fn compact_history(path: &Path, limit_per_server: usize) -> Result<(),
         output.push_str(&line);
         output.push('\n');
     }
-    tokio::fs::write(path, output)
-        .await
-        .map_err(|err| err.to_string())
+    write_atomic(path, output.as_bytes()).await
 }
 
 pub async fn load_registry(path: &Path) -> Result<ServerRegistry, String> {
@@ -169,69 +167,155 @@ pub async fn load_registry(path: &Path) -> Result<ServerRegistry, String> {
 }
 
 pub async fn save_registry(path: &Path, registry: &ServerRegistry) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        tokio::fs::create_dir_all(parent)
-            .await
-            .map_err(|err| err.to_string())?;
-    }
-    let raw = serde_json::to_string_pretty(registry.profiles()).map_err(|err| err.to_string())?;
-    tokio::fs::write(path, raw)
-        .await
-        .map_err(|err| err.to_string())
+    let raw = serde_json::to_vec_pretty(registry.profiles()).map_err(|err| err.to_string())?;
+    write_atomic(path, &raw).await
 }
 
 pub async fn load_identity(path: &Path) -> Result<Identity, String> {
-    if let Ok(raw) = tokio::fs::read_to_string(path).await
-        && let Ok(identity) = identityFromString(raw.trim())
-    {
-        return Ok(identity);
+    match tokio::fs::read_to_string(path).await {
+        Ok(raw) => identityFromString(raw.trim()).map_err(|error| error.to_string()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let identity = generateIdentity(IDENTITY_SECURITY_LEVEL);
+            save_identity_atomic(path, &identity).await?;
+            Ok(identity)
+        }
+        Err(error) => Err(error.to_string()),
     }
-    let identity = generateIdentity(IDENTITY_SECURITY_LEVEL);
-    save_identity_atomic(path, &identity).await?;
-    Ok(identity)
 }
 
 /// 原子写身份文件：临时文件 + fsync + rename。
 ///
 /// 身份文件承载用户在服务器上的全部权限，挖矿中途被杀也不能留下半个文件。
 pub async fn save_identity_atomic(path: &Path, identity: &Identity) -> Result<(), String> {
+    write_atomic(path, identity.to_string().as_bytes()).await
+}
+
+async fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         tokio::fs::create_dir_all(parent)
             .await
-            .map_err(|err| err.to_string())?;
+            .map_err(|error| error.to_string())?;
     }
     let file_name = path
         .file_name()
-        .and_then(|name| name.to_str())
-        .ok_or_else(|| "身份文件路径没有文件名".to_string())?;
-    let temp = path.with_file_name(format!("{file_name}.tmp"));
-
-    let mut file = tokio::fs::File::create(&temp)
+        .ok_or_else(|| "文件路径没有文件名".to_string())?;
+    let mut temp_name = file_name.to_os_string();
+    temp_name.push(format!(".{:032x}.tmp", rand::random::<u128>()));
+    let temp = path.with_file_name(temp_name);
+    let mut options = tokio::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    options.mode(0o600);
+    let mut file = options
+        .open(&temp)
         .await
-        .map_err(|err| err.to_string())?;
-    file.write_all(identity.to_string().as_bytes())
-        .await
-        .map_err(|err| err.to_string())?;
-    file.sync_all().await.map_err(|err| err.to_string())?;
-    drop(file);
-
-    match tokio::fs::rename(&temp, path).await {
-        Ok(()) => Ok(()),
-        Err(_) => {
-            // Windows 上 rename 不覆盖已有文件；退化成先删后改名。
-            tokio::fs::remove_file(path)
-                .await
-                .map_err(|err| err.to_string())?;
-            tokio::fs::rename(&temp, path)
-                .await
-                .map_err(|err| err.to_string())
-        }
+        .map_err(|error| error.to_string())?;
+    let written = async {
+        file.write_all(bytes).await?;
+        file.sync_all().await
     }
+    .await;
+    drop(file);
+    // rename 的覆盖语义由文件系统提供；失败时不能先删除用户的旧文件。
+    let outcome = match written {
+        Ok(()) => tokio::fs::rename(&temp, path).await,
+        Err(error) => Err(error),
+    };
+    if let Err(error) = outcome {
+        if let Err(cleanup) = tokio::fs::remove_file(&temp).await {
+            return Err(format!("{error}; 清理临时文件失败: {cleanup}"));
+        }
+        return Err(error.to_string());
+    }
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn invalid_identity_is_not_replaced_with_a_new_key() {
+        let dir = std::env::temp_dir().join(format!(
+            "flspeak-invalid-identity-{:x}",
+            rand::random::<u64>()
+        ));
+        tokio::fs::create_dir_all(&dir).await.unwrap();
+        let path = dir.join("identity.txt");
+        tokio::fs::write(&path, b"invalid identity - preserve for recovery")
+            .await
+            .unwrap();
+        assert!(load_identity(&path).await.is_err());
+        assert_eq!(
+            tokio::fs::read(&path).await.unwrap(),
+            b"invalid identity - preserve for recovery"
+        );
+        tokio::fs::remove_dir_all(&dir).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn atomic_replacement_failure_preserves_destination_and_cleans_staging() {
+        let dir = std::env::temp_dir().join(format!(
+            "flspeak-atomic-failure-{:x}",
+            rand::random::<u64>()
+        ));
+        let path = dir.join("identity.txt");
+        tokio::fs::create_dir_all(&path).await.unwrap();
+        tokio::fs::write(path.join("keep"), b"original")
+            .await
+            .unwrap();
+        assert!(write_atomic(&path, b"replacement").await.is_err());
+        assert_eq!(
+            tokio::fs::read(path.join("keep")).await.unwrap(),
+            b"original"
+        );
+        let mut entries = tokio::fs::read_dir(&dir).await.unwrap();
+        assert_eq!(
+            entries.next_entry().await.unwrap().unwrap().file_name(),
+            "identity.txt"
+        );
+        assert!(entries.next_entry().await.unwrap().is_none());
+        tokio::fs::remove_dir_all(&dir).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn concurrent_atomic_writes_publish_only_complete_files() {
+        let dir = std::env::temp_dir().join(format!(
+            "flspeak-atomic-concurrent-{:x}",
+            rand::random::<u64>()
+        ));
+        let path = dir.join("data.json");
+        let mut writes = Vec::new();
+        for index in 0..12u8 {
+            let path = path.clone();
+            writes.push(tokio::spawn(async move {
+                write_atomic(&path, &vec![index; 32 * 1024]).await
+            }));
+        }
+        for write in writes {
+            write.await.unwrap().unwrap();
+        }
+        let bytes = tokio::fs::read(&path).await.unwrap();
+        assert_eq!(bytes.len(), 32 * 1024);
+        assert!(bytes.iter().all(|byte| *byte == bytes[0]));
+        let mut entries = tokio::fs::read_dir(&dir).await.unwrap();
+        assert!(entries.next_entry().await.unwrap().is_some());
+        assert!(entries.next_entry().await.unwrap().is_none());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                tokio::fs::metadata(&path)
+                    .await
+                    .unwrap()
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o600
+            );
+        }
+        tokio::fs::remove_dir_all(&dir).await.unwrap();
+    }
 
     #[tokio::test]
     async fn registry_round_trips_through_disk() {

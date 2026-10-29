@@ -34,6 +34,7 @@ pub enum AudioEvent {
     Outbound {
         codec: i32,
         data: Vec<u8>,
+        produced_at: Instant,
     },
     /// 本端 VAD/PTT 是否在发送，低频。
     SelfSpeaking {
@@ -45,8 +46,6 @@ pub enum AudioEvent {
     },
     CaptureState {
         ready: bool,
-        ptt_mode: bool,
-        ptt_active: bool,
     },
     PlaybackState {
         ready: bool,
@@ -279,9 +278,6 @@ fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, mic_level: 
     };
     let mut stream: Option<CaptureStream> = None;
     let mut device: Option<String> = None;
-    let mut muted = false;
-    let mut ptt_mode = false;
-    let mut ptt_active = false;
     let mut speaking = false;
     let mut pacer = VoicePacer::default();
     let mut raw = Vec::new();
@@ -300,9 +296,6 @@ fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, mic_level: 
                     &mut pipeline,
                     &mut stream,
                     &mut device,
-                    &mut muted,
-                    &mut ptt_mode,
-                    &mut ptt_active,
                     &mut speaking,
                     &sink,
                     &mut pacer,
@@ -351,6 +344,7 @@ fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, mic_level: 
                     sink(AudioEvent::Outbound {
                         codec: packet.codec,
                         data: packet.data,
+                        produced_at: now,
                     });
                     pacer.advance();
                 }
@@ -376,23 +370,14 @@ fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, mic_level: 
     if let Some(stream) = stream.take() {
         drop(stream);
     }
-    sink(AudioEvent::CaptureState {
-        ready: false,
-        ptt_mode,
-        ptt_active: false,
-    });
-    let _ = muted;
+    sink(AudioEvent::CaptureState { ready: false });
 }
 
-#[allow(clippy::too_many_arguments)]
 fn handle_capture_command(
     command: CaptureCommand,
     pipeline: &mut CapturePipeline,
     stream: &mut Option<CaptureStream>,
     device: &mut Option<String>,
-    muted: &mut bool,
-    ptt_mode: &mut bool,
-    ptt_active: &mut bool,
     speaking: &mut bool,
     sink: &EventSink,
     pacer: &mut VoicePacer,
@@ -401,14 +386,7 @@ fn handle_capture_command(
         CaptureCommand::Shutdown => return false,
         CaptureCommand::Start { device: next } => {
             *device = next;
-            open_capture(
-                stream,
-                pipeline,
-                (*device).clone(),
-                *ptt_mode,
-                *ptt_active,
-                sink,
-            );
+            open_capture(stream, pipeline, (*device).clone(), sink);
             *speaking = false;
             pacer.due(Instant::now(), false);
         }
@@ -418,47 +396,29 @@ fn handle_capture_command(
             }
             pipeline.end();
             *speaking = false;
-            sink(AudioEvent::CaptureState {
-                ready: false,
-                ptt_mode: *ptt_mode,
-                ptt_active: *ptt_active,
-            });
+            sink(AudioEvent::CaptureState { ready: false });
         }
         CaptureCommand::SetDevice { device: next } => {
             let was_active = stream.is_some();
             *device = next;
             if was_active {
-                open_capture(
-                    stream,
-                    pipeline,
-                    (*device).clone(),
-                    *ptt_mode,
-                    *ptt_active,
-                    sink,
-                );
+                open_capture(stream, pipeline, (*device).clone(), sink);
             }
         }
         CaptureCommand::SetMuted(next) => {
-            *muted = next;
             pipeline.set_muted(next);
         }
         CaptureCommand::SetDeafened(deafened) => pipeline.set_deafened(deafened),
         CaptureCommand::SetPttMode(next) => {
-            *ptt_mode = next;
             pipeline.set_ptt_mode(next);
             sink(AudioEvent::CaptureState {
                 ready: stream.is_some(),
-                ptt_mode: *ptt_mode,
-                ptt_active: *ptt_active,
             });
         }
         CaptureCommand::SetPttActive(next) => {
-            *ptt_active = next;
             pipeline.set_ptt_active(next);
             sink(AudioEvent::CaptureState {
                 ready: stream.is_some(),
-                ptt_mode: *ptt_mode,
-                ptt_active: *ptt_active,
             });
         }
         CaptureCommand::SetCodec(codec) => match pipeline.set_codec(codec) {
@@ -476,8 +436,6 @@ fn open_capture(
     stream: &mut Option<CaptureStream>,
     pipeline: &mut CapturePipeline,
     device: Option<String>,
-    ptt_mode: bool,
-    ptt_active: bool,
     sink: &EventSink,
 ) {
     if let Some(old) = stream.take() {
@@ -487,11 +445,7 @@ fn open_capture(
         Ok(next) => {
             pipeline.begin();
             *stream = Some(next);
-            sink(AudioEvent::CaptureState {
-                ready: true,
-                ptt_mode,
-                ptt_active,
-            });
+            sink(AudioEvent::CaptureState { ready: true });
         }
         Err(err) => {
             pipeline.end();
@@ -499,11 +453,7 @@ fn open_capture(
                 stage: AudioStage::Capture,
                 message: err.to_string(),
             });
-            sink(AudioEvent::CaptureState {
-                ready: false,
-                ptt_mode,
-                ptt_active,
-            });
+            sink(AudioEvent::CaptureState { ready: false });
         }
     }
 }

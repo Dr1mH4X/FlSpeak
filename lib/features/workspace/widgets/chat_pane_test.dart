@@ -2,6 +2,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:flutter/material.dart';
@@ -12,7 +13,212 @@ import '../../../core/image_host.dart';
 import '../../../l10n/app_localizations.dart';
 import 'chat_pane.dart';
 
+class _ChatHarness extends StatefulWidget {
+  const _ChatHarness({this.pick, this.upload, this.send, super.key});
+  final Future<PickedChatImage?> Function()? pick;
+  final Future<String?> Function(Uint8List)? upload;
+  final Future<bool> Function(String, String)? send;
+  @override
+  State<_ChatHarness> createState() => _ChatHarnessState();
+}
+
+class _ChatHarnessState extends State<_ChatHarness> {
+  String recipient = 'alice';
+  List<ChatMessage> messages = [];
+  void select(String uid) => setState(() => recipient = uid);
+  void replaceMessages(List<ChatMessage> value) =>
+      setState(() => messages = value);
+  @override
+  Widget build(BuildContext context) {
+    final target = recipient;
+    return MaterialApp(
+      locale: const Locale('zh'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(
+        body: ChatPane(
+          channelName: 'Lobby',
+          messages: messages,
+          scope: ChatScope.direct,
+          canSendChannel: true,
+          busy: false,
+          selfUid: 'self',
+          selfClientId: 1,
+          recipients: const [
+            ClientView(id: 2, nickname: 'Alice', uid: 'alice', channelId: 5),
+            ClientView(id: 3, nickname: 'Bob', uid: 'bob', channelId: 5),
+          ],
+          recipientUid: target,
+          recipientId: target == 'alice' ? 2 : 3,
+          onRecipientChanged: select,
+          onReply: (_) {},
+          onScopeChanged: (_) {},
+          onSend: (text) =>
+              widget.send?.call(target, text) ?? Future.value(true),
+          onPickImage: widget.pick,
+          onUploadImage: widget.upload,
+        ),
+      ),
+    );
+  }
+}
+
+PickedChatImage _picked() => PickedChatImage(
+  bytes: base64Decode(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNIcznzHwAFAAJ2x7r4FgAAAABJRU5ErkJggg==',
+  ),
+  name: 'picked.png',
+);
+
 void main() {
+  testWidgets('private recipients keep separate drafts', (tester) async {
+    final key = GlobalKey<_ChatHarnessState>();
+    await tester.pumpWidget(_ChatHarness(key: key));
+    await tester.enterText(find.byType(TextField).last, 'for Alice');
+    key.currentState!.select('bob');
+    await tester.pump();
+    expect(
+      tester.widget<TextField>(find.byType(TextField).last).controller!.text,
+      '',
+    );
+    await tester.enterText(find.byType(TextField).last, 'for Bob');
+    key.currentState!.select('alice');
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(find.byType(TextField).last).controller!.text,
+      'for Alice',
+    );
+    key.currentState!.select('bob');
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(find.byType(TextField).last).controller!.text,
+      'for Bob',
+    );
+  });
+
+  testWidgets('late image selection belongs to the original recipient', (
+    tester,
+  ) async {
+    final key = GlobalKey<_ChatHarnessState>();
+    final picked = Completer<PickedChatImage?>();
+    await tester.pumpWidget(_ChatHarness(key: key, pick: () => picked.future));
+    await tester.tap(find.byIcon(Icons.add_photo_alternate_outlined));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('选择图片'));
+    await tester.pump();
+    key.currentState!.select('bob');
+    await tester.pump();
+    picked.complete(_picked());
+    await tester.pumpAndSettle();
+    expect(find.byType(Image), findsNothing);
+    key.currentState!.select('alice');
+    await tester.pumpAndSettle();
+    expect(find.byType(Image), findsOneWidget);
+  });
+
+  testWidgets(
+    'switching target during upload keeps its cached image and cannot send it to the new target',
+    (tester) async {
+      final key = GlobalKey<_ChatHarnessState>();
+      final upload = Completer<String?>();
+      var uploads = 0;
+      final sent = <(String, String)>[];
+      await tester.pumpWidget(
+        _ChatHarness(
+          key: key,
+          pick: () async => _picked(),
+          upload: (_) {
+            uploads++;
+            return upload.future;
+          },
+          send: (target, text) async {
+            sent.add((target, text));
+            return true;
+          },
+        ),
+      );
+      await tester.enterText(find.byType(TextField).last, 'caption');
+      await tester.tap(find.byIcon(Icons.add_photo_alternate_outlined));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('选择图片'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.send_rounded));
+      await tester.pump();
+      key.currentState!.select('bob');
+      await tester.pump();
+      upload.complete('https://images.example.com/picked.png');
+      await tester.pumpAndSettle();
+      expect(sent, isEmpty);
+      expect(find.byType(Image), findsNothing);
+      key.currentState!.select('alice');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.send_rounded));
+      await tester.pumpAndSettle();
+      expect(uploads, 1);
+      expect(sent.single, (
+        'alice',
+        'caption\n![](<https://images.example.com/picked.png>)',
+      ));
+    },
+  );
+
+  testWidgets('a completed send clears its inactive draft', (tester) async {
+    final key = GlobalKey<_ChatHarnessState>();
+    final reply = Completer<bool>();
+    await tester.pumpWidget(
+      _ChatHarness(key: key, send: (_, text) => reply.future),
+    );
+    await tester.enterText(find.byType(TextField).last, 'already sent');
+    await tester.pump();
+    await tester.tap(find.byIcon(Icons.send_rounded));
+    await tester.pump();
+    key.currentState!.select('bob');
+    await tester.pump();
+    reply.complete(true);
+    await tester.pumpAndSettle();
+    key.currentState!.select('alice');
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(find.byType(TextField).last).controller!.text,
+      '',
+    );
+  });
+
+  testWidgets(
+    'incoming chat preserves history reading and follows capped history while at the bottom',
+    (tester) async {
+      final key = GlobalKey<_ChatHarnessState>();
+      ChatMessage message(int id, {String? text}) => ChatMessage(
+        from: 'Alice',
+        fromUid: 'alice',
+        fromId: 2,
+        text: text ?? 'message $id',
+        at: DateTime.utc(2026, 1, 1).add(Duration(seconds: id)),
+        scope: ChatScope.direct,
+        targetId: 1,
+      );
+      await tester.pumpWidget(_ChatHarness(key: key));
+      var messages = List.generate(40, (index) => message(index));
+      key.currentState!.replaceMessages(messages);
+      await tester.pumpAndSettle();
+      final scroll = tester.widget<ListView>(find.byType(ListView)).controller!;
+      scroll.jumpTo(0);
+      await tester.pump();
+      messages = [...messages, message(40)];
+      key.currentState!.replaceMessages(messages);
+      await tester.pumpAndSettle();
+      expect(scroll.offset, 0);
+      scroll.jumpTo(scroll.position.maxScrollExtent);
+      await tester.pump();
+      key.currentState!.replaceMessages([
+        ...messages.skip(1),
+        message(41, text: List.filled(12, 'long message').join('\n')),
+      ]);
+      await tester.pumpAndSettle();
+      expect(scroll.position.extentAfter, lessThan(1));
+    },
+  );
+
   testWidgets(
     'pending send cannot duplicate; failure retains draft; success clears it',
     (tester) async {

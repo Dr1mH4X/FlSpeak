@@ -445,7 +445,7 @@ sealed class CoreEvent with _$CoreEvent {
   const factory CoreEvent.selfSpeaking({required bool speaking}) =
       CoreEvent_SelfSpeaking;
 
-  /// 本端采集与远端混音电平（0–1），≤10Hz。
+  /// 本端采集与远端混音电平（0–1），50Hz。
   const factory CoreEvent.levels({
     required double mic,
     required double received,

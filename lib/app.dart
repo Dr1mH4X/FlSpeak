@@ -35,6 +35,8 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
   /// 只在「只有应用内兜底」的模式下执行——那种模式失焦后收不到 keyup，
   /// 不收尾会一直卡在发送状态。
   bool _nativeRegistered = false;
+  int _registrationRevision = 0;
+  SessionController? _pttOwner;
 
   @override
   void initState() {
@@ -54,6 +56,9 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
 
   @override
   void dispose() {
+    _registrationRevision++;
+    _setPtt(false);
+    unawaited(_hotkey.unregister());
     HardwareKeyboard.instance.removeHandler(_handleInAppKey);
     WidgetsBinding.instance.removeObserver(this);
     _hotkey.setHandler();
@@ -90,6 +95,13 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
   }
 
   void _setPtt(bool active) {
+    if (!active) {
+      _pttDown = false;
+      final owner = _pttOwner;
+      _pttOwner = null;
+      if (owner != null) unawaited(owner.setPttActive(false));
+      return;
+    }
     if (_pttDown == active) {
       return;
     }
@@ -99,11 +111,18 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
     if (!view.connected || !view.pttMode) {
       return;
     }
-    unawaited(ref.read(sessionViewProvider.notifier).setPttActive(active));
+    final owner = ref.read(sessionViewProvider.notifier);
+    _pttOwner = owner;
+    unawaited(owner.setPttActive(true));
   }
 
   Future<void> _syncRegistration(int? keyId) async {
-    _nativeRegistered = await _hotkey.registerByKeyId(keyId);
+    _setPtt(false);
+    _nativeRegistered = false;
+    final revision = ++_registrationRevision;
+    final registered = await _hotkey.registerByKeyId(keyId);
+    if (!mounted || revision != _registrationRevision) return;
+    _nativeRegistered = registered;
     if (keyId != null && !_nativeRegistered) {
       debugPrint('全局热键注册失败，按住说话退回应用内按键');
     }

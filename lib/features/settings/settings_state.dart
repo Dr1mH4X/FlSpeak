@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -51,21 +53,34 @@ final audioSelectionProvider =
     );
 
 class AudioSelectionController extends Notifier<AudioDeviceSelection> {
+  Future<void> _selectionCompleted = Future.value();
   @override
   AudioDeviceSelection build() => const AudioDeviceSelection();
 
   Future<void> selectInput(AudioDeviceView? device) =>
-      _apply(state.withInput(device));
+      _apply((current) => current.withInput(device));
 
   Future<void> selectOutput(AudioDeviceView? device) =>
-      _apply(state.withOutput(device));
+      _apply((current) => current.withOutput(device));
 
-  Future<void> _apply(AudioDeviceSelection next) async {
-    // Rust 一次同时写入输入与输出，未改动的另一侧必须带上当前值，否则会被重置成系统默认。
-    await ref
-        .read(coreSessionProvider)
-        .setAudioDevices(input: next.inputId, output: next.outputId);
-    state = next;
+  Future<void> _apply(
+    AudioDeviceSelection Function(AudioDeviceSelection) update,
+  ) async {
+    final previous = _selectionCompleted;
+    final completed = Completer<void>();
+    _selectionCompleted = completed.future;
+    try {
+      await previous;
+      if (!ref.mounted) return;
+      // 两个设备一起提交；排到本次操作时再合并最近一次成功的选择。
+      final next = update(state);
+      await ref
+          .read(coreSessionProvider)
+          .setAudioDevices(input: next.inputId, output: next.outputId);
+      if (ref.mounted) state = next;
+    } finally {
+      completed.complete();
+    }
   }
 }
 

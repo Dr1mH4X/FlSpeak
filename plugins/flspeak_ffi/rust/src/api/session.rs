@@ -168,7 +168,7 @@ pub enum CoreEvent {
     SelfSpeaking {
         speaking: bool,
     },
-    /// 本端采集与远端混音电平（0–1），≤10Hz。
+    /// 本端采集与远端混音电平（0–1），50Hz。
     Levels {
         mic: f64,
         received: f64,

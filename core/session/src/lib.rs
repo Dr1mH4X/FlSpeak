@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use server::{AddressError, ServerError, ServerProfile, ServerRegistry};
+use server::{AddressError, ServerError, ServerProfile};
 use tokio::runtime::Builder;
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::task::LocalSet;
@@ -164,7 +164,7 @@ pub enum SessionEvent {
     SelfSpeaking {
         speaking: bool,
     },
-    /// 本端采集与远端混音电平（0–1），≤10Hz。
+    /// 本端采集与远端混音电平（0–1），50Hz。
     Levels {
         mic: f32,
         received: f32,
@@ -470,7 +470,7 @@ impl SessionHandle {
                             let _ = events.send(SessionEvent::Failed {
                                 message: format!("档案读取失败: {message}"),
                             });
-                            ServerRegistry::new()
+                            return;
                         }
                     };
                     let _ = events.send(SessionEvent::Servers(registry.profiles().to_vec()));
@@ -809,6 +809,27 @@ impl SessionHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn invalid_registry_stops_startup_without_exposing_an_empty_writable_registry() {
+        let dir = std::env::temp_dir().join(format!(
+            "flspeak-invalid-registry-{:x}",
+            rand::random::<u64>()
+        ));
+        tokio::fs::create_dir_all(&dir).await.unwrap();
+        let path = dir.join("servers.json");
+        tokio::fs::write(&path, b"{invalid registry").await.unwrap();
+        let handle =
+            SessionHandle::spawn_with_options(path.clone(), SessionOptions { audio: false })
+                .unwrap();
+        let result = tokio::time::timeout(Duration::from_secs(2), handle.list_servers())
+            .await
+            .unwrap();
+        assert!(result.is_err());
+        assert_eq!(tokio::fs::read(&path).await.unwrap(), b"{invalid registry");
+        drop(handle);
+        tokio::fs::remove_dir_all(&dir).await.unwrap();
+    }
 
     #[tokio::test]
     async fn session_spawns_and_shuts_down_without_a_server() {

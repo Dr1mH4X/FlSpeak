@@ -82,6 +82,7 @@ class SessionController extends Notifier<SessionView> {
   final _transferReplies = <int, Completer<bool>>{};
   final _levels = StreamController<VoiceLevels>.broadcast();
   VoiceLevels _latestLevels = VoiceLevels.silent;
+  int _pendingActions = 0;
 
   /// 最近一次已提示的语音错误；Voice 事件重复带同一句时不再刷新提示。
   String? _lastVoiceNotice;
@@ -113,7 +114,7 @@ class SessionController extends Notifier<SessionView> {
       }
     } on CoreError catch (error) {
       if (ref.mounted) {
-        _notify(describeCoreError(error, ref.read(_localizationsProvider)));
+        _notifyCoreError(error);
       }
     }
   }
@@ -292,7 +293,7 @@ class SessionController extends Notifier<SessionView> {
     try {
       await ref.read(coreSessionProvider).setMuted(muted: muted);
     } on CoreError catch (error) {
-      _notify(describeCoreError(error, ref.read(_localizationsProvider)));
+      _notifyCoreError(error);
     }
   }
 
@@ -300,7 +301,7 @@ class SessionController extends Notifier<SessionView> {
     try {
       await ref.read(coreSessionProvider).setDeafened(deafened: deafened);
     } on CoreError catch (error) {
-      _notify(describeCoreError(error, ref.read(_localizationsProvider)));
+      _notifyCoreError(error);
     }
   }
 
@@ -308,7 +309,7 @@ class SessionController extends Notifier<SessionView> {
     try {
       await ref.read(coreSessionProvider).setAway(away: away);
     } on CoreError catch (error) {
-      _notify(describeCoreError(error, ref.read(_localizationsProvider)));
+      _notifyCoreError(error);
     }
   }
 
@@ -316,18 +317,18 @@ class SessionController extends Notifier<SessionView> {
     try {
       await ref.read(coreSessionProvider).setPttMode(enabled: enabled);
     } on CoreError catch (error) {
-      _notify(describeCoreError(error, ref.read(_localizationsProvider)));
+      _notifyCoreError(error);
     }
   }
 
   Future<void> setPttActive(bool active) async {
-    if (!state.pttMode) {
+    if (!ref.mounted || !state.pttMode) {
       return;
     }
     try {
       await ref.read(coreSessionProvider).setPttActive(active: active);
     } on CoreError catch (error) {
-      _notify(describeCoreError(error, ref.read(_localizationsProvider)));
+      _notifyCoreError(error);
     }
   }
 
@@ -335,7 +336,7 @@ class SessionController extends Notifier<SessionView> {
     try {
       await ref.read(coreSessionProvider).cancelIdentityUpgrade();
     } on CoreError catch (error) {
-      _notify(describeCoreError(error, ref.read(_localizationsProvider)));
+      _notifyCoreError(error);
     }
   }
 
@@ -387,7 +388,7 @@ class SessionController extends Notifier<SessionView> {
       );
     } on CoreError catch (error) {
       if (ref.mounted) {
-        _notify(describeCoreError(error, ref.read(_localizationsProvider)));
+        _notifyCoreError(error);
       }
       return null;
     } on Exception {
@@ -590,6 +591,12 @@ class SessionController extends Notifier<SessionView> {
     try {
       await ref.read(coreSessionProvider).requestSnapshot();
     } on CoreError catch (error) {
+      _notifyCoreError(error);
+    }
+  }
+
+  void _notifyCoreError(CoreError error) {
+    if (ref.mounted) {
       _notify(describeCoreError(error, ref.read(_localizationsProvider)));
     }
   }
@@ -610,6 +617,8 @@ class SessionController extends Notifier<SessionView> {
     Future<void> Function() action, {
     bool passwordPrompt = false,
   }) async {
+    if (!ref.mounted) return false;
+    _pendingActions++;
     state = state.copyWith(busy: true);
     try {
       await action();
@@ -617,11 +626,12 @@ class SessionController extends Notifier<SessionView> {
     } on CoreError catch (error) {
       if (passwordPrompt && error is CoreError_ChannelPasswordRequired) rethrow;
       if (ref.mounted) {
-        _notify(describeCoreError(error, ref.read(_localizationsProvider)));
+        _notifyCoreError(error);
       }
       return false;
     } finally {
-      if (ref.mounted) state = state.copyWith(busy: false);
+      _pendingActions--;
+      if (ref.mounted) state = state.copyWith(busy: _pendingActions != 0);
     }
   }
 

@@ -81,7 +81,85 @@ class _Paths extends PathProviderPlatform {
   Future<String?> getTemporaryPath() async => path;
 }
 
+class _PendingFiles extends Fake implements CoreSession {
+  final replies = <Completer<List<ChannelFileView>>>[];
+  @override
+  Future<List<ChannelFileView>> listFiles({
+    required int channelId,
+    required String path,
+    String? password,
+  }) {
+    final reply = Completer<List<ChannelFileView>>();
+    replies.add(reply);
+    return reply.future;
+  }
+}
+
 void main() {
+  for (final staleError in [false, true]) {
+    testWidgets(
+      'latest file listing owns data and loading state, stale error=$staleError',
+      (tester) async {
+        final core = _PendingFiles();
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              coreSessionProvider.overrideWithValue(core),
+              sessionViewProvider.overrideWith(_Controller.new),
+            ],
+            child: const MaterialApp(
+              locale: Locale('zh'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Scaffold(body: ChannelFilesPane(channelId: 5)),
+            ),
+          ),
+        );
+        await tester.pump();
+        core.replies[0].completeError(
+          const CoreError.channelPasswordRequired(message: 'password'),
+        );
+        await tester.pump();
+        await tester.enterText(find.byType(TextField), 'first');
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pump();
+        await tester.enterText(find.byType(TextField), 'second');
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pump();
+        expect(core.replies, hasLength(3));
+        core.replies[2].complete(const [
+          ChannelFileView(
+            name: 'latest.txt',
+            path: '/latest.txt',
+            directory: false,
+            size: 1,
+          ),
+        ]);
+        await tester.pump();
+        if (staleError) {
+          core.replies[1].completeError(
+            const CoreError.channelPasswordRequired(
+              message: 'obsolete password',
+            ),
+          );
+        } else {
+          core.replies[1].complete(const [
+            ChannelFileView(
+              name: 'old.txt',
+              path: '/old.txt',
+              directory: false,
+              size: 1,
+            ),
+          ]);
+        }
+        await tester.pumpAndSettle();
+        expect(find.text('latest.txt'), findsOneWidget);
+        expect(find.text('old.txt'), findsNothing);
+        expect(find.byType(TextField), findsNothing);
+      },
+    );
+  }
+
   testWidgets(
     'password-protected file list browses folders and exports verified bytes',
     (tester) async {

@@ -37,6 +37,7 @@ const IDENTITY_MAX_LEVEL: i32 = 29;
 const STARTUP_RECONNECT_LIMIT: u32 = 5;
 /// TS 单个数据报上限 500 字节；扣掉 tag/头/语音头后 Opus 载荷约 484 字节。
 const MAX_VOICE_PAYLOAD: usize = 484;
+const MAX_VOICE_QUEUE_DELAY: Duration = Duration::from_millis(100);
 const _: () = assert!(MAX_VOICE_PAYLOAD < 500);
 
 /// ServerQuery 单行消息上限。超过这个长度的文本必须分片发送。
@@ -118,6 +119,7 @@ pub(crate) struct Actor {
     input_device: Option<String>,
     output_device: Option<String>,
     capture_active: bool,
+    audio_since: Instant,
     audio_enabled: bool,
     last_snapshot: Option<(Vec<ChannelView>, Vec<ClientView>)>,
     channel_codecs: HashMap<u64, i32>,
@@ -170,6 +172,7 @@ impl Actor {
             input_device: None,
             output_device: None,
             capture_active: false,
+            audio_since: Instant::now(),
             audio_enabled,
             last_snapshot: None,
             channel_codecs: HashMap::new(),
@@ -1124,7 +1127,9 @@ impl Actor {
             self.voice.set_muted(muted)?;
         }
         self.voice_state.muted = muted;
+        self.audio_since = Instant::now();
         if muted {
+            self.emit(SessionEvent::SelfSpeaking { speaking: false });
             self.voice_state.ptt_active = false;
             if self.audio_enabled {
                 let _ = self.voice.set_ptt_active(false);
@@ -1140,7 +1145,9 @@ impl Actor {
             self.voice.set_deafened(deafened)?;
         }
         self.voice_state.deafened = deafened;
+        self.audio_since = Instant::now();
         if deafened {
+            self.emit(SessionEvent::SelfSpeaking { speaking: false });
             self.voice_state.ptt_active = false;
             if self.audio_enabled {
                 let _ = self.voice.set_ptt_active(false);
@@ -1184,6 +1191,10 @@ impl Actor {
             self.voice.set_ptt_mode(enabled)?;
         }
         self.voice_state.ptt_mode = enabled;
+        self.audio_since = Instant::now();
+        if enabled && !self.voice_state.ptt_active {
+            self.emit(SessionEvent::SelfSpeaking { speaking: false });
+        }
         if !enabled {
             self.voice_state.ptt_active = false;
         }
@@ -1200,6 +1211,10 @@ impl Actor {
             self.voice.set_ptt_active(active)?;
         }
         self.voice_state.ptt_active = active;
+        self.audio_since = Instant::now();
+        if !active {
+            self.emit(SessionEvent::SelfSpeaking { speaking: false });
+        }
         self.emit_voice_state();
         Ok(())
     }
@@ -1230,6 +1245,7 @@ impl Actor {
             return;
         }
         self.self_channel_id = channel_id;
+        self.audio_since = Instant::now();
         if let SessionState::Connected { client_id, .. } = self.state.clone() {
             self.set_state(SessionState::Connected {
                 client_id,
@@ -1674,8 +1690,12 @@ impl Actor {
 
     fn handle_audio(&mut self, event: AudioEvent) {
         match event {
-            AudioEvent::Outbound { codec, data } => {
-                if codec != self.current_codec {
+            AudioEvent::Outbound {
+                codec,
+                data,
+                produced_at,
+            } => {
+                if !self.can_send_voice(codec, produced_at, Instant::now()) {
                     return;
                 }
                 if data.len() > MAX_VOICE_PAYLOAD {
@@ -1692,16 +1712,12 @@ impl Actor {
                 self.emit(SessionEvent::Speaking { client_ids });
             }
             AudioEvent::SelfSpeaking { speaking } => {
-                self.emit(SessionEvent::SelfSpeaking { speaking });
+                self.emit(SessionEvent::SelfSpeaking {
+                    speaking: speaking && self.voice_gate_open(),
+                });
             }
-            AudioEvent::CaptureState {
-                ready,
-                ptt_mode,
-                ptt_active,
-            } => {
+            AudioEvent::CaptureState { ready } => {
                 self.voice_state.input_ready = ready;
-                self.voice_state.ptt_mode = ptt_mode;
-                self.voice_state.ptt_active = ptt_active;
                 if ready {
                     self.voice_state.message = None;
                 }
@@ -1725,6 +1741,22 @@ impl Actor {
                 self.emit_voice_state();
             }
         }
+    }
+
+    fn voice_gate_open(&self) -> bool {
+        matches!(self.state, SessionState::Connected { .. })
+            && self.self_channel_id != 0
+            && self.capture_active
+            && !self.voice_state.muted
+            && !self.voice_state.deafened
+            && (!self.voice_state.ptt_mode || self.voice_state.ptt_active)
+    }
+
+    fn can_send_voice(&self, codec: i32, produced_at: Instant, now: Instant) -> bool {
+        self.voice_gate_open()
+            && codec == self.current_codec
+            && produced_at >= self.audio_since
+            && now.saturating_duration_since(produced_at) <= MAX_VOICE_QUEUE_DELAY
     }
 
     fn start_voice(&mut self) {
@@ -1786,6 +1818,7 @@ impl Actor {
     }
 
     fn invalidate_handlers(&mut self) {
+        self.audio_since = Instant::now();
         self.voice.set_meter_enabled(false);
         self.channel_tools = Default::default();
         self.transfer_target = None;
@@ -2361,6 +2394,78 @@ impl AsyncRead for ProgressReader {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn audio_actor() -> Actor {
+        let (events, _) = broadcast::channel(16);
+        let (commands, _) = mpsc::unbounded_channel();
+        let (_, audio) = mpsc::channel(16);
+        let voice = VoiceEngine::spawn(|_| {}, |_, _| {}).unwrap();
+        let mut actor = Actor::new(
+            PathBuf::new(),
+            ServerRegistry::new(),
+            events,
+            commands,
+            voice,
+            audio,
+            false,
+        );
+        actor.state = SessionState::Connected {
+            client_id: 1,
+            channel_id: 5,
+        };
+        actor.self_channel_id = 5;
+        actor.capture_active = true;
+        actor
+    }
+
+    #[test]
+    fn queued_voice_requires_fresh_data_and_an_open_gate() {
+        let mut actor = audio_actor();
+        let at = actor.audio_since;
+        let now = at + Duration::from_millis(20);
+        assert!(actor.can_send_voice(VOICE_CODEC, at, now));
+        assert!(!actor.can_send_voice(
+            VOICE_CODEC,
+            at,
+            at + MAX_VOICE_QUEUE_DELAY + Duration::from_millis(1)
+        ));
+        actor.audio_since = at + Duration::from_millis(1);
+        assert!(!actor.can_send_voice(VOICE_CODEC, at, now));
+        actor.audio_since = at;
+        actor.voice_state.muted = true;
+        assert!(!actor.can_send_voice(VOICE_CODEC, at, now));
+        actor.voice_state.muted = false;
+        actor.voice_state.ptt_mode = true;
+        assert!(!actor.can_send_voice(VOICE_CODEC, at, now));
+        actor.voice_state.ptt_active = true;
+        assert!(actor.can_send_voice(VOICE_CODEC, at, now));
+        actor.voice_state.deafened = true;
+        assert!(!actor.can_send_voice(VOICE_CODEC, at, now));
+        actor.voice_state.deafened = false;
+        actor.capture_active = false;
+        assert!(!actor.can_send_voice(VOICE_CODEC, at, now));
+    }
+
+    #[tokio::test]
+    async fn mute_cycle_discards_already_queued_voice_and_readiness_preserves_ptt_intent() {
+        let mut actor = audio_actor();
+        let queued = Instant::now();
+        actor.set_muted(true).await.unwrap();
+        actor.set_muted(false).await.unwrap();
+        assert!(!actor.can_send_voice(VOICE_CODEC, queued, Instant::now()));
+        actor.voice_state.ptt_mode = true;
+        actor.voice_state.ptt_active = false;
+        actor.handle_audio(AudioEvent::CaptureState { ready: true });
+        assert!(actor.voice_state.input_ready);
+        assert!(actor.voice_state.ptt_mode);
+        assert!(!actor.voice_state.ptt_active);
+        let mut events = actor.events.subscribe();
+        actor.handle_audio(AudioEvent::SelfSpeaking { speaking: true });
+        assert!(matches!(
+            events.try_recv(),
+            Ok(SessionEvent::SelfSpeaking { speaking: false })
+        ));
+    }
 
     #[test]
     fn mute_flags_follow_official_deafen_semantics() {

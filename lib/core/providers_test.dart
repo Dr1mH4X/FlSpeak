@@ -130,7 +130,56 @@ class _Core extends Fake implements CoreSession {
   }
 }
 
+class _ConcurrentCore extends _Core {
+  _ConcurrentCore(super.eventsController);
+  final disconnected = Completer<void>();
+  final configured = Completer<void>();
+  final muted = Completer<void>();
+  @override
+  Future<void> disconnect() => disconnected.future;
+  @override
+  Future<void> setAutoReconnect({required bool enabled}) => configured.future;
+  @override
+  Future<void> setMuted({required bool muted}) => this.muted.future;
+}
+
 void main() {
+  test('late voice failures do not read a disposed provider', () async {
+    final events = StreamController<CoreEvent>.broadcast(sync: true);
+    final core = _ConcurrentCore(events);
+    final container = ProviderContainer(
+      overrides: [coreSessionProvider.overrideWithValue(core)],
+    );
+    final command = container.read(sessionViewProvider.notifier).setMuted(true);
+    container.dispose();
+    core.muted.completeError(
+      const CoreError.connection(message: 'late failure'),
+    );
+    await command;
+    await events.close();
+  });
+
+  test('busy stays set until all concurrent commands have finished', () async {
+    final events = StreamController<CoreEvent>.broadcast(sync: true);
+    final core = _ConcurrentCore(events);
+    final container = ProviderContainer(
+      overrides: [coreSessionProvider.overrideWithValue(core)],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await events.close();
+    });
+    final controller = container.read(sessionViewProvider.notifier);
+    final disconnect = controller.disconnect();
+    final configure = controller.setAutoReconnect(false);
+    core.configured.complete();
+    await configure;
+    expect(container.read(sessionViewProvider).busy, isTrue);
+    core.disconnected.complete();
+    await disconnect;
+    expect(container.read(sessionViewProvider).busy, isFalse);
+  });
+
   test('电平不改变会话快照，断开后丢弃在途指标', () async {
     final events = StreamController<CoreEvent>.broadcast(sync: true);
     final container = ProviderContainer(
