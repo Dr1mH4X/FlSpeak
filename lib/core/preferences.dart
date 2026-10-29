@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -191,6 +192,7 @@ class PreferencesStore {
 
   final String? path;
   SessionPreferences _preferences;
+  Future<void> _writeCompleted = Future.value();
 
   SessionPreferences get current => _preferences;
 
@@ -228,21 +230,22 @@ class PreferencesStore {
       return;
     }
 
-    final file = File(target);
-    await file.parent.create(recursive: true);
-    final temporary = File('$target.tmp');
-    await temporary.writeAsString(
-      jsonEncode(preferences.toJson()),
-      flush: true,
-    );
+    final previous = _writeCompleted;
+    final completed = Completer<void>();
+    _writeCompleted = completed.future;
     try {
+      await previous;
+      final file = File(target);
+      await file.parent.create(recursive: true);
+      final temporary = File('$target.tmp');
+      await temporary.writeAsString(
+        jsonEncode(preferences.toJson()),
+        flush: true,
+      );
       await temporary.rename(target);
-    } on FileSystemException {
-      // Windows 上 rename 不覆盖已有文件，退化为先删后改。
-      if (await file.exists()) {
-        await file.delete();
-      }
-      await temporary.rename(target);
+    } finally {
+      // 队尾只表示写入结束；失败仍返回原调用者，后续保存可以重试。
+      completed.complete();
     }
   }
 }

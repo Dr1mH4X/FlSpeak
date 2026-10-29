@@ -38,9 +38,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
   _MainTab _tab = _MainTab.chat;
 
   void _handleTabChanged() {
-    if (_tabController.indexIsChanging) {
-      return;
-    }
+    // 目标内容与指示器同时切换，不等待指示器动画结束。
     final tab = _MainTab.values[_tabController.index];
     if (tab != _tab) {
       setState(() => _tab = tab);
@@ -106,8 +104,27 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
                         : Motion.effectsDefault,
                     switchInCurve: Motion.effectsDefaultCurve,
                     switchOutCurve: Motion.effectsDefaultCurve.flipped,
+                    layoutBuilder: (current, previous) => Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        for (final child in previous)
+                          ExcludeFocus(
+                            child: IgnorePointer(
+                              child: ExcludeSemantics(child: child),
+                            ),
+                          ),
+                        ?current,
+                      ],
+                    ),
                     child: KeyedSubtree(
-                      key: ValueKey(_tab),
+                      key: ValueKey((
+                        _tab,
+                        view.activeServerId,
+                        view.connectionEpoch,
+                        channelId,
+                        view.connected,
+                        view.connecting || view.reconnecting,
+                      )),
                       child: _buildBody(context, l10n, view, channel),
                     ),
                   ),

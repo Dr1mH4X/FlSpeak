@@ -4,7 +4,6 @@
 //! 两条线程之间没有共享锁，控制命令走独立的有界通道，语音包走另一条有界通道。
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, TrySendError, sync_channel};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -14,7 +13,7 @@ use crate::capture::{CapturePipeline, VoicePacer};
 use crate::convert::FormatConverter;
 use crate::device::{CaptureStream, PlaybackStream, start_capture, start_playback};
 use crate::format::{FRAME_MS, OPUS_STEREO};
-use crate::level::{LevelMeter, MeterClock, rms};
+use crate::level::{LevelMeter, LevelReading, MeterClock, SharedMeter, rms};
 use crate::playback::{MIX_FRAME_MS, PlaybackPipeline, VoiceFrame};
 
 const CONTROL_CAPACITY: usize = 64;
@@ -34,15 +33,11 @@ pub enum AudioEvent {
     Outbound {
         codec: i32,
         data: Vec<u8>,
+        produced_at: Instant,
     },
     /// 本端 VAD/PTT 是否在发送，低频。
     SelfSpeaking {
         speaking: bool,
-    },
-    /// 本端采集与远端混音电平（0–1），≤10Hz。
-    Levels {
-        mic: f32,
-        received: f32,
     },
     /// 远端活跃说话人集合变化。
     Talkers {
@@ -50,8 +45,6 @@ pub enum AudioEvent {
     },
     CaptureState {
         ready: bool,
-        ptt_mode: bool,
-        ptt_active: bool,
     },
     PlaybackState {
         ready: bool,
@@ -63,7 +56,7 @@ pub enum AudioEvent {
 }
 
 enum CaptureCommand {
-    Start { device: Option<String> },
+    Start { device: Option<String>, epoch: u64 },
     Stop,
     SetDevice { device: Option<String> },
     SetMuted(bool),
@@ -75,7 +68,7 @@ enum CaptureCommand {
 }
 
 enum PlaybackCommand {
-    Start { device: Option<String> },
+    Start { device: Option<String>, epoch: u64 },
     Stop,
     SetDevice { device: Option<String> },
     SetDeafened(bool),
@@ -96,38 +89,44 @@ impl IncomingVoiceSender {
 }
 
 type EventSink = Arc<dyn Fn(AudioEvent) + Send + Sync>;
+type LevelSink = Arc<dyn Fn(LevelReading) + Send + Sync>;
 
 /// 音频引擎句柄。Drop 时关闭两条线程并等待 cpal 流释放。
 pub struct VoiceEngine {
     capture: SyncSender<CaptureCommand>,
     playback: SyncSender<PlaybackCommand>,
     incoming: IncomingVoiceSender,
+    meter: Arc<SharedMeter>,
     capture_thread: Option<JoinHandle<()>>,
     playback_thread: Option<JoinHandle<()>>,
 }
 
 impl VoiceEngine {
-    pub fn spawn(sink: impl Fn(AudioEvent) + Send + Sync + 'static) -> Result<Self, AudioError> {
+    pub fn spawn(
+        sink: impl Fn(AudioEvent) + Send + Sync + 'static,
+        levels: impl Fn(LevelReading) + Send + Sync + 'static,
+    ) -> Result<Self, AudioError> {
         let sink: EventSink = Arc::new(sink);
+        let levels: LevelSink = Arc::new(levels);
+        let meter = Arc::new(SharedMeter::default());
         let (capture, capture_rx) = sync_channel(CONTROL_CAPACITY);
         let (playback, playback_rx) = sync_channel(CONTROL_CAPACITY);
         let (incoming, incoming_rx) = sync_channel(INCOMING_CAPACITY);
-        // capture 线程写入、playback 线程按 10Hz 读出并合成一个事件。
-        let mic_level = Arc::new(AtomicU32::new(0));
 
         let capture_thread = thread::Builder::new()
             .name("voice-capture".into())
             .spawn({
                 let sink = Arc::clone(&sink);
-                let mic_level = Arc::clone(&mic_level);
-                move || capture_loop(capture_rx, sink, mic_level)
+                let meter = Arc::clone(&meter);
+                move || capture_loop(capture_rx, sink, meter)
             })
             .map_err(|err| AudioError::Engine(err.to_string()))?;
         let playback_thread = thread::Builder::new()
             .name("voice-playback".into())
             .spawn({
                 let sink = Arc::clone(&sink);
-                move || playback_loop(playback_rx, incoming_rx, sink, mic_level)
+                let meter = Arc::clone(&meter);
+                move || playback_loop(playback_rx, incoming_rx, sink, levels, meter)
             })
             .map_err(|err| AudioError::Engine(err.to_string()))?;
 
@@ -135,6 +134,7 @@ impl VoiceEngine {
             capture,
             playback,
             incoming: IncomingVoiceSender { sender: incoming },
+            meter,
             capture_thread: Some(capture_thread),
             playback_thread: Some(playback_thread),
         })
@@ -144,9 +144,17 @@ impl VoiceEngine {
         self.incoming.clone()
     }
 
+    /// 由会话状态控制指标发布；指标不排入协议 actor 的音频事件队列。
+    pub fn set_meter_epoch(&self, epoch: Option<u64>) {
+        self.meter.set_epoch(epoch);
+    }
+
     pub fn start_playback(&self, device: Option<String>) -> Result<(), AudioError> {
         self.playback
-            .try_send(PlaybackCommand::Start { device })
+            .try_send(PlaybackCommand::Start {
+                device,
+                epoch: self.meter.epoch(),
+            })
             .map_err(send_error)
     }
 
@@ -158,11 +166,15 @@ impl VoiceEngine {
 
     pub fn start_capture(&self, device: Option<String>) -> Result<(), AudioError> {
         self.capture
-            .try_send(CaptureCommand::Start { device })
+            .try_send(CaptureCommand::Start {
+                device,
+                epoch: self.meter.epoch(),
+            })
             .map_err(send_error)
     }
 
     pub fn stop_capture(&self) -> Result<(), AudioError> {
+        self.meter.clear_mic();
         self.capture
             .try_send(CaptureCommand::Stop)
             .map_err(send_error)
@@ -239,16 +251,7 @@ fn send_error<T>(err: TrySendError<T>) -> AudioError {
     }
 }
 
-fn store_level(slot: &AtomicU32, level: f32) {
-    let scaled = (level.clamp(0.0, 1.0) * 1000.0) as u32;
-    slot.store(scaled, Ordering::Relaxed);
-}
-
-fn load_level(slot: &AtomicU32) -> f32 {
-    slot.load(Ordering::Relaxed) as f32 / 1000.0
-}
-
-fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, mic_level: Arc<AtomicU32>) {
+fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, meter: Arc<SharedMeter>) {
     let mut pipeline = match CapturePipeline::new(crate::format::VOICE_CODEC) {
         Ok(pipeline) => pipeline,
         Err(err) => {
@@ -261,10 +264,8 @@ fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, mic_level: 
     };
     let mut stream: Option<CaptureStream> = None;
     let mut device: Option<String> = None;
-    let mut muted = false;
-    let mut ptt_mode = false;
-    let mut ptt_active = false;
     let mut speaking = false;
+    let mut capture_epoch = 0;
     let mut pacer = VoicePacer::default();
     let mut raw = Vec::new();
     let mut mic_meter = LevelMeter::default();
@@ -277,14 +278,28 @@ fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, mic_level: 
         match commands.recv_timeout(wait.min(tick)) {
             Ok(CaptureCommand::Shutdown) => break,
             Ok(command) => {
+                match &command {
+                    CaptureCommand::Start { epoch, .. } => {
+                        capture_epoch = *epoch;
+                        mic_meter.silence();
+                        meter.clear_mic();
+                    }
+                    CaptureCommand::Stop => {
+                        capture_epoch = 0;
+                        mic_meter.silence();
+                        meter.clear_mic();
+                    }
+                    CaptureCommand::SetDevice { .. } => {
+                        mic_meter.silence();
+                        meter.clear_mic();
+                    }
+                    _ => {}
+                }
                 if !handle_capture_command(
                     command,
                     &mut pipeline,
                     &mut stream,
                     &mut device,
-                    &mut muted,
-                    &mut ptt_mode,
-                    &mut ptt_active,
                     &mut speaking,
                     &sink,
                     &mut pacer,
@@ -325,7 +340,7 @@ fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, mic_level: 
             mic_meter.silence()
         };
         // 只是共享给 playback 线程合成事件；跨 FFI 的频率由那边控制。
-        store_level(&mic_level, mic);
+        meter.store_mic(capture_epoch, mic);
 
         match pipeline.take_packet() {
             Ok(Some(packet)) => {
@@ -333,6 +348,7 @@ fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, mic_level: 
                     sink(AudioEvent::Outbound {
                         codec: packet.codec,
                         data: packet.data,
+                        produced_at: now,
                     });
                     pacer.advance();
                 }
@@ -358,39 +374,24 @@ fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, mic_level: 
     if let Some(stream) = stream.take() {
         drop(stream);
     }
-    sink(AudioEvent::CaptureState {
-        ready: false,
-        ptt_mode,
-        ptt_active: false,
-    });
-    let _ = muted;
+    meter.clear_mic();
+    sink(AudioEvent::CaptureState { ready: false });
 }
 
-#[allow(clippy::too_many_arguments)]
 fn handle_capture_command(
     command: CaptureCommand,
     pipeline: &mut CapturePipeline,
     stream: &mut Option<CaptureStream>,
     device: &mut Option<String>,
-    muted: &mut bool,
-    ptt_mode: &mut bool,
-    ptt_active: &mut bool,
     speaking: &mut bool,
     sink: &EventSink,
     pacer: &mut VoicePacer,
 ) -> bool {
     match command {
         CaptureCommand::Shutdown => return false,
-        CaptureCommand::Start { device: next } => {
+        CaptureCommand::Start { device: next, .. } => {
             *device = next;
-            open_capture(
-                stream,
-                pipeline,
-                (*device).clone(),
-                *ptt_mode,
-                *ptt_active,
-                sink,
-            );
+            open_capture(stream, pipeline, (*device).clone(), sink);
             *speaking = false;
             pacer.due(Instant::now(), false);
         }
@@ -400,47 +401,29 @@ fn handle_capture_command(
             }
             pipeline.end();
             *speaking = false;
-            sink(AudioEvent::CaptureState {
-                ready: false,
-                ptt_mode: *ptt_mode,
-                ptt_active: *ptt_active,
-            });
+            sink(AudioEvent::CaptureState { ready: false });
         }
         CaptureCommand::SetDevice { device: next } => {
             let was_active = stream.is_some();
             *device = next;
             if was_active {
-                open_capture(
-                    stream,
-                    pipeline,
-                    (*device).clone(),
-                    *ptt_mode,
-                    *ptt_active,
-                    sink,
-                );
+                open_capture(stream, pipeline, (*device).clone(), sink);
             }
         }
         CaptureCommand::SetMuted(next) => {
-            *muted = next;
             pipeline.set_muted(next);
         }
         CaptureCommand::SetDeafened(deafened) => pipeline.set_deafened(deafened),
         CaptureCommand::SetPttMode(next) => {
-            *ptt_mode = next;
             pipeline.set_ptt_mode(next);
             sink(AudioEvent::CaptureState {
                 ready: stream.is_some(),
-                ptt_mode: *ptt_mode,
-                ptt_active: *ptt_active,
             });
         }
         CaptureCommand::SetPttActive(next) => {
-            *ptt_active = next;
             pipeline.set_ptt_active(next);
             sink(AudioEvent::CaptureState {
                 ready: stream.is_some(),
-                ptt_mode: *ptt_mode,
-                ptt_active: *ptt_active,
             });
         }
         CaptureCommand::SetCodec(codec) => match pipeline.set_codec(codec) {
@@ -458,8 +441,6 @@ fn open_capture(
     stream: &mut Option<CaptureStream>,
     pipeline: &mut CapturePipeline,
     device: Option<String>,
-    ptt_mode: bool,
-    ptt_active: bool,
     sink: &EventSink,
 ) {
     if let Some(old) = stream.take() {
@@ -469,11 +450,7 @@ fn open_capture(
         Ok(next) => {
             pipeline.begin();
             *stream = Some(next);
-            sink(AudioEvent::CaptureState {
-                ready: true,
-                ptt_mode,
-                ptt_active,
-            });
+            sink(AudioEvent::CaptureState { ready: true });
         }
         Err(err) => {
             pipeline.end();
@@ -481,11 +458,7 @@ fn open_capture(
                 stage: AudioStage::Capture,
                 message: err.to_string(),
             });
-            sink(AudioEvent::CaptureState {
-                ready: false,
-                ptt_mode,
-                ptt_active,
-            });
+            sink(AudioEvent::CaptureState { ready: false });
         }
     }
 }
@@ -494,7 +467,8 @@ fn playback_loop(
     commands: Receiver<PlaybackCommand>,
     incoming: Receiver<PlaybackCommand>,
     sink: EventSink,
-    mic_level: Arc<AtomicU32>,
+    levels: LevelSink,
+    meter: Arc<SharedMeter>,
 ) {
     let mut pipeline = PlaybackPipeline::new();
     let mut stream: Option<PlaybackStream> = None;
@@ -503,6 +477,7 @@ fn playback_loop(
     let mut last_talkers: Vec<i32> = Vec::new();
     let mut received_meter = LevelMeter::default();
     let mut received_clock = MeterClock::default();
+    let mut playback_epoch = 0;
 
     loop {
         let now = Instant::now();
@@ -510,6 +485,21 @@ fn playback_loop(
         match commands.recv_timeout(wait.min(Duration::from_millis(IO_TICK_MS))) {
             Ok(PlaybackCommand::Shutdown) => break,
             Ok(command) => {
+                match &command {
+                    PlaybackCommand::Start { epoch, .. } => {
+                        playback_epoch = *epoch;
+                        received_meter.silence();
+                        received_clock = MeterClock::default();
+                    }
+                    PlaybackCommand::Stop => {
+                        playback_epoch = 0;
+                        received_meter.silence();
+                    }
+                    PlaybackCommand::SetDevice { .. } => {
+                        received_meter.silence();
+                    }
+                    _ => {}
+                }
                 if !handle_playback_command(
                     command,
                     &mut pipeline,
@@ -552,10 +542,15 @@ fn playback_loop(
                 received_meter.silence()
             };
             if received_clock.due(now) {
-                sink(AudioEvent::Levels {
-                    mic: load_level(&mic_level),
-                    received: received_level,
-                });
+                let epoch = meter.epoch();
+                let received = if epoch == playback_epoch {
+                    received_level
+                } else {
+                    0.0
+                };
+                if let Some(reading) = meter.reading(epoch, received) {
+                    levels(reading);
+                }
             }
             if tick.talkers != last_talkers {
                 last_talkers = tick.talkers.clone();
@@ -592,8 +587,8 @@ fn handle_playback_command(
 ) -> bool {
     match command {
         PlaybackCommand::Shutdown => return false,
-        PlaybackCommand::Start { device } => {
-            *pipeline = PlaybackPipeline::new();
+        PlaybackCommand::Start { device, .. } => {
+            pipeline.restart();
             if let Some(old) = stream.take() {
                 drop(old);
             }
@@ -650,4 +645,38 @@ fn handle_playback_command(
         }
     }
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn level_reporting_does_not_wait_for_the_control_event_consumer() {
+        let (control, pending) = sync_channel(1);
+        control
+            .try_send(AudioEvent::SelfSpeaking { speaking: false })
+            .unwrap();
+        let (levels, readings) = std::sync::mpsc::channel();
+        let engine = VoiceEngine::spawn(
+            move |event| {
+                let _ = control.try_send(event);
+            },
+            move |reading| {
+                let _ = levels.send((reading.mic, reading.received));
+            },
+        )
+        .unwrap();
+        engine.set_meter_epoch(Some(1));
+
+        // 控制事件始终未被消费；未启动任何输入或输出设备。
+        assert_eq!(
+            readings.recv_timeout(Duration::from_secs(2)),
+            Ok((0.0, 0.0))
+        );
+        assert!(matches!(
+            pending.try_recv(),
+            Ok(AudioEvent::SelfSpeaking { speaking: false })
+        ));
+    }
 }

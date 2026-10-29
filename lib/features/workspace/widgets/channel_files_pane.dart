@@ -23,6 +23,7 @@ class _ChannelFilesPaneState extends ConsumerState<ChannelFilesPane> {
   bool _passwordRequired = false;
   bool _downloading = false;
   int? _transferId;
+  int _loadRevision = 0;
   late final _epoch = ref.read(sessionViewProvider).connectionEpoch;
   @override
   void initState() {
@@ -43,6 +44,8 @@ class _ChannelFilesPaneState extends ConsumerState<ChannelFilesPane> {
 
   Future<void> _load() async {
     if (!mounted || !_available) return;
+    final revision = ++_loadRevision;
+    bool current() => mounted && _available && revision == _loadRevision;
     setState(() {
       _loading = true;
       _failed = false;
@@ -55,7 +58,7 @@ class _ChannelFilesPaneState extends ConsumerState<ChannelFilesPane> {
             path: _path,
             password: _password.text,
           );
-      if (mounted && _available) {
+      if (current()) {
         setState(() {
           _files = List<ChannelFileView>.of(files)
             ..sort(
@@ -69,16 +72,16 @@ class _ChannelFilesPaneState extends ConsumerState<ChannelFilesPane> {
         });
       }
     } on CoreError_ChannelPasswordRequired {
-      if (mounted) setState(() => _passwordRequired = true);
+      if (current()) setState(() => _passwordRequired = true);
     } on CoreError catch (error) {
-      if (mounted) {
+      if (mounted && current()) {
         setState(() => _failed = true);
         ref
             .read(noticeCenterProvider.notifier)
             .show(describeCoreError(error, AppLocalizations.of(context)));
       }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (current()) setState(() => _loading = false);
     }
   }
 

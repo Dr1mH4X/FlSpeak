@@ -1,5 +1,7 @@
 // ignore_for_file: depend_on_referenced_packages
 
+import 'dart:async';
+
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,11 +11,13 @@ import 'image_host.dart';
 
 class _Api extends Fake implements RustLibApi {
   bool reject = false;
+  Completer<void>? validation;
   @override
   Future<void> crateApiSessionValidateImageHost({
     required String uploadBase,
     required String publicBase,
   }) async {
+    await validation?.future;
     if (reject) throw const CoreError.invalidAddress(message: 'invalid host');
   }
 }
@@ -49,7 +53,32 @@ void main() {
           .setMockMethodCallHandler(channel, null),
     );
     api.reject = false;
+    api.validation = null;
   });
+
+  test(
+    'closing the provider during host validation stops the deferred save',
+    () async {
+      final container = ProviderContainer();
+      await container.read(imageHostProvider.future);
+      final validation = Completer<void>();
+      api.validation = validation;
+      final saving = container
+          .read(imageHostProvider.notifier)
+          .save(
+            const ImageHostConfiguration(
+              uploadBase: 'https://upload.example.com/',
+              publicBase: 'https://images.example.com/',
+            ),
+          );
+      container.dispose();
+      validation.complete();
+      await saving;
+      final reopened = ProviderContainer();
+      addTearDown(reopened.dispose);
+      expect(await reopened.read(imageHostProvider.future), isNull);
+    },
+  );
 
   test(
     'configuration round trips only through secure storage and can be removed',

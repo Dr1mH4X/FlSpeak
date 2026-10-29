@@ -35,6 +35,8 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
   /// 只在「只有应用内兜底」的模式下执行——那种模式失焦后收不到 keyup，
   /// 不收尾会一直卡在发送状态。
   bool _nativeRegistered = false;
+  int _registrationRevision = 0;
+  SessionController? _pttOwner;
 
   @override
   void initState() {
@@ -46,7 +48,7 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
       onKeyUp: () => _setPtt(false),
     );
     ref.listenManual(
-      preferencesProvider.select((preferences) => preferences.pttHotkey),
+      activePttHotkeyProvider,
       (previous, keyId) => unawaited(_syncRegistration(keyId)),
       fireImmediately: true,
     );
@@ -54,6 +56,9 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
 
   @override
   void dispose() {
+    _registrationRevision++;
+    _setPtt(false);
+    unawaited(_hotkey.unregister());
     HardwareKeyboard.instance.removeHandler(_handleInAppKey);
     WidgetsBinding.instance.removeObserver(this);
     _hotkey.setHandler();
@@ -75,7 +80,7 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
   /// 应用内兜底：原生全局热键不可用（Android / Wayland / 注册失败）时，
   /// 应用在前台仍能用快捷键说话。
   bool _handleInAppKey(KeyEvent event) {
-    final keyId = ref.read(preferencesProvider).pttHotkey;
+    final keyId = ref.read(activePttHotkeyProvider);
     if (keyId == null || event.logicalKey.keyId != keyId) {
       return false;
     }
@@ -90,20 +95,35 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
   }
 
   void _setPtt(bool active) {
+    if (!active) {
+      _pttDown = false;
+      final owner = _pttOwner;
+      _pttOwner = null;
+      if (owner != null) unawaited(owner.setPttActive(false));
+      return;
+    }
     if (_pttDown == active) {
       return;
     }
+    if (ref.read(pttHotkeyRecordingProvider)) return;
     _pttDown = active;
     final view = ref.read(sessionViewProvider);
     // 未连接或没开按住说话时不发命令，避免弹出无关的错误提示条。
     if (!view.connected || !view.pttMode) {
       return;
     }
-    unawaited(ref.read(sessionViewProvider.notifier).setPttActive(active));
+    final owner = ref.read(sessionViewProvider.notifier);
+    _pttOwner = owner;
+    unawaited(owner.setPttActive(true));
   }
 
   Future<void> _syncRegistration(int? keyId) async {
-    _nativeRegistered = await _hotkey.registerByKeyId(keyId);
+    _setPtt(false);
+    _nativeRegistered = false;
+    final revision = ++_registrationRevision;
+    final registered = await _hotkey.registerByKeyId(keyId);
+    if (!mounted || revision != _registrationRevision) return;
+    _nativeRegistered = registered;
     if (keyId != null && !_nativeRegistered) {
       debugPrint('全局热键注册失败，按住说话退回应用内按键');
     }

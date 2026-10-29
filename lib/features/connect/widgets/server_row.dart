@@ -11,6 +11,7 @@ import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
 import '../../../widgets/monogram.dart';
 import 'relative_time.dart';
+import '../../../widgets/press_feedback.dart';
 
 /// 连接页的一行服务器：整行是主落点，右键弹统一的二级菜单放「从列表移除」。
 ///
@@ -72,7 +73,7 @@ class _ServerRowState extends ConsumerState<ServerRow> {
                       .serverIcons[widget.profile.id] ??
                   ServerIcon.community;
               final icon = await showServerIconPicker(context, current);
-              if (icon != null) {
+              if (mounted && icon != null) {
                 ref
                     .read(preferencesProvider.notifier)
                     .setServerIcon(widget.profile.id, icon);
@@ -98,7 +99,7 @@ class _ServerRowState extends ConsumerState<ServerRow> {
                 child: Semantics(
                   button: true,
                   enabled: active,
-                  child: InkWell(
+                  child: AnimatedInkWell(
                     onTap: widget.enabled ? widget.onTap : null,
                     // M3 state layer：hover 是 onSurface 8%，不再自定底色。
                     hoverColor: scheme.onSurface.withValues(alpha: 0.08),
@@ -145,11 +146,24 @@ class _ServerRowState extends ConsumerState<ServerRow> {
                                       fontFeatures: tabularFigures,
                                     ),
                                   ),
+                                  if (narrow &&
+                                      (connected || widget.connecting))
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: Text(
+                                        widget.connecting
+                                            ? l10n.sessionConnecting
+                                            : l10n.sessionConnected,
+                                        style: texts.labelSmall?.copyWith(
+                                          color: scheme.primary,
+                                        ),
+                                      ),
+                                    ),
                                 ],
                               ),
                             ),
                             const SizedBox(width: 8),
-                            if (widget.connecting)
+                            if (!narrow && widget.connecting)
                               Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -169,7 +183,7 @@ class _ServerRowState extends ConsumerState<ServerRow> {
                                   ),
                                 ],
                               )
-                            else if (connected)
+                            else if (!narrow && connected)
                               _ConnectedChip(label: l10n.sessionConnected)
                             else if (showLastConnected)
                               ConstrainedBox(

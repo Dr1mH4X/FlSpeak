@@ -9,6 +9,7 @@ import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../l10n/app_localizations.dart';
 import 'models.dart';
+import 'global_hotkey.dart';
 import 'file_export.dart';
 import 'image_host.dart';
 import 'notices.dart';
@@ -38,9 +39,14 @@ final sessionViewProvider = NotifierProvider<SessionController, SessionView>(
   SessionController.new,
 );
 
-/// 电平独立成流：10Hz 的更新只让电平条重建，不碰整个 `SessionView`。
+/// 电平独立成流：50Hz 的更新只让电平条重建，不碰整个 `SessionView`。
 final voiceLevelsProvider = StreamProvider<VoiceLevels>((ref) {
   return ref.watch(sessionViewProvider.notifier).levels;
+});
+
+final activePttHotkeyProvider = Provider<int?>((ref) {
+  if (ref.watch(pttHotkeyRecordingProvider)) return null;
+  return ref.watch(preferencesProvider.select((value) => value.pttHotkey));
 });
 
 final sessionAccessProvider = FutureProvider.autoDispose<AccessView>((
@@ -98,6 +104,10 @@ class SessionController extends Notifier<SessionView> {
   final _transferReplies = <int, Completer<bool>>{};
   final _levels = StreamController<VoiceLevels>.broadcast();
   VoiceLevels _latestLevels = VoiceLevels.silent;
+  int _pendingActions = 0;
+  int _serversRevision = 0;
+  String? _connectingServerId;
+  bool _awaitingDisconnect = false;
 
   /// 最近一次已提示的语音错误；Voice 事件重复带同一句时不再刷新提示。
   String? _lastVoiceNotice;
@@ -122,14 +132,15 @@ class SessionController extends Notifier<SessionView> {
   }
 
   Future<void> _loadServers(CoreSession session) async {
+    final revision = _serversRevision;
     try {
       final servers = await session.listServers();
-      if (ref.mounted) {
+      if (ref.mounted && revision == _serversRevision) {
         state = state.copyWith(servers: servers);
       }
     } on CoreError catch (error) {
-      if (ref.mounted) {
-        _notify(describeCoreError(error, ref.read(_localizationsProvider)));
+      if (ref.mounted && revision == _serversRevision) {
+        _notifyCoreError(error);
       }
     }
   }
@@ -148,26 +159,27 @@ class SessionController extends Notifier<SessionView> {
     await _run(() => ref.read(coreSessionProvider).removeServer(id: id));
   }
 
-  Future<bool> connect({required String id, required String nickname}) {
-    return _run(() async {
-      // 先记下目标档案：状态事件只带客户端 id，界面需要知道连的是哪台服务器。
-      state = state.copyWith(
-        activeServerId: id,
-        channels: const [],
-        clients: const [],
-        messages: const [],
-        chatScope: ChatScope.channel,
-        directRecipientUid: null,
-        directRecipientId: null,
-        speaking: const {},
-      );
-      // 频道/成员快照由 actor 在连接成功后主动推送，不再额外拉一遍。
-      await ref.read(coreSessionProvider).connect(id: id, nickname: nickname);
+  Future<bool> connect({required String id, required String nickname}) async {
+    if (!ref.mounted || state.busy || state.connecting) return false;
+    if (state.connected && state.activeServerId == id) return true;
+    _connectingServerId = id;
+    _awaitingDisconnect = true;
+    var attempted = false;
+    final connected = await _run(() async {
+      final session = ref.read(coreSessionProvider);
+      // 核心可能已进入界面尚未收到的重连流程，显式重置句柄再连接。
+      await session.disconnect();
+      if (!ref.mounted || _connectingServerId != id) return;
+      attempted = true;
+      await session.connect(id: id, nickname: nickname);
     });
+    return connected && attempted;
   }
 
-  Future<bool> disconnect() =>
-      _run(() => ref.read(coreSessionProvider).disconnect());
+  Future<bool> disconnect() {
+    _connectingServerId = null;
+    return _run(() => ref.read(coreSessionProvider).disconnect());
+  }
 
   /// 返回是否真的换了频道：调用方要按结果决定要不要把界面停在目标频道。
   Future<bool> joinChannel(int channelId, {String? password}) async {
@@ -308,7 +320,7 @@ class SessionController extends Notifier<SessionView> {
     try {
       await ref.read(coreSessionProvider).setMuted(muted: muted);
     } on CoreError catch (error) {
-      _notify(describeCoreError(error, ref.read(_localizationsProvider)));
+      _notifyCoreError(error);
     }
   }
 
@@ -316,7 +328,7 @@ class SessionController extends Notifier<SessionView> {
     try {
       await ref.read(coreSessionProvider).setDeafened(deafened: deafened);
     } on CoreError catch (error) {
-      _notify(describeCoreError(error, ref.read(_localizationsProvider)));
+      _notifyCoreError(error);
     }
   }
 
@@ -324,7 +336,7 @@ class SessionController extends Notifier<SessionView> {
     try {
       await ref.read(coreSessionProvider).setAway(away: away);
     } on CoreError catch (error) {
-      _notify(describeCoreError(error, ref.read(_localizationsProvider)));
+      _notifyCoreError(error);
     }
   }
 
@@ -332,18 +344,18 @@ class SessionController extends Notifier<SessionView> {
     try {
       await ref.read(coreSessionProvider).setPttMode(enabled: enabled);
     } on CoreError catch (error) {
-      _notify(describeCoreError(error, ref.read(_localizationsProvider)));
+      _notifyCoreError(error);
     }
   }
 
   Future<void> setPttActive(bool active) async {
-    if (!state.pttMode) {
+    if (!ref.mounted || !state.pttMode) {
       return;
     }
     try {
       await ref.read(coreSessionProvider).setPttActive(active: active);
     } on CoreError catch (error) {
-      _notify(describeCoreError(error, ref.read(_localizationsProvider)));
+      _notifyCoreError(error);
     }
   }
 
@@ -351,7 +363,7 @@ class SessionController extends Notifier<SessionView> {
     try {
       await ref.read(coreSessionProvider).cancelIdentityUpgrade();
     } on CoreError catch (error) {
-      _notify(describeCoreError(error, ref.read(_localizationsProvider)));
+      _notifyCoreError(error);
     }
   }
 
@@ -403,7 +415,7 @@ class SessionController extends Notifier<SessionView> {
       );
     } on CoreError catch (error) {
       if (ref.mounted) {
-        _notify(describeCoreError(error, ref.read(_localizationsProvider)));
+        _notifyCoreError(error);
       }
       return null;
     } on Exception {
@@ -606,6 +618,12 @@ class SessionController extends Notifier<SessionView> {
     try {
       await ref.read(coreSessionProvider).requestSnapshot();
     } on CoreError catch (error) {
+      _notifyCoreError(error);
+    }
+  }
+
+  void _notifyCoreError(CoreError error) {
+    if (ref.mounted) {
       _notify(describeCoreError(error, ref.read(_localizationsProvider)));
     }
   }
@@ -626,18 +644,21 @@ class SessionController extends Notifier<SessionView> {
     Future<void> Function() action, {
     bool passwordPrompt = false,
   }) async {
+    if (!ref.mounted) return false;
+    _pendingActions++;
     state = state.copyWith(busy: true);
     try {
       await action();
-      return true;
+      return ref.mounted;
     } on CoreError catch (error) {
       if (passwordPrompt && error is CoreError_ChannelPasswordRequired) rethrow;
       if (ref.mounted) {
-        _notify(describeCoreError(error, ref.read(_localizationsProvider)));
+        _notifyCoreError(error);
       }
       return false;
     } finally {
-      if (ref.mounted) state = state.copyWith(busy: false);
+      _pendingActions--;
+      if (ref.mounted) state = state.copyWith(busy: _pendingActions != 0);
     }
   }
 
@@ -647,9 +668,8 @@ class SessionController extends Notifier<SessionView> {
       case CoreEvent_AccessChanged():
         state = current.copyWith(accessRevision: current.accessRevision + 1);
       case CoreEvent_State(state: final next):
-        if (next is CoreSessionState_Disconnected) {
-          // 采集/播放随断开停止，电平流不会再来新样本；主动清零，
-          // 避免重连前停留在最后一帧。
+        if (next is CoreSessionState_Disconnected) _awaitingDisconnect = false;
+        if (next is! CoreSessionState_Connected) {
           _latestLevels = VoiceLevels.silent;
           _levels.add(_latestLevels);
         }
@@ -666,17 +686,48 @@ class SessionController extends Notifier<SessionView> {
             directRecipientUid: null,
             directRecipientId: null,
             activeFileDownloads: const {},
-            busy: false,
+            busy: _pendingActions != 0,
+          ),
+          CoreSessionState_Connecting() => current.copyWith(
+            state: next,
+            activeServerId: _awaitingDisconnect
+                ? current.activeServerId
+                : _connectingServerId,
+            channels: const [],
+            clients: const [],
+            messages: const [],
+            chatScope: ChatScope.channel,
+            directRecipientUid: null,
+            directRecipientId: null,
+            speaking: const {},
+            selfSpeaking: false,
+          ),
+          CoreSessionState_Reconnecting() => current.copyWith(
+            state: next,
+            activeServerId:
+                current.activeServerId ??
+                (_awaitingDisconnect ? null : _connectingServerId),
+            channels: const [],
+            clients: const [],
+            speaking: const {},
+            selfSpeaking: false,
           ),
           _ => current.copyWith(
             state: next,
+            activeServerId: _awaitingDisconnect || current.connected
+                ? current.activeServerId
+                : _connectingServerId ?? current.activeServerId,
             connectionEpoch:
                 next is CoreSessionState_Connected && !current.connected
                 ? current.connectionEpoch + 1
                 : current.connectionEpoch,
           ),
         };
+        if (next is CoreSessionState_Connected && !_awaitingDisconnect) {
+          _connectingServerId = null;
+        }
       case CoreEvent_Servers(:final profiles):
+        _serversRevision++;
         state = current.copyWith(servers: profiles);
       case CoreEvent_Snapshot(:final channels, :final clients):
         state = current.copyWith(
@@ -808,14 +859,22 @@ class SessionController extends Notifier<SessionView> {
       case CoreEvent_SelfSpeaking(:final speaking):
         state = current.copyWith(selfSpeaking: speaking);
       case CoreEvent_Levels(:final mic, :final received):
+        // 断开后可能仍有在途的轻量指标，不能让它重新点亮电平条。
+        if (!current.connected) return;
         _latestLevels = VoiceLevels(mic: mic, received: received);
         _levels.add(_latestLevels);
       case CoreEvent_IdentityUpgrade(:final to):
         state = current.copyWith(identityUpgradeTarget: to);
-        _notify('身份等级不足，正在提升到 $to…', tone: NoticeTone.info);
+        _notify(
+          ref.read(_localizationsProvider).identityUpgrading(to),
+          tone: NoticeTone.info,
+        );
       case CoreEvent_IdentityUpgraded(:final level):
         state = current.copyWith(identityUpgradeTarget: null);
-        _notify('身份等级已提升到 $level，正在重连…', tone: NoticeTone.info);
+        _notify(
+          ref.read(_localizationsProvider).identityUpgraded(level),
+          tone: NoticeTone.info,
+        );
       case CoreEvent_TransferStarted(
         :final id,
         :final remotePath,
@@ -869,15 +928,12 @@ class SessionController extends Notifier<SessionView> {
       case CoreEvent_Denied(:final message):
         _notifyFailure(message);
       case CoreEvent_Failed(:final message):
-        // 保留 activeServerId：掉线重连期间服务器栏仍然标着原服务器；
-        // 用户主动断开由 State(Disconnected) 负责清空。
-        state = current.copyWith(
-          channels: const [],
-          clients: const [],
-          speaking: const {},
-          identityUpgradeTarget: null,
-        );
-        _notifyFailure(message);
+        if (current.connected) {
+          _notify(message);
+        } else {
+          state = current.copyWith(identityUpgradeTarget: null);
+          _notifyFailure(message);
+        }
     }
   }
 }

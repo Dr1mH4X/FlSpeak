@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
@@ -73,20 +74,46 @@ class _ChatPaneState extends State<ChatPane> {
   final _input = TextEditingController();
   final _focus = FocusNode();
   final _scroll = ScrollController();
+  int _scrollRequest = 0;
+  bool _followingMessages = true;
+  bool _scrollingToEnd = false;
 
   bool _sending = false;
   PickedChatImage? _image;
   String? _uploadedImageUrl;
+  final _drafts = <_DraftTarget, _ComposerDraft>{};
+
+  _DraftTarget _target(ChatPane pane) => (
+    scope: pane.scope,
+    uid: pane.scope == ChatScope.direct ? pane.recipientUid : null,
+    clientId: pane.scope == ChatScope.direct ? pane.recipientId : null,
+    channel: pane.channelName,
+  );
+
+  _ComposerDraft _snapshot() => _ComposerDraft(
+    value: _input.value,
+    image: _image,
+    uploadedUrl: _uploadedImageUrl,
+  );
 
   Future<void> _selectImage(Future<PickedChatImage?> Function() pick) async {
     if (_sending || widget.busy) return;
+    final destination = _target(widget);
+    final draft = _snapshot();
     setState(() => _sending = true);
     try {
       final image = await pick();
       if (mounted && image != null) {
         setState(() {
-          _image = image;
-          _uploadedImageUrl = null;
+          if (destination == _target(widget)) {
+            _image = image;
+            _uploadedImageUrl = null;
+          } else {
+            _drafts[destination] = _ComposerDraft(
+              value: draft.value,
+              image: image,
+            );
+          }
         });
       }
     } finally {
@@ -136,8 +163,26 @@ class _ChatPaneState extends State<ChatPane> {
   @override
   void didUpdateWidget(ChatPane oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.messages.length != widget.messages.length ||
-        oldWidget.scope != widget.scope) {
+    final previous = _target(oldWidget);
+    final current = _target(widget);
+    final changed = previous != current;
+    if (changed) {
+      if (_input.text.isNotEmpty || _image != null) {
+        _drafts[previous] = _snapshot();
+      }
+      final draft = _drafts.remove(current) ?? const _ComposerDraft();
+      _input.value = draft.value;
+      _image = draft.image;
+      _uploadedImageUrl = draft.uploadedUrl;
+    }
+    final latest = widget.messages.lastOrNull;
+    final newMessage =
+        latest != null && !identical(latest, oldWidget.messages.lastOrNull);
+    final following =
+        _followingMessages &&
+        (!_scroll.hasClients ||
+            _scroll.position.userScrollDirection == ScrollDirection.idle);
+    if (changed || (newMessage && (following || _isOwnMessage(latest)))) {
       _scheduleScrollToEnd();
     }
   }
@@ -151,31 +196,40 @@ class _ChatPaneState extends State<ChatPane> {
   }
 
   void _scheduleScrollToEnd() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scroll.hasClients) {
+    final request = ++_scrollRequest;
+    _followingMessages = true;
+    _scrollingToEnd = true;
+
+    void follow(Duration _) async {
+      if (!mounted || request != _scrollRequest || !_scroll.hasClients) {
+        return;
+      }
+      if (_scroll.position.extentAfter < 1) {
+        _scrollingToEnd = false;
         return;
       }
       final target = _scroll.position.maxScrollExtent;
       if (MediaQuery.disableAnimationsOf(context)) {
         _scroll.jumpTo(target);
       } else {
-        _scroll.animateTo(
+        await _scroll.animateTo(
           target,
           duration: Motion.effectsFast,
           curve: Motion.effectsFastCurve,
         );
       }
-    });
+      if (mounted && request == _scrollRequest) {
+        _scrollingToEnd = false;
+      }
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback(follow);
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   Future<void> _send() async {
     final draft = _input.value;
-    final destination = (
-      widget.scope,
-      widget.recipientUid,
-      widget.recipientId,
-      widget.channelName,
-    );
+    final destination = _target(widget);
     final send = widget.onSend;
     var text = draft.text.trim();
     final image = _image;
@@ -191,29 +245,32 @@ class _ChatPaneState extends State<ChatPane> {
         final url =
             _uploadedImageUrl ?? await widget.onUploadImage?.call(image.bytes);
         if (!mounted || url == null) return;
-        if (identical(_image, image)) _uploadedImageUrl = url;
-        if (destination !=
-            (
-              widget.scope,
-              widget.recipientUid,
-              widget.recipientId,
-              widget.channelName,
-            )) {
+        if (destination != _target(widget)) {
+          final pending = _drafts[destination];
+          if (pending != null && identical(pending.image, image)) {
+            _drafts[destination] = _ComposerDraft(
+              value: pending.value,
+              image: image,
+              uploadedUrl: url,
+            );
+          }
           return;
         }
+        if (identical(_image, image)) _uploadedImageUrl = url;
         text = [if (text.isNotEmpty) text, '![](<$url>)'].join('\n');
       }
       final sent = await send(text);
+      if (mounted && sent && destination != _target(widget)) {
+        final pending = _drafts[destination];
+        if (pending?.value == draft && identical(pending?.image, image)) {
+          _drafts.remove(destination);
+        }
+      }
       if (mounted &&
           sent &&
           _input.value == draft &&
-          destination ==
-              (
-                widget.scope,
-                widget.recipientUid,
-                widget.recipientId,
-                widget.channelName,
-              )) {
+          identical(_image, image) &&
+          destination == _target(widget)) {
         _input.clear();
         setState(() {
           _image = null;
@@ -223,7 +280,10 @@ class _ChatPaneState extends State<ChatPane> {
     } finally {
       if (mounted) {
         setState(() => _sending = false);
-        _focus.requestFocus();
+        if (destination == _target(widget) &&
+            (ModalRoute.of(context)?.isCurrent ?? false)) {
+          _focus.requestFocus();
+        }
       }
     }
   }
@@ -266,35 +326,67 @@ class _ChatPaneState extends State<ChatPane> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
-          child: ListView.builder(
-            controller: _scroll,
-            // 拖动消息列表时收起键盘，避免触屏上键盘挡住输入区。
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: EdgeInsets.fromLTRB(horizontal, 24, horizontal, 24),
-            itemCount: widget.messages.length + 1,
-            itemBuilder: (context, index) {
-              final child = index == 0
-                  ? _Welcome(
-                      channelName: widget.channelName,
-                      description: widget.description,
-                    )
-                  : _MessageRow(
-                      message: widget.messages[index - 1],
-                      onImageTap: _openImage,
-                      onReply:
-                          _sending ||
-                              widget.busy ||
-                              _isOwnMessage(widget.messages[index - 1])
-                          ? null
-                          : widget.onReply,
-                    );
-              return Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: _contentMaxWidth),
-                  child: child,
-                ),
-              );
+          child: NotificationListener<ScrollMetricsNotification>(
+            onNotification: (notification) {
+              // 富文本、图片与惰性列表布局都可能修正底部的实际位置。
+              if (notification.depth == 0 &&
+                  _followingMessages &&
+                  _scroll.hasClients &&
+                  _scroll.position.userScrollDirection ==
+                      ScrollDirection.idle) {
+                _scheduleScrollToEnd();
+              }
+              return false;
             },
+            child: NotificationListener<ScrollNotification>(
+              onNotification: (notification) {
+                if (notification.depth == 0) {
+                  if (notification is UserScrollNotification &&
+                      notification.direction != ScrollDirection.idle) {
+                    _scrollRequest++;
+                    _scrollingToEnd = false;
+                  }
+                  if (notification is ScrollUpdateNotification &&
+                      !_scrollingToEnd) {
+                    _followingMessages = notification.metrics.extentAfter < 72;
+                  }
+                }
+                return false;
+              },
+              child: ListView.builder(
+                controller: _scroll,
+                // 拖动消息列表时收起键盘，避免触屏上键盘挡住输入区。
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: EdgeInsets.fromLTRB(horizontal, 24, horizontal, 24),
+                itemCount: widget.messages.length + 1,
+                itemBuilder: (context, index) {
+                  final child = index == 0
+                      ? _Welcome(
+                          channelName: widget.channelName,
+                          description: widget.description,
+                        )
+                      : _MessageRow(
+                          message: widget.messages[index - 1],
+                          onImageTap: _openImage,
+                          onReply:
+                              _sending ||
+                                  widget.busy ||
+                                  _isOwnMessage(widget.messages[index - 1])
+                              ? null
+                              : widget.onReply,
+                        );
+                  return Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        maxWidth: _contentMaxWidth,
+                      ),
+                      child: child,
+                    ),
+                  );
+                },
+              ),
+            ),
           ),
         ),
         // 没有当前投递目标时保留范围选择入口，禁止发送。
@@ -512,6 +604,24 @@ class _ChatPaneState extends State<ChatPane> {
       ),
     );
   }
+}
+
+typedef _DraftTarget = ({
+  ChatScope scope,
+  String? uid,
+  int? clientId,
+  String channel,
+});
+
+class _ComposerDraft {
+  const _ComposerDraft({
+    this.value = TextEditingValue.empty,
+    this.image,
+    this.uploadedUrl,
+  });
+  final TextEditingValue value;
+  final PickedChatImage? image;
+  final String? uploadedUrl;
 }
 
 class _ScopeButton extends StatelessWidget {

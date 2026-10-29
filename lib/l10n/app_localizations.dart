@@ -386,6 +386,12 @@ abstract class AppLocalizations {
   /// **'Upgrading identity level to {target}…'**
   String identityUpgrading(int target);
 
+  /// No description provided for @identityUpgraded.
+  ///
+  /// In en, this message translates to:
+  /// **'Identity upgraded to level {level}. Reconnecting…'**
+  String identityUpgraded(int level);
+
   /// No description provided for @workspaceDropped.
   ///
   /// In en, this message translates to:

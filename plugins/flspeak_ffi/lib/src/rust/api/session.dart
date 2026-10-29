@@ -56,8 +56,8 @@ abstract class CoreSession implements RustOpaqueInterface {
 
   /// 订阅事件流。
   ///
-  /// 取消订阅要在 `shutdown()` 之后：`shutdown()` 关闭广播通道，转发任务随即退出，
-  /// 这时 Dart 侧取消订阅会立刻完成；反过来先取消，要等下一次 `add` 失败才收尾。
+  /// 取消订阅放在 `shutdown()` 之后：会话和音频线程收尾后，订阅结束并释放转发任务。
+  /// 先取消时要等下一次 `add` 失败或会话退出才能收尾。
   Stream<CoreEvent> events();
 
   Future<Uint8List> fetchIcon({required int iconId});
@@ -447,7 +447,7 @@ sealed class CoreEvent with _$CoreEvent {
   const factory CoreEvent.selfSpeaking({required bool speaking}) =
       CoreEvent_SelfSpeaking;
 
-  /// 本端采集与远端混音电平（0–1），≤10Hz。
+  /// 本端采集与远端混音电平（0–1），50Hz。
   const factory CoreEvent.levels({
     required double mic,
     required double received,

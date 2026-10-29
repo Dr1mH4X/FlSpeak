@@ -1,6 +1,20 @@
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'hotkey_codes.dart';
+
+final pttHotkeyRecordingProvider = NotifierProvider<PttHotkeyRecording, bool>(
+  PttHotkeyRecording.new,
+);
+
+class PttHotkeyRecording extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void setRecording(bool recording) {
+    if (ref.mounted) state = recording;
+  }
+}
 
 /// `flspeak/global_hotkey` 通道的 Dart 侧封装。
 ///

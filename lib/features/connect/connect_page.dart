@@ -131,7 +131,11 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
           }
         });
       } else if ((previous != null && next.failureSeq != previous.failureSeq) ||
-          (next.activeServerId != null && next.activeServerId != pending)) {
+          (!next.busy &&
+              !next.connecting &&
+              !next.reconnecting &&
+              next.activeServerId != null &&
+              next.activeServerId != pending)) {
         // 只有明确的失败/换目标才放掉连接中状态；busy 结束不等于连上。
         _pendingServerId = null;
       }

@@ -1,3 +1,5 @@
+// ignore_for_file: depend_on_referenced_packages
+
 import 'package:flspeak/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -41,9 +43,9 @@ void main() {
                       onPressed: () {},
                       icon: const Icon(Icons.add_photo_alternate_outlined),
                     ),
-                    IconButton(
+                    const IconButton(
                       onPressed: null,
-                      icon: const Icon(Icons.send_rounded),
+                      icon: Icon(Icons.send_rounded),
                     ),
                   ],
                 ),

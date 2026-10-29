@@ -53,6 +53,12 @@ class MainFlutterWindow: NSWindow {
   }
 
   deinit {
+    if let hotkeyRef = hotkeyRef {
+      UnregisterEventHotKey(hotkeyRef)
+    }
+    if let hotkeyEventHandler = hotkeyEventHandler {
+      RemoveEventHandler(hotkeyEventHandler)
+    }
     NotificationCenter.default.removeObserver(self)
   }
 

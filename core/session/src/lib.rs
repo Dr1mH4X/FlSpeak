@@ -9,6 +9,7 @@
 
 mod actor;
 mod downloads;
+mod events;
 mod image_upload;
 mod images;
 mod store;
@@ -16,14 +17,15 @@ mod store;
 mod channel_tools;
 pub mod text_format;
 pub use channel_tools::{AccessView, ChannelFileView, GroupKind, KickTarget, MemberGroupView};
+pub use events::SessionSubscription;
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use server::{AddressError, ServerError, ServerProfile, ServerRegistry};
+use server::{AddressError, ServerError, ServerProfile};
 use tokio::runtime::Builder;
-use tokio::sync::{broadcast, mpsc, oneshot};
+use tokio::sync::{broadcast, mpsc, oneshot, watch};
 use tokio::task::LocalSet;
 
 pub use image_upload::{upload_image, validate_image_host};
@@ -126,7 +128,10 @@ pub enum TransferDirection {
 
 #[derive(Debug, Clone)]
 pub enum SessionEvent {
-    State(SessionState),
+    State {
+        state: SessionState,
+        connection_epoch: u64,
+    },
     Servers(Vec<ServerProfile>),
     Snapshot {
         channels: Vec<ChannelView>,
@@ -165,7 +170,7 @@ pub enum SessionEvent {
     SelfSpeaking {
         speaking: bool,
     },
-    /// 本端采集与远端混音电平（0–1），≤10Hz。
+    /// 本端采集与远端混音电平（0–1），50Hz。
     Levels {
         mic: f32,
         received: f32,
@@ -208,11 +213,11 @@ pub enum SessionCommand {
     RegisterServer {
         label: String,
         address: String,
-        reply: oneshot::Sender<Result<ServerProfile, ServerError>>,
+        reply: oneshot::Sender<Result<ServerProfile, SessionError>>,
     },
     RemoveServer {
         id: String,
-        reply: oneshot::Sender<Result<(), ServerError>>,
+        reply: oneshot::Sender<Result<(), SessionError>>,
     },
     ListServers {
         reply: oneshot::Sender<Vec<ServerProfile>>,
@@ -375,6 +380,9 @@ pub enum SessionError {
     #[error("{0}")]
     Transfer(String),
 
+    #[error("档案保存失败: {0}")]
+    Storage(String),
+
     #[error("会话 actor 已退出")]
     Closed,
 
@@ -410,6 +418,7 @@ impl Default for SessionOptions {
 pub struct SessionHandle {
     commands: mpsc::UnboundedSender<SessionCommand>,
     events: broadcast::Sender<SessionEvent>,
+    levels: watch::Receiver<audio::level::LevelReading>,
     store_path: PathBuf,
 }
 
@@ -432,13 +441,21 @@ impl SessionHandle {
         let (commands, command_rx) = mpsc::unbounded_channel();
         let (events, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
         let (audio_events, audio_rx) = mpsc::channel(actor::AUDIO_EVENT_CAPACITY);
-        let voice = audio::engine::VoiceEngine::spawn(move |event| {
-            let _ = audio_events.try_send(event);
-        })?;
+        let (level_publisher, levels) = events::level_channel();
+        let audio_levels = level_publisher.clone();
+        let voice = audio::engine::VoiceEngine::spawn(
+            move |event| {
+                let _ = audio_events.try_send(event);
+            },
+            move |reading| {
+                audio_levels.publish(reading);
+            },
+        )?;
 
         let handle = Self {
             commands: commands.clone(),
             events: events.clone(),
+            levels,
             store_path: store_path.clone(),
         };
 
@@ -468,7 +485,7 @@ impl SessionHandle {
                             let _ = events.send(SessionEvent::Failed {
                                 message: format!("档案读取失败: {message}"),
                             });
-                            ServerRegistry::new()
+                            return;
                         }
                     };
                     let _ = events.send(SessionEvent::Servers(registry.profiles().to_vec()));
@@ -477,9 +494,12 @@ impl SessionHandle {
                         registry,
                         events,
                         commands,
-                        voice,
-                        audio_rx,
-                        options.audio,
+                        actor::SessionAudio {
+                            voice,
+                            events: audio_rx,
+                            levels: level_publisher,
+                            enabled: options.audio,
+                        },
                     )
                     .run(command_rx)
                     .await;
@@ -490,8 +510,8 @@ impl SessionHandle {
         Ok(handle)
     }
 
-    pub fn subscribe(&self) -> broadcast::Receiver<SessionEvent> {
-        self.events.subscribe()
+    pub fn subscribe(&self) -> SessionSubscription {
+        SessionSubscription::new(self.events.subscribe(), self.levels.clone())
     }
 
     pub fn store_path(&self) -> &Path {
@@ -509,17 +529,13 @@ impl SessionHandle {
             address,
             reply,
         })?;
-        rx.await
-            .map_err(|_| SessionError::Closed)?
-            .map_err(Into::into)
+        rx.await.map_err(|_| SessionError::Closed)?
     }
 
     pub async fn remove_server(&self, id: String) -> Result<(), SessionError> {
         let (reply, rx) = oneshot::channel();
         self.send(SessionCommand::RemoveServer { id, reply })?;
-        rx.await
-            .map_err(|_| SessionError::Closed)?
-            .map_err(Into::into)
+        rx.await.map_err(|_| SessionError::Closed)?
     }
 
     pub async fn list_servers(&self) -> Result<Vec<ServerProfile>, SessionError> {
@@ -798,7 +814,7 @@ impl SessionHandle {
         rx.await.map_err(|_| SessionError::Closed)?
     }
 
-    /// 关闭 actor 并等待连接收尾。
+    /// 请求关闭 actor；订阅在连接与音频线程收尾后结束。
     pub async fn shutdown(&self) -> Result<(), SessionError> {
         self.send(SessionCommand::Shutdown)
     }
@@ -810,9 +826,73 @@ impl SessionHandle {
     }
 }
 
+impl Drop for SessionHandle {
+    fn drop(&mut self) {
+        let _ = self.commands.send(SessionCommand::Shutdown);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn explicit_shutdown_and_dropping_the_handle_both_close_subscriptions() {
+        for explicit in [true, false] {
+            let root = std::env::temp_dir().join(format!(
+                "flspeak-subscription-close-{:x}",
+                rand::random::<u64>()
+            ));
+            tokio::fs::create_dir_all(&root).await.unwrap();
+            let handle = SessionHandle::spawn_with_options(
+                root.join("servers.json"),
+                SessionOptions { audio: false },
+            )
+            .unwrap();
+            handle.list_servers().await.unwrap();
+            let mut events = handle.subscribe();
+            let retained = if explicit {
+                handle.shutdown().await.unwrap();
+                Some(handle)
+            } else {
+                drop(handle);
+                None
+            };
+            tokio::time::timeout(Duration::from_secs(2), async {
+                loop {
+                    match events.recv().await {
+                        Err(broadcast::error::RecvError::Closed) => break,
+                        Err(broadcast::error::RecvError::Lagged(_)) | Ok(_) => {}
+                    }
+                }
+            })
+            .await
+            .unwrap();
+            drop(retained);
+            tokio::fs::remove_dir_all(root).await.unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn invalid_registry_stops_startup_without_exposing_an_empty_writable_registry() {
+        let dir = std::env::temp_dir().join(format!(
+            "flspeak-invalid-registry-{:x}",
+            rand::random::<u64>()
+        ));
+        tokio::fs::create_dir_all(&dir).await.unwrap();
+        let path = dir.join("servers.json");
+        tokio::fs::write(&path, b"{invalid registry").await.unwrap();
+        let handle =
+            SessionHandle::spawn_with_options(path.clone(), SessionOptions { audio: false })
+                .unwrap();
+        let result = tokio::time::timeout(Duration::from_secs(2), handle.list_servers())
+            .await
+            .unwrap();
+        assert!(result.is_err());
+        assert_eq!(tokio::fs::read(&path).await.unwrap(), b"{invalid registry");
+        drop(handle);
+        tokio::fs::remove_dir_all(&dir).await.unwrap();
+    }
 
     #[tokio::test]
     async fn session_spawns_and_shuts_down_without_a_server() {

@@ -119,9 +119,14 @@ Connected ──非主动断开──> Reconnecting{attempt, delay}
 - 连续 3 次 `wait_connected` 超时后，读取当前身份等级，目标 `current + 5`，上限 29。
 - 挖矿在独立 OS 线程的 current-thread runtime 上跑，不阻塞 actor；`AbortSignal` 支持 UI
   取消。
-- 写身份文件用临时文件 + `sync_all` + rename；Windows 上 rename 不覆盖时退化为先删后改。
+- 身份只在文件不存在时生成；已有文件读取或解析失败会中止连接并报告错误，原文件保留。
+- 身份、服务器档案与历史压缩结果采用同目录独占临时文件、`sync_all` 与 rename 替换。替换失败保留目标文件并清理临时文件；Unix 新文件权限为 `0600`。
 - 事件：`IdentityUpgrade { from, to }`、`IdentityUpgraded { level }`；失败发 `Failed`。
 - 结果带 generation，用户已经手动重连/断开时旧结果直接丢弃。
+
+服务器档案读取失败会中止会话启动并报告错误，避免把空列表写回损坏的档案。界面偏好按提交顺序写盘，保存失败后后续操作仍可重试。
+
+档案增删先保存修改后的副本，成功后替换内存列表并发布 `Servers`；失败返回 `SessionError::Storage`，内存列表保持原值。
 
 ## 文本消息
 
@@ -177,6 +182,7 @@ downloadFile(remotePath, localPath, channelId, password?) -> transferId
 
 ## 失败语义
 
+- 界面的连接生命周期由 `State` 事件控制；切换服务器先断开旧连接，再连接新目标。仍然连接时收到 `Failed` 只显示提示，不清空频道与成员；重连会清除过期的说话指示和电平。
 - 音频设备失败：`Voice` 带错误 + 连接保持。
 - 轮询失败：发 `Log`，不清空现有快照；下一次继续。
 - 重连失败：退避耗尽后 `State(Disconnected)` + `Failed`。

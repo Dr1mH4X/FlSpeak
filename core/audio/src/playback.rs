@@ -222,6 +222,13 @@ impl PlaybackPipeline {
         }
     }
 
+    pub fn restart(&mut self) {
+        *self = Self {
+            deafened: self.deafened,
+            ..Self::new()
+        };
+    }
+
     pub fn dropped_frames(&self) -> u64 {
         self.dropped
     }
@@ -321,6 +328,21 @@ mod tests {
             client_id,
             codec: MUSIC_CODEC,
             data,
+        }
+    }
+
+    #[test]
+    fn restarting_clears_old_audio_and_preserves_the_deafen_control() {
+        for deafened in [false, true] {
+            let mut pipeline = PlaybackPipeline::new();
+            let now = Instant::now();
+            pipeline.push_incoming(frame(1, packet(0.0)), now);
+            pipeline.set_deafened(deafened);
+            pipeline.restart();
+            let tick = pipeline.tick(now + TARGET_DELAY, MIX_SAMPLES_PER_CHANNEL);
+            assert!(tick.talkers.is_empty());
+            assert!(tick.samples.iter().all(|sample| *sample == 0.0));
+            assert_eq!(pipeline.deafened, deafened);
         }
     }
 

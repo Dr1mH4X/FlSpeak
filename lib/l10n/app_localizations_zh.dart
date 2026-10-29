@@ -175,6 +175,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String identityUpgraded(int level) {
+    return '身份等级已提升到 $level，正在重连…';
+  }
+
+  @override
   String get workspaceDropped => '连接丢失';
 
   @override

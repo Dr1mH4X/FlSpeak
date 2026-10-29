@@ -60,3 +60,7 @@ JSON。自托管服务器不保存图片字节，`file_id` 不是可直接访问
 - 第三方 URL 图片可显示；磁盘 LRU、隐私开关、像素上限尚未接线。
 - 显示官方附件需要一次连接边界决策与 myTS 鉴权；当前不做。
 - 渲染现状与边界细节见 `docs/images.md` 与 `docs/connection-boundary.md`。
+
+## Related
+
+跨收件人的草稿、选图与上传归属见[异步交互的目标与状态归属](../../implemented/architecture/2026-10-29-ui-async-ownership.md)。

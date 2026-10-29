@@ -77,14 +77,23 @@ class ConnectHeader extends StatelessWidget {
             ),
           if (connected) ...[
             const SizedBox(width: 12),
-            TextButton.icon(
-              onPressed: onWorkspace,
-              icon: const Icon(
-                Icons.arrow_forward_rounded,
-                size: IconSizes.medium,
+            if (desktop)
+              TextButton.icon(
+                onPressed: onWorkspace,
+                icon: const Icon(
+                  Icons.arrow_forward_rounded,
+                  size: IconSizes.medium,
+                ),
+                label: Text(l10n.workspaceReturn),
+              )
+            else
+              IconButton(
+                onPressed: onWorkspace,
+                icon: Icon(
+                  Icons.arrow_forward_rounded,
+                  semanticLabel: l10n.workspaceReturn,
+                ),
               ),
-              label: Text(l10n.workspaceReturn),
-            ),
           ],
           if (!desktop)
             IconButton(

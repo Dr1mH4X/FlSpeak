@@ -61,6 +61,7 @@ Poked / AccessChanged / Transfer* / Log / Denied / Failed
 ```
 
 - 广播通道容量 256；订阅慢时旧事件被丢弃，订阅者收到 `Lagged` 后继续。
+- 电平使用独立的最新值缓存，经会话订阅合并到单个 FFI 事件流；投递与代次规则见[音频](audio.md#电平)。
 - `Log` 事件目前不入界面，保留给调试面板。
 - 语音帧不在这条链路上。
 

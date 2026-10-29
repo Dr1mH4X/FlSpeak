@@ -56,6 +56,7 @@ class ImageHostController extends AsyncNotifier<ImageHostConfiguration?> {
         uploadBase: config.uploadBase,
         publicBase: config.publicBase,
       );
+      if (!ref.mounted) return;
       await ref
           .read(imageHostStorageProvider)
           .write(

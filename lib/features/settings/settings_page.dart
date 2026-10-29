@@ -296,7 +296,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       labelBuilder: (context, value) =>
           _localeLabel(l10n, value.isEmpty ? null : value),
     );
-    if (code == null) {
+    if (!mounted || code == null) {
       return;
     }
     ref
@@ -313,7 +313,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       current: current,
       labelBuilder: (context, value) => _voiceMeterLabel(l10n, value),
     );
-    if (source == null) {
+    if (!mounted || source == null) {
       return;
     }
     ref.read(preferencesProvider.notifier).setVoiceMeterSource(source);
@@ -332,7 +332,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         selectedId: output ? selection.outputId : selection.inputId,
       ),
     );
-    if (choice == null) {
+    if (!mounted || choice == null) {
       return;
     }
     final controller = ref.read(audioSelectionProvider.notifier);
@@ -366,22 +366,22 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Future<void> _pickPttHotkey() async {
+    if (ref.read(pttHotkeyRecordingProvider)) return;
     final l10n = AppLocalizations.of(context);
     final currentKeyId = ref.read(preferencesProvider).pttHotkey;
-    // 录制期间先注销：macOS 的 Carbon 热键在系统层吞按键，不注销就录不到同一个键。
-    await const GlobalHotkey().unregister();
-    if (!mounted) {
-      return;
-    }
-    await showAppModal<void>(
-      context,
-      title: l10n.settingsPttHotkeyRecordTitle,
-      builder: (context) => _PttHotkeyRecorder(currentKeyId: currentKeyId),
-    );
-    // 面板里保存/清除都会写偏好，app 层的偏好监听负责重新注册；取消（偏好
-    // 没变）时把原绑定注册回去。
-    if (ref.read(preferencesProvider).pttHotkey == currentKeyId) {
-      await const GlobalHotkey().registerByKeyId(currentKeyId);
+    final recording = ref.read(pttHotkeyRecordingProvider.notifier);
+    recording.setRecording(true);
+    try {
+      // 等待原生注销完成，Carbon 才能把原热键交给录制输入框。
+      await const GlobalHotkey().unregister();
+      if (!mounted) return;
+      await showAppModal<void>(
+        context,
+        title: l10n.settingsPttHotkeyRecordTitle,
+        builder: (context) => _PttHotkeyRecorder(currentKeyId: currentKeyId),
+      );
+    } finally {
+      recording.setRecording(false);
     }
   }
 

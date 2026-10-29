@@ -104,6 +104,14 @@
       }
     }
   },
+  "identityUpgraded": "身份等级已提升到 {level}，正在重连…",
+  "@identityUpgraded": {
+    "placeholders": {
+      "level": {
+        "type": "int"
+      }
+    }
+  },
   "workspaceDropped": "连接丢失",
   "workspaceRetrying": "正在重试…",
   "channelsSection": "频道",

@@ -37,6 +37,7 @@ const IDENTITY_MAX_LEVEL: i32 = 29;
 const STARTUP_RECONNECT_LIMIT: u32 = 5;
 /// TS 单个数据报上限 500 字节；扣掉 tag/头/语音头后 Opus 载荷约 484 字节。
 const MAX_VOICE_PAYLOAD: usize = 484;
+const MAX_VOICE_QUEUE_DELAY: Duration = Duration::from_millis(100);
 const _: () = assert!(MAX_VOICE_PAYLOAD < 500);
 
 /// ServerQuery 单行消息上限。
@@ -95,6 +96,13 @@ pub(crate) enum SessionSignal {
     },
 }
 
+pub(crate) struct SessionAudio {
+    pub voice: VoiceEngine,
+    pub events: mpsc::Receiver<AudioEvent>,
+    pub levels: crate::events::LevelPublisher,
+    pub enabled: bool,
+}
+
 pub(crate) struct Actor {
     registry: ServerRegistry,
     store_path: PathBuf,
@@ -104,6 +112,7 @@ pub(crate) struct Actor {
     signal_rx: mpsc::UnboundedReceiver<SessionSignal>,
     audio_events: mpsc::Receiver<AudioEvent>,
     voice: VoiceEngine,
+    levels: crate::events::LevelPublisher,
     logger: Arc<dyn Logger>,
     state: SessionState,
     client: Option<Arc<Client>>,
@@ -119,6 +128,7 @@ pub(crate) struct Actor {
     input_device: Option<String>,
     output_device: Option<String>,
     capture_active: bool,
+    audio_since: Instant,
     audio_enabled: bool,
     last_snapshot: Option<(Vec<ChannelView>, Vec<ClientView>)>,
     channel_codecs: HashMap<u64, i32>,
@@ -139,10 +149,14 @@ impl Actor {
         registry: ServerRegistry,
         events: broadcast::Sender<SessionEvent>,
         commands: mpsc::UnboundedSender<SessionCommand>,
-        voice: VoiceEngine,
-        audio_events: mpsc::Receiver<AudioEvent>,
-        audio_enabled: bool,
+        audio: SessionAudio,
     ) -> Self {
+        let SessionAudio {
+            voice,
+            events: audio_events,
+            levels,
+            enabled: audio_enabled,
+        } = audio;
         let (signals, signal_rx) = mpsc::unbounded_channel();
         let logger: Arc<dyn Logger> = Arc::new(EventLogger {
             events: events.clone(),
@@ -156,6 +170,7 @@ impl Actor {
             signal_rx,
             audio_events,
             voice,
+            levels,
             logger,
             state: SessionState::Disconnected,
             client: None,
@@ -171,6 +186,7 @@ impl Actor {
             input_device: None,
             output_device: None,
             capture_active: false,
+            audio_since: Instant::now(),
             audio_enabled,
             last_snapshot: None,
             channel_codecs: HashMap::new(),
@@ -513,18 +529,26 @@ impl Actor {
         &mut self,
         label: String,
         address: String,
-    ) -> Result<ServerProfile, ServerError> {
-        let profile = self.registry.register(&label, &address)?;
-        self.persist().await;
+    ) -> Result<ServerProfile, SessionError> {
+        let mut registry = self.registry.clone();
+        let profile = registry.register(&label, &address)?;
+        store::save_registry(&self.store_path, &registry)
+            .await
+            .map_err(SessionError::Storage)?;
+        self.registry = registry;
         self.emit(SessionEvent::Servers(self.registry.profiles().to_vec()));
         Ok(profile)
     }
 
-    async fn remove(&mut self, id: String) -> Result<(), ServerError> {
-        if !self.registry.remove(&id) {
-            return Err(ServerError::NotRegistered(id));
+    async fn remove(&mut self, id: String) -> Result<(), SessionError> {
+        let mut registry = self.registry.clone();
+        if !registry.remove(&id) {
+            return Err(ServerError::NotRegistered(id).into());
         }
-        self.persist().await;
+        store::save_registry(&self.store_path, &registry)
+            .await
+            .map_err(SessionError::Storage)?;
+        self.registry = registry;
         self.emit(SessionEvent::Servers(self.registry.profiles().to_vec()));
         Ok(())
     }
@@ -1143,7 +1167,9 @@ impl Actor {
             self.voice.set_muted(muted)?;
         }
         self.voice_state.muted = muted;
+        self.audio_since = Instant::now();
         if muted {
+            self.emit(SessionEvent::SelfSpeaking { speaking: false });
             self.voice_state.ptt_active = false;
             if self.audio_enabled {
                 let _ = self.voice.set_ptt_active(false);
@@ -1159,7 +1185,9 @@ impl Actor {
             self.voice.set_deafened(deafened)?;
         }
         self.voice_state.deafened = deafened;
+        self.audio_since = Instant::now();
         if deafened {
+            self.emit(SessionEvent::SelfSpeaking { speaking: false });
             self.voice_state.ptt_active = false;
             if self.audio_enabled {
                 let _ = self.voice.set_ptt_active(false);
@@ -1203,6 +1231,10 @@ impl Actor {
             self.voice.set_ptt_mode(enabled)?;
         }
         self.voice_state.ptt_mode = enabled;
+        self.audio_since = Instant::now();
+        if enabled && !self.voice_state.ptt_active {
+            self.emit(SessionEvent::SelfSpeaking { speaking: false });
+        }
         if !enabled {
             self.voice_state.ptt_active = false;
         }
@@ -1219,6 +1251,10 @@ impl Actor {
             self.voice.set_ptt_active(active)?;
         }
         self.voice_state.ptt_active = active;
+        self.audio_since = Instant::now();
+        if !active {
+            self.emit(SessionEvent::SelfSpeaking { speaking: false });
+        }
         self.emit_voice_state();
         Ok(())
     }
@@ -1249,6 +1285,7 @@ impl Actor {
             return;
         }
         self.self_channel_id = channel_id;
+        self.audio_since = Instant::now();
         if let SessionState::Connected { client_id, .. } = self.state.clone() {
             self.set_state(SessionState::Connected {
                 client_id,
@@ -1693,8 +1730,12 @@ impl Actor {
 
     fn handle_audio(&mut self, event: AudioEvent) {
         match event {
-            AudioEvent::Outbound { codec, data } => {
-                if codec != self.current_codec {
+            AudioEvent::Outbound {
+                codec,
+                data,
+                produced_at,
+            } => {
+                if !self.can_send_voice(codec, produced_at, Instant::now()) {
                     return;
                 }
                 if data.len() > MAX_VOICE_PAYLOAD {
@@ -1711,19 +1752,12 @@ impl Actor {
                 self.emit(SessionEvent::Speaking { client_ids });
             }
             AudioEvent::SelfSpeaking { speaking } => {
-                self.emit(SessionEvent::SelfSpeaking { speaking });
+                self.emit(SessionEvent::SelfSpeaking {
+                    speaking: speaking && self.voice_gate_open(),
+                });
             }
-            AudioEvent::Levels { mic, received } => {
-                self.emit(SessionEvent::Levels { mic, received });
-            }
-            AudioEvent::CaptureState {
-                ready,
-                ptt_mode,
-                ptt_active,
-            } => {
+            AudioEvent::CaptureState { ready } => {
                 self.voice_state.input_ready = ready;
-                self.voice_state.ptt_mode = ptt_mode;
-                self.voice_state.ptt_active = ptt_active;
                 if ready {
                     self.voice_state.message = None;
                 }
@@ -1747,6 +1781,22 @@ impl Actor {
                 self.emit_voice_state();
             }
         }
+    }
+
+    fn voice_gate_open(&self) -> bool {
+        matches!(self.state, SessionState::Connected { .. })
+            && self.self_channel_id != 0
+            && self.capture_active
+            && !self.voice_state.muted
+            && !self.voice_state.deafened
+            && (!self.voice_state.ptt_mode || self.voice_state.ptt_active)
+    }
+
+    fn can_send_voice(&self, codec: i32, produced_at: Instant, now: Instant) -> bool {
+        self.voice_gate_open()
+            && codec == self.current_codec
+            && produced_at >= self.audio_since
+            && now.saturating_duration_since(produced_at) <= MAX_VOICE_QUEUE_DELAY
     }
 
     fn start_voice(&mut self) {
@@ -1795,19 +1845,14 @@ impl Actor {
         self.set_state(SessionState::Disconnected);
     }
 
-    async fn persist(&self) {
-        if let Err(message) = store::save_registry(&self.store_path, &self.registry).await {
-            self.emit(SessionEvent::Failed {
-                message: format!("档案保存失败: {message}"),
-            });
-        }
-    }
-
     fn connected(&self) -> Result<Arc<Client>, SessionError> {
         self.client.clone().ok_or(SessionError::NotConnected)
     }
 
     fn invalidate_handlers(&mut self) {
+        self.audio_since = Instant::now();
+        self.voice.set_meter_epoch(None);
+        self.levels.set_epoch(None);
         self.channel_tools = Default::default();
         self.transfer_target = None;
         self.connection_epoch = self.connection_epoch.wrapping_add(1);
@@ -1815,8 +1860,15 @@ impl Actor {
     }
 
     fn set_state(&mut self, state: SessionState) {
+        let scope =
+            matches!(&state, SessionState::Connected { .. }).then_some(self.connection_epoch);
+        self.voice.set_meter_epoch(scope);
+        self.levels.set_epoch(scope);
         self.state = state.clone();
-        self.emit(SessionEvent::State(state));
+        self.emit(SessionEvent::State {
+            state,
+            connection_epoch: self.connection_epoch,
+        });
     }
 
     fn emit_voice_state(&self) {
@@ -2386,6 +2438,118 @@ impl AsyncRead for ProgressReader {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn failed_registry_writes_reject_the_operation_and_preserve_memory() {
+        for removing in [false, true] {
+            let root = std::env::temp_dir().join(format!(
+                "flspeak-registry-operation-{:x}",
+                rand::random::<u64>()
+            ));
+            let path = root.join("servers.json");
+            tokio::fs::create_dir_all(&path).await.unwrap();
+            tokio::fs::write(path.join("keep"), b"preserve")
+                .await
+                .unwrap();
+            let mut actor = audio_actor();
+            actor.store_path = path;
+            let original = actor
+                .registry
+                .register("Original", "a.example.com")
+                .unwrap();
+            let mut events = actor.events.subscribe();
+            let rejected = if removing {
+                actor.remove(original.id.clone()).await.is_err()
+            } else {
+                actor
+                    .register("New".into(), "b.example.com".into())
+                    .await
+                    .is_err()
+            };
+            let profiles = actor.registry.profiles().to_vec();
+            let emitted = events.try_recv().is_ok();
+            tokio::fs::remove_dir_all(&root).await.unwrap();
+            assert!(rejected);
+            assert_eq!(profiles, vec![original]);
+            assert!(!emitted);
+        }
+    }
+
+    fn audio_actor() -> Actor {
+        let (events, _) = broadcast::channel(16);
+        let (commands, _) = mpsc::unbounded_channel();
+        let (_, audio) = mpsc::channel(16);
+        let voice = VoiceEngine::spawn(|_| {}, |_| {}).unwrap();
+        let (levels, _) = crate::events::level_channel();
+        let mut actor = Actor::new(
+            PathBuf::new(),
+            ServerRegistry::new(),
+            events,
+            commands,
+            SessionAudio {
+                voice,
+                events: audio,
+                levels,
+                enabled: false,
+            },
+        );
+        actor.state = SessionState::Connected {
+            client_id: 1,
+            channel_id: 5,
+        };
+        actor.self_channel_id = 5;
+        actor.capture_active = true;
+        actor
+    }
+
+    #[test]
+    fn queued_voice_requires_fresh_data_and_an_open_gate() {
+        let mut actor = audio_actor();
+        let at = actor.audio_since;
+        let now = at + Duration::from_millis(20);
+        assert!(actor.can_send_voice(VOICE_CODEC, at, now));
+        assert!(!actor.can_send_voice(
+            VOICE_CODEC,
+            at,
+            at + MAX_VOICE_QUEUE_DELAY + Duration::from_millis(1)
+        ));
+        actor.audio_since = at + Duration::from_millis(1);
+        assert!(!actor.can_send_voice(VOICE_CODEC, at, now));
+        actor.audio_since = at;
+        actor.voice_state.muted = true;
+        assert!(!actor.can_send_voice(VOICE_CODEC, at, now));
+        actor.voice_state.muted = false;
+        actor.voice_state.ptt_mode = true;
+        assert!(!actor.can_send_voice(VOICE_CODEC, at, now));
+        actor.voice_state.ptt_active = true;
+        assert!(actor.can_send_voice(VOICE_CODEC, at, now));
+        actor.voice_state.deafened = true;
+        assert!(!actor.can_send_voice(VOICE_CODEC, at, now));
+        actor.voice_state.deafened = false;
+        actor.capture_active = false;
+        assert!(!actor.can_send_voice(VOICE_CODEC, at, now));
+    }
+
+    #[tokio::test]
+    async fn mute_cycle_discards_already_queued_voice_and_readiness_preserves_ptt_intent() {
+        let mut actor = audio_actor();
+        let queued = Instant::now();
+        actor.set_muted(true).await.unwrap();
+        actor.set_muted(false).await.unwrap();
+        assert!(!actor.can_send_voice(VOICE_CODEC, queued, Instant::now()));
+        actor.voice_state.ptt_mode = true;
+        actor.voice_state.ptt_active = false;
+        actor.handle_audio(AudioEvent::CaptureState { ready: true });
+        assert!(actor.voice_state.input_ready);
+        assert!(actor.voice_state.ptt_mode);
+        assert!(!actor.voice_state.ptt_active);
+        let mut events = actor.events.subscribe();
+        actor.handle_audio(AudioEvent::SelfSpeaking { speaking: true });
+        assert!(matches!(
+            events.try_recv(),
+            Ok(SessionEvent::SelfSpeaking { speaking: false })
+        ));
+    }
 
     #[test]
     fn mute_flags_follow_official_deafen_semantics() {

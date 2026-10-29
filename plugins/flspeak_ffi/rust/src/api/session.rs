@@ -168,7 +168,7 @@ pub enum CoreEvent {
     SelfSpeaking {
         speaking: bool,
     },
-    /// 本端采集与远端混音电平（0–1），≤10Hz。
+    /// 本端采集与远端混音电平（0–1），50Hz。
     Levels {
         mic: f64,
         received: f64,
@@ -287,8 +287,8 @@ impl CoreSession {
 
     /// 订阅事件流。
     ///
-    /// 取消订阅要在 `shutdown()` 之后：`shutdown()` 关闭广播通道，转发任务随即退出，
-    /// 这时 Dart 侧取消订阅会立刻完成；反过来先取消，要等下一次 `add` 失败才收尾。
+    /// 取消订阅放在 `shutdown()` 之后：会话和音频线程收尾后，订阅结束并释放转发任务。
+    /// 先取消时要等下一次 `add` 失败或会话退出才能收尾。
     pub fn events(&self, sink: StreamSink<CoreEvent, SseCodec>) -> Result<(), CoreError> {
         let mut events = self.handle.subscribe();
         runtime()?.spawn(async move {
@@ -740,7 +740,7 @@ impl From<SessionEvent> for CoreEvent {
     fn from(event: SessionEvent) -> Self {
         match event {
             SessionEvent::AccessChanged => CoreEvent::AccessChanged,
-            SessionEvent::State(state) => CoreEvent::State {
+            SessionEvent::State { state, .. } => CoreEvent::State {
                 state: state.into(),
             },
             SessionEvent::Servers(profiles) => CoreEvent::Servers {
@@ -841,9 +841,11 @@ impl From<SessionError> for CoreError {
             SessionError::ChannelPasswordRequired => CoreError::ChannelPasswordRequired {
                 message: err.to_string(),
             },
-            SessionError::Closed | SessionError::Spawn(_) => CoreError::Internal {
-                message: err.to_string(),
-            },
+            SessionError::Closed | SessionError::Spawn(_) | SessionError::Storage(_) => {
+                CoreError::Internal {
+                    message: err.to_string(),
+                }
+            }
             _ => CoreError::Connection {
                 message: err.to_string(),
             },

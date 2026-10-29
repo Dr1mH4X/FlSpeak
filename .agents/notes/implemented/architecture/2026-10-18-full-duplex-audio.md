@@ -48,3 +48,7 @@ TeamSpeakClaw 的 `VoicePacer`。
   codec 发包。
 - 身份挖矿可能占用一个核心几十秒到几分钟；UI 有取消入口。
 - 链路与已知限制的细节见 `docs/audio.md`。
+
+## Related
+
+发送包的新鲜度与 PTT 状态归属见[语音发送的新鲜度与控制状态](../../implemented/architecture/2026-10-29-voice-egress-gate.md)；保存失败时的身份保留见[保存失败时保留持久化数据](../../implemented/bug-fix/2026-10-29-preserve-persistent-data.md)。

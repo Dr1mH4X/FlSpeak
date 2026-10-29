@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import '../theme/app_motion.dart';
 
 /// 空状态是行动邀请：说清楚现在缺什么、下一步点哪里。
 ///
@@ -100,6 +101,7 @@ Future<T?> showAppModal<T>(
   WidgetBuilder? footer,
 }) {
   final compact = context.isCompact;
+  final reduceMotion = MediaQuery.disableAnimationsOf(context);
   Widget panel(BuildContext context) => _ModalPanel(
     title: title,
     description: description,
@@ -113,6 +115,13 @@ Future<T?> showAppModal<T>(
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: false,
+      sheetAnimationStyle: reduceMotion
+          ? AnimationStyle.noAnimation
+          : const AnimationStyle(
+              duration: Motion.effectsSlow,
+              reverseDuration: Motion.effectsDefault,
+              curve: Motion.spatialCurve,
+            ),
       // M3 scrim：scrim 色压 32%，亮暗主题各自成立。
       barrierColor: context.scheme.scrim.withValues(alpha: 0.32),
       constraints: BoxConstraints(
@@ -128,22 +137,64 @@ Future<T?> showAppModal<T>(
     );
   }
 
-  return showDialog<T>(
-    context: context,
-    barrierColor: context.scheme.scrim.withValues(alpha: 0.32),
-    // 底色与形状交给 dialogTheme（surfaceContainerHigh + xxxl）。
-    builder: (context) => Dialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: Radii.xxxlAll,
-        side: BorderSide(color: context.scheme.outlineVariant),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 512),
-        child: panel(context),
+  return Navigator.of(context, rootNavigator: true).push<T>(
+    _AppDialogRoute<T>(
+      context: context,
+      barrierColor: context.scheme.scrim.withValues(alpha: 0.32),
+      // 底色与形状交给 dialogTheme（surfaceContainerHigh + xxxl）。
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: Radii.xxxlAll,
+          side: BorderSide(color: context.scheme.outlineVariant),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 512),
+          child: panel(context),
+        ),
       ),
     ),
   );
+}
+
+class _AppDialogRoute<T> extends DialogRoute<T> {
+  _AppDialogRoute({
+    required super.context,
+    required super.builder,
+    required super.barrierColor,
+  }) : super(
+         themes: InheritedTheme.capture(
+           from: context,
+           to: Navigator.of(context, rootNavigator: true).context,
+         ),
+         traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
+         animationStyle: MediaQuery.disableAnimationsOf(context)
+             ? AnimationStyle.noAnimation
+             : const AnimationStyle(
+                 duration: Motion.effectsDefault,
+                 reverseDuration: Motion.effectsFast,
+               ),
+       );
+
+  @override
+  Widget buildTransitions(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    if (MediaQuery.disableAnimationsOf(context)) return child;
+    final progress = animation.drive(
+      CurveTween(curve: Motion.effectsDefaultCurve),
+    );
+    return FadeTransition(
+      opacity: progress,
+      child: ScaleTransition(
+        scale: progress.drive(Tween(begin: 0.94, end: 1.0)),
+        child: child,
+      ),
+    );
+  }
 }
 
 class _ModalPanel extends StatelessWidget {
