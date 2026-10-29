@@ -75,6 +75,22 @@ final memberGroupsProvider = FutureProvider.autoDispose
           .memberGroups(uid: target.uid, clientId: target.clientId);
     });
 
+/// 频道简介缓存；同一连接内共用，重连或切服销毁旧请求。
+final channelDescriptionProvider = FutureProvider.autoDispose
+    .family<String, int>((ref, channelId) async {
+      final session = ref.watch(
+        sessionViewProvider.select(
+          (v) => (v.activeServerId, v.connectionEpoch, v.connected),
+        ),
+      );
+      if (!session.$3 || session.$1 == null) {
+        throw StateError('Channel description requires an active connection');
+      }
+      return ref
+          .read(coreSessionProvider)
+          .channelDescription(channelId: channelId);
+    }, retry: (retryCount, error) => null);
+
 class SessionController extends Notifier<SessionView> {
   /// 只保留本次会话的消息；上限防止长时间挂着时无限增长。
   static const _messageLimit = 500;

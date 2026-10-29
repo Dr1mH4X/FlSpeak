@@ -371,6 +371,10 @@ impl CoreSession {
         Ok(channels.into_iter().map(ChannelView::from).collect())
     }
 
+    pub async fn channel_description(&self, channel_id: u64) -> Result<String, CoreError> {
+        Ok(self.handle.channel_description(channel_id).await?)
+    }
+
     pub async fn list_clients(&self) -> Result<Vec<ClientView>, CoreError> {
         let clients = self.handle.list_clients().await?;
         Ok(clients.into_iter().map(ClientView::from).collect())

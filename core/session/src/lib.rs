@@ -250,6 +250,10 @@ pub enum SessionCommand {
     ListChannels {
         reply: oneshot::Sender<Result<Vec<ChannelView>, SessionError>>,
     },
+    ChannelDescription {
+        channel_id: u64,
+        reply: oneshot::Sender<Result<String, SessionError>>,
+    },
     ListClients {
         reply: oneshot::Sender<Result<Vec<ClientView>, SessionError>>,
     },
@@ -590,6 +594,12 @@ impl SessionHandle {
     pub async fn list_channels(&self) -> Result<Vec<ChannelView>, SessionError> {
         let (reply, rx) = oneshot::channel();
         self.send(SessionCommand::ListChannels { reply })?;
+        rx.await.map_err(|_| SessionError::Closed)?
+    }
+
+    pub async fn channel_description(&self, channel_id: u64) -> Result<String, SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::ChannelDescription { channel_id, reply })?;
         rx.await.map_err(|_| SessionError::Closed)?
     }
 

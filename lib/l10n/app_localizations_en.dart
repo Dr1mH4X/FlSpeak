@@ -654,4 +654,16 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get kickConnectionChanged =>
       'The connection changed. Close this dialog and try again.';
+
+  @override
+  String get channelDetails => 'Channel Details';
+
+  @override
+  String get channelDescription => 'Channel Description';
+
+  @override
+  String get channelDescriptionEmpty => 'No description for this channel';
+
+  @override
+  String get channelDescriptionFailed => 'Failed to load channel description';
 }

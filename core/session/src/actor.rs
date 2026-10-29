@@ -303,6 +303,9 @@ impl Actor {
             SessionCommand::ListChannels { reply } => {
                 let _ = reply.send(self.list_channels().await);
             }
+            SessionCommand::ChannelDescription { channel_id, reply } => {
+                let _ = reply.send(self.channel_description(channel_id).await);
+            }
             SessionCommand::ListClients { reply } => {
                 let _ = reply.send(self.list_clients().await);
             }
@@ -776,6 +779,19 @@ impl Actor {
             });
         }
         Ok(directory.channels)
+    }
+
+    async fn channel_description(&self, channel_id: u64) -> Result<String, SessionError> {
+        let client = self.connected()?;
+        match tsclient_rs::get_channel_description(&client, channel_id).await {
+            Ok(desc) => Ok(desc),
+            Err(_) => {
+                let info = tsclient_rs::get_channel_info(&client, channel_id)
+                    .await
+                    .map_err(crate::channel_tools::protocol_error)?;
+                Ok(info.description)
+            }
+        }
     }
 
     async fn list_clients(&self) -> Result<Vec<ClientView>, SessionError> {

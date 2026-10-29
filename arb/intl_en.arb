@@ -330,5 +330,9 @@
         "type": "String"
       }
     }
-  }
+  },
+  "channelDetails": "Channel Details",
+  "channelDescription": "Channel Description",
+  "channelDescriptionEmpty": "No description for this channel",
+  "channelDescriptionFailed": "Failed to load channel description"
 }

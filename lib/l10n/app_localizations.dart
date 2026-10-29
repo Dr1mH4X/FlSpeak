@@ -1267,6 +1267,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The connection changed. Close this dialog and try again.'**
   String get kickConnectionChanged;
+
+  /// No description provided for @channelDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Channel Details'**
+  String get channelDetails;
+
+  /// No description provided for @channelDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Channel Description'**
+  String get channelDescription;
+
+  /// No description provided for @channelDescriptionEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No description for this channel'**
+  String get channelDescriptionEmpty;
+
+  /// No description provided for @channelDescriptionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load channel description'**
+  String get channelDescriptionFailed;
 }
 
 class _AppLocalizationsDelegate

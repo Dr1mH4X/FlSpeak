@@ -41,6 +41,8 @@ abstract class CoreSession implements RustOpaqueInterface {
 
   Future<void> cancelIdentityUpgrade();
 
+  Future<String> channelDescription({required int channelId});
+
   Future<void> connect({required String id, required String nickname});
 
   Future<void> disconnect();
