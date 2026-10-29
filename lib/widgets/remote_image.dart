@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/remote_images.dart';
 import '../l10n/app_localizations.dart';
+import '../theme/app_theme.dart';
 
 /// 聊天、媒体墙和浏览层的图片统一经过 Rust 的地址及传输限制。
 class RemoteImage extends ConsumerWidget {
@@ -58,7 +59,7 @@ class RemoteImage extends ConsumerWidget {
             TextButton.icon(
               onPressed: () => ref.invalidate(remoteImageProvider(url)),
               style: TextButton.styleFrom(foregroundColor: color),
-              icon: const Icon(Icons.refresh_rounded, size: 18),
+              icon: const Icon(Icons.refresh_rounded, size: IconSizes.medium),
               label: Text(l10n.commonRetry),
             ),
           ],

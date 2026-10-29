@@ -87,7 +87,7 @@ class MembersPane extends StatelessWidget {
                   if (member.inputMuted ?? false)
                     Icon(
                       Icons.mic_off_rounded,
-                      size: 16,
+                      size: IconSizes.small,
                       color: scheme.onSurfaceVariant,
                       semanticLabel: l10n.memberMicMuted,
                     ),

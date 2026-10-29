@@ -173,7 +173,11 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
         padding: const EdgeInsets.only(left: 20, right: 4),
         child: Row(
           children: [
-            Icon(Icons.dns_outlined, size: 20, color: context.scheme.primary),
+            Icon(
+              Icons.dns_outlined,
+              size: IconSizes.toolbar,
+              color: context.scheme.primary,
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -337,7 +341,10 @@ class _ChannelTile extends StatelessWidget {
         openOnSecondaryTap: true,
         items: [
           MenuItemButton(
-            leadingIcon: const Icon(Icons.login_rounded, size: 18),
+            leadingIcon: const Icon(
+              Icons.login_rounded,
+              size: IconSizes.medium,
+            ),
             onPressed: canJoin ? onJoin : null,
             child: Text(l10n.channelJoinMenu),
           ),
@@ -395,7 +402,7 @@ class _ChannelTile extends StatelessWidget {
                                     padding: const EdgeInsets.only(left: 6),
                                     child: Icon(
                                       Icons.lock_rounded,
-                                      size: 15,
+                                      size: IconSizes.small,
                                       color: foreground,
                                       semanticLabel:
                                           l10n.channelPasswordProtected,
@@ -576,7 +583,7 @@ class _MemberFlag extends StatelessWidget {
       padding: const EdgeInsets.only(left: 6),
       child: Icon(
         icon,
-        size: 14,
+        size: IconSizes.state,
         color: color ?? scheme.error,
         semanticLabel: label,
       ),
@@ -629,7 +636,7 @@ class _UserFooter extends StatelessWidget {
                 children: [
                   Icon(
                     Icons.network_check_rounded,
-                    size: 22,
+                    size: IconSizes.toolbar,
                     color: view.connected
                         ? context.status.live
                         : scheme.primary,
@@ -667,7 +674,7 @@ class _UserFooter extends StatelessWidget {
                       onPressed: view.busy ? null : onDisconnect,
                       icon: Icon(
                         Icons.call_end_rounded,
-                        size: 20,
+                        size: IconSizes.toolbar,
                         semanticLabel: l10n.serverDisconnect,
                       ),
                     ),
@@ -780,7 +787,7 @@ class _IconToggle extends StatelessWidget {
               ),
               child: Icon(
                 icon,
-                size: 20,
+                size: IconSizes.toolbar,
                 color: active ? activeForeground : scheme.onSurfaceVariant,
               ),
             ),

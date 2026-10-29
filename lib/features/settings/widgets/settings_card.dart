@@ -98,7 +98,7 @@ class SettingsRow extends StatelessWidget {
         ),
         child: Icon(
           icon,
-          size: 20,
+          size: IconSizes.toolbar,
           color: destructive
               ? scheme.onErrorContainer
               : scheme.onSecondaryContainer,
@@ -126,7 +126,11 @@ class SettingsRow extends StatelessWidget {
       trailing:
           trailing ??
           (onTap != null
-              ? Icon(Icons.chevron_right_rounded, size: 18, color: secondary)
+              ? Icon(
+                  Icons.chevron_right_rounded,
+                  size: IconSizes.medium,
+                  color: secondary,
+                )
               : null),
       onTap: onTap,
       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),

@@ -161,12 +161,16 @@ class _IdentityDialogContentState extends State<_IdentityDialogContent> {
             shape: BoxShape.circle,
             border: Border.all(color: scheme.primary),
           ),
-          child: Icon(Icons.check_rounded, size: 12, color: scheme.onPrimary),
+          child: Icon(
+            Icons.check_rounded,
+            size: IconSizes.micro,
+            color: scheme.onPrimary,
+          ),
         ),
         const SizedBox(width: 4),
         IconButton(
           onPressed: _startEditing,
-          iconSize: 16,
+          iconSize: IconSizes.small,
           color: scheme.onSurfaceVariant,
           style: IconButton.styleFrom(
             minimumSize: const Size(Sizes.touch, Sizes.touch),
@@ -213,7 +217,7 @@ class _IdentityDialogContentState extends State<_IdentityDialogContent> {
         ),
         IconButton(
           onPressed: _commit,
-          iconSize: 16,
+          iconSize: IconSizes.small,
           color: scheme.primary,
           style: IconButton.styleFrom(
             minimumSize: const Size(Sizes.touch, Sizes.touch),
@@ -224,7 +228,7 @@ class _IdentityDialogContentState extends State<_IdentityDialogContent> {
         ),
         IconButton(
           onPressed: _cancelEditing,
-          iconSize: 16,
+          iconSize: IconSizes.small,
           color: scheme.onSurfaceVariant,
           style: IconButton.styleFrom(
             minimumSize: const Size(Sizes.touch, Sizes.touch),

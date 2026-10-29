@@ -102,7 +102,10 @@ class ChannelDetailsPane extends ConsumerWidget {
                               onPressed: () => ref.invalidate(
                                 channelDescriptionProvider(channel.id),
                               ),
-                              icon: const Icon(Icons.refresh_rounded, size: 16),
+                              icon: const Icon(
+                                Icons.refresh_rounded,
+                                size: IconSizes.small,
+                              ),
                               label: Text(l10n.commonRetry),
                             ),
                           ],

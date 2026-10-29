@@ -397,7 +397,7 @@ class _ServerSection extends StatelessWidget {
             else
               FilledButton.icon(
                 onPressed: onAdd,
-                icon: const Icon(Icons.add_rounded, size: 20),
+                icon: const Icon(Icons.add_rounded, size: IconSizes.toolbar),
                 label: Text(l10n.serverAdd),
               ),
           ],
@@ -408,7 +408,10 @@ class _ServerSection extends StatelessWidget {
             onChanged: onSearch,
             decoration: InputDecoration(
               labelText: l10n.serverSearchLabel,
-              prefixIcon: const Icon(Icons.search_rounded, size: 22),
+              prefixIcon: const Icon(
+                Icons.search_rounded,
+                size: IconSizes.toolbar,
+              ),
             ),
           ),
           const SizedBox(height: 16),
@@ -478,7 +481,7 @@ class _EmptyServers extends StatelessWidget {
               ),
               child: Icon(
                 Icons.forum_outlined,
-                size: 36,
+                size: IconSizes.display,
                 color: scheme.onPrimaryContainer,
               ),
             ),
@@ -499,7 +502,7 @@ class _EmptyServers extends StatelessWidget {
             const SizedBox(height: 28),
             FilledButton.tonalIcon(
               onPressed: onAdd,
-              icon: const Icon(Icons.add_rounded, size: 20),
+              icon: const Icon(Icons.add_rounded, size: IconSizes.toolbar),
               label: Text(l10n.serverEmptyAction),
             ),
           ],

@@ -133,6 +133,30 @@ abstract final class Sizes {
   static const railTile = 48.0;
 }
 
+/// 图标语义尺寸规范（基于 Material 3 与紧凑桌面界面收敛）。
+abstract final class IconSizes {
+  /// 徽章与超微标记：12。例如头像选中态微型对勾。
+  static const micro = 12.0;
+
+  /// 状态角标与行内微标：14。例如频道成员静音/说话指示、错误条前缀。
+  static const state = 14.0;
+
+  /// 行内辅助图标与小操作：16。例如频道密码锁、通知横幅图标、次要刷新。
+  static const small = 16.0;
+
+  /// 树节点与导航标签：18。例如频道树音量节点、顶栏 Tab 图标、列表尾部箭头。
+  static const medium = 18.0;
+
+  /// 操作按钮与工具栏图标：20。所有 [IconButton]、输入框工具按钮、按钮内嵌图标。
+  static const toolbar = 20.0;
+
+  /// 独立导航图标与大操作：24。如主导航栏磁贴、菜单主图标。
+  static const standard = 24.0;
+
+  /// 空状态插图与大卡片图标：40。如 [EmptyState] 居中插图。
+  static const display = 40.0;
+}
+
 /// 页面级容器的描边：浅色下一根很淡的线，深色按 M3 divider 规范用
 /// outlineVariant 全色——暗色下再压透明度就真的看不见了。
 BorderSide hairlineSide(BuildContext context) {
@@ -398,6 +422,7 @@ ThemeData buildAppTheme(Brightness brightness) {
     textTheme: text,
     extensions: [status],
     visualDensity: VisualDensity.standard,
+    iconTheme: const IconThemeData(size: IconSizes.toolbar),
     splashFactory: InkSparkle.splashFactory,
     dividerTheme: DividerThemeData(
       color: scheme.outlineVariant,
@@ -503,6 +528,7 @@ ThemeData buildAppTheme(Brightness brightness) {
     ),
     iconButtonTheme: IconButtonThemeData(
       style: ButtonStyle(
+        iconSize: const WidgetStatePropertyAll(IconSizes.toolbar),
         shape: const WidgetStatePropertyAll(CircleBorder()),
         side: focusRing,
       ),
@@ -571,7 +597,7 @@ ThemeData buildAppTheme(Brightness brightness) {
     switchTheme: SwitchThemeData(
       thumbIcon: WidgetStateProperty.resolveWith(
         (states) => states.contains(WidgetState.selected)
-            ? const Icon(Icons.check_rounded, size: 16)
+            ? const Icon(Icons.check_rounded, size: IconSizes.small)
             : null,
       ),
     ),

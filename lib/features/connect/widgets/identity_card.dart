@@ -96,7 +96,10 @@ class IdentityCard extends StatelessWidget {
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size.fromHeight(Sizes.touch),
                   ),
-                  icon: const Icon(Icons.badge_outlined, size: 18),
+                  icon: const Icon(
+                    Icons.badge_outlined,
+                    size: IconSizes.medium,
+                  ),
                   label: Text(l10n.identityManage),
                 ),
                 const SizedBox(height: 20),
@@ -104,7 +107,7 @@ class IdentityCard extends StatelessWidget {
                   children: [
                     Icon(
                       Icons.verified_user_outlined,
-                      size: 16,
+                      size: IconSizes.small,
                       color: scheme.onSurfaceVariant,
                     ),
                     const SizedBox(width: 8),
@@ -184,7 +187,7 @@ class IdentityStrip extends StatelessWidget {
               ),
               Icon(
                 Icons.chevron_right_rounded,
-                size: 20,
+                size: IconSizes.medium,
                 color: scheme.onSurfaceVariant,
               ),
             ],

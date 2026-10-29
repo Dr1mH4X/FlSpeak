@@ -279,7 +279,7 @@ class _ChannelHeader extends StatelessWidget {
                 ),
                 icon: Icon(
                   Icons.menu_rounded,
-                  size: 24,
+                  size: IconSizes.standard,
                   semanticLabel: l10n.workspaceOpenMenu,
                 ),
               ),
@@ -331,7 +331,11 @@ class _ViewTabs extends StatelessWidget {
         for (final tab in tabs)
           Tab(
             height: 48,
-            child: Icon(tab.icon, size: 18, semanticLabel: tab.label),
+            child: Icon(
+              tab.icon,
+              size: IconSizes.medium,
+              semanticLabel: tab.label,
+            ),
           ),
       ],
     );
@@ -360,7 +364,7 @@ class _IdentityBanner extends StatelessWidget {
         children: [
           Icon(
             Icons.workspace_premium_rounded,
-            size: 18,
+            size: IconSizes.medium,
             color: scheme.onSecondaryContainer,
           ),
           const SizedBox(width: 8),
@@ -439,7 +443,7 @@ class _DeviceChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: scheme.onErrorContainer),
+          Icon(icon, size: IconSizes.state, color: scheme.onErrorContainer),
           const SizedBox(width: 6),
           Flexible(
             child: Text(

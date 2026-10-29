@@ -67,7 +67,11 @@ class SettingsOptionRow extends StatelessWidget {
               ),
               if (selected) ...[
                 const SizedBox(width: 12),
-                Icon(Icons.check_rounded, size: 20, color: scheme.primary),
+                Icon(
+                  Icons.check_rounded,
+                  size: IconSizes.toolbar,
+                  color: scheme.primary,
+                ),
               ],
             ],
           ),

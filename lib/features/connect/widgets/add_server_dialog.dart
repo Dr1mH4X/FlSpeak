@@ -70,7 +70,10 @@ Future<ServerProfileView?> showAddServerDialog(BuildContext context) {
                           children: [
                             Text(l10n.serverAddAndConnect),
                             const SizedBox(width: 8),
-                            const Icon(Icons.arrow_forward_rounded, size: 16),
+                            const Icon(
+                              Icons.arrow_forward_rounded,
+                              size: IconSizes.small,
+                            ),
                           ],
                         ),
                 ),
