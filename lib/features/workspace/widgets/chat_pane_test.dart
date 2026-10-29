@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../../core/models.dart';
 import '../../../core/image_host.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../theme/app_theme.dart';
 import 'chat_pane.dart';
 
 void main() {
@@ -192,6 +193,7 @@ void main() {
     'long channel name falls back to generic channel hint without growing composer height',
     (tester) async {
       Widget buildPane(String channelName) => MaterialApp(
+        theme: buildAppTheme(Brightness.light),
         locale: const Locale('zh'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
@@ -229,4 +231,46 @@ void main() {
       expect(longHeight, shortHeight);
     },
   );
+
+  testWidgets('composer send button does not force minimumSize Sizes.touch', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildAppTheme(Brightness.light),
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: SizedBox(
+            width: 360,
+            height: 600,
+            child: ChatPane(
+              channelName: 'Lobby',
+              messages: const [],
+              scope: ChatScope.channel,
+              canSendChannel: true,
+              busy: false,
+              selfUid: 'self',
+              recipients: const [],
+              recipientUid: null,
+              onRecipientChanged: (_) {},
+              onReply: (_) {},
+              onScopeChanged: (_) {},
+              onSend: (_) async => true,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final sendButton = tester.widget<IconButton>(
+      find.widgetWithIcon(IconButton, Icons.send_rounded),
+    );
+    expect(
+      sendButton.style?.minimumSize?.resolve({}),
+      isNot(const Size(Sizes.touch, Sizes.touch)),
+    );
+    expect(sendButton.style?.backgroundColor?.resolve({}), isNull);
+  });
 }

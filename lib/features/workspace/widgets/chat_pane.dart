@@ -487,7 +487,7 @@ class _ChatPaneState extends State<ChatPane> {
                 const SizedBox(width: 4),
                 ValueListenableBuilder<TextEditingValue>(
                   valueListenable: _input,
-                  builder: (context, value, child) => IconButton.filled(
+                  builder: (context, value, child) => IconButton(
                     onPressed:
                         !widget.busy &&
                             !_sending &&
@@ -496,8 +496,7 @@ class _ChatPaneState extends State<ChatPane> {
                         ? _send
                         : null,
                     style: IconButton.styleFrom(
-                      minimumSize: const Size(Sizes.touch, Sizes.touch),
-                      shape: const CircleBorder(),
+                      foregroundColor: scheme.primary,
                     ),
                     icon: Icon(
                       Icons.send_rounded,
