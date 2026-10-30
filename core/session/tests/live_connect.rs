@@ -26,7 +26,7 @@ async fn live_connect_chain() {
     let _ = tokio::fs::remove_dir_all(&dir).await;
 
     let handle = SessionHandle::spawn_with_options(
-        dir.join("servers.json"),
+        dir.join("preferences.json"),
         SessionOptions { audio: false },
     )
     .expect("启动会话");

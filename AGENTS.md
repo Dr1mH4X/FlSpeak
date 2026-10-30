@@ -22,6 +22,7 @@ TeamSpeak 第三方客户端：Flutter 负责界面，Rust 负责协议、连接
 | `core/` | `core/AGENTS.md` |
 | `plugins/flspeak_ffi/` | `plugins/flspeak_ffi/AGENTS.md` |
 | `lib/` | `lib/AGENTS.md` |
+| `lib/features/settings/` | `lib/features/settings/AGENTS.md` |
 | `docs/` | `docs/AGENTS.md` |
 | `.github/` | `.github/AGENTS.md` |
 | `.agents/notes/` | `.agents/notes/AGENTS.md` |

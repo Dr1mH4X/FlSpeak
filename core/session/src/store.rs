@@ -4,7 +4,6 @@ use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use server::{ServerProfile, ServerRegistry};
 use tokio::io::AsyncWriteExt;
 use tsclient_rs::{Identity, generateIdentity, identityFromString};
 
@@ -14,7 +13,7 @@ use crate::TextMessageView;
 const IDENTITY_SECURITY_LEVEL: i32 = 8;
 
 pub fn identity_path(store_path: &Path) -> PathBuf {
-    store_path.with_file_name("identity.txt")
+    store_path.with_file_name("identity.json")
 }
 
 pub fn history_path(store_path: &Path) -> PathBuf {
@@ -154,23 +153,6 @@ pub async fn compact_history(path: &Path, limit_per_server: usize) -> Result<(),
     write_atomic(path, output.as_bytes()).await
 }
 
-pub async fn load_registry(path: &Path) -> Result<ServerRegistry, String> {
-    match tokio::fs::read_to_string(path).await {
-        Ok(raw) => {
-            let profiles: Vec<ServerProfile> =
-                serde_json::from_str(&raw).map_err(|err| err.to_string())?;
-            Ok(ServerRegistry::from_profiles(profiles))
-        }
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(ServerRegistry::new()),
-        Err(err) => Err(err.to_string()),
-    }
-}
-
-pub async fn save_registry(path: &Path, registry: &ServerRegistry) -> Result<(), String> {
-    let raw = serde_json::to_vec_pretty(registry.profiles()).map_err(|err| err.to_string())?;
-    write_atomic(path, &raw).await
-}
-
 pub async fn load_identity(path: &Path) -> Result<Identity, String> {
     match tokio::fs::read_to_string(path).await {
         Ok(raw) => identityFromString(raw.trim()).map_err(|error| error.to_string()),
@@ -241,7 +223,7 @@ mod tests {
             rand::random::<u64>()
         ));
         tokio::fs::create_dir_all(&dir).await.unwrap();
-        let path = dir.join("identity.txt");
+        let path = dir.join("identity.json");
         tokio::fs::write(&path, b"invalid identity - preserve for recovery")
             .await
             .unwrap();
@@ -259,7 +241,7 @@ mod tests {
             "flspeak-atomic-failure-{:x}",
             rand::random::<u64>()
         ));
-        let path = dir.join("identity.txt");
+        let path = dir.join("identity.json");
         tokio::fs::create_dir_all(&path).await.unwrap();
         tokio::fs::write(path.join("keep"), b"original")
             .await
@@ -272,7 +254,7 @@ mod tests {
         let mut entries = tokio::fs::read_dir(&dir).await.unwrap();
         assert_eq!(
             entries.next_entry().await.unwrap().unwrap().file_name(),
-            "identity.txt"
+            "identity.json"
         );
         assert!(entries.next_entry().await.unwrap().is_none());
         tokio::fs::remove_dir_all(&dir).await.unwrap();
@@ -318,32 +300,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn registry_round_trips_through_disk() {
-        let dir = std::env::temp_dir().join("flspeak-session-store-test");
-        let path = dir.join("servers.json");
-        let _ = tokio::fs::remove_dir_all(&dir).await;
-
-        let mut registry = ServerRegistry::new();
-        registry.register("home", "ts.example.com").unwrap();
-        save_registry(&path, &registry).await.unwrap();
-
-        let loaded = load_registry(&path).await.unwrap();
-        assert_eq!(loaded.profiles(), registry.profiles());
-
-        let _ = tokio::fs::remove_dir_all(&dir).await;
-    }
-
-    #[tokio::test]
-    async fn missing_registry_is_empty() {
-        let path = std::env::temp_dir().join("flspeak-session-missing/servers.json");
-        let loaded = load_registry(&path).await.unwrap();
-        assert!(loaded.profiles().is_empty());
-    }
-
-    #[tokio::test]
     async fn identity_is_generated_once_and_reloaded() {
         let dir = std::env::temp_dir().join("flspeak-session-identity-test");
-        let path = identity_path(&dir.join("servers.json"));
+        let path = identity_path(&dir.join("preferences.json"));
         let _ = tokio::fs::remove_dir_all(&dir).await;
 
         let first = load_identity(&path).await.unwrap();
@@ -369,7 +328,7 @@ mod tests {
     #[tokio::test]
     async fn identity_write_is_atomic_and_leaves_no_temp_file() {
         let dir = std::env::temp_dir().join("flspeak-session-atomic-identity-test");
-        let path = identity_path(&dir.join("servers.json"));
+        let path = identity_path(&dir.join("preferences.json"));
         let _ = tokio::fs::remove_dir_all(&dir).await;
 
         let identity = load_identity(&path).await.unwrap();
@@ -378,7 +337,7 @@ mod tests {
         let raw = tokio::fs::read_to_string(&path).await.unwrap();
         assert_eq!(raw, identity.to_string());
         assert!(
-            !tokio::fs::try_exists(path.with_file_name("identity.txt.tmp"))
+            !tokio::fs::try_exists(path.with_file_name("identity.json.tmp"))
                 .await
                 .unwrap()
         );
@@ -389,7 +348,7 @@ mod tests {
     #[tokio::test]
     async fn history_appends_and_loads_the_latest_messages() {
         let dir = std::env::temp_dir().join("flspeak-session-history-test");
-        let path = history_path(&dir.join("servers.json"));
+        let path = history_path(&dir.join("preferences.json"));
         let _ = tokio::fs::remove_dir_all(&dir).await;
 
         for index in 0..5 {
@@ -413,7 +372,7 @@ mod tests {
     #[tokio::test]
     async fn history_compaction_keeps_a_limit_per_server() {
         let dir = std::env::temp_dir().join("flspeak-session-compact-test");
-        let path = history_path(&dir.join("servers.json"));
+        let path = history_path(&dir.join("preferences.json"));
         let _ = tokio::fs::remove_dir_all(&dir).await;
 
         for index in 0..10 {
@@ -447,7 +406,7 @@ mod tests {
     #[tokio::test]
     async fn malformed_history_lines_are_skipped() {
         let dir = std::env::temp_dir().join("flspeak-session-bad-history-test");
-        let path = history_path(&dir.join("servers.json"));
+        let path = history_path(&dir.join("preferences.json"));
         let _ = tokio::fs::remove_dir_all(&dir).await;
         tokio::fs::create_dir_all(&dir).await.unwrap();
         tokio::fs::write(&path, "not json\n{\"server_id\":\"x\"}\n")

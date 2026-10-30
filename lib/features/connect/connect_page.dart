@@ -13,7 +13,7 @@ import 'widgets/add_server_dialog.dart';
 import 'widgets/connect_header.dart';
 import 'widgets/identity_card.dart';
 import 'widgets/identity_dialog.dart';
-import '../workspace/widgets/server_rail.dart';
+import '../../widgets/app_navigation_sidebar.dart';
 import 'widgets/remove_server_dialog.dart';
 import 'widgets/server_row.dart';
 
@@ -251,15 +251,8 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (desktop)
-              ServerRail(
-                homeSelected: true,
-                onSelect: _connect,
-                onAdd: _openAddServer,
-                onHome: () {},
-                onSettings: () => context.push(AppRoutes.settings),
-                onDisconnect: () async {
-                  await ref.read(sessionViewProvider.notifier).disconnect();
-                },
+              const AppNavigationSidebar(
+                selectedDestination: AppNavDestination.home,
               ),
             Expanded(
               child: Material(

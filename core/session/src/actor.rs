@@ -22,7 +22,8 @@ use tsclient_rs::{
 use crate::store::{self, identity_path};
 use crate::{
     AudioDeviceView, AudioDevicesView, ChannelView, ClientView, SessionCommand, SessionError,
-    SessionEvent, SessionState, TextMessageView, TransferDirection, VoiceStateView,
+    SessionEvent, SessionState, SettingsManager, TextMessageView, TransferDirection,
+    VoiceStateView,
 };
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(8);
@@ -532,9 +533,10 @@ impl Actor {
     ) -> Result<ServerProfile, SessionError> {
         let mut registry = self.registry.clone();
         let profile = registry.register(&label, &address)?;
-        store::save_registry(&self.store_path, &registry)
-            .await
-            .map_err(SessionError::Storage)?;
+        SettingsManager::update(|settings| {
+            settings.network.servers = registry.profiles().to_vec();
+        })
+        .map_err(SessionError::Storage)?;
         self.registry = registry;
         self.emit(SessionEvent::Servers(self.registry.profiles().to_vec()));
         Ok(profile)
@@ -545,9 +547,10 @@ impl Actor {
         if !registry.remove(&id) {
             return Err(ServerError::NotRegistered(id).into());
         }
-        store::save_registry(&self.store_path, &registry)
-            .await
-            .map_err(SessionError::Storage)?;
+        SettingsManager::update(|settings| {
+            settings.network.servers = registry.profiles().to_vec();
+        })
+        .map_err(SessionError::Storage)?;
         self.registry = registry;
         self.emit(SessionEvent::Servers(self.registry.profiles().to_vec()));
         Ok(())
@@ -2446,12 +2449,13 @@ mod tests {
                 "flspeak-registry-operation-{:x}",
                 rand::random::<u64>()
             ));
-            let path = root.join("servers.json");
+            let path = root.join("preferences.json");
             tokio::fs::create_dir_all(&path).await.unwrap();
             tokio::fs::write(path.join("keep"), b"preserve")
                 .await
                 .unwrap();
             let mut actor = audio_actor();
+            let _ = SettingsManager::init(path.clone());
             actor.store_path = path;
             let original = actor
                 .registry

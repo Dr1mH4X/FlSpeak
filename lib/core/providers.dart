@@ -29,7 +29,7 @@ final coreSessionProvider = Provider<CoreSession>(
   (ref) => throw StateError('coreSessionProvider 必须在 ProviderScope 里覆盖'),
 );
 
-/// `servers.json` 的绝对路径，设置页展示与复制用。同样在 `main()` 里覆盖。
+/// `preferences.json` 的绝对路径，设置页展示与复制用。同样在 `main()` 里覆盖。
 final storePathProvider = Provider<String>(
   (ref) => throw StateError('storePathProvider 必须在 ProviderScope 里覆盖'),
 );

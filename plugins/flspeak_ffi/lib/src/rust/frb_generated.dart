@@ -64,7 +64,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => 1103543083;
+  int get rustContentHash => -1849858746;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -257,6 +257,14 @@ abstract class RustLibApi extends BaseApi {
   });
 
   Future<Uint8List> crateApiSessionFetchImage({required String url});
+
+  String crateApiSessionGetSettingsJson();
+
+  void crateApiSessionInitSettings({required String storePath});
+
+  void crateApiSessionUpdateAudioSettingsJson({required String json});
+
+  void crateApiSessionUpdateUiSettingsJson({required String json});
 
   Future<String> crateApiSessionUploadImage({
     required String uploadBase,
@@ -1632,6 +1640,103 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "fetch_image", argNames: ["url"]);
 
   @override
+  String crateApiSessionGetSettingsJson() {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 35)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_String,
+          decodeErrorData: sse_decode_core_error,
+        ),
+        constMeta: kCrateApiSessionGetSettingsJsonConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSessionGetSettingsJsonConstMeta =>
+      const TaskConstMeta(debugName: "get_settings_json", argNames: []);
+
+  @override
+  void crateApiSessionInitSettings({required String storePath}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(storePath, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 36)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_core_error,
+        ),
+        constMeta: kCrateApiSessionInitSettingsConstMeta,
+        argValues: [storePath],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSessionInitSettingsConstMeta =>
+      const TaskConstMeta(debugName: "init_settings", argNames: ["storePath"]);
+
+  @override
+  void crateApiSessionUpdateAudioSettingsJson({required String json}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(json, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 37)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_core_error,
+        ),
+        constMeta: kCrateApiSessionUpdateAudioSettingsJsonConstMeta,
+        argValues: [json],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSessionUpdateAudioSettingsJsonConstMeta =>
+      const TaskConstMeta(
+        debugName: "update_audio_settings_json",
+        argNames: ["json"],
+      );
+
+  @override
+  void crateApiSessionUpdateUiSettingsJson({required String json}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(json, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 38)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_core_error,
+        ),
+        constMeta: kCrateApiSessionUpdateUiSettingsJsonConstMeta,
+        argValues: [json],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSessionUpdateUiSettingsJsonConstMeta =>
+      const TaskConstMeta(
+        debugName: "update_ui_settings_json",
+        argNames: ["json"],
+      );
+
+  @override
   Future<String> crateApiSessionUploadImage({
     required String uploadBase,
     required String publicBase,
@@ -1649,7 +1754,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 35,
+            funcId: 39,
             port: port_,
           );
         },
@@ -1683,7 +1788,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 36,
+            funcId: 40,
             port: port_,
           );
         },

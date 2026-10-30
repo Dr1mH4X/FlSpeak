@@ -3,7 +3,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/models.dart';
@@ -14,7 +13,7 @@ import '../../router.dart';
 import '../../theme/app_theme.dart';
 import 'widgets/channel_pane.dart';
 import 'widgets/channel_pane_resizer.dart';
-import 'widgets/server_rail.dart';
+import '../../widgets/app_navigation_sidebar.dart';
 
 /// 工作区三栏布局；窄屏将服务器与频道收进抽屉。
 class WorkspaceShell extends ConsumerWidget {
@@ -53,18 +52,6 @@ class WorkspaceShell extends ConsumerWidget {
           .show(l10n.workspaceRetrying, tone: NoticeTone.info);
     });
 
-    void selectServer(ServerProfileView server) {
-      if (server.id == view.activeServerId && view.connected) {
-        context.go(AppRoutes.workspace);
-      } else {
-        context.go(
-          '${AppRoutes.connect}?server=${Uri.encodeComponent(server.id)}',
-        );
-      }
-    }
-
-    void addServer() => context.go(AppRoutes.connect);
-
     /// 断开后回到服务器列表：工作区只剩空频道栏，
     /// 用户下一步能做的事全在连接页。
     Future<void> disconnect() async {
@@ -78,13 +65,6 @@ class WorkspaceShell extends ConsumerWidget {
       }
     }
 
-    // 设置页可能被路由包进外壳：这种情况下按钮已经处于目标页，不再重复入栈。
-    void openSettings() {
-      if (location != AppRoutes.settings) {
-        context.push(AppRoutes.settings);
-      }
-    }
-
     // 设置页或连接页嵌在外壳里时，选中频道要回到工作区主区域。
     void selectChannel() {
       if (location != AppRoutes.workspace) {
@@ -92,12 +72,9 @@ class WorkspaceShell extends ConsumerWidget {
       }
     }
 
-    final rail = ServerRail(
-      onSelect: selectServer,
-      onAdd: addServer,
-      onHome: addServer,
-      onSettings: openSettings,
-      onDisconnect: () => unawaited(disconnect()),
+    final rail = AppNavigationSidebar(
+      selectedDestination: AppNavDestination.server,
+      activeServerId: view.activeServerId,
     );
     final panel = ChannelPanel(
       onChannelSelected: selectChannel,
@@ -109,7 +86,10 @@ class WorkspaceShell extends ConsumerWidget {
       return Scaffold(
         backgroundColor: scheme.surface,
         drawer: Drawer(
-          width: math.min(ServerRail.width + Sizes.channelPanel, width - 24),
+          width: math.min(
+            AppNavigationSidebar.compactWidth + Sizes.channelPanel,
+            width - 24,
+          ),
           backgroundColor: panelColor,
           surfaceTintColor: Colors.transparent,
           shape: const RoundedRectangleBorder(
@@ -144,7 +124,7 @@ class WorkspaceShell extends ConsumerWidget {
               maxWidth: math.max(
                 Sizes.channelPanelMin,
                 width -
-                    ServerRail.width -
+                    AppNavigationSidebar.compactWidth -
                     Sizes.mainPaneMin -
                     ChannelPaneResizer.handleWidth,
               ),

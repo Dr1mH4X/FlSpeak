@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flspeak_ffi/flspeak_ffi.dart' as ffi;
 import 'package:path/path.dart' as p;
 
 import 'server_icon.dart';
@@ -138,7 +139,7 @@ class SessionPreferences {
   );
 
   Map<String, Object?> toJson() => {
-    'schema': 2,
+    'schemaVersion': 4,
     'nickname': nickname,
     'lastConnected': {
       for (final entry in lastConnected.entries)
@@ -154,7 +155,10 @@ class SessionPreferences {
   };
 
   static SessionPreferences fromJson(Map<String, Object?> json) {
-    final rawLastConnected = json['lastConnected'];
+    final ui = json['ui'] is Map
+        ? (json['ui'] as Map).cast<String, Object?>()
+        : json;
+    final rawLastConnected = ui['lastConnected'];
     final lastConnected = <String, DateTime>{};
     if (rawLastConnected is Map) {
       for (final entry in rawLastConnected.entries) {
@@ -165,7 +169,7 @@ class SessionPreferences {
         }
       }
     }
-    final rawIcons = json['serverIcons'];
+    final rawIcons = ui['serverIcons'];
     final serverIcons = <String, ServerIcon>{};
     if (rawIcons is Map) {
       for (final entry in rawIcons.entries) {
@@ -174,25 +178,25 @@ class SessionPreferences {
         }
       }
     }
-    final rawNickname = json['nickname'];
+    final rawNickname = ui['nickname'];
     final nickname = rawNickname is String ? rawNickname.trim() : '';
-    final rawLocale = json['locale'];
-    final rawPttHotkey = json['pttHotkey'];
-    final rawPanelWidth = json['channelPanelWidth'];
+    final rawLocale = ui['locale'];
+    final rawPttHotkey = ui['pttHotkey'];
+    final rawPanelWidth = ui['channelPanelWidth'];
     return SessionPreferences(
       nickname: nickname.isEmpty || nickname == _legacyFallbackNickname
           ? fallbackNickname
           : nickname,
       lastConnected: lastConnected,
       locale: rawLocale is String && rawLocale.isNotEmpty ? rawLocale : null,
-      theme: AppThemePreference.fromId(json['theme']),
-      motion: AppMotionPreference.fromId(json['motion']),
+      theme: AppThemePreference.fromId(ui['theme']),
+      motion: AppMotionPreference.fromId(ui['motion']),
       pttHotkey: rawPttHotkey is int ? rawPttHotkey : null,
       // 文件可能被手改或跨版本：不是有限数就当未设置，尺寸交给渲染时的夹取。
       channelPanelWidth: rawPanelWidth is num && rawPanelWidth.isFinite
           ? rawPanelWidth.toDouble()
           : null,
-      voiceMeterSource: VoiceMeterSource.fromId(json['voiceMeterSource']),
+      voiceMeterSource: VoiceMeterSource.fromId(ui['voiceMeterSource']),
       serverIcons: Map.unmodifiable(serverIcons),
     );
   }
@@ -212,9 +216,13 @@ class PreferencesStore {
             nickname: SessionPreferences.fallbackNickname,
           );
 
-  /// 和 `servers.json` 放在同一目录，便于一起备份/搬迁。
-  static String pathFor(String storePath) =>
-      p.join(p.dirname(storePath), 'preferences.json');
+  /// 和 `identity.json` 等状态文件放在同一目录。若传入的本身就是 `preferences.json` 则直接使用。
+  static String pathFor(String storePath) {
+    if (p.basename(storePath) == 'preferences.json') {
+      return storePath;
+    }
+    return p.join(p.dirname(storePath), 'preferences.json');
+  }
 
   final String? path;
   SessionPreferences _preferences;
@@ -224,16 +232,9 @@ class PreferencesStore {
 
   static Future<PreferencesStore> load(String path) async {
     try {
-      final file = File(path);
-      if (!await file.exists()) {
-        return PreferencesStore._(
-          path,
-          const SessionPreferences(
-            nickname: SessionPreferences.fallbackNickname,
-          ),
-        );
-      }
-      final decoded = jsonDecode(await file.readAsString());
+      ffi.initSettings(storePath: path);
+      final jsonStr = ffi.getSettingsJson();
+      final decoded = jsonDecode(jsonStr);
       if (decoded is Map) {
         return PreferencesStore._(
           path,
@@ -241,7 +242,19 @@ class PreferencesStore {
         );
       }
     } on Object catch (error) {
-      debugPrint('读取 preferences 失败：$error');
+      debugPrint('通过 FFI 读取设置失败，尝试回退磁盘读取：$error');
+      try {
+        final file = File(path);
+        if (await file.exists()) {
+          final decoded = jsonDecode(await file.readAsString());
+          if (decoded is Map) {
+            return PreferencesStore._(
+              path,
+              SessionPreferences.fromJson(decoded.cast<String, Object?>()),
+            );
+          }
+        }
+      } catch (_) {}
     }
     return PreferencesStore._(
       path,
@@ -261,16 +274,31 @@ class PreferencesStore {
     _writeCompleted = completed.future;
     try {
       await previous;
-      final file = File(target);
-      await file.parent.create(recursive: true);
-      final temporary = File('$target.tmp');
-      await temporary.writeAsString(
-        jsonEncode(preferences.toJson()),
-        flush: true,
-      );
-      await temporary.rename(target);
+      try {
+        ffi.updateUiSettingsJson(json: jsonEncode(preferences.toJson()));
+      } on Object catch (e) {
+        debugPrint('通过 FFI 保存设置失败，尝试直接落盘 fallback: $e');
+        final file = File(target);
+        await file.parent.create(recursive: true);
+
+        Map<String, Object?> existing = {};
+        if (await file.exists()) {
+          try {
+            final decoded = jsonDecode(await file.readAsString());
+            if (decoded is Map) {
+              existing = decoded.cast<String, Object?>();
+            }
+          } catch (_) {}
+        }
+
+        final payload = Map<String, Object?>.from(existing);
+        payload.addAll(preferences.toJson());
+
+        final temporary = File('$target.tmp');
+        await temporary.writeAsString(jsonEncode(payload), flush: true);
+        await temporary.rename(target);
+      }
     } finally {
-      // 队尾只表示写入结束；失败仍返回原调用者，后续保存可以重试。
       completed.complete();
     }
   }

@@ -35,6 +35,22 @@ Future<String> uploadImage({
   bytes: bytes,
 );
 
+/// 初始化全局设置单例（幂等，兼容 Flutter Hot Restart）。
+void initSettings({required String storePath}) =>
+    RustLib.instance.api.crateApiSessionInitSettings(storePath: storePath);
+
+/// 获取当前设置的完整 JSON 字符串。
+String getSettingsJson() =>
+    RustLib.instance.api.crateApiSessionGetSettingsJson();
+
+/// 局部更新 UI 设置（确保不覆盖 servers 与其他配置）。
+void updateUiSettingsJson({required String json}) =>
+    RustLib.instance.api.crateApiSessionUpdateUiSettingsJson(json: json);
+
+/// 局部更新音频设置。
+void updateAudioSettingsJson({required String json}) =>
+    RustLib.instance.api.crateApiSessionUpdateAudioSettingsJson(json: json);
+
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<CoreSession>>
 abstract class CoreSession implements RustOpaqueInterface {
   Future<AccessView> access();

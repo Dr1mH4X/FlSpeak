@@ -151,7 +151,7 @@ Connected ──非主动断开──> Reconnecting{attempt, delay}
 - 回放：连接成功后按 server_id 读出最近 500 条，发 `History` 事件；Dart 用带时间戳的消息
   替换当前列表。
 - 体积：启动时压缩一次（按服务器保留最近 500 条）；运行期只追加。
-- 隐私：本地明文，和 `servers.json`、`identity.txt` 同级。清除历史入口留待后续。
+- 隐私：本地明文，和 `identity.json` 同级。清除历史入口留待后续。
 
 ## 文件传输
 

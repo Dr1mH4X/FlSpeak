@@ -870,3 +870,36 @@ impl From<ConnectError> for CoreError {
         }
     }
 }
+
+/// 初始化全局设置单例（幂等，兼容 Flutter Hot Restart）。
+#[frb(sync)]
+pub fn init_settings(store_path: String) -> Result<(), CoreError> {
+    session::SettingsManager::init(PathBuf::from(store_path)).map_err(|e| CoreError::Internal {
+        message: format!("init_settings failed: {e}"),
+    })?;
+    Ok(())
+}
+
+/// 获取当前设置的完整 JSON 字符串。
+#[frb(sync)]
+pub fn get_settings_json() -> Result<String, CoreError> {
+    session::SettingsManager::get_json().map_err(|e| CoreError::Internal {
+        message: format!("get_settings_json failed: {e}"),
+    })
+}
+
+/// 局部更新 UI 设置（确保不覆盖 servers 与其他配置）。
+#[frb(sync)]
+pub fn update_ui_settings_json(json: String) -> Result<(), CoreError> {
+    session::SettingsManager::update_ui_from_json(&json).map_err(|e| CoreError::Internal {
+        message: format!("update_ui_settings_json failed: {e}"),
+    })
+}
+
+/// 局部更新音频设置。
+#[frb(sync)]
+pub fn update_audio_settings_json(json: String) -> Result<(), CoreError> {
+    session::SettingsManager::update_audio_from_json(&json).map_err(|e| CoreError::Internal {
+        message: format!("update_audio_settings_json failed: {e}"),
+    })
+}

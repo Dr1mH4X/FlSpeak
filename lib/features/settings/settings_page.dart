@@ -15,16 +15,19 @@ import '../../core/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../router.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_navigation_sidebar.dart';
 import '../../widgets/common.dart';
-import '../../widgets/view_scope.dart';
 import '../../widgets/window_header.dart';
 import 'settings_state.dart';
-import 'widgets/settings_card.dart';
 import 'widgets/appearance_picker.dart';
-import 'widgets/settings_dialogs.dart';
 import 'widgets/image_host_dialog.dart';
+import 'widgets/ptt_hotkey_recorder.dart';
+import 'widgets/settings_dialogs.dart';
+import 'widgets/settings_section.dart';
 
-/// 该路由是顶层路由，所以页面自带 Scaffold；从工作区或登录页进入都能原路返回。
+enum SettingsCategory { appearance, voice, general, data, about }
+
+/// 设置项页面：左侧全局导航侧边栏，右侧为两级菜单设计（二级占满内容区）。
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
 
@@ -33,267 +36,22 @@ class SettingsPage extends ConsumerStatefulWidget {
 }
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
-  int _selectedSection = 0;
-  final _sectionKeys = List.generate(4, (_) => GlobalKey());
-
-  void _jumpTo(int index) {
-    setState(() => _selectedSection = index);
-    final section = _sectionKeys[index].currentContext;
-    if (section != null) {
-      Scrollable.ensureVisible(
-        section,
-        duration: MediaQuery.disableAnimationsOf(context)
-            ? Duration.zero
-            : const Duration(milliseconds: 250),
-        alignment: 0.05,
-      );
-    }
-  }
+  SettingsCategory? _activeCategory;
 
   void _back() {
+    if (_activeCategory != null) {
+      setState(() => _activeCategory = null);
+      return;
+    }
     if (context.canPop()) {
       context.pop();
     } else {
-      // 工作区用 go() 进入设置页，栈里没有上一页；回到工作区是唯一合理的落点。
       context.go(AppRoutes.workspace);
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final preferences = ref.watch(preferencesProvider);
-    final view = ref.watch(sessionViewProvider);
-    final audioSelection = ref.watch(audioSelectionProvider);
-    final storePath = ref.watch(storePathProvider);
-    final compact = context.isCompact;
-    final pttHotkeyKey = preferences.pttHotkey == null
-        ? null
-        : LogicalKeyboardKey.findKeyByKeyId(preferences.pttHotkey!);
-
-    final sections = <Widget>[
-      SettingsGroup(
-        title: l10n.settingsGeneral,
-        children: [
-          SettingsRow(
-            icon: Icons.cloud_upload_outlined,
-            title: l10n.imageHostTitle,
-            onTap: () => showImageHostSettings(context),
-          ),
-          SettingsRow(
-            icon: Icons.translate_rounded,
-            title: l10n.settingsLanguage,
-            subtitle: _localeLabel(l10n, preferences.locale),
-            onTap: () => unawaited(_pickLanguage(preferences.locale)),
-          ),
-          SettingsRow(
-            icon: Icons.animation_rounded,
-            title: l10n.settingsMotion,
-            subtitle: _motionLabel(l10n, preferences.motion),
-            onTap: () => unawaited(_pickMotion(preferences.motion)),
-          ),
-        ],
-      ),
-      SettingsGroup(
-        title: l10n.settingsVoice,
-        children: [
-          SettingsRow(
-            icon: Icons.record_voice_over_rounded,
-            title: l10n.settingsPttMode,
-            trailing: Switch(
-              value: view.pttMode,
-              onChanged: (enabled) => unawaited(
-                ref.read(sessionViewProvider.notifier).setPttMode(enabled),
-              ),
-            ),
-            onTap: () => unawaited(
-              ref.read(sessionViewProvider.notifier).setPttMode(!view.pttMode),
-            ),
-          ),
-          SettingsRow(
-            icon: Icons.keyboard_rounded,
-            title: l10n.settingsPttHotkey,
-            subtitle: pttHotkeyKey == null
-                ? l10n.settingsPttHotkeyNone
-                : pttHotkeyDisplayName(pttHotkeyKey),
-            onTap: () => unawaited(_pickPttHotkey()),
-          ),
-          SettingsRow(
-            icon: Icons.mic_rounded,
-            title: l10n.settingsInputDevice,
-            subtitle: audioSelection.inputName ?? l10n.settingsDeviceDefault,
-            onTap: () => unawaited(
-              _pickAudioDevice(selection: audioSelection, output: false),
-            ),
-          ),
-          SettingsRow(
-            icon: Icons.volume_up_rounded,
-            title: l10n.settingsOutputDevice,
-            subtitle: audioSelection.outputName ?? l10n.settingsDeviceDefault,
-            onTap: () => unawaited(
-              _pickAudioDevice(selection: audioSelection, output: true),
-            ),
-          ),
-          SettingsRow(
-            icon: Icons.graphic_eq_rounded,
-            title: l10n.settingsVoiceMeter,
-            subtitle: _voiceMeterLabel(l10n, preferences.voiceMeterSource),
-            onTap: () =>
-                unawaited(_pickVoiceMeter(preferences.voiceMeterSource)),
-          ),
-        ],
-      ),
-      SettingsGroup(
-        title: l10n.settingsData,
-        children: [
-          SettingsRow(
-            icon: Icons.folder_rounded,
-            title: l10n.settingsStorePath,
-            subtitle: storePath,
-            trailing: IconButton(
-              onPressed: () => unawaited(_copyStorePath(storePath)),
-              icon: Icon(
-                Icons.copy_rounded,
-                size: IconSizes.medium,
-                semanticLabel: l10n.commonCopy,
-              ),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints.tightFor(
-                width: Sizes.touch,
-                height: Sizes.touch,
-              ),
-            ),
-          ),
-        ],
-      ),
-      SettingsGroup(title: l10n.settingsAbout, children: [_about(l10n)]),
-    ];
-
-    final windowControls = ViewScope.windowControlsOf(context);
-    final titles = [
-      l10n.settingsGeneral,
-      l10n.settingsVoice,
-      l10n.settingsData,
-      l10n.settingsAbout,
-    ];
-    final icons = [
-      Icons.tune_rounded,
-      Icons.headphones_outlined,
-      Icons.folder_outlined,
-      Icons.info_outline_rounded,
-    ];
-    final content = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        WindowDragRegion(child: _SettingsTopBar(onBack: _back)),
-        Expanded(
-          child: SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(
-              compact ? 20 : 40,
-              24,
-              compact ? 20 : 40,
-              40,
-            ),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 760),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    KeyedSubtree(
-                      key: _sectionKeys.first,
-                      child: AppearancePicker(
-                        value: preferences.theme,
-                        onChanged: ref
-                            .read(preferencesProvider.notifier)
-                            .setTheme,
-                      ),
-                    ),
-                    sections.first,
-                    for (var index = 1; index < sections.length; index++)
-                      KeyedSubtree(
-                        key: _sectionKeys[index],
-                        child: sections[index],
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-    return Scaffold(
-      backgroundColor: context.pageColor,
-      body: SafeArea(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (!compact)
-              SizedBox(
-                width: 224,
-                child: Material(
-                  color: context.scheme.surfaceContainerLow,
-                  child: Column(
-                    children: [
-                      // 宽屏时红绿灯压在侧栏左上角，标题整体让到按钮区之下。
-                      WindowDragRegion(
-                        child: SizedBox(
-                          width: double.infinity,
-                          height: windowControls.height,
-                        ),
-                      ),
-                      Expanded(
-                        child: ListView(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 24,
-                          ),
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-                              child: Text(
-                                l10n.appName,
-                                style: context.texts.titleLarge,
-                              ),
-                            ),
-                            for (var index = 0; index < titles.length; index++)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 8),
-                                child: ListTile(
-                                  selected: _selectedSection == index,
-                                  selectedTileColor:
-                                      context.scheme.primaryContainer,
-                                  selectedColor:
-                                      context.scheme.onPrimaryContainer,
-                                  leading: Icon(
-                                    icons[index],
-                                    size: IconSizes.toolbar,
-                                  ),
-                                  title: Text(
-                                    titles[index],
-                                    style: context.texts.bodyMedium,
-                                  ),
-                                  onTap: () => _jumpTo(index),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            Expanded(child: content),
-          ],
-        ),
-      ),
-    );
-  }
-
   Future<void> _pickLanguage(String? current) async {
     final l10n = AppLocalizations.of(context);
-    // 空串表示「跟随系统」：null 已经被「用户关掉对话框」占用，不能再用它区分。
     final code = await showSettingsOptions<String>(
       context,
       title: l10n.settingsLanguage,
@@ -378,9 +136,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Future<void> _copyStorePath(String path) async {
     final l10n = AppLocalizations.of(context);
     await Clipboard.setData(ClipboardData(text: path));
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
     ref
         .read(noticeCenterProvider.notifier)
         .show(l10n.commonCopied, tone: NoticeTone.info);
@@ -388,48 +144,350 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   Future<void> _pickPttHotkey() async {
     if (ref.read(pttHotkeyRecordingProvider)) return;
-    final l10n = AppLocalizations.of(context);
-    final currentKeyId = ref.read(preferencesProvider).pttHotkey;
-    final recording = ref.read(pttHotkeyRecordingProvider.notifier);
-    recording.setRecording(true);
-    try {
-      // 等待原生注销完成，Carbon 才能把原热键交给录制输入框。
-      await const GlobalHotkey().unregister();
-      if (!mounted) return;
-      await showAppModal<void>(
-        context,
-        title: l10n.settingsPttHotkeyRecordTitle,
-        builder: (context) => _PttHotkeyRecorder(currentKeyId: currentKeyId),
-      );
-    } finally {
-      recording.setRecording(false);
-    }
+    await pickPttHotkey(context, ref);
   }
-
-  Widget _about(AppLocalizations l10n) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-      child: Text(l10n.appName, style: context.texts.titleMedium),
-    );
-  }
-}
-
-/// 顶栏：返回键 + 页面标题。
-class _SettingsTopBar extends StatelessWidget {
-  const _SettingsTopBar({required this.onBack});
-
-  final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final preferences = ref.watch(preferencesProvider);
+    final view = ref.watch(sessionViewProvider);
+    final audioSelection = ref.watch(audioSelectionProvider);
+    final storePath = ref.watch(storePathProvider);
+    final compact = context.isCompact;
+
+    final pttHotkeyKey = preferences.pttHotkey == null
+        ? null
+        : LogicalKeyboardKey.findKeyByKeyId(preferences.pttHotkey!);
+
+    final isSubPage = _activeCategory != null;
+
+    final String pageTitle = switch (_activeCategory) {
+      SettingsCategory.appearance => l10n.settingsTheme,
+      SettingsCategory.voice => l10n.settingsVoice,
+      SettingsCategory.general => l10n.settingsGeneral,
+      SettingsCategory.data => l10n.settingsData,
+      SettingsCategory.about => l10n.settingsAbout,
+      null => l10n.settingsTitle,
+    };
+
+    // 一级概览卡片入口
+    final Widget overviewContent = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        generateSection(
+          title: l10n.settingsGeneral,
+          items: [
+            SettingsTile(
+              icon: Icons.palette_outlined,
+              title: l10n.settingsTheme,
+              subtitle: _themeLabel(l10n, preferences.theme),
+              onTap: () =>
+                  setState(() => _activeCategory = SettingsCategory.appearance),
+            ),
+            SettingsTile(
+              icon: Icons.headphones_outlined,
+              title: l10n.settingsVoice,
+              subtitle: view.pttMode
+                  ? l10n.settingsPttMode
+                  : (audioSelection.inputName ?? l10n.settingsDeviceDefault),
+              onTap: () =>
+                  setState(() => _activeCategory = SettingsCategory.voice),
+            ),
+            SettingsTile(
+              icon: Icons.tune_rounded,
+              title: l10n.settingsGeneral,
+              subtitle: _localeLabel(l10n, preferences.locale),
+              onTap: () =>
+                  setState(() => _activeCategory = SettingsCategory.general),
+            ),
+            SettingsTile(
+              icon: Icons.folder_outlined,
+              title: l10n.settingsData,
+              subtitle: storePath,
+              onTap: () =>
+                  setState(() => _activeCategory = SettingsCategory.data),
+            ),
+            SettingsTile(
+              icon: Icons.info_outline_rounded,
+              title: l10n.settingsAbout,
+              subtitle: l10n.appName,
+              onTap: () =>
+                  setState(() => _activeCategory = SettingsCategory.about),
+            ),
+          ],
+        ),
+      ],
+    );
+
+    // 二级页面（占满主区域）
+    Widget subPageContent;
+    switch (_activeCategory) {
+      case SettingsCategory.appearance:
+        subPageContent = Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 24),
+              child: AppearancePicker(
+                value: preferences.theme,
+                onChanged: ref.read(preferencesProvider.notifier).setTheme,
+              ),
+            ),
+            generateSection(
+              title: l10n.settingsMotion,
+              items: [
+                SettingsTile(
+                  icon: Icons.animation_rounded,
+                  title: l10n.settingsMotion,
+                  subtitle: _motionLabel(l10n, preferences.motion),
+                  onTap: () => unawaited(_pickMotion(preferences.motion)),
+                ),
+                SettingsTile(
+                  icon: Icons.graphic_eq_rounded,
+                  title: l10n.settingsVoiceMeter,
+                  subtitle: _voiceMeterLabel(
+                    l10n,
+                    preferences.voiceMeterSource,
+                  ),
+                  onTap: () =>
+                      unawaited(_pickVoiceMeter(preferences.voiceMeterSource)),
+                ),
+              ],
+            ),
+          ],
+        );
+      case SettingsCategory.voice:
+        subPageContent = Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            generateSection(
+              title: l10n.settingsPttMode,
+              items: [
+                SettingsTile(
+                  icon: Icons.record_voice_over_rounded,
+                  title: l10n.settingsPttMode,
+                  trailing: Switch(
+                    value: view.pttMode,
+                    onChanged: (enabled) => unawaited(
+                      ref
+                          .read(sessionViewProvider.notifier)
+                          .setPttMode(enabled),
+                    ),
+                  ),
+                  onTap: () => unawaited(
+                    ref
+                        .read(sessionViewProvider.notifier)
+                        .setPttMode(!view.pttMode),
+                  ),
+                ),
+                SettingsTile(
+                  icon: Icons.keyboard_rounded,
+                  title: l10n.settingsPttHotkey,
+                  subtitle: pttHotkeyKey == null
+                      ? l10n.settingsPttHotkeyNone
+                      : pttHotkeyDisplayName(pttHotkeyKey),
+                  onTap: () => unawaited(_pickPttHotkey()),
+                ),
+              ],
+            ),
+            generateSection(
+              title: l10n.settingsInputDevice,
+              items: [
+                SettingsTile(
+                  icon: Icons.mic_rounded,
+                  title: l10n.settingsInputDevice,
+                  subtitle:
+                      audioSelection.inputName ?? l10n.settingsDeviceDefault,
+                  onTap: () => unawaited(
+                    _pickAudioDevice(selection: audioSelection, output: false),
+                  ),
+                ),
+                SettingsTile(
+                  icon: Icons.volume_up_rounded,
+                  title: l10n.settingsOutputDevice,
+                  subtitle:
+                      audioSelection.outputName ?? l10n.settingsDeviceDefault,
+                  onTap: () => unawaited(
+                    _pickAudioDevice(selection: audioSelection, output: true),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      case SettingsCategory.general:
+        subPageContent = Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            generateSection(
+              title: l10n.settingsLanguage,
+              items: [
+                SettingsTile(
+                  icon: Icons.translate_rounded,
+                  title: l10n.settingsLanguage,
+                  subtitle: _localeLabel(l10n, preferences.locale),
+                  onTap: () => unawaited(_pickLanguage(preferences.locale)),
+                ),
+                SettingsTile(
+                  icon: Icons.cloud_upload_outlined,
+                  title: l10n.imageHostTitle,
+                  onTap: () => showImageHostSettings(context),
+                ),
+              ],
+            ),
+          ],
+        );
+      case SettingsCategory.data:
+        subPageContent = Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            generateSection(
+              title: l10n.settingsStorePath,
+              items: [
+                SettingsTile(
+                  icon: Icons.folder_rounded,
+                  title: l10n.settingsStorePath,
+                  subtitle: storePath,
+                  trailing: IconButton(
+                    onPressed: () => unawaited(_copyStorePath(storePath)),
+                    icon: Icon(
+                      Icons.copy_rounded,
+                      size: IconSizes.medium,
+                      semanticLabel: l10n.commonCopy,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      case SettingsCategory.about:
+        subPageContent = Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        color: context.scheme.primaryContainer,
+                        borderRadius: Radii.largeAll,
+                      ),
+                      child: Icon(
+                        Icons.record_voice_over_rounded,
+                        size: 36,
+                        color: context.scheme.onPrimaryContainer,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      l10n.appName,
+                      style: context.texts.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'v0.1.0',
+                      style: context.texts.bodySmall?.copyWith(
+                        color: context.scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            generateSection(
+              items: [
+                SettingsTile(
+                  icon: Icons.info_outline_rounded,
+                  title: l10n.settingsAbout,
+                  subtitle: l10n.appName,
+                ),
+              ],
+            ),
+          ],
+        );
+      case null:
+        subPageContent = const SizedBox.shrink();
+    }
+
+    final rightContent = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _SettingsTopBar(title: pageTitle, onBack: _back),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              compact ? 16 : 32,
+              16,
+              compact ? 16 : 32,
+              40,
+            ),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 720),
+                child: isSubPage ? subPageContent : overviewContent,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+
+    return Shortcuts(
+      shortcuts: const {
+        SingleActivator(LogicalKeyboardKey.escape): DismissIntent(),
+      },
+      child: Actions(
+        actions: {
+          DismissIntent: CallbackAction<DismissIntent>(
+            onInvoke: (_) {
+              _back();
+              return null;
+            },
+          ),
+        },
+        child: Scaffold(
+          backgroundColor: context.pageColor,
+          body: SafeArea(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (!compact)
+                  const AppNavigationSidebar(
+                    selectedDestination: AppNavDestination.settings,
+                  ),
+                Expanded(child: rightContent),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsTopBar extends StatelessWidget {
+  const _SettingsTopBar({required this.title, required this.onBack});
+
+  final String title;
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: Sizes.header),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 880),
           child: Padding(
-            padding: EdgeInsets.fromLTRB(context.isCompact ? 8 : 0, 8, 16, 8),
+            padding: EdgeInsets.fromLTRB(context.isCompact ? 8 : 12, 8, 16, 8),
             child: Row(
               children: [
                 IconButton(
@@ -443,13 +501,15 @@ class _SettingsTopBar extends StatelessWidget {
                 ),
                 const SizedBox(width: 4),
                 Expanded(
-                  child: Semantics(
-                    header: true,
-                    child: Text(
-                      l10n.settingsTitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: context.texts.titleLarge,
+                  child: WindowDragRegion(
+                    child: Semantics(
+                      header: true,
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: context.texts.titleLarge,
+                      ),
                     ),
                   ),
                 ),
@@ -462,7 +522,6 @@ class _SettingsTopBar extends StatelessWidget {
   }
 }
 
-/// 音频设备选择器：先「系统默认」，再按输入/输出列出设备。
 class _AudioDevicePicker extends ConsumerWidget {
   const _AudioDevicePicker({required this.output, required this.selectedId});
 
@@ -547,7 +606,13 @@ class _AudioDevicePicker extends ConsumerWidget {
   }
 }
 
-/// 它们不是界面文案，而是语言自己的名字；翻译成「英语」反而认不出来。
+String _themeLabel(AppLocalizations l10n, AppThemePreference theme) =>
+    switch (theme) {
+      AppThemePreference.system => l10n.settingsThemeSystem,
+      AppThemePreference.light => l10n.settingsThemeLight,
+      AppThemePreference.dark => l10n.settingsThemeDark,
+    };
+
 String _localeLabel(AppLocalizations l10n, String? locale) => switch (locale) {
   null => l10n.settingsLanguageSystem,
   'en' => 'English',
@@ -567,148 +632,3 @@ String _motionLabel(AppLocalizations l10n, AppMotionPreference motion) =>
       AppMotionPreference.on => l10n.settingsMotionOn,
       AppMotionPreference.off => l10n.settingsMotionOff,
     };
-
-/// 快捷键录制面板：按下任意受支持的键即保存并关闭，Esc 取消。
-///
-/// 裸修饰键和平台换不出原生键码的键都会被拒，提示换一个。
-class _PttHotkeyRecorder extends ConsumerStatefulWidget {
-  const _PttHotkeyRecorder({required this.currentKeyId});
-
-  final int? currentKeyId;
-
-  @override
-  ConsumerState<_PttHotkeyRecorder> createState() => _PttHotkeyRecorderState();
-}
-
-class _PttHotkeyRecorderState extends ConsumerState<_PttHotkeyRecorder> {
-  // LogicalKeyboardKey 重写了 ==，只能放非 const 集合。
-  static final _modifiers = <LogicalKeyboardKey>{
-    LogicalKeyboardKey.shift,
-    LogicalKeyboardKey.shiftLeft,
-    LogicalKeyboardKey.shiftRight,
-    LogicalKeyboardKey.control,
-    LogicalKeyboardKey.controlLeft,
-    LogicalKeyboardKey.controlRight,
-    LogicalKeyboardKey.alt,
-    LogicalKeyboardKey.altLeft,
-    LogicalKeyboardKey.altRight,
-    LogicalKeyboardKey.meta,
-    LogicalKeyboardKey.metaLeft,
-    LogicalKeyboardKey.metaRight,
-    LogicalKeyboardKey.fn,
-  };
-
-  final _focus = FocusNode();
-  String? _error;
-
-  @override
-  void dispose() {
-    _focus.dispose();
-    super.dispose();
-  }
-
-  KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent || event is KeyRepeatEvent) {
-      return KeyEventResult.ignored;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.escape) {
-      Navigator.of(context).pop();
-      return KeyEventResult.handled;
-    }
-    final key = event.logicalKey;
-    if (_modifiers.contains(key) || !isSupportedPttHotkey(key)) {
-      setState(
-        () =>
-            _error = AppLocalizations.of(context).settingsPttHotkeyUnsupported,
-      );
-      return KeyEventResult.handled;
-    }
-    ref.read(preferencesProvider.notifier).setPttHotkey(key.keyId);
-    Navigator.of(context).pop();
-    return KeyEventResult.handled;
-  }
-
-  void _clear() {
-    ref.read(preferencesProvider.notifier).setPttHotkey(null);
-    Navigator.of(context).pop();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final scheme = context.scheme;
-    final currentKey = widget.currentKeyId == null
-        ? null
-        : LogicalKeyboardKey.findKeyByKeyId(widget.currentKeyId!);
-
-    return Focus(
-      focusNode: _focus,
-      autofocus: true,
-      onKeyEvent: _handleKey,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (currentKey != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Row(
-                children: [
-                  Text(
-                    l10n.settingsPttHotkey,
-                    style: context.texts.bodyMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    pttHotkeyDisplayName(currentKey),
-                    style: context.texts.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.keyboard_rounded,
-                  size: IconSizes.toolbar,
-                  color: scheme.onSurfaceVariant,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    l10n.settingsPttHotkeyRecordHint,
-                    style: context.texts.bodyMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                _error!,
-                style: context.texts.bodySmall?.copyWith(color: scheme.error),
-              ),
-            ),
-          if (widget.currentKeyId != null)
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: _clear,
-                child: Text(l10n.settingsPttHotkeyClear),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}

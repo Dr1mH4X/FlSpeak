@@ -34,7 +34,7 @@ Future<GoRouter> _mount(
     overrides: [
       coreSessionProvider.overrideWithValue(_Core()),
       sessionViewProvider.overrideWith(_Session.new),
-      storePathProvider.overrideWithValue('/tmp/flspeak-test/servers.json'),
+      storePathProvider.overrideWithValue('/tmp/flspeak-test/preferences.json'),
     ],
   );
   addTearDown(container.dispose);

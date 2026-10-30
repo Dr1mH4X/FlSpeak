@@ -12,7 +12,10 @@ mod downloads;
 mod events;
 mod image_upload;
 mod images;
+pub mod settings;
 mod store;
+
+pub use settings::{AppSettings, AudioSettings, NetworkSettings, SettingsManager, UiSettings};
 
 mod channel_tools;
 pub mod text_format;
@@ -479,15 +482,15 @@ impl SessionHandle {
                             message: format!("历史消息压缩失败: {message}"),
                         });
                     }
-                    let registry = match store::load_registry(&store_path).await {
-                        Ok(registry) => registry,
-                        Err(message) => {
-                            let _ = events.send(SessionEvent::Failed {
-                                message: format!("档案读取失败: {message}"),
-                            });
-                            return;
-                        }
-                    };
+                    if let Err(message) = SettingsManager::init(store_path.clone()) {
+                        let _ = events.send(SessionEvent::Failed {
+                            message: format!("设置加载失败: {message}"),
+                        });
+                        return;
+                    }
+                    let servers =
+                        SettingsManager::with(|s| s.network.servers.clone()).unwrap_or_default();
+                    let registry = server::ServerRegistry::from_profiles(servers);
                     let _ = events.send(SessionEvent::Servers(registry.profiles().to_vec()));
                     actor::Actor::new(
                         store_path,
@@ -845,7 +848,7 @@ mod tests {
             ));
             tokio::fs::create_dir_all(&root).await.unwrap();
             let handle = SessionHandle::spawn_with_options(
-                root.join("servers.json"),
+                root.join("preferences.json"),
                 SessionOptions { audio: false },
             )
             .unwrap();
@@ -880,7 +883,7 @@ mod tests {
             rand::random::<u64>()
         ));
         tokio::fs::create_dir_all(&dir).await.unwrap();
-        let path = dir.join("servers.json");
+        let path = dir.join("preferences.json");
         tokio::fs::write(&path, b"{invalid registry").await.unwrap();
         let handle =
             SessionHandle::spawn_with_options(path.clone(), SessionOptions { audio: false })
@@ -898,7 +901,7 @@ mod tests {
     async fn session_spawns_and_shuts_down_without_a_server() {
         let dir = std::env::temp_dir().join("flspeak-session-spawn-test");
         let _ = tokio::fs::remove_dir_all(&dir).await;
-        let handle = SessionHandle::spawn(dir.join("servers.json")).expect("session spawn");
+        let handle = SessionHandle::spawn(dir.join("preferences.json")).expect("session spawn");
         assert!(matches!(
             handle.state().await.expect("state"),
             SessionState::Disconnected
@@ -911,7 +914,7 @@ mod tests {
     async fn kick_rejects_another_connection_before_any_protocol_operation() {
         let dir = std::env::temp_dir().join(format!("flspeak-kick-test-{}", rand::random::<u64>()));
         let handle = SessionHandle::spawn_with_options(
-            dir.join("servers.json"),
+            dir.join("preferences.json"),
             SessionOptions { audio: false },
         )
         .unwrap();

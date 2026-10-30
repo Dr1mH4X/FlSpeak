@@ -30,7 +30,7 @@ FlSpeak/
 - **每类事件只注册一个处理器**。tsclient-rs 为每个处理器、每个包 spawn 一个任务。
 - **音频不跨 FFI**。Dart 只能通过单一 `Stream<CoreEvent>` 拿 UI 事件；capture/playback
   各自独占 cpal 流，cpal 回调零分配零锁。
-- **身份私钥不出 Rust**。`identity.txt` 由 Rust 读写，Dart 只传 store 目录。
+- **身份私钥不出 Rust**。`identity.json` 由 Rust 读写，Dart 只传 store 目录。
 
 ## 与 tsclient-rs 的关系
 

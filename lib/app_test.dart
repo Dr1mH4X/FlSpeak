@@ -41,7 +41,7 @@ Future<ProviderContainer> _mountPtt(
   final container = ProviderContainer(
     overrides: [
       coreSessionProvider.overrideWithValue(_PttCore()),
-      storePathProvider.overrideWithValue('/tmp/flspeak-test/servers.json'),
+      storePathProvider.overrideWithValue('/tmp/flspeak-test/preferences.json'),
       sessionViewProvider.overrideWith(() => controller),
       preferencesStoreProvider.overrideWithValue(
         PreferencesStore.inMemory(
@@ -84,6 +84,10 @@ void main() {
         final controller = _PttSession();
         final container = await _mountPtt(tester, controller);
         container.read(routerProvider).go(AppRoutes.settings);
+        await tester.pumpAndSettle();
+        final voiceCategory = find.text('语音');
+        await tester.ensureVisible(voiceCategory);
+        await tester.tap(voiceCategory);
         await tester.pumpAndSettle();
         final shortcut = find.text('按住说话快捷键');
         await tester.ensureVisible(shortcut);
@@ -233,7 +237,9 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           coreSessionProvider.overrideWithValue(_PttCore()),
-          storePathProvider.overrideWithValue('/tmp/flspeak-test/servers.json'),
+          storePathProvider.overrideWithValue(
+            '/tmp/flspeak-test/preferences.json',
+          ),
           sessionViewProvider.overrideWith(_PttSession.new),
           preferencesStoreProvider.overrideWithValue(
             PreferencesStore.inMemory(

@@ -139,4 +139,39 @@ void main() {
       );
     },
   );
+
+  test(
+    'saving preferences preserves existing servers array and custom fields',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'flspeak-preserve-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final path = '${directory.path}/preferences.json';
+      final initial = {
+        'schema': 3,
+        'servers': [
+          {
+            'id': 'ts.example.com:9987',
+            'label': 'Example',
+            'host': 'ts.example.com',
+            'port': 9987,
+          },
+        ],
+        'nickname': 'Initial',
+      };
+      await File(path).writeAsString(jsonEncode(initial));
+
+      final store = await PreferencesStore.load(path);
+      expect(store.current.nickname, 'Initial');
+
+      await store.save(store.current.copyWith(nickname: 'Updated'));
+
+      final decoded = jsonDecode(await File(path).readAsString()) as Map;
+      expect(decoded['nickname'], 'Updated');
+      expect(decoded['servers'], isA<List>());
+      expect((decoded['servers'] as List).first['label'], 'Example');
+      expect(decoded['schema'], 3);
+    },
+  );
 }

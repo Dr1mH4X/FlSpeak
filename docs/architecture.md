@@ -30,11 +30,11 @@ Flutter 负责界面，Rust 负责协议、连接边界与音频。Dart 不持�
 Dart: registerServer(label, "ts.example.com:9987")
   └─ FFI 转发 ─> actor ─> server::parse_address
                  ├─ 拒绝：不是 IP/域名、端口非法或裸昵称
-                 └─ 通过：写 servers.json，广播 Servers 事件
+                 └─ 通过：写 preferences.json，广播 Servers 事件
 Dart: connect(id, nickname)
   └─ FFI 转发 ─> actor
         ├─ 从档案取 host:port（连接目标只能来自档案）
-        ├─ 读/生成 identity.txt（Dart 拿不到私钥）
+        ├─ 读/生成 identity.json（Dart 拿不到私钥）
         ├─ proto::resolve_target 做 SRV 查询
         ├─ proto::client 对最终目标做一次官方主机检查
         ├─ 注入 DenyResolver + Client::new
