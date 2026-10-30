@@ -670,4 +670,22 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get channelDescriptionFailed => 'Failed to load channel description';
+
+  @override
+  String get aboutSubtitle => 'Self-hosted TeamSpeak 3 client';
+
+  @override
+  String get aboutSourceAndFeedback => 'Project & Source';
+
+  @override
+  String get aboutSourceCode => 'Source Code';
+
+  @override
+  String get aboutIssueTracker => 'Issue Tracker';
+
+  @override
+  String get aboutLicense => 'License';
+
+  @override
+  String get aboutCopySuccess => 'Link copied to clipboard';
 }

@@ -19,6 +19,7 @@ import '../../widgets/app_navigation_sidebar.dart';
 import '../../widgets/common.dart';
 import '../../widgets/window_header.dart';
 import 'settings_state.dart';
+import 'widgets/about_card.dart';
 import 'widgets/appearance_picker.dart';
 import 'widgets/image_host_dialog.dart';
 import 'widgets/ptt_hotkey_recorder.dart';
@@ -363,56 +364,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           ],
         );
       case SettingsCategory.about:
-        subPageContent = Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                child: Column(
-                  children: [
-                    Container(
-                      width: 64,
-                      height: 64,
-                      decoration: BoxDecoration(
-                        color: context.scheme.primaryContainer,
-                        borderRadius: Radii.largeAll,
-                      ),
-                      child: Icon(
-                        Icons.record_voice_over_rounded,
-                        size: 36,
-                        color: context.scheme.onPrimaryContainer,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    Text(
-                      l10n.appName,
-                      style: context.texts.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'v0.1.0',
-                      style: context.texts.bodySmall?.copyWith(
-                        color: context.scheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            generateSection(
-              items: [
-                SettingsTile(
-                  icon: Icons.info_outline_rounded,
-                  title: l10n.settingsAbout,
-                  subtitle: l10n.appName,
-                ),
-              ],
-            ),
-          ],
-        );
+        subPageContent = const AboutCard();
       case null:
         subPageContent = const SizedBox.shrink();
     }

@@ -329,5 +329,11 @@
   "channelDetails": "Channel Details",
   "channelDescription": "Channel Description",
   "channelDescriptionEmpty": "No description for this channel",
-  "channelDescriptionFailed": "Failed to load channel description"
+  "channelDescriptionFailed": "Failed to load channel description",
+  "aboutSubtitle": "Self-hosted TeamSpeak 3 client",
+  "aboutSourceAndFeedback": "Project & Source",
+  "aboutSourceCode": "Source Code",
+  "aboutIssueTracker": "Issue Tracker",
+  "aboutLicense": "License",
+  "aboutCopySuccess": "Link copied to clipboard"
 }

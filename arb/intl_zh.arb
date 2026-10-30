@@ -329,5 +329,11 @@
   "channelDetails": "频道详情",
   "channelDescription": "频道简介",
   "channelDescriptionEmpty": "此频道暂无简介",
-  "channelDescriptionFailed": "获取频道简介失败"
+  "channelDescriptionFailed": "获取频道简介失败",
+  "aboutSubtitle": "自托管 TeamSpeak 3 客户端",
+  "aboutSourceAndFeedback": "项目与源码",
+  "aboutSourceCode": "开源代码",
+  "aboutIssueTracker": "问题反馈",
+  "aboutLicense": "许可证",
+  "aboutCopySuccess": "链接已复制到剪贴板"
 }

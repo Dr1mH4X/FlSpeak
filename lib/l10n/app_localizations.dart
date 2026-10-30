@@ -1303,6 +1303,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Failed to load channel description'**
   String get channelDescriptionFailed;
+
+  /// No description provided for @aboutSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Self-hosted TeamSpeak 3 client'**
+  String get aboutSubtitle;
+
+  /// No description provided for @aboutSourceAndFeedback.
+  ///
+  /// In en, this message translates to:
+  /// **'Project & Source'**
+  String get aboutSourceAndFeedback;
+
+  /// No description provided for @aboutSourceCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Source Code'**
+  String get aboutSourceCode;
+
+  /// No description provided for @aboutIssueTracker.
+  ///
+  /// In en, this message translates to:
+  /// **'Issue Tracker'**
+  String get aboutIssueTracker;
+
+  /// No description provided for @aboutLicense.
+  ///
+  /// In en, this message translates to:
+  /// **'License'**
+  String get aboutLicense;
+
+  /// No description provided for @aboutCopySuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Link copied to clipboard'**
+  String get aboutCopySuccess;
 }
 
 class _AppLocalizationsDelegate

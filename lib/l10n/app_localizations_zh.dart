@@ -654,4 +654,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get channelDescriptionFailed => '获取频道简介失败';
+
+  @override
+  String get aboutSubtitle => '自托管 TeamSpeak 3 客户端';
+
+  @override
+  String get aboutSourceAndFeedback => '项目与源码';
+
+  @override
+  String get aboutSourceCode => '开源代码';
+
+  @override
+  String get aboutIssueTracker => '问题反馈';
+
+  @override
+  String get aboutLicense => '许可证';
+
+  @override
+  String get aboutCopySuccess => '链接已复制到剪贴板';
 }
