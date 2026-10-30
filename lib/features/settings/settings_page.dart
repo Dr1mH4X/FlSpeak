@@ -44,10 +44,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       setState(() => _activeCategory = null);
       return;
     }
-    if (context.canPop()) {
-      context.pop();
-    } else {
-      context.go(AppRoutes.workspace);
+    final router = GoRouter.maybeOf(context);
+    if (router != null && router.canPop()) {
+      router.pop();
+    } else if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else if (router != null) {
+      final view = ref.read(sessionViewProvider);
+      router.go(view.connected ? AppRoutes.workspace : AppRoutes.connect);
     }
   }
 
@@ -405,19 +409,31 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             },
           ),
         },
-        child: Scaffold(
-          backgroundColor: context.pageColor,
-          body: SafeArea(
-            top: compact,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (!compact)
-                  const AppNavigationSidebar(
-                    selectedDestination: AppNavDestination.settings,
-                  ),
-                Expanded(child: rightContent),
-              ],
+        child: Focus(
+          autofocus: true,
+          child: PopScope(
+            canPop: _activeCategory == null,
+            onPopInvokedWithResult: (didPop, _) {
+              if (didPop) return;
+              if (_activeCategory != null) {
+                setState(() => _activeCategory = null);
+              }
+            },
+            child: Scaffold(
+              backgroundColor: context.pageColor,
+              body: SafeArea(
+                top: compact,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (!compact)
+                      const AppNavigationSidebar(
+                        selectedDestination: AppNavDestination.settings,
+                      ),
+                    Expanded(child: rightContent),
+                  ],
+                ),
+              ),
             ),
           ),
         ),

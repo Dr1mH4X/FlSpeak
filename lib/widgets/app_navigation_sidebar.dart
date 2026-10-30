@@ -263,7 +263,7 @@ class _AppNavigationSidebarState extends ConsumerState<AppNavigationSidebar> {
                     onTap: () {
                       if (widget.selectedDestination !=
                           AppNavDestination.settings) {
-                        context.go(AppRoutes.settings);
+                        context.push(AppRoutes.settings);
                       }
                     },
                   ),
