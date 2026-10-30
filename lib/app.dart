@@ -14,6 +14,7 @@ import 'l10n/app_localizations.dart';
 import 'router.dart';
 import 'theme/app_theme.dart';
 import 'widgets/notice_host.dart';
+import 'widgets/theme_cross_fade.dart';
 import 'widgets/view_scope.dart';
 import 'widgets/window_header.dart';
 
@@ -157,10 +158,12 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
         return MediaQuery(
           data: MediaQuery.of(context)
               .copyWith(disableAnimations: disableAnimations),
-          child: AnnotatedRegion<SystemUiOverlayStyle>(
-            value: appSystemUiOverlayStyle(Theme.of(context)),
-            child: _WindowBackgroundSync(
-              child: _WindowFrame(child: child ?? const SizedBox.shrink()),
+          child: ThemeCrossFade(
+            child: AnnotatedRegion<SystemUiOverlayStyle>(
+              value: appSystemUiOverlayStyle(Theme.of(context)),
+              child: _WindowBackgroundSync(
+                child: _WindowFrame(child: child ?? const SizedBox.shrink()),
+              ),
             ),
           ),
         );

@@ -64,16 +64,18 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // 两级菜单：先点击一级分类卡片进入二级页面
-        final categoryRow = find.widgetWithText(
-          SettingsTile,
-          language ? '通用' : '外观',
-        );
-        await tester.ensureVisible(categoryRow);
-        await tester.tap(categoryRow);
-        await tester.pumpAndSettle();
+        if (!language) {
+          // 音频显示在「外观」二级页面中
+          final categoryRow = find.widgetWithText(SettingsTile, '外观');
+          await tester.ensureVisible(categoryRow);
+          await tester.tap(categoryRow);
+          await tester.pumpAndSettle();
+        }
 
-        final row = find.widgetWithText(SettingsTile, language ? '语言' : '音频显示');
+        final row = find.widgetWithText(
+          language ? SettingsOptionsTile<String?> : SettingsTile,
+          language ? '语言' : '音频显示',
+        );
         await tester.ensureVisible(row);
         await tester.tap(row);
         await tester.pumpAndSettle();
@@ -146,6 +148,65 @@ void main() {
 
     expect(container.read(preferencesProvider).motion, AppMotionPreference.on);
   });
+
+  testWidgets(
+    'picking language preference updates provider state and displays in trailing',
+    (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_Core()),
+          sessionViewProvider.overrideWith(_Session.new),
+          storePathProvider.overrideWithValue(
+            '/tmp/flspeak-test/preferences.json',
+          ),
+          preferencesStoreProvider.overrideWithValue(
+            PreferencesStore.inMemory(
+              preferences: const SessionPreferences(
+                nickname: 'Test',
+                locale: 'zh',
+              ),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            locale: const Locale('zh'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const SettingsPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 一级概览卡片第一项即为语言选择
+      final languageTile = find.widgetWithText(
+        SettingsOptionsTile<String?>,
+        '语言',
+      );
+      expect(languageTile, findsOneWidget);
+      expect(find.text('中文'), findsOneWidget);
+
+      // 点击语言项打开弹出菜单
+      await tester.tap(languageTile);
+      await tester.pumpAndSettle();
+
+      // 弹出菜单中包含选项
+      expect(find.text('跟随系统'), findsOneWidget);
+      expect(find.text('English'), findsOneWidget);
+
+      // 点击选择 English
+      await tester.tap(find.text('English').last);
+      await tester.pumpAndSettle();
+
+      expect(container.read(preferencesProvider).locale, 'en');
+    },
+  );
 
   testWidgets(
     'global navigation sidebar toggles expansion and subpage navigation operates cleanly',

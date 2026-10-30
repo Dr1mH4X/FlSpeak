@@ -4,7 +4,7 @@
 
 | 来源 | 原始许可证 | 复制内容 |
 | --- | --- | --- |
-| [FlClash](https://github.com/chen08209/FlClash) | GPL-3.0 | macOS 标题条布局、窗口尺寸与红绿灯让位 |
+| [FlClash](https://github.com/chen08209/FlClash) | GPL-3.0 | macOS 标题条布局、窗口尺寸与红绿灯让位，选项弹层、文字模糊切换动效、整屏主题与语言平滑过渡、Liquid Glass 与 Goo 渲染底座 |
 | [FlClash 的 `plugins/window`](https://github.com/chen08209/FlClash/tree/main/plugins/window) | MIT | 隐藏标题栏、窗口拖拽、双击缩放与全屏状态 |
 
 ## FlClash
@@ -13,13 +13,22 @@
 
 原始许可证为 GNU General Public License v3.0，见 FlClash 仓库根 `LICENSE`，原文见 https://www.gnu.org/licenses/gpl-3.0.txt 。复制片段的版权归 FlClash 作者所有。
 
-复制内容来自 `lib/common/layout.dart` 的窗口尺寸与红绿灯区域、`lib/ui/view_scope.dart`、`lib/manager/window_manager.dart` 的 `WindowHeaderContainer`、`WindowHeaderLayout`、`WindowHeaderBar`、`WindowHeader`，以及 `lib/ui/scaffold.dart` 的 `_WindowControlsClearance`。
+复制内容来自 `lib/common/layout.dart` 的窗口尺寸与红绿灯区域、`lib/ui/view_scope.dart`、`lib/manager/window_manager.dart` 的 `WindowHeaderContainer`、`WindowHeaderLayout`、`WindowHeaderBar`、`WindowHeader`，以及 `lib/ui/scaffold.dart` 的 `_WindowControlsClearance`；设置与弹出层体系来自 `shaders/liquid_glass.frag`、`lib/ui/shape.dart`、`lib/ui/motion.dart`、`lib/ui/navigation_dock.dart`（弹性按压）、`lib/ui/liquid_glass.dart`、`lib/ui/liquid_glass_capture.dart`、`lib/ui/goo.dart`、`lib/ui/theme_cross_fade.dart`、`lib/ui/popup.dart` 与 `lib/ui/list.dart`（选项值按钮）。
 
 | 本仓库文件 | 原始文件 |
 | --- | --- |
 | `lib/core/window_metrics.dart` | `lib/common/layout.dart` |
 | `lib/widgets/view_scope.dart` | `lib/ui/view_scope.dart` |
 | `lib/widgets/window_header.dart` | `lib/manager/window_manager.dart`、`lib/ui/scaffold.dart` |
+| `shaders/liquid_glass.frag` | `shaders/liquid_glass.frag` |
+| `lib/widgets/shape.dart` | `lib/ui/shape.dart` |
+| `lib/widgets/motion.dart` | `lib/ui/motion.dart` |
+| `lib/widgets/elastic_press.dart` | `lib/ui/navigation_dock.dart` |
+| `lib/widgets/liquid_glass.dart` | `lib/ui/liquid_glass.dart` |
+| `lib/widgets/liquid_glass_capture.dart` | `lib/ui/liquid_glass_capture.dart` |
+| `lib/widgets/goo.dart` | `lib/ui/goo.dart` |
+| `lib/widgets/theme_cross_fade.dart` | `lib/ui/theme_cross_fade.dart` |
+| `lib/widgets/popup.dart` | `lib/ui/popup.dart`、`lib/ui/list.dart` |
 
 ## FlClash 的 window 插件
 

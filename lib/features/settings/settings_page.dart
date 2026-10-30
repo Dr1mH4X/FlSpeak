@@ -55,24 +55,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     }
   }
 
-  Future<void> _pickLanguage(String? current) async {
-    final l10n = AppLocalizations.of(context);
-    final code = await showSettingsOptions<String>(
-      context,
-      title: l10n.settingsLanguage,
-      options: const ['', 'en', 'zh'],
-      current: current ?? '',
-      labelBuilder: (context, value) =>
-          _localeLabel(l10n, value.isEmpty ? null : value),
-    );
-    if (!mounted || code == null) {
-      return;
-    }
-    ref
-        .read(preferencesProvider.notifier)
-        .setLocale(code.isEmpty ? null : code);
-  }
-
   Future<void> _pickMotion(AppMotionPreference current) async {
     final l10n = AppLocalizations.of(context);
     final motion = await showSettingsOptions<AppMotionPreference>(
@@ -181,42 +163,46 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         generateSection(
-          title: l10n.settingsGeneral,
+          title: l10n.settingsTitle,
           items: [
+            SettingsOptionsTile<String?>(
+              icon: Icons.translate_rounded,
+              title: l10n.settingsLanguage,
+              options: const [null, 'zh', 'en'],
+              value: preferences.locale,
+              textBuilder: (locale) => _localeLabel(l10n, locale),
+              onChanged: (locale) {
+                if (!mounted) return;
+                ref.read(preferencesProvider.notifier).setLocale(locale);
+              },
+            ),
             SettingsTile(
               icon: Icons.palette_outlined,
               title: l10n.settingsTheme,
-              subtitle: _themeLabel(l10n, preferences.theme),
               onTap: () =>
                   setState(() => _activeCategory = SettingsCategory.appearance),
             ),
             SettingsTile(
               icon: Icons.headphones_outlined,
               title: l10n.settingsVoice,
-              subtitle: view.pttMode
-                  ? l10n.settingsPttMode
-                  : (audioSelection.inputName ?? l10n.settingsDeviceDefault),
               onTap: () =>
                   setState(() => _activeCategory = SettingsCategory.voice),
             ),
             SettingsTile(
               icon: Icons.tune_rounded,
               title: l10n.settingsGeneral,
-              subtitle: _localeLabel(l10n, preferences.locale),
               onTap: () =>
                   setState(() => _activeCategory = SettingsCategory.general),
             ),
             SettingsTile(
               icon: Icons.folder_outlined,
               title: l10n.settingsData,
-              subtitle: storePath,
               onTap: () =>
                   setState(() => _activeCategory = SettingsCategory.data),
             ),
             SettingsTile(
               icon: Icons.info_outline_rounded,
               title: l10n.settingsAbout,
-              subtitle: l10n.appName,
               onTap: () =>
                   setState(() => _activeCategory = SettingsCategory.about),
             ),
@@ -326,14 +312,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             generateSection(
-              title: l10n.settingsLanguage,
+              title: l10n.settingsGeneral,
               items: [
-                SettingsTile(
-                  icon: Icons.translate_rounded,
-                  title: l10n.settingsLanguage,
-                  subtitle: _localeLabel(l10n, preferences.locale),
-                  onTap: () => unawaited(_pickLanguage(preferences.locale)),
-                ),
                 SettingsTile(
                   icon: Icons.cloud_upload_outlined,
                   title: l10n.imageHostTitle,
@@ -574,13 +554,6 @@ class _AudioDevicePicker extends ConsumerWidget {
     );
   }
 }
-
-String _themeLabel(AppLocalizations l10n, AppThemePreference theme) =>
-    switch (theme) {
-      AppThemePreference.system => l10n.settingsThemeSystem,
-      AppThemePreference.light => l10n.settingsThemeLight,
-      AppThemePreference.dark => l10n.settingsThemeDark,
-    };
 
 String _localeLabel(AppLocalizations l10n, String? locale) => switch (locale) {
   null => l10n.settingsLanguageSystem,

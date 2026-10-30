@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
+import '../../../widgets/popup.dart';
 
 enum ItemPosition {
   start,
@@ -178,6 +179,7 @@ class SettingsTile extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             if (leadingWidget != null) ...[
               leadingWidget,
@@ -186,6 +188,7 @@ class SettingsTile extends StatelessWidget {
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
@@ -223,6 +226,64 @@ class SettingsTile extends StatelessWidget {
                 color: secondary.withValues(alpha: 0.7),
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 带弹出菜单和取值切换动效的选项设置行（移植自 FlClash ListItem.options）。
+class SettingsOptionsTile<T> extends StatefulWidget {
+  const SettingsOptionsTile({
+    required this.title,
+    this.icon,
+    this.leading,
+    required this.options,
+    required this.value,
+    required this.textBuilder,
+    required this.onChanged,
+    super.key,
+  });
+
+  final String title;
+  final IconData? icon;
+  final Widget? leading;
+  final List<T> options;
+  final T value;
+  final String Function(T value) textBuilder;
+  final ValueChanged<T> onChanged;
+
+  @override
+  State<SettingsOptionsTile<T>> createState() => _SettingsOptionsTileState<T>();
+}
+
+class _SettingsOptionsTileState<T> extends State<SettingsOptionsTile<T>> {
+  PopupOpen? _openMenu;
+
+  @override
+  Widget build(BuildContext context) {
+    return SettingsTile(
+      title: widget.title,
+      icon: widget.icon,
+      leading: widget.leading,
+      onTap: () => _openMenu?.call(),
+      trailing: CommonPopupBox(
+        targetBuilder: (open) {
+          _openMenu = open;
+          return OptionsValueButton(
+            label: widget.textBuilder(widget.value),
+            onPressed: open,
+          );
+        },
+        popupBuilder: (_) => CommonPopupMenu(
+          items: [
+            for (final option in widget.options)
+              CommonPopupMenuItem(
+                label: widget.textBuilder(option),
+                checked: option == widget.value,
+                onPressed: () => widget.onChanged(option),
+              ),
           ],
         ),
       ),
