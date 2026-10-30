@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flspeak/features/settings/widgets/about_card.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
+import 'package:flspeak/widgets/common.dart';
 
 void main() {
   Widget buildTestWidget({
@@ -29,6 +30,7 @@ void main() {
     await tester.pumpWidget(buildTestWidget(locale: const Locale('zh')));
     await tester.pumpAndSettle();
 
+    expect(find.byType(HairlineCard), findsOneWidget);
     expect(find.text('FlSpeak'), findsOneWidget);
     expect(find.text('又一个跨平台、开源的 TeamSpeak 客户端'), findsOneWidget);
     expect(find.text('项目与源码'), findsOneWidget);

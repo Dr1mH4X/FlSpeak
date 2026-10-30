@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/common.dart';
 
 const String _repoUrl = 'https://github.com/Dr1mH4X/FlSpeak';
 const String _issuesUrl = 'https://github.com/Dr1mH4X/FlSpeak/issues';
@@ -44,182 +45,172 @@ class AboutCard extends StatelessWidget {
     final scheme = context.scheme;
     final isDark = context.isDark;
 
-    final cardBg = isDark
-        ? scheme.surfaceContainerLow
-        : scheme.surfaceContainerLowest;
     final sectionBg = isDark
         ? scheme.surfaceContainer
         : scheme.surfaceContainerLow;
 
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 540),
-        child: Container(
-          decoration: BoxDecoration(
-            color: cardBg,
-            borderRadius: Radii.xxlAll,
-            border: Border.all(color: hairlineSide(context).color),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // 1. 图标占位
-              Center(
-                child: Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? scheme.surfaceContainerHigh
-                        : scheme.surfaceContainerLowest,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: scheme.outlineVariant.withValues(alpha: 0.6),
-                      width: 1.5,
-                    ),
+    return HairlineCard(
+      clip: true,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // 1. 图标占位
+            Center(
+              child: Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? scheme.surfaceContainerHigh
+                      : scheme.surfaceContainerLowest,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: scheme.outlineVariant.withValues(alpha: 0.6),
+                    width: 1.5,
                   ),
                 ),
               ),
-              const SizedBox(height: 18),
+            ),
+            const SizedBox(height: 18),
 
-              // 2. 应用名称
-              Center(
+            // 2. 应用名称
+            Center(
+              child: Text(
+                l10n.appName,
+                style: context.texts.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 24,
+                  letterSpacing: -0.3,
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+
+            // 3. 副标题 / 描述
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Text(
-                  l10n.appName,
-                  style: context.texts.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 24,
-                    letterSpacing: -0.3,
+                  l10n.aboutSubtitle,
+                  textAlign: TextAlign.center,
+                  style: context.texts.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
                   ),
                 ),
               ),
-              const SizedBox(height: 6),
+            ),
+            const SizedBox(height: 28),
 
-              // 3. 副标题 / 描述
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Text(
-                    l10n.aboutSubtitle,
-                    textAlign: TextAlign.center,
-                    style: context.texts.bodyMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
+            // 4. 联系与项目源码
+            _InfoSection(
+              backgroundColor: sectionBg,
+              icon: Icons.mail_outline_rounded,
+              title: l10n.aboutSourceAndFeedback,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _BulletLinkRow(
+                    label: '${l10n.aboutSourceCode}: ',
+                    linkText: 'GitHub',
+                    url: _repoUrl,
+                    onTap: () => onOpenUrl(_repoUrl),
                   ),
-                ),
+                  const SizedBox(height: 8),
+                  _BulletLinkRow(
+                    label: '${l10n.aboutIssueTracker}: ',
+                    linkText: 'GitHub Issue',
+                    url: _issuesUrl,
+                    onTap: () => onOpenUrl(_issuesUrl),
+                  ),
+                ],
               ),
-              const SizedBox(height: 28),
+            ),
+            const SizedBox(height: 14),
 
-              // 4. 联系与项目源码
-              _InfoSection(
-                backgroundColor: sectionBg,
-                icon: Icons.mail_outline_rounded,
-                title: l10n.aboutSourceAndFeedback,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _BulletLinkRow(
-                      label: '${l10n.aboutSourceCode}: ',
-                      linkText: 'GitHub',
-                      url: _repoUrl,
-                      onTap: () => onOpenUrl(_repoUrl),
-                    ),
-                    const SizedBox(height: 8),
-                    _BulletLinkRow(
-                      label: '${l10n.aboutIssueTracker}: ',
-                      linkText: 'GitHub Issue',
-                      url: _issuesUrl,
-                      onTap: () => onOpenUrl(_issuesUrl),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 14),
-
-              // 5. 许可证卡片
-              _InfoSection(
-                backgroundColor: sectionBg,
-                icon: Icons.description_outlined,
-                title: l10n.aboutLicense,
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: Semantics(
-                    link: true,
-                    label: 'GNU Affero General Public License v3.0 (AGPL-3.0)',
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(6),
-                      mouseCursor: SystemMouseCursors.click,
-                      onTap: () => onOpenUrl(_licenseUrl),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 4,
-                          horizontal: 2,
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                'GNU Affero General Public License v3.0 (AGPL-3.0)',
-                                style: context.texts.bodyMedium?.copyWith(
-                                  color: scheme.primary,
-                                  fontWeight: FontWeight.w600,
-                                  decoration: TextDecoration.underline,
-                                  decorationColor: scheme.primary.withValues(
-                                    alpha: 0.4,
-                                  ),
+            // 5. 许可证卡片
+            _InfoSection(
+              backgroundColor: sectionBg,
+              icon: Icons.description_outlined,
+              title: l10n.aboutLicense,
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: Semantics(
+                  link: true,
+                  label: 'GNU Affero General Public License v3.0 (AGPL-3.0)',
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(6),
+                    mouseCursor: SystemMouseCursors.click,
+                    onTap: () => onOpenUrl(_licenseUrl),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 4,
+                        horizontal: 2,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              'GNU Affero General Public License v3.0 (AGPL-3.0)',
+                              style: context.texts.bodyMedium?.copyWith(
+                                color: scheme.primary,
+                                fontWeight: FontWeight.w600,
+                                decoration: TextDecoration.underline,
+                                decorationColor: scheme.primary.withValues(
+                                  alpha: 0.4,
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 4),
-                            Icon(
-                              Icons.open_in_new_rounded,
-                              size: 14,
-                              color: scheme.primary,
-                            ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.open_in_new_rounded,
+                            size: 14,
+                            color: scheme.primary,
+                          ),
+                        ],
                       ),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
+            ),
+            const SizedBox(height: 24),
 
-              // 6. 分割线与底部 Powered by tsclient-rs
-              Divider(
-                color: scheme.outlineVariant.withValues(alpha: 0.5),
-                height: 1,
-              ),
-              const SizedBox(height: 16),
-              Center(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Powered by ',
-                      style: context.texts.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
-                        fontSize: 12,
-                      ),
+            // 6. 分割线与底部 Powered by tsclient-rs
+            Divider(
+              color: scheme.outlineVariant.withValues(alpha: 0.5),
+              height: 1,
+            ),
+            const SizedBox(height: 16),
+            Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Powered by ',
+                    style: context.texts.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+                      fontSize: 12,
                     ),
-                    _InteractiveLink(
-                      text: 'tsclient-rs',
-                      url: _tsclientUrl,
-                      onTap: () => onOpenUrl(_tsclientUrl),
-                      textStyle: context.texts.bodySmall?.copyWith(
-                        color: scheme.primary,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 12,
-                      ),
+                  ),
+                  _InteractiveLink(
+                    text: 'tsclient-rs',
+                    url: _tsclientUrl,
+                    onTap: () => onOpenUrl(_tsclientUrl),
+                    textStyle: context.texts.bodySmall?.copyWith(
+                      color: scheme.primary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
