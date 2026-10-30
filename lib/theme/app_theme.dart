@@ -101,8 +101,8 @@ abstract final class Breakpoints {
 
 /// 桌面三栏布局与触控尺寸。
 abstract final class Sizes {
-  /// 顶栏高度 `h-16`。
-  static const header = 64.0;
+  /// 顶栏高度 `h-12`。收敛为 48 保持与红绿灯高度居中对齐及全平台紧凑统一。
+  static const header = 48.0;
 
   /// 服务器栏宽度 `w-20`。
   static const rail = 80.0;

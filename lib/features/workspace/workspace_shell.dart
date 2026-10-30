@@ -115,6 +115,7 @@ class WorkspaceShell extends ConsumerWidget {
     return Scaffold(
       backgroundColor: scheme.surface,
       body: SafeArea(
+        top: false,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -138,7 +139,7 @@ class WorkspaceShell extends ConsumerWidget {
   }
 }
 
-/// 主内容区在桌面以圆角与导航分隔，窄屏铺满。
+/// 主内容区在桌面与导航分隔，顶栏直通窗口上沿。
 class _MainSurface extends StatelessWidget {
   const _MainSurface({required this.compact, required this.child});
 
@@ -151,9 +152,7 @@ class _MainSurface extends StatelessWidget {
 
     return Material(
       color: scheme.surface,
-      borderRadius: compact
-          ? BorderRadius.zero
-          : const BorderRadius.only(topLeft: Radius.circular(Radii.xxl)),
+      borderRadius: BorderRadius.zero,
       clipBehavior: Clip.antiAlias,
       child: child,
     );

@@ -14,11 +14,12 @@ import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
 import '../../../widgets/channel_icon.dart';
 import '../../../widgets/monogram.dart';
-import '../workspace_state.dart';
-import 'client_actions.dart';
-import 'channel_password_dialog.dart';
-import 'voice_activity_ribbon.dart';
 import '../../../widgets/press_feedback.dart';
+import '../../../widgets/window_header.dart';
+import '../workspace_state.dart';
+import 'channel_password_dialog.dart';
+import 'client_actions.dart';
+import 'voice_activity_ribbon.dart';
 
 /// 频道栏：服务器身份、统一的频道树、当前用户。
 ///
@@ -170,28 +171,30 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
   ) {
     return SizedBox(
       height: Sizes.header,
-      child: Padding(
-        padding: const EdgeInsets.only(left: 20, right: 4),
-        child: Row(
-          children: [
-            Icon(
-              Icons.dns_outlined,
-              size: IconSizes.toolbar,
-              color: context.scheme.primary,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                view.activeServer?.label ?? l10n.appName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: context.texts.titleMedium?.copyWith(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w500,
+      child: WindowDragRegion(
+        child: Padding(
+          padding: const EdgeInsets.only(left: 16, right: 8),
+          child: Row(
+            children: [
+              Icon(
+                Icons.dns_outlined,
+                size: IconSizes.medium,
+                color: context.scheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  view.activeServer?.label ?? l10n.appName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.texts.titleMedium?.copyWith(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

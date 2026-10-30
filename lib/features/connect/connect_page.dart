@@ -247,6 +247,7 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
     return Scaffold(
       backgroundColor: scheme.surfaceContainerLowest,
       body: SafeArea(
+        top: !desktop,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -257,11 +258,7 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
             Expanded(
               child: Material(
                 color: scheme.surface,
-                borderRadius: desktop
-                    ? const BorderRadius.only(
-                        topLeft: Radius.circular(Radii.xxl),
-                      )
-                    : BorderRadius.zero,
+                borderRadius: BorderRadius.zero,
                 clipBehavior: Clip.antiAlias,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,

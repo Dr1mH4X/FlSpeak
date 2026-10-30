@@ -9,6 +9,7 @@ import '../../l10n/app_localizations.dart';
 import '../../theme/app_motion.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common.dart';
+import '../../widgets/window_header.dart';
 import '../settings/widgets/image_host_dialog.dart';
 import 'widgets/chat_pane.dart';
 import 'widgets/channel_files_pane.dart';
@@ -274,7 +275,7 @@ class _ChannelHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final horizontal = compact ? 8.0 : 24.0;
+    final horizontal = compact ? 8.0 : 16.0;
     final hasChannel = channel != null;
 
     return Container(
@@ -303,15 +304,22 @@ class _ChannelHeader extends StatelessWidget {
               const SizedBox(width: 8),
             ],
             Expanded(
-              child: Semantics(
-                header: true,
-                child: Text(
-                  channel != null ? channelDisplayName(channel!) : l10n.appName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: context.texts.titleMedium?.copyWith(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w500,
+              child: WindowDragRegion(
+                child: Semantics(
+                  header: true,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      channel != null
+                          ? channelDisplayName(channel!)
+                          : l10n.appName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.texts.titleMedium?.copyWith(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -342,12 +350,12 @@ class _ViewTabs extends StatelessWidget {
       isScrollable: true,
       // M3 scrollable tabs 的默认对齐：首签偏移一个 tab 边距。
       tabAlignment: TabAlignment.start,
-      // 频道头只有 64 高，页签压到 40 贴标题基线。
+      // 频道头为 48 高，页签压到 36 垂直居中。
       splashBorderRadius: Radii.pillAll,
       tabs: [
         for (final tab in tabs)
           Tab(
-            height: 48,
+            height: 36,
             child: Icon(
               tab.icon,
               size: IconSizes.medium,

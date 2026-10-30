@@ -456,6 +456,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         child: Scaffold(
           backgroundColor: context.pageColor,
           body: SafeArea(
+            top: compact,
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [

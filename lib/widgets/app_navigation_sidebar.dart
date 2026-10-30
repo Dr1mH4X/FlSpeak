@@ -16,8 +16,9 @@ import 'common.dart';
 import 'monogram.dart';
 import 'server_icon_picker.dart';
 import 'view_scope.dart';
+import 'window_header.dart';
 
-const double _compactWidth = 48.0;
+const double _compactWidth = Sizes.rail;
 const double _expandedWidth = 200.0;
 const double _itemSize = 38.0;
 const double _itemGap = 6.0;
@@ -27,8 +28,8 @@ const Duration _expandDuration = Duration(milliseconds: 240);
 
 enum AppNavDestination { home, server, settings }
 
-/// 全局常驻侧边栏：收窄态 48px，展开态 200px。
-/// 顺序：顶部（折叠展开）-> 首页 -> 服务器列表（纯自定义图标）-> 弹性空白 -> 添加服务器 -> 设置 -> 底部。
+/// 全局常驻侧边栏：收窄态 80px（完全包裹 macOS 78px 红绿灯），展开态 200px。
+/// 顺序：顶部（macOS 避让 / 折叠展开）-> 首页 -> 服务器列表（纯自定义图标）-> 弹性空白 -> 添加服务器 -> 设置 -> 底部。
 class AppNavigationSidebar extends ConsumerStatefulWidget {
   const AppNavigationSidebar({
     required this.selectedDestination,
@@ -121,7 +122,8 @@ class _AppNavigationSidebarState extends ConsumerState<AppNavigationSidebar> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // 1. 顶部避让与折叠/展开按钮
-                SizedBox(height: windowControls.height + 4),
+                if (windowControls.height > 0)
+                  const WindowDragRegion(child: SizedBox(height: Sizes.header)),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 5),
                   child: Semantics(
@@ -132,14 +134,21 @@ class _AppNavigationSidebarState extends ConsumerState<AppNavigationSidebar> {
                       onTap: _toggleExpand,
                       child: SizedBox(
                         height: _itemSize,
-                        child: Center(
-                          child: Icon(
-                            _globalExpanded
-                                ? Icons.menu_open_rounded
-                                : Icons.menu_rounded,
-                            size: IconSizes.toolbar,
-                            color: scheme.onSurfaceVariant,
-                          ),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: _compactWidth - 10,
+                              child: Center(
+                                child: Icon(
+                                  _globalExpanded
+                                      ? Icons.menu_open_rounded
+                                      : Icons.menu_rounded,
+                                  size: IconSizes.toolbar,
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
