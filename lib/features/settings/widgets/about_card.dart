@@ -10,6 +10,7 @@ const String _repoUrl = 'https://github.com/Dr1mH4X/FlSpeak';
 const String _issuesUrl = 'https://github.com/Dr1mH4X/FlSpeak/issues';
 const String _licenseUrl =
     'https://github.com/Dr1mH4X/FlSpeak/blob/main/LICENSE';
+const String _tsclientUrl = 'https://github.com/Dr1mH4X/tsclient-rs';
 
 /// 跨平台在系统默认浏览器中打开外部链接。
 Future<bool> openExternalUrl(String url) async {
@@ -98,10 +99,14 @@ class AboutCard extends StatelessWidget {
 
               // 3. 副标题 / 描述
               Center(
-                child: Text(
-                  l10n.aboutSubtitle,
-                  style: context.texts.bodyMedium?.copyWith(
-                    color: scheme.onSurfaceVariant,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    l10n.aboutSubtitle,
+                    textAlign: TextAlign.center,
+                    style: context.texts.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
               ),
@@ -121,7 +126,7 @@ class AboutCard extends StatelessWidget {
                       url: _repoUrl,
                       onTap: () => onOpenUrl(_repoUrl),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     _BulletLinkRow(
                       label: '${l10n.aboutIssueTracker}: ',
                       linkText: 'GitHub Issue',
@@ -138,19 +143,43 @@ class AboutCard extends StatelessWidget {
                 backgroundColor: sectionBg,
                 icon: Icons.description_outlined,
                 title: l10n.aboutLicense,
-                child: Semantics(
-                  link: true,
-                  label: 'GNU Affero General Public License v3.0 (AGPL-3.0)',
-                  child: InkWell(
-                    borderRadius: Radii.smallAll,
-                    onTap: () => onOpenUrl(_licenseUrl),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Text(
-                        'GNU Affero General Public License v3.0 (AGPL-3.0)',
-                        style: context.texts.bodyMedium?.copyWith(
-                          color: scheme.primary,
-                          fontWeight: FontWeight.w500,
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: Semantics(
+                    link: true,
+                    label: 'GNU Affero General Public License v3.0 (AGPL-3.0)',
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(6),
+                      mouseCursor: SystemMouseCursors.click,
+                      onTap: () => onOpenUrl(_licenseUrl),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 4,
+                          horizontal: 2,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                'GNU Affero General Public License v3.0 (AGPL-3.0)',
+                                style: context.texts.bodyMedium?.copyWith(
+                                  color: scheme.primary,
+                                  fontWeight: FontWeight.w600,
+                                  decoration: TextDecoration.underline,
+                                  decorationColor: scheme.primary.withValues(
+                                    alpha: 0.4,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.open_in_new_rounded,
+                              size: 14,
+                              color: scheme.primary,
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -159,19 +188,34 @@ class AboutCard extends StatelessWidget {
               ),
               const SizedBox(height: 24),
 
-              // 6. 分割线与底部 Powered by
+              // 6. 分割线与底部 Powered by tsclient-rs
               Divider(
                 color: scheme.outlineVariant.withValues(alpha: 0.5),
                 height: 1,
               ),
               const SizedBox(height: 16),
               Center(
-                child: Text(
-                  'Powered by Flutter & Rust',
-                  style: context.texts.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
-                    fontSize: 12,
-                  ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Powered by ',
+                      style: context.texts.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+                        fontSize: 12,
+                      ),
+                    ),
+                    _InteractiveLink(
+                      text: 'tsclient-rs',
+                      url: _tsclientUrl,
+                      onTap: () => onOpenUrl(_tsclientUrl),
+                      textStyle: context.texts.bodySmall?.copyWith(
+                        color: scheme.primary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -252,7 +296,7 @@ class _BulletLinkRow extends StatelessWidget {
     final scheme = context.scheme;
 
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Text(
           '•  ',
@@ -266,27 +310,76 @@ class _BulletLinkRow extends StatelessWidget {
             color: scheme.onSurfaceVariant,
           ),
         ),
-        Semantics(
-          link: true,
-          label: '$label$linkText',
-          child: InkWell(
-            borderRadius: BorderRadius.circular(4),
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: Text(
-                linkText,
-                style: context.texts.bodyMedium?.copyWith(
-                  color: scheme.primary,
-                  fontWeight: FontWeight.w600,
-                  decoration: TextDecoration.underline,
-                  decorationColor: scheme.primary.withValues(alpha: 0.5),
-                ),
+        _InteractiveLink(text: linkText, url: url, onTap: onTap),
+      ],
+    );
+  }
+}
+
+class _InteractiveLink extends StatefulWidget {
+  const _InteractiveLink({
+    required this.text,
+    required this.url,
+    required this.onTap,
+    this.textStyle,
+  });
+
+  final String text;
+  final String url;
+  final VoidCallback onTap;
+  final TextStyle? textStyle;
+
+  @override
+  State<_InteractiveLink> createState() => _InteractiveLinkState();
+}
+
+class _InteractiveLinkState extends State<_InteractiveLink> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.scheme;
+    final baseStyle =
+        widget.textStyle ??
+        context.texts.bodyMedium?.copyWith(
+          color: scheme.primary,
+          fontWeight: FontWeight.w600,
+        );
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Semantics(
+        link: true,
+        label: widget.text,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            decoration: BoxDecoration(
+              color: _hovered
+                  ? scheme.primary.withValues(alpha: 0.1)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              widget.text,
+              style: baseStyle?.copyWith(
+                color: _hovered
+                    ? scheme.primary
+                    : scheme.primary.withValues(alpha: 0.9),
+                decoration: TextDecoration.underline,
+                decorationColor: _hovered
+                    ? scheme.primary
+                    : scheme.primary.withValues(alpha: 0.4),
               ),
             ),
           ),
         ),
-      ],
+      ),
     );
   }
 }

@@ -330,7 +330,7 @@
   "channelDescription": "Channel Description",
   "channelDescriptionEmpty": "No description for this channel",
   "channelDescriptionFailed": "Failed to load channel description",
-  "aboutSubtitle": "Self-hosted TeamSpeak 3 client",
+  "aboutSubtitle": "Yet another teamspeak client, multi-platform and open-source.",
   "aboutSourceAndFeedback": "Project & Source",
   "aboutSourceCode": "Source Code",
   "aboutIssueTracker": "Issue Tracker",

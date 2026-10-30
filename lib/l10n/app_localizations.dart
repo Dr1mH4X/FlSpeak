@@ -1307,7 +1307,7 @@ abstract class AppLocalizations {
   /// No description provided for @aboutSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Self-hosted TeamSpeak 3 client'**
+  /// **'Yet another teamspeak client, multi-platform and open-source.'**
   String get aboutSubtitle;
 
   /// No description provided for @aboutSourceAndFeedback.

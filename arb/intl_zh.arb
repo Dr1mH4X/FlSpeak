@@ -330,7 +330,7 @@
   "channelDescription": "频道简介",
   "channelDescriptionEmpty": "此频道暂无简介",
   "channelDescriptionFailed": "获取频道简介失败",
-  "aboutSubtitle": "自托管 TeamSpeak 3 客户端",
+  "aboutSubtitle": "又一个跨平台、开源的 TeamSpeak 客户端",
   "aboutSourceAndFeedback": "项目与源码",
   "aboutSourceCode": "开源代码",
   "aboutIssueTracker": "问题反馈",

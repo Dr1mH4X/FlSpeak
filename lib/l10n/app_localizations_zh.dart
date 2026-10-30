@@ -656,7 +656,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get channelDescriptionFailed => '获取频道简介失败';
 
   @override
-  String get aboutSubtitle => '自托管 TeamSpeak 3 客户端';
+  String get aboutSubtitle => '又一个跨平台、开源的 TeamSpeak 客户端';
 
   @override
   String get aboutSourceAndFeedback => '项目与源码';
