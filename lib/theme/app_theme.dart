@@ -104,8 +104,8 @@ abstract final class Sizes {
   /// 顶栏高度 `h-12`。收敛为 48 保持与红绿灯高度居中对齐及全平台紧凑统一。
   static const header = 48.0;
 
-  /// 服务器栏宽度 `w-20`。
-  static const rail = 80.0;
+  /// 服务器导航栏基准紧凑宽度（对齐 FlClash 48px，macOS 红绿灯避让动态取 78px）。
+  static const rail = 48.0;
 
   /// 频道栏宽度 `w-72`。也是拖动分隔条后双击恢复的默认值。
   static const channelPanel = 288.0;
@@ -131,8 +131,8 @@ abstract final class Sizes {
   /// 让同一套控件跨端保持一致的命中面积。
   static const touch = 48.0;
 
-  /// 服务器栏磁贴 `size-12`。
-  static const railTile = 48.0;
+  /// 服务器栏磁贴与导航项高度（对齐 FlClash 40px）。
+  static const railTile = 40.0;
 }
 
 /// 图标语义尺寸规范（基于 Material 3 与紧凑桌面界面收敛）。

@@ -29,6 +29,7 @@
 | `lib/widgets/goo.dart` | `lib/ui/goo.dart` |
 | `lib/widgets/theme_cross_fade.dart` | `lib/ui/theme_cross_fade.dart` |
 | `lib/widgets/popup.dart` | `lib/ui/popup.dart`、`lib/ui/list.dart` |
+| `lib/widgets/app_navigation_sidebar.dart` | `lib/ui/sidebar.dart` |
 
 ## FlClash 的 window 插件
 

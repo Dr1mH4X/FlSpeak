@@ -82,14 +82,13 @@ class WorkspaceShell extends ConsumerWidget {
     );
     final surface = _MainSurface(compact: compact, child: child);
 
+    final compactWidth = AppNavigationSidebar.compactWidthOf(context);
+
     if (compact) {
       return Scaffold(
         backgroundColor: scheme.surface,
         drawer: Drawer(
-          width: math.min(
-            AppNavigationSidebar.compactWidth + Sizes.channelPanel,
-            width - 24,
-          ),
+          width: math.min(compactWidth + Sizes.channelPanel, width - 24),
           backgroundColor: panelColor,
           surfaceTintColor: Colors.transparent,
           shape: const RoundedRectangleBorder(
@@ -125,7 +124,7 @@ class WorkspaceShell extends ConsumerWidget {
               maxWidth: math.max(
                 Sizes.channelPanelMin,
                 width -
-                    AppNavigationSidebar.compactWidth -
+                    compactWidth -
                     Sizes.mainPaneMin -
                     ChannelPaneResizer.handleWidth,
               ),
