@@ -35,6 +35,7 @@ rand = "0.10"
 sha1 = "0.10"
 base64 = "0.22"
 pulldown-cmark = { version = "0.13", default-features = false }
+sysproxy = "0.3"
 
 audio = { path = "core/audio" }
 proto = { path = "core/proto" }

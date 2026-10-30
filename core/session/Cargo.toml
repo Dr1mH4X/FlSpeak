@@ -20,3 +20,6 @@ base64.workspace = true
 server.workspace = true
 tsclient-rs.workspace = true
 pulldown-cmark.workspace = true
+
+[target.'cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))'.dependencies]
+sysproxy = { workspace = true }

@@ -72,13 +72,13 @@ URL 图片已实现：
 - Dart `MessageContent` 通过 FFI `fetchImage(url)` 取字节，Rust 侧
   `core/session/src/images.rs` 做校验与抓取。
 - 校验：只允许 http/https、拒绝凭据、拒绝 `proto::forbidden_host` 命中的官方主机、
-  拒绝 localhost/私网/链路本地/组播/CGNAT/IPv4-mapped IPv6；DNS 解析后逐个检查并
+  拒绝 localhost/私有主机名（.local/.lan/.internal）/私网/链路本地/组播/CGNAT/IPv4-mapped IPv6；DNS 解析后逐个检查并
   固定到选中的公网地址（降低 DNS rebinding）。
 - 限制：最多 3 次重定向，每一跳重新校验；15s 超时；20 MiB 上限；content-type 必须
   `image/*` 或字节 magic 命中 PNG/JPEG/GIF/WebP/AVIF；失败显示“图片加载失败”和 URL。
 - 聊天缩略图、媒体墙与全屏查看器共用 `remoteImageProvider`，通过 Rust 抓取图片，按 URL 合并可见视图的请求；视图全部离开后释放字节。失败状态提供原地重试，普通重建不自动重试。
-- 图片请求不使用环境 HTTP 代理，DNS 校验后的全部公网地址用于连接重试；DNS、重定向与读取合计受 15s 超时限制。透明网卡代理可继续使用。
-- fake-IP DNS 返回的 `198.18.0.0/15` 地址仍被拒绝；使用 FlClash 等代理时，在其 fake-IP 过滤列表中加入需要加载的图片域名，使其返回真实地址。重定向后的图片域名也需满足同一条件。
+- 图片请求支持环境 HTTP 代理（`HTTP_PROXY`/`ALL_PROXY` 等）与操作系统级系统代理（macOS/Windows/Linux），当检测到代理存在时跳过本地 DNS 预解析与 IP 绑定，由代理端远端解析以避免 DNS 污染；未配置代理时继续在本地进行 DNS 校验并固定 IP。无论是否使用代理，均严格校验公网 IP 字面量并拦截本地/私有主机名。DNS、重定向与读取合计受 15s 超时限制。
+- fake-IP DNS 返回的 `198.18.0.0/15`（RFC 2544 基准测试保留网段）予以放行，允许 FlClash、Clash 等 TUN/fake-IP 透明网卡代理在不修改域名过滤列表的情况下直接抓取图片；局域网（10/172.16/192.168）与环回私网仍被严格拦截。重定向后的图片域名也需满足同一条件。
 - 全屏查看器支持打开、前后翻页和关闭；图片文件名按 URL 路径规则解码一次。
 
 未实现：

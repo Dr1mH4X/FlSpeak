@@ -141,10 +141,50 @@ fn validate_url(raw: &str) -> Result<Url, ImageError> {
     if proto::forbidden_host(host).is_some() {
         return Err(ImageError::BlockedHost(host.to_string()));
     }
-    if host.eq_ignore_ascii_case("localhost") {
+    if is_forbidden_local_host(host) {
         return Err(ImageError::BlockedAddress(host.to_string()));
     }
     Ok(url)
+}
+
+fn is_forbidden_local_host(host: &str) -> bool {
+    let lower = host.to_ascii_lowercase();
+    lower == "localhost"
+        || lower.ends_with(".localhost")
+        || lower.ends_with(".local")
+        || lower.ends_with(".internal")
+        || lower.ends_with(".lan")
+}
+
+fn has_env_proxy() -> bool {
+    [
+        "HTTP_PROXY",
+        "http_proxy",
+        "HTTPS_PROXY",
+        "https_proxy",
+        "ALL_PROXY",
+        "all_proxy",
+    ]
+    .iter()
+    .any(|k| std::env::var_os(k).is_some_and(|v| !v.is_empty()))
+}
+
+#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
+fn get_system_proxy() -> Option<reqwest::Proxy> {
+    if let Ok(sys_proxy) = sysproxy::Sysproxy::get_system_proxy()
+        && sys_proxy.enable
+        && !sys_proxy.host.is_empty()
+        && sys_proxy.port > 0
+    {
+        let proxy_url = format!("http://{}:{}", sys_proxy.host, sys_proxy.port);
+        return reqwest::Proxy::all(&proxy_url).ok();
+    }
+    None
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+fn get_system_proxy() -> Option<reqwest::Proxy> {
+    None
 }
 
 async fn build_client(url: &Url) -> Result<Client, ImageError> {
@@ -155,18 +195,22 @@ async fn build_client(url: &Url) -> Result<Client, ImageError> {
         .port_or_known_default()
         .ok_or_else(|| ImageError::InvalidUrl("缺少端口".into()))?;
 
-    // 环境代理可自行解析原始域名，绕过已校验并固定的地址；透明网卡代理不受影响。
-    let mut builder = Client::builder()
-        .no_proxy()
-        .timeout(TIMEOUT)
-        .redirect(Policy::none());
+    let mut builder = Client::builder().timeout(TIMEOUT).redirect(Policy::none());
+
+    let has_env = has_env_proxy();
+    let sys_proxy = if !has_env { get_system_proxy() } else { None };
+    let has_proxy = has_env || sys_proxy.is_some();
+
+    if let Some(proxy) = sys_proxy {
+        builder = builder.proxy(proxy);
+    }
 
     let literal_host = host.trim_start_matches('[').trim_end_matches(']');
     if let Ok(ip) = literal_host.parse::<IpAddr>() {
         if !is_public_ip(ip) {
             return Err(ImageError::BlockedAddress(host.to_string()));
         }
-    } else {
+    } else if !has_proxy {
         let addresses = tokio::net::lookup_host((host, port))
             .await
             .map_err(|err| ImageError::Request(format!("DNS 解析失败: {err}")))?;
@@ -210,9 +254,11 @@ fn is_public_v4(ip: Ipv4Addr) -> bool {
     {
         return false;
     }
-    // 100.64.0.0/10 (CGNAT)、198.18.0.0/15 (benchmark) 也不是公共图片主机。
-    !(octets[0] == 100 && (64..=127).contains(&octets[1])
-        || octets[0] == 198 && (18..=19).contains(&octets[1]))
+    // 100.64.0.0/10 (CGNAT) 也不是公共图片主机。
+    // 注：198.18.0.0/15 (benchmark) 是 RFC 2544 基准测试保留网段，但现代透明网卡代理
+    // （如 Clash/FlClash/Sing-box）默认将其作为 Fake-IP 网段。放行该网段不增加局域网/环回
+    // SSRF 风险，并允许透明代理正常拉取图片。
+    !(octets[0] == 100 && (64..=127).contains(&octets[1]))
 }
 
 fn is_public_v6(ip: Ipv6Addr) -> bool {
@@ -273,12 +319,27 @@ mod tests {
     }
 
     #[test]
+    fn rejects_local_and_private_hostnames() {
+        for url in [
+            "http://localhost/a.png",
+            "http://app.localhost/a.png",
+            "http://my-nas.local/a.png",
+            "http://router.lan/a.png",
+            "http://service.internal/a.png",
+        ] {
+            assert!(matches!(
+                validate_url(url),
+                Err(ImageError::BlockedAddress(_))
+            ));
+        }
+    }
+
+    #[test]
     fn rejects_private_address_literals() {
         for url in [
             "http://127.0.0.1/a.png",
             "http://10.0.0.1/a.png",
             "http://192.168.1.1/a.png",
-            "http://198.18.0.4/a.png",
             "http://100.64.0.1/a.png",
             "http://[::1]/a.png",
             "http://[::ffff:127.0.0.1]/a.png",
@@ -289,6 +350,12 @@ mod tests {
                 Err(ImageError::BlockedAddress(_))
             ));
         }
+    }
+
+    #[test]
+    fn permits_fake_ip_benchmark_range_for_tun_proxies() {
+        let parsed = validate_url("http://198.18.0.4/a.png").unwrap();
+        assert!(build_client_blocking(&parsed).is_ok());
     }
 
     fn build_client_blocking(url: &Url) -> Result<Client, ImageError> {

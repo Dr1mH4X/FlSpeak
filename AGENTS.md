@@ -1,6 +1,6 @@
 # AGENTS.md
 
-自托管 TeamSpeak 客户端：Flutter 负责界面，Rust 负责协议、连接边界与音频。
+TeamSpeak 第三方客户端：Flutter 负责界面，Rust 负责协议、连接边界与音频。
 
 ## 先读什么
 
