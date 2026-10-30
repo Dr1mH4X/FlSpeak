@@ -222,6 +222,7 @@ class CommonPopupRoute<T> extends PopupRoute<T> {
     this.sourceImage,
     this.modal = true,
     this.avoid,
+    this.reduceMotion = false,
   }) : super(requestFocus: modal ? null : false);
 
   final WidgetBuilder builder;
@@ -247,6 +248,9 @@ class CommonPopupRoute<T> extends PopupRoute<T> {
   /// A rect the popup keeps clear of when there is room above or below it.
   final Rect? avoid;
 
+  /// Whether animations should be bypassed when reduce motion is active.
+  final bool reduceMotion;
+
   @override
   final String? barrierLabel;
 
@@ -257,17 +261,23 @@ class CommonPopupRoute<T> extends PopupRoute<T> {
   bool get barrierDismissible => true;
 
   @override
-  Duration get transitionDuration => _openDuration;
+  Duration get transitionDuration =>
+      reduceMotion ? Duration.zero : _openDuration;
 
   @override
-  Duration get reverseTransitionDuration =>
-      sourceImage == null ? _shrinkDuration : _dismissDuration;
+  Duration get reverseTransitionDuration => reduceMotion
+      ? Duration.zero
+      : (sourceImage == null ? _shrinkDuration : _dismissDuration);
 
   // A controller reverses over the share of its duration it had run, so a
   // popup closed while opening would rush the return its morph times in full.
   @override
   bool didPop(T? result) {
     final controller = this.controller!;
+    if (reduceMotion) {
+      controller.reverseDuration = Duration.zero;
+      return super.didPop(result);
+    }
     controller.reverseDuration =
         reverseTransitionDuration * (1 / math.max(controller.value, 1e-3));
     return super.didPop(result);
@@ -277,7 +287,7 @@ class CommonPopupRoute<T> extends PopupRoute<T> {
 
   /// Whether the platter shows rather than the cards, which on glass stand
   /// bare meanwhile so that one pane, the platter's, bends what lies behind.
-  final _platter = ValueNotifier<bool>(true);
+  late final _platter = ValueNotifier<bool>(!reduceMotion);
 
   final _pin = _PopupPin();
 
@@ -288,15 +298,21 @@ class CommonPopupRoute<T> extends PopupRoute<T> {
   @override
   void install() {
     super.install();
-    animation!
-      ..addListener(_updatePlatter)
-      ..addStatusListener(_handleStatusChanged);
-    _unfolded.addListener(_updatePlatter);
+    if (!reduceMotion) {
+      animation!
+        ..addListener(_updatePlatter)
+        ..addStatusListener(_handleStatusChanged);
+      _unfolded.addListener(_updatePlatter);
+    }
   }
 
   void _handleStatusChanged(AnimationStatus status) => _updatePlatter();
 
   void _updatePlatter() {
+    if (reduceMotion) {
+      _platter.value = false;
+      return;
+    }
     final animation = this.animation!;
     // A popup with a control to return into does so on the platter; one
     // without dissolves as it stood when it began to close.
@@ -311,9 +327,12 @@ class CommonPopupRoute<T> extends PopupRoute<T> {
 
   @override
   void dispose() {
-    animation
-      ?..removeListener(_updatePlatter)
-      ..removeStatusListener(_handleStatusChanged);
+    if (!reduceMotion) {
+      animation
+        ?..removeListener(_updatePlatter)
+        ..removeStatusListener(_handleStatusChanged);
+      _unfolded.removeListener(_updatePlatter);
+    }
     _unfolded.dispose();
     _platter.dispose();
     super.dispose();
@@ -328,7 +347,7 @@ class CommonPopupRoute<T> extends PopupRoute<T> {
   /// A popup that returns into its control runs a picked item once landed,
   /// so nothing the item rebuilds changes under the returning platter.
   void _runPicked(VoidCallback action) {
-    if (sourceImage == null) {
+    if (reduceMotion || sourceImage == null) {
       action();
       return;
     }
@@ -381,14 +400,22 @@ class CommonPopupRoute<T> extends PopupRoute<T> {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
+    final effectiveReduceMotion =
+        reduceMotion || MediaQuery.disableAnimationsOf(context);
+    if (effectiveReduceMotion) {
+      _platter.value = false;
+    }
+    final effectiveAnimation = effectiveReduceMotion
+        ? kAlwaysCompleteAnimation
+        : animation;
     if (elevated) {
       return ElevatedSurfaceTheme(
         child: Builder(
-          builder: (context) => _buildPopup(context, animation, child),
+          builder: (context) => _buildPopup(context, effectiveAnimation, child),
         ),
       );
     }
-    return _buildPopup(context, animation, child);
+    return _buildPopup(context, effectiveAnimation, child);
   }
 
   Widget _buildPopup(
@@ -1561,7 +1588,8 @@ class _CommonPopupBoxState extends State<CommonPopupBox> {
     if (_route != null) {
       return;
     }
-    final snapshot = ValueNotifier<ui.Image?>(null);
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final snapshot = reduceMotion ? null : ValueNotifier<ui.Image?>(null);
     final route = _route = CommonPopupRoute<void>(
       barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
       builder: (context) => widget.popupBuilder(context),
@@ -1570,6 +1598,7 @@ class _CommonPopupBoxState extends State<CommonPopupBox> {
       elevated: ElevatedSurfaceTheme.isIn(context),
       sourceColor: _sourceColor(),
       sourceImage: snapshot,
+      reduceMotion: reduceMotion,
     );
     Navigator.of(context).push(route);
     void reveal() {
@@ -1588,14 +1617,16 @@ class _CommonPopupBoxState extends State<CommonPopupBox> {
         _route = null;
       }
       reveal();
-      snapshot.value?.dispose();
-      snapshot.dispose();
+      snapshot?.value?.dispose();
+      snapshot?.dispose();
     });
     // The control repaints its ink as it is tapped, so it can only be
     // captured once that frame has been painted.
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _captureSource(route, snapshot),
-    );
+    if (!reduceMotion && snapshot != null) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _captureSource(route, snapshot),
+      );
+    }
   }
 
   @override
@@ -2184,11 +2215,19 @@ class _CommonPopupMenuState extends State<CommonPopupMenu>
         ),
       );
     });
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _unfold.value = 1;
+      return;
+    }
     _unfold.value = 0;
     _unfoldTop();
   }
 
   TickerFuture _springTo(double target, SpringDescription spring) {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _unfold.value = target;
+      return TickerFuture.complete();
+    }
     return _unfold.animateWith(
       SpringSimulation(spring, _unfold.value, target, _unfold.velocity),
     );
@@ -2205,6 +2244,18 @@ class _CommonPopupMenuState extends State<CommonPopupMenu>
 
   void _pop() {
     if (_path.isEmpty || _folding) {
+      return;
+    }
+    if (MediaQuery.disableAnimationsOf(context)) {
+      setState(() {
+        _folding = false;
+        final step = _path.removeLast();
+        // The header stood on the item that opened its sub menu.
+        if (_pressed == _headerIndex) {
+          _pressed = step.index;
+        }
+        _unfold.value = 1;
+      });
       return;
     }
     setState(() => _folding = true);
@@ -2697,8 +2748,11 @@ class _CommonPopupMenuState extends State<CommonPopupMenu>
       // so a swell then would cut the menu's edges until the platter left.
       child: ValueListenableBuilder<bool>(
         valueListenable: _platter ?? const AlwaysStoppedAnimation(false),
-        builder: (_, platter, child) =>
-            ElasticPress(enabled: !platter, pullPastEdges: true, child: child!),
+        builder: (_, platter, child) => ElasticPress(
+          enabled: !platter && !MediaQuery.disableAnimationsOf(context),
+          pullPastEdges: true,
+          child: child!,
+        ),
         child: RawGestureDetector(
           key: _menuKey,
           gestures: {
