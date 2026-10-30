@@ -376,10 +376,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsVoiceMeter => '音频显示';
 
   @override
-  String get settingsVoiceMeterMic => '自己麦克风';
+  String get settingsVoiceMeterMic => '麦克风音频';
 
   @override
-  String get settingsVoiceMeterReceived => '接收到的音频';
+  String get settingsVoiceMeterReceived => '接收音频';
 
   @override
   String get settingsDeviceDefault => '系统默认';

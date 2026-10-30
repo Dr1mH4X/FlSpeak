@@ -779,7 +779,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsVoiceMeterMic.
   ///
   /// In en, this message translates to:
-  /// **'My microphone'**
+  /// **'Microphone audio'**
   String get settingsVoiceMeterMic;
 
   /// No description provided for @settingsVoiceMeterReceived.

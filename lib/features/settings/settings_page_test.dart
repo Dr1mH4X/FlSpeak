@@ -79,7 +79,7 @@ void main() {
         await tester.pumpAndSettle();
         visible.value = false;
         await tester.pump();
-        await tester.tap(find.text(language ? 'English' : '接收到的音频').last);
+        await tester.tap(find.text(language ? 'English' : '接收音频').last);
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
         final preferences = container.read(preferencesProvider);

@@ -183,7 +183,7 @@
   "settingsInputDevice": "Microphone",
   "settingsOutputDevice": "Speaker",
   "settingsVoiceMeter": "Audio display",
-  "settingsVoiceMeterMic": "My microphone",
+  "settingsVoiceMeterMic": "Microphone audio",
   "settingsVoiceMeterReceived": "Received audio",
   "settingsDeviceDefault": "System default",
   "settingsAudioUnavailable": "Audio devices unavailable",

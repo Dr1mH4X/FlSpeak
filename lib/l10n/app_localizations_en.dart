@@ -380,7 +380,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsVoiceMeter => 'Audio display';
 
   @override
-  String get settingsVoiceMeterMic => 'My microphone';
+  String get settingsVoiceMeterMic => 'Microphone audio';
 
   @override
   String get settingsVoiceMeterReceived => 'Received audio';
