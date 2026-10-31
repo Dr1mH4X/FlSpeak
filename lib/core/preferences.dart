@@ -231,31 +231,33 @@ class PreferencesStore {
   SessionPreferences get current => _preferences;
 
   static Future<PreferencesStore> load(String path) async {
-    try {
-      ffi.initSettings(storePath: path);
-      final jsonStr = ffi.getSettingsJson();
-      final decoded = jsonDecode(jsonStr);
-      if (decoded is Map) {
-        return PreferencesStore._(
-          path,
-          SessionPreferences.fromJson(decoded.cast<String, Object?>()),
-        );
-      }
-    } on Object catch (error) {
-      debugPrint('通过 FFI 读取设置失败，尝试回退磁盘读取：$error');
+    if (ffi.isRustLibInitialized) {
       try {
-        final file = File(path);
-        if (await file.exists()) {
-          final decoded = jsonDecode(await file.readAsString());
-          if (decoded is Map) {
-            return PreferencesStore._(
-              path,
-              SessionPreferences.fromJson(decoded.cast<String, Object?>()),
-            );
-          }
+        ffi.initSettings(storePath: path);
+        final jsonStr = ffi.getSettingsJson();
+        final decoded = jsonDecode(jsonStr);
+        if (decoded is Map) {
+          return PreferencesStore._(
+            path,
+            SessionPreferences.fromJson(decoded.cast<String, Object?>()),
+          );
         }
-      } catch (_) {}
+      } on Object catch (error) {
+        debugPrint('通过 FFI 读取设置失败，尝试回退磁盘读取：$error');
+      }
     }
+    try {
+      final file = File(path);
+      if (await file.exists()) {
+        final decoded = jsonDecode(await file.readAsString());
+        if (decoded is Map) {
+          return PreferencesStore._(
+            path,
+            SessionPreferences.fromJson(decoded.cast<String, Object?>()),
+          );
+        }
+      }
+    } catch (_) {}
     return PreferencesStore._(
       path,
       const SessionPreferences(nickname: SessionPreferences.fallbackNickname),
@@ -280,46 +282,50 @@ class PreferencesStore {
     _writeCompleted = completed.future;
     try {
       await previous;
-      try {
-        ffi.updateUiSettingsJson(json: jsonEncode(preferences.toJson()));
-        final jsonStr = ffi.getSettingsJson();
-        final decoded = jsonDecode(jsonStr);
-        if (decoded is Map) {
-          _preferences = SessionPreferences.fromJson(
-            decoded.cast<String, Object?>(),
-          );
+      if (ffi.isRustLibInitialized) {
+        try {
+          ffi.updateUiSettingsJson(json: jsonEncode(preferences.toJson()));
+          final jsonStr = ffi.getSettingsJson();
+          final decoded = jsonDecode(jsonStr);
+          if (decoded is Map) {
+            _preferences = SessionPreferences.fromJson(
+              decoded.cast<String, Object?>(),
+            );
+            return _preferences;
+          }
+        } on Object catch (e) {
+          debugPrint('通过 FFI 保存设置失败，尝试直接落盘 fallback: $e');
         }
-      } on Object catch (e) {
-        debugPrint('通过 FFI 保存设置失败，尝试直接落盘 fallback: $e');
-        final file = File(target);
-        await file.parent.create(recursive: true);
-
-        Map<String, Object?> existing = {};
-        if (await file.exists()) {
-          try {
-            final decoded = jsonDecode(await file.readAsString());
-            if (decoded is Map) {
-              existing = decoded.cast<String, Object?>();
-            }
-          } catch (_) {}
-        }
-
-        final trimmed = preferences.nickname.trim();
-        final normalizedNickname = trimmed.isEmpty
-            ? SessionPreferences.fallbackNickname
-            : trimmed;
-        final normalizedPreferences = preferences.copyWith(
-          nickname: normalizedNickname,
-        );
-
-        final payload = Map<String, Object?>.from(existing);
-        payload.addAll(normalizedPreferences.toJson());
-
-        final temporary = File('$target.tmp');
-        await temporary.writeAsString(jsonEncode(payload), flush: true);
-        await temporary.rename(target);
-        _preferences = normalizedPreferences;
       }
+
+      final file = File(target);
+      await file.parent.create(recursive: true);
+
+      Map<String, Object?> existing = {};
+      if (await file.exists()) {
+        try {
+          final decoded = jsonDecode(await file.readAsString());
+          if (decoded is Map) {
+            existing = decoded.cast<String, Object?>();
+          }
+        } catch (_) {}
+      }
+
+      final trimmed = preferences.nickname.trim();
+      final normalizedNickname = trimmed.isEmpty
+          ? SessionPreferences.fallbackNickname
+          : trimmed;
+      final normalizedPreferences = preferences.copyWith(
+        nickname: normalizedNickname,
+      );
+
+      final payload = Map<String, Object?>.from(existing);
+      payload.addAll(normalizedPreferences.toJson());
+
+      final temporary = File('$target.tmp');
+      await temporary.writeAsString(jsonEncode(payload), flush: true);
+      await temporary.rename(target);
+      _preferences = normalizedPreferences;
       return _preferences;
     } finally {
       completed.complete();
