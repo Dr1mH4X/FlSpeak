@@ -2,6 +2,7 @@
   "name": "flspeak-website",
   "private": true,
   "version": "0.1.0",
+  "packageManager": "pnpm@10.29.3",
   "type": "module",
   "scripts": {
     "sync-data": "node scripts/sync-github-data.mjs",
