@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { parseHashRoute } from '../hooks/useUrlState.ts';
 import { formatTranslation, translations } from '../i18n/translations.ts';
 import {
   classifyAllAssets,
@@ -197,4 +198,72 @@ test('bilingual translations and real synced CHANGELOG.md satisfy brand and zero
     `Expected at least 1 version release node, got ${parsedReal.length}`
   );
   assert.equal(parsedReal[0].year, '2026');
+  assert.equal(parsedReal[0].title, '首个正式版本发布');
+  assert.ok(parsedReal[0].summary?.includes('FlSpeak 的首个正式版本'));
+  assert.deepEqual(parsedReal[0].contributors, ['@Dr1mH4X', '@ZeroBlock0']);
+  assert.ok(
+    parsedReal[0].rawSections && parsedReal[0].rawSections.length > 0,
+    'Expected rawSections commits to be present'
+  );
+});
+
+test('parseHashRoute accurately routes home, changelog, and deep version anchors', () => {
+  assert.deepEqual(parseHashRoute(''), {
+    view: 'home',
+    targetVersion: null,
+    anchor: null,
+  });
+  assert.deepEqual(parseHashRoute('#/'), {
+    view: 'home',
+    targetVersion: null,
+    anchor: null,
+  });
+  assert.deepEqual(parseHashRoute('#download'), {
+    view: 'home',
+    targetVersion: null,
+    anchor: 'download',
+  });
+  assert.deepEqual(parseHashRoute('#/changelog'), {
+    view: 'changelog',
+    targetVersion: null,
+    anchor: null,
+  });
+  assert.deepEqual(parseHashRoute('#changelog'), {
+    view: 'changelog',
+    targetVersion: null,
+    anchor: null,
+  });
+  assert.deepEqual(parseHashRoute('#/changelog?v=v0.1.0'), {
+    view: 'changelog',
+    targetVersion: 'v0.1.0',
+    anchor: null,
+  });
+  assert.deepEqual(parseHashRoute('#/changelog/v0.1.0'), {
+    view: 'changelog',
+    targetVersion: 'v0.1.0',
+    anchor: null,
+  });
+  assert.deepEqual(parseHashRoute('#v0.1.0'), {
+    view: 'changelog',
+    targetVersion: 'v0.1.0',
+    anchor: null,
+  });
+  assert.deepEqual(parseHashRoute('#main@3a1d37c'), {
+    view: 'changelog',
+    targetVersion: 'main@3a1d37c',
+    anchor: null,
+  });
+});
+
+test('filterChangelogVersions searches title, summary, and rawSections', () => {
+  const syncedChangelogPath = resolve(__dirname, '../../public/CHANGELOG.md');
+  const syncedMarkdown = readFileSync(syncedChangelogPath, 'utf8');
+  const versions = parseChangelogMarkdown(syncedMarkdown);
+
+  const resTitle = filterChangelogVersions(versions, '首个正式版本');
+  assert.equal(resTitle.matchedVersionsCount, 1);
+  assert.equal(resTitle.versions[0].version, 'v0.1.0');
+
+  const resSummary = filterChangelogVersions(versions, '跨平台');
+  assert.equal(resSummary.matchedVersionsCount, 1);
 });

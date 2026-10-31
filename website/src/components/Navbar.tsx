@@ -128,12 +128,12 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className={`site-navbar ${scrolled ? 'is-scrolled' : ''}`}>
-      <a href="#changelog" className="skip-link">
+      <a href="#download" className="skip-link">
         {t('skipToDownloads')}
       </a>
 
       <div className="navbar-inner">
-        <a href="#" className="brand-link" aria-label={t('appTitle')}>
+        <a href="#/" className="brand-link" aria-label={t('appTitle')}>
           <span className="brand-glyph" aria-hidden="true">
             <img
               src="/icon.png"
@@ -164,7 +164,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           />
 
           <a
-            href="#changelog"
+            href="#/changelog"
             className="nav-item-link"
             onMouseEnter={handleItemEnter}
           >

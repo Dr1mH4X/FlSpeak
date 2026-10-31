@@ -11,6 +11,7 @@ const CATEGORY_ORDER: ChangelogCategory[] = [
   'fix',
   'perf',
   'revert',
+  'other',
 ];
 
 function mapHeadingToCategory(heading: string): ChangelogCategory | null {
@@ -48,6 +49,14 @@ function mapHeadingToCategory(heading: string): ChangelogCategory | null {
     lower.includes('撤销')
   ) {
     return 'revert';
+  }
+  if (
+    lower.includes('other') ||
+    lower.includes('其他') ||
+    lower.includes('misc') ||
+    lower.includes('chore')
+  ) {
+    return 'other';
   }
   return null;
 }
@@ -141,26 +150,77 @@ export function parseChangelogMarkdown(
     fix: [],
     perf: [],
     revert: [],
+    other: [],
   };
+  let rawBuckets: Record<ChangelogCategory, ChangelogItem[]> = {
+    breaking: [],
+    feat: [],
+    fix: [],
+    perf: [],
+    revert: [],
+    other: [],
+  };
+  let currentSummaryLines: string[] = [];
+  let currentContributors: string[] = [];
+  let mode: 'curated' | 'contributors' | 'rawCommits' = 'curated';
   let activeCategory: ChangelogCategory = 'feat';
+  let hasSeenSubHeading = false;
   let itemCounter = 0;
 
   function flushCurrent() {
     if (!currentVersion) return;
     const sections: ChangelogSection[] = [];
     for (const cat of CATEGORY_ORDER) {
-      if (currentBuckets[cat].length > 0) {
+      if (currentBuckets[cat] && currentBuckets[cat].length > 0) {
         sections.push({
           category: cat,
           items: currentBuckets[cat],
         });
       }
     }
-    if (sections.length > 0) {
+    const rawSections: ChangelogSection[] = [];
+    for (const cat of CATEGORY_ORDER) {
+      if (rawBuckets[cat] && rawBuckets[cat].length > 0) {
+        rawSections.push({
+          category: cat,
+          items: rawBuckets[cat],
+        });
+      }
+    }
+    if (sections.length > 0 || rawSections.length > 0) {
       currentVersion.sections = sections;
+      currentVersion.rawSections =
+        rawSections.length > 0 ? rawSections : undefined;
+      currentVersion.summary =
+        currentSummaryLines.length > 0
+          ? currentSummaryLines.join(' ').trim()
+          : null;
+      currentVersion.contributors =
+        currentContributors.length > 0 ? currentContributors : undefined;
       versions.push(currentVersion);
     }
     currentVersion = null;
+    currentSummaryLines = [];
+    currentContributors = [];
+    currentBuckets = {
+      breaking: [],
+      feat: [],
+      fix: [],
+      perf: [],
+      revert: [],
+      other: [],
+    };
+    rawBuckets = {
+      breaking: [],
+      feat: [],
+      fix: [],
+      perf: [],
+      revert: [],
+      other: [],
+    };
+    mode = 'curated';
+    activeCategory = 'feat';
+    hasSeenSubHeading = false;
   }
 
   for (const rawLine of lines) {
@@ -195,6 +255,7 @@ export function parseChangelogMarkdown(
           ? rawVer
           : `v${rawVer}`
         : rawVer;
+      const title = headerMatch[5] ? headerMatch[5].trim() : null;
 
       currentVersion = {
         version: displayVersion,
@@ -203,7 +264,11 @@ export function parseChangelogMarkdown(
         year,
         compareUrl,
         isTagRelease,
+        title,
+        summary: null,
+        contributors: undefined,
         sections: [],
+        rawSections: undefined,
       };
       currentBuckets = {
         breaking: [],
@@ -211,24 +276,77 @@ export function parseChangelogMarkdown(
         fix: [],
         perf: [],
         revert: [],
+        other: [],
       };
+      rawBuckets = {
+        breaking: [],
+        feat: [],
+        fix: [],
+        perf: [],
+        revert: [],
+        other: [],
+      };
+      currentSummaryLines = [];
+      currentContributors = [];
+      mode = 'curated';
       activeCategory = 'feat';
+      hasSeenSubHeading = false;
       continue;
     }
 
     const subHeadingMatch = line.match(/^#{2,4}\s+(.+)$/);
     if (subHeadingMatch && currentVersion) {
-      const mapped = mapHeadingToCategory(subHeadingMatch[1]);
-      if (mapped) {
-        activeCategory = mapped;
+      hasSeenSubHeading = true;
+      const subTitle = subHeadingMatch[1].trim();
+      const lower = subTitle.toLowerCase();
+      if (lower.includes('贡献者') || lower.includes('contributors')) {
+        mode = 'contributors';
+      } else if (lower.includes('commits') || lower.includes('提交')) {
+        mode = 'rawCommits';
+        activeCategory = 'feat';
+      } else {
+        const mapped = mapHeadingToCategory(subTitle);
+        if (mapped) {
+          activeCategory = mapped;
+        }
       }
       continue;
     }
 
+    if (
+      !line.startsWith('#') &&
+      !/^[-*+]\s+/.test(line) &&
+      currentVersion &&
+      !hasSeenSubHeading
+    ) {
+      currentSummaryLines.push(line);
+      continue;
+    }
+
     if (/^[-*+]\s+/.test(line) && currentVersion) {
-      const item = parseBulletLine(line, activeCategory, ++itemCounter, repoSlug);
-      if (item) {
-        currentBuckets[activeCategory].push(item);
+      if (mode === 'contributors') {
+        const c = line.replace(/^[-*+]\s+/, '').trim();
+        if (c) currentContributors.push(c);
+      } else if (mode === 'rawCommits') {
+        const item = parseBulletLine(
+          line,
+          activeCategory,
+          ++itemCounter,
+          repoSlug
+        );
+        if (item) {
+          rawBuckets[activeCategory].push(item);
+        }
+      } else {
+        const item = parseBulletLine(
+          line,
+          activeCategory,
+          ++itemCounter,
+          repoSlug
+        );
+        if (item) {
+          currentBuckets[activeCategory].push(item);
+        }
       }
     }
   }
@@ -269,6 +387,7 @@ export function buildChangelogFromCommits(
       fix: [],
       perf: [],
       revert: [],
+      other: [],
     };
 
     for (const commit of dayCommits) {
@@ -316,7 +435,7 @@ export function buildChangelogFromCommits(
 
     const sections: ChangelogSection[] = [];
     for (const cat of CATEGORY_ORDER) {
-      if (buckets[cat].length > 0) {
+      if (buckets[cat] && buckets[cat].length > 0) {
         sections.push({ category: cat, items: buckets[cat] });
       }
     }
@@ -354,7 +473,9 @@ export function filterChangelogVersions(
   if (!query) {
     const totalItems = versions.reduce(
       (sum, v) =>
-        sum + v.sections.reduce((sSum, sec) => sSum + sec.items.length, 0),
+        sum +
+        v.sections.reduce((sSum, sec) => sSum + sec.items.length, 0) +
+        (v.rawSections?.reduce((rSum, sec) => rSum + sec.items.length, 0) ?? 0),
       0
     );
     return {
@@ -370,27 +491,43 @@ export function filterChangelogVersions(
   for (const v of versions) {
     const versionMatches =
       v.version.toLowerCase().includes(query) ||
-      v.date.toLowerCase().includes(query);
+      v.date.toLowerCase().includes(query) ||
+      (v.title?.toLowerCase().includes(query) ?? false) ||
+      (v.summary?.toLowerCase().includes(query) ?? false);
 
-    const matchedSections: ChangelogSection[] = [];
-    for (const sec of v.sections) {
-      const items = sec.items.filter((item) => {
-        if (versionMatches) return true;
-        const inScope = item.scope?.toLowerCase().includes(query) ?? false;
-        const inDesc = item.description.toLowerCase().includes(query);
-        const inHash = item.shortHash?.toLowerCase().includes(query) ?? false;
-        return inScope || inDesc || inHash;
-      });
-      if (items.length > 0) {
-        matchedSections.push({ category: sec.category, items });
-        matchedItemsCount += items.length;
+    const filterSecList = (sectionsList: ChangelogSection[]) => {
+      const result: ChangelogSection[] = [];
+      for (const sec of sectionsList) {
+        const items = sec.items.filter((item) => {
+          if (versionMatches) return true;
+          const inScope = item.scope?.toLowerCase().includes(query) ?? false;
+          const inDesc = item.description.toLowerCase().includes(query);
+          const inHash = item.shortHash?.toLowerCase().includes(query) ?? false;
+          return inScope || inDesc || inHash;
+        });
+        if (items.length > 0) {
+          result.push({ category: sec.category, items });
+          matchedItemsCount += items.length;
+        }
       }
-    }
+      return result;
+    };
 
-    if (matchedSections.length > 0) {
+    const matchedSections = filterSecList(v.sections);
+    const matchedRawSections = v.rawSections
+      ? filterSecList(v.rawSections)
+      : [];
+
+    if (
+      versionMatches ||
+      matchedSections.length > 0 ||
+      matchedRawSections.length > 0
+    ) {
       filtered.push({
         ...v,
         sections: matchedSections,
+        rawSections:
+          matchedRawSections.length > 0 ? matchedRawSections : undefined,
       });
     }
   }

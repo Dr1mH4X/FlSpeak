@@ -176,6 +176,179 @@ function groupCommitsByConventionalType(commits, repoSlug) {
   return groups;
 }
 
+function formatRawCommitSections(groups) {
+  const lines = [];
+  if (groups.breaking.length > 0) {
+    lines.push('#### 升级注意', '', ...groups.breaking, '');
+  }
+  if (groups.feat.length > 0) {
+    lines.push('#### 新增', '', ...groups.feat, '');
+  }
+  if (groups.fix.length > 0) {
+    lines.push('#### 修复', '', ...groups.fix, '');
+  }
+  if (groups.perf.length > 0) {
+    lines.push('#### 优化', '', ...groups.perf, '');
+  }
+  if (groups.revert.length > 0) {
+    lines.push('#### 回滚', '', ...groups.revert, '');
+  }
+  return lines;
+}
+
+function getCuratedReleaseNote(tag) {
+  const candidates = [
+    resolve(REPO_ROOT, 'docs', 'release', `${tag}.md`),
+    resolve(REPO_ROOT, 'docs', 'release', `${tag.replace(/^v/i, '')}.md`),
+    resolve(REPO_ROOT, 'docs', 'release', `v${tag.replace(/^v/i, '')}.md`),
+  ];
+  let docPath = null;
+  for (const c of candidates) {
+    if (existsSync(c)) {
+      docPath = c;
+      break;
+    }
+  }
+  if (!docPath) return null;
+
+  try {
+    const raw = readFileSync(docPath, 'utf8');
+    const lines = raw.split(/\r?\n/);
+    let title = null;
+    let date = null;
+    const summaryLines = [];
+    const sections = {
+      breaking: [],
+      feat: [],
+      fix: [],
+      perf: [],
+      other: [],
+    };
+    const contributors = [];
+
+    let active = null;
+    let pastHeader = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      if (!pastHeader && line.startsWith('# ')) {
+        const m = line.match(
+          /^#\s+([^\s(]+)\s*(?:\((\d{4}-\d{2}-\d{2})\))?(?::\s*(.+))?$/
+        );
+        if (m) {
+          date = m[2] || null;
+          title = m[3] ? m[3].trim() : null;
+          pastHeader = true;
+          continue;
+        }
+      }
+
+      if (line.startsWith('## ')) {
+        pastHeader = true;
+        const h = line.slice(3).trim();
+        if (h.includes('新增')) active = 'feat';
+        else if (h.includes('修复')) active = 'fix';
+        else if (h.includes('优化')) active = 'perf';
+        else if (h.includes('其他')) active = 'other';
+        else if (h.includes('升级注意') || h.includes('破坏性'))
+          active = 'breaking';
+        else if (h.includes('贡献者')) active = 'contributors';
+        else active = null;
+        continue;
+      }
+
+      if (!pastHeader || active === null) {
+        summaryLines.push(line);
+        continue;
+      }
+
+      if (line.startsWith('- ') || line.startsWith('* ')) {
+        const item = line.slice(2).trim();
+        if (active === 'contributors') {
+          contributors.push(item);
+        } else if (sections[active]) {
+          sections[active].push(item);
+        }
+      }
+    }
+
+    return {
+      title,
+      date,
+      summary: summaryLines.join(' '),
+      sections,
+      contributors,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function formatCuratedReleaseSections(curated, rawCommitSections) {
+  const lines = [];
+  if (curated.summary) {
+    lines.push(curated.summary, '');
+  }
+
+  if (curated.sections.breaking && curated.sections.breaking.length > 0) {
+    lines.push(
+      '### 升级注意',
+      '',
+      ...curated.sections.breaking.map((it) => `* ${it}`),
+      ''
+    );
+  }
+  if (curated.sections.feat && curated.sections.feat.length > 0) {
+    lines.push(
+      '### 新增',
+      '',
+      ...curated.sections.feat.map((it) => `* ${it}`),
+      ''
+    );
+  }
+  if (curated.sections.fix && curated.sections.fix.length > 0) {
+    lines.push(
+      '### 修复',
+      '',
+      ...curated.sections.fix.map((it) => `* ${it}`),
+      ''
+    );
+  }
+  if (curated.sections.perf && curated.sections.perf.length > 0) {
+    lines.push(
+      '### 优化',
+      '',
+      ...curated.sections.perf.map((it) => `* ${it}`),
+      ''
+    );
+  }
+  if (curated.sections.other && curated.sections.other.length > 0) {
+    lines.push(
+      '### 其他',
+      '',
+      ...curated.sections.other.map((it) => `* ${it}`),
+      ''
+    );
+  }
+
+  if (curated.contributors && curated.contributors.length > 0) {
+    lines.push(
+      '### 贡献者',
+      '',
+      ...curated.contributors.map((c) => `* ${c}`),
+      ''
+    );
+  }
+
+  if (rawCommitSections && rawCommitSections.length > 0) {
+    lines.push('### Commits', '', ...rawCommitSections);
+  }
+
+  return lines;
+}
+
 function formatReleaseSections(groups) {
   const lines = [];
   if (groups.breaking.length > 0) {
@@ -231,21 +404,34 @@ function buildVersionedChangelog(repoSlug) {
       const rangeSpec = prevTag ? `${prevTag}..${tag}` : tag;
       const tagCommits = getCommitsForRange(rangeSpec);
       const groups = groupCommitsByConventionalType(tagCommits, repoSlug);
-      const total =
-        groups.breaking.length +
-        groups.feat.length +
-        groups.fix.length +
-        groups.perf.length +
-        groups.revert.length;
-      if (total > 0) {
-        const tagDate = getTagCommitDate(tag) || (tagCommits[0]?.date ?? '');
-        const tagUrl = prevTag
-          ? `https://github.com/${repoSlug}/compare/${prevTag}...${tag}`
-          : `https://github.com/${repoSlug}/releases/tag/${tag}`;
+      const curated = getCuratedReleaseNote(tag);
+
+      const tagDate =
+        curated?.date || getTagCommitDate(tag) || (tagCommits[0]?.date ?? '');
+      const tagUrl = prevTag
+        ? `https://github.com/${repoSlug}/compare/${prevTag}...${tag}`
+        : `https://github.com/${repoSlug}/releases/tag/${tag}`;
+
+      if (curated) {
+        const rawCommitSections = formatRawCommitSections(groups);
+        const titleSuffix = curated.title ? `: ${curated.title}` : '';
         versions.push({
-          header: `## [${tag}](${tagUrl}) (${tagDate})`,
-          sections: formatReleaseSections(groups),
+          header: `## [${tag}](${tagUrl}) (${tagDate})${titleSuffix}`,
+          sections: formatCuratedReleaseSections(curated, rawCommitSections),
         });
+      } else {
+        const total =
+          groups.breaking.length +
+          groups.feat.length +
+          groups.fix.length +
+          groups.perf.length +
+          groups.revert.length;
+        if (total > 0) {
+          versions.push({
+            header: `## [${tag}](${tagUrl}) (${tagDate})`,
+            sections: formatReleaseSections(groups),
+          });
+        }
       }
     }
   } else {

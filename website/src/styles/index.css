@@ -2068,6 +2068,378 @@ a {
   }
 }
 
+/* ==========================================================================
+   Changelog & Release Enhancements (TOC, Summary, Contributors & Raw Commits)
+   ========================================================================== */
+
+.cl-version-subject {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--m3-on-surface);
+  margin-left: 4px;
+}
+
+.cl-version-summary {
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--m3-surface-container);
+  border: 1px solid var(--subtle-border);
+}
+
+.cl-summary-text {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: var(--m3-on-surface);
+}
+
+.cl-cat-dot.is-other {
+  background: var(--m3-on-surface-variant);
+}
+
+.cl-contributors-box {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--subtle-border);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.cl-contributors-label {
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--m3-on-surface-variant);
+}
+
+.cl-contributors-list {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cl-contributor-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--m3-surface-high);
+  color: var(--m3-on-surface);
+  font-family: var(--font-mono);
+  font-size: 0.73rem;
+  font-weight: 550;
+  text-decoration: none;
+  border: 1px solid var(--subtle-border);
+  transition:
+    border-color 140ms ease,
+    transform 140ms ease;
+}
+
+.cl-contributor-chip:hover {
+  border-color: var(--m3-primary);
+  transform: translateY(-1px);
+}
+
+/* Raw Commits Accordion */
+.cl-raw-commits-container {
+  margin-top: 16px;
+  border-top: 1px solid var(--subtle-border);
+  padding-top: 12px;
+}
+
+.cl-raw-commits-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  padding: 4px 6px;
+  border-radius: 6px;
+  color: var(--m3-on-surface-variant);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    color 140ms ease,
+    background-color 140ms ease;
+}
+
+.cl-raw-commits-toggle:hover {
+  background: var(--m3-surface-high);
+  color: var(--m3-on-surface);
+}
+
+.cl-toggle-chevron {
+  transition: transform 180ms ease;
+}
+
+.cl-toggle-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.cl-raw-commits-panel {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--m3-surface-container);
+  border: 1px solid var(--subtle-border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cl-raw-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cl-raw-group-title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--m3-on-surface-variant);
+}
+
+.cl-items-list.is-raw-list {
+  gap: 6px;
+}
+
+.cl-item.is-raw-item {
+  font-size: 0.81rem;
+  line-height: 1.5;
+}
+
+/* Latest Release Section on Home */
+.latest-release-section {
+  position: relative;
+}
+
+.latest-release-nav-prompt {
+  margin-top: 20px;
+}
+
+.cl-go-archive-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: var(--m3-surface-container);
+  border: 1px solid var(--card-border);
+  color: var(--m3-on-surface);
+  font-size: 0.84rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    transform 150ms ease;
+}
+
+.cl-go-archive-btn:hover {
+  background: var(--m3-surface-high);
+  border-color: var(--m3-primary);
+  transform: translateX(2px);
+}
+
+.cl-timeline.is-latest-only {
+  padding-bottom: 0;
+}
+
+.cl-view-all-wrap {
+  margin-top: 18px;
+  display: flex;
+  justify-content: stretch;
+}
+
+.cl-view-all-cta {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px 24px;
+  border-radius: 16px;
+  background: var(--m3-surface-low);
+  border: 1px solid var(--card-border);
+  color: var(--m3-primary);
+  font-size: 0.94rem;
+  font-weight: 650;
+  text-decoration: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.cl-view-all-cta:hover {
+  background: var(--m3-surface-container);
+  border-color: var(--m3-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+}
+
+/* Dedicated Changelog Archive Page Header & TOC */
+.cl-top-nav-bar {
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+}
+
+.cl-back-home-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 99px;
+  background: var(--m3-surface-low);
+  border: 1px solid var(--subtle-border);
+  color: var(--m3-on-surface-variant);
+  font-size: 0.84rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    color 140ms ease,
+    border-color 140ms ease,
+    background-color 140ms ease;
+}
+
+.cl-back-home-btn:hover {
+  color: var(--m3-on-surface);
+  border-color: var(--m3-primary);
+  background: var(--m3-surface-high);
+}
+
+.cl-toc-nav {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--subtle-border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cl-toc-heading {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--m3-on-surface-variant);
+}
+
+.cl-toc-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 48vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.cl-toc-groups::-webkit-scrollbar {
+  width: 4px;
+}
+.cl-toc-groups::-webkit-scrollbar-thumb {
+  background: var(--subtle-border);
+  border-radius: 4px;
+}
+
+.cl-toc-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cl-toc-year {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--m3-primary);
+  opacity: 0.9;
+}
+
+.cl-toc-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.cl-toc-item {
+  margin: 0;
+  padding: 0;
+}
+
+.cl-toc-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  color: var(--m3-on-surface-variant);
+  text-decoration: none;
+  border-left: 2px solid transparent;
+  transition: all 130ms ease;
+}
+
+.cl-toc-bullet {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--m3-outline-variant);
+  flex-shrink: 0;
+  transition:
+    background-color 130ms ease,
+    transform 130ms ease;
+}
+
+.cl-toc-version {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.cl-toc-desc {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.76rem;
+  opacity: 0.8;
+}
+
+.cl-toc-link:hover {
+  background: var(--m3-surface-high);
+  color: var(--m3-on-surface);
+}
+
+.cl-toc-link.is-active {
+  background: var(--m3-surface-high);
+  color: var(--m3-primary);
+  border-left-color: var(--m3-primary);
+  font-weight: 650;
+}
+
+.cl-toc-link.is-active .cl-toc-bullet {
+  background: var(--m3-primary);
+  transform: scale(1.3);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

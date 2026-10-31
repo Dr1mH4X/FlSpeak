@@ -67,7 +67,8 @@ export type ChangelogCategory =
   | 'feat'
   | 'fix'
   | 'perf'
-  | 'revert';
+  | 'revert'
+  | 'other';
 
 export interface ChangelogItem {
   id: string;
@@ -90,7 +91,11 @@ export interface ChangelogVersion {
   year: string;
   compareUrl: string | null;
   isTagRelease: boolean;
+  title?: string | null;
+  summary?: string | null;
+  contributors?: string[];
   sections: ChangelogSection[];
+  rawSections?: ChangelogSection[];
 }
 
 export interface DeviceInfo {

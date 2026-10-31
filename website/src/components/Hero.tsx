@@ -176,7 +176,7 @@ export const Hero: React.FC<HeroProps> = ({
     <section className="hero-section">
       <div className="hero-header-stack">
         {(releaseTag || hasChangelog) && (
-          <a href="#changelog" className="hero-eyebrow-pill">
+          <a href="#latest-release" className="hero-eyebrow-pill">
             <span className="eyebrow-pulse-dot" aria-hidden="true" />
             <span>{t('eyebrowReleased', { tag: displayTag })}</span>
             <svg

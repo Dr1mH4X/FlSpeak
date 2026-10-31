@@ -3,11 +3,12 @@ import { AmbientBackground } from './components/AmbientBackground';
 import { ChangelogSection } from './components/ChangelogSection';
 import { Footer } from './components/Footer';
 import { Hero } from './components/Hero';
+import { LatestReleaseSection } from './components/LatestReleaseSection';
 import { Navbar } from './components/Navbar';
 import { useI18n } from './hooks/useI18n';
 import { useReleaseData } from './hooks/useReleaseData';
 import { useTheme } from './hooks/useTheme';
-import { useUrlState } from './hooks/useUrlState';
+import { type SiteView, useUrlState } from './hooks/useUrlState';
 import type { ArchId, DetectedOs, PlatformId } from './types/release';
 import { detectDevice } from './utils/detectDevice';
 
@@ -16,6 +17,7 @@ export const App: React.FC = () => {
   const { locale, toggleLocale, t, formatDate, formatRelativeTime } = useI18n();
   const { manifest, classifiedAssets, changelogVersions } = useReleaseData();
 
+  const [currentView, setCurrentView] = useState<SiteView>('home');
   const [selectedPlatform, setSelectedPlatform] =
     useState<PlatformId>('windows');
   const [selectedArch, setSelectedArch] = useState<ArchId>('x64');
@@ -47,11 +49,16 @@ export const App: React.FC = () => {
     setTargetVersionHash(hashTarget);
   }, []);
 
+  const handleViewChange = useCallback((view: SiteView) => {
+    setCurrentView(view);
+  }, []);
+
   useUrlState({
     onPlatformParam: handlePlatformParam,
     onArchParam: handleArchParam,
     onQueryParam: handleQueryParam,
     onVersionHash: handleVersionHash,
+    onViewChange: handleViewChange,
   });
 
   useEffect(() => {
@@ -74,6 +81,13 @@ export const App: React.FC = () => {
       cancelled = true;
     };
   }, []);
+
+  // Scroll to top when view changes without version anchor target
+  useEffect(() => {
+    if (!targetVersionHash) {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
+  }, [currentView, targetVersionHash]);
 
   const handleSelectPlatform = useCallback((plat: PlatformId) => {
     urlOverrodePlatformRef.current = true;
@@ -102,29 +116,41 @@ export const App: React.FC = () => {
       />
 
       <main className="page-container">
-        <Hero
-          selectedPlatform={selectedPlatform}
-          selectedArch={selectedArch}
-          detectedOs={detectedOs}
-          onSelectPlatform={handleSelectPlatform}
-          releaseTag={manifest.tag}
-          hasChangelog={changelogVersions.length > 0}
-          classifiedAssets={classifiedAssets}
-          repoSlug={repoSlug}
-          t={t}
-        />
+        {currentView === 'home' ? (
+          <>
+            <Hero
+              selectedPlatform={selectedPlatform}
+              selectedArch={selectedArch}
+              detectedOs={detectedOs}
+              onSelectPlatform={handleSelectPlatform}
+              releaseTag={manifest.tag}
+              hasChangelog={changelogVersions.length > 0}
+              classifiedAssets={classifiedAssets}
+              repoSlug={repoSlug}
+              t={t}
+            />
 
-        <ChangelogSection
-          versions={changelogVersions}
-          repoSlug={repoSlug}
-          searchQuery={searchQuery}
-          onSearchQueryChange={setSearchQuery}
-          targetVersionHash={targetVersionHash}
-          onTargetVersionHandled={handleTargetVersionHandled}
-          formatDate={formatDate}
-          formatRelativeTime={formatRelativeTime}
-          t={t}
-        />
+            <LatestReleaseSection
+              versions={changelogVersions}
+              repoSlug={repoSlug}
+              formatDate={formatDate}
+              formatRelativeTime={formatRelativeTime}
+              t={t}
+            />
+          </>
+        ) : (
+          <ChangelogSection
+            versions={changelogVersions}
+            repoSlug={repoSlug}
+            searchQuery={searchQuery}
+            onSearchQueryChange={setSearchQuery}
+            targetVersionHash={targetVersionHash}
+            onTargetVersionHandled={handleTargetVersionHandled}
+            formatDate={formatDate}
+            formatRelativeTime={formatRelativeTime}
+            t={t}
+          />
+        )}
       </main>
 
       <Footer repoSlug={repoSlug} t={t} />

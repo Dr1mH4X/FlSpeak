@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { TranslationKey } from '../i18n/translations';
-import type { ChangelogCategory, ChangelogVersion } from '../types/release';
+import type { ChangelogVersion } from '../types/release';
 import {
   filterChangelogVersions,
   normalizeAnchorId,
-  splitHighlightSegments,
 } from '../utils/parseChangelog';
+import { VersionNode } from './VersionNode';
 
 interface ChangelogSectionProps {
   versions: ChangelogVersion[];
@@ -19,46 +19,8 @@ interface ChangelogSectionProps {
   t: (key: TranslationKey, vars?: Record<string, string | number>) => string;
 }
 
-const INITIAL_VISIBLE_COUNT = 6;
+const INITIAL_VISIBLE_COUNT = 8;
 const PAGE_INCREMENT = 15;
-
-function getCategoryTitleKey(cat: ChangelogCategory): TranslationKey {
-  switch (cat) {
-    case 'breaking':
-      return 'changelogCatBreaking';
-    case 'feat':
-      return 'changelogCatFeat';
-    case 'fix':
-      return 'changelogCatFix';
-    case 'perf':
-      return 'changelogCatPerf';
-    case 'revert':
-      return 'changelogCatRevert';
-  }
-}
-
-const HighlightedText: React.FC<{ text: string; query: string }> = ({
-  text,
-  query,
-}) => {
-  const segments = useMemo(
-    () => splitHighlightSegments(text, query),
-    [text, query]
-  );
-  return (
-    <>
-      {segments.map((seg, i) =>
-        seg.highlighted ? (
-          <mark key={i} className="cl-search-mark">
-            {seg.text}
-          </mark>
-        ) : (
-          <React.Fragment key={i}>{seg.text}</React.Fragment>
-        )
-      )}
-    </>
-  );
-};
 
 export const ChangelogSection: React.FC<ChangelogSectionProps> = ({
   versions,
@@ -76,6 +38,7 @@ export const ChangelogSection: React.FC<ChangelogSectionProps> = ({
   const [visibleCount, setVisibleCount] = useState<number>(
     INITIAL_VISIBLE_COUNT
   );
+  const [activeAnchorId, setActiveAnchorId] = useState<string>('');
 
   // 80ms debounce for search query
   useEffect(() => {
@@ -122,6 +85,7 @@ export const ChangelogSection: React.FC<ChangelogSectionProps> = ({
         setVisibleCount(targetIdx + 2);
       }
       const targetAnchorId = versions[targetIdx].anchorId;
+      setActiveAnchorId(targetAnchorId);
       requestAnimationFrame(() => {
         const el = document.getElementById(targetAnchorId);
         if (el) {
@@ -159,12 +123,100 @@ export const ChangelogSection: React.FC<ChangelogSectionProps> = ({
     return formatDate(last.date);
   }, [versions, formatDate]);
 
+  // Group all versions by year for TOC directory
+  const tocGroups = useMemo(() => {
+    const groups: Array<{
+      year: string;
+      items: Array<{
+        anchorId: string;
+        version: string;
+        title?: string | null;
+      }>;
+    }> = [];
+
+    for (const v of versions) {
+      const year = v.year || (v.date ? v.date.slice(0, 4) : 'Other');
+      let g = groups.find((grp) => grp.year === year);
+      if (!g) {
+        g = { year, items: [] };
+        groups.push(g);
+      }
+      g.items.push({
+        anchorId: v.anchorId,
+        version: v.version,
+        title: v.title,
+      });
+    }
+    return groups;
+  }, [versions]);
+
+  // Track active version in viewport with IntersectionObserver
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('IntersectionObserver' in window)) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            setActiveAnchorId(entry.target.id);
+            break;
+          }
+        }
+      },
+      {
+        rootMargin: '-80px 0px -65% 0px',
+        threshold: 0,
+      }
+    );
+
+    const elements = document.querySelectorAll('.cl-version-node');
+    elements.forEach((el) => observer.observe(el));
+
+    return () => observer.disconnect();
+  }, [displayedVersions]);
+
+  const handleTocClick = (anchorId: string) => {
+    const targetIdx = versions.findIndex((v) => v.anchorId === anchorId);
+    if (targetIdx !== -1 && targetIdx >= visibleCount) {
+      setVisibleCount(targetIdx + 2);
+    }
+    setActiveAnchorId(anchorId);
+    requestAnimationFrame(() => {
+      const el = document.getElementById(anchorId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  };
+
   return (
-    <section id="changelog" className="section-block changelog-section">
+    <section id="changelog" className="section-block changelog-section is-archive-page">
+      {/* Back to Home Breadcrumb Header */}
+      <div className="cl-top-nav-bar">
+        <a href="#/" className="cl-back-home-btn">
+          <svg
+            viewBox="0 0 20 20"
+            width="16"
+            height="16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M15 10H5M10 15l-5-5 5-5" />
+          </svg>
+          <span>{t('changelogBackToHome')}</span>
+        </a>
+      </div>
+
       <div className="section-two-col">
-        {/* Left Sticky Search & Stats Rail */}
+        {/* Left Sticky TOC & Search Rail */}
         <div className="section-left-rail is-sticky-rail">
-          <h2 className="section-heading">{t('changelogTitle')}</h2>
+          <h1 className="section-heading">{t('changelogAllReleasesTitle')}</h1>
 
           <p className="section-meta-badge">
             {versions.length > 0 && earliestDate
@@ -173,6 +225,10 @@ export const ChangelogSection: React.FC<ChangelogSectionProps> = ({
                   since: earliestDate,
                 })
               : t('changelogNoStats')}
+          </p>
+
+          <p className="section-lead">
+            {t('changelogAllReleasesSubtitle')}
           </p>
 
           {/* Search Box */}
@@ -250,6 +306,55 @@ export const ChangelogSection: React.FC<ChangelogSectionProps> = ({
                   })}
             </div>
           )}
+
+          {/* TOC Navigation Tree */}
+          {!isSearching && tocGroups.length > 0 && (
+            <nav className="cl-toc-nav" aria-label={t('changelogTocTitle')}>
+              <h2 className="cl-toc-heading">{t('changelogTocTitle')}</h2>
+              <div className="cl-toc-groups">
+                {tocGroups.map((group) => (
+                  <div key={group.year} className="cl-toc-group">
+                    <span className="cl-toc-year">{group.year}</span>
+                    <ul className="cl-toc-list">
+                      {group.items.map((item) => {
+                        const isActive =
+                          activeAnchorId === item.anchorId ||
+                          (!activeAnchorId &&
+                            versions[0]?.anchorId === item.anchorId);
+                        return (
+                          <li key={item.anchorId} className="cl-toc-item">
+                            <a
+                              href={`#/changelog?v=${item.anchorId}`}
+                              className={`cl-toc-link ${isActive ? 'is-active' : ''}`}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleTocClick(item.anchorId);
+                                window.history.replaceState(
+                                  null,
+                                  '',
+                                  `#/changelog?v=${item.anchorId}`
+                                );
+                              }}
+                            >
+                              <span className="cl-toc-bullet" />
+                              <span className="cl-toc-version">
+                                {item.version}
+                              </span>
+                              {item.title && (
+                                <span className="cl-toc-desc">
+                                  {item.title}
+                                </span>
+                              )}
+                            </a>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </nav>
+          )}
         </div>
 
         {/* Right Version Timeline */}
@@ -305,7 +410,6 @@ export const ChangelogSection: React.FC<ChangelogSectionProps> = ({
                 const isLatest =
                   versions.length > 0 &&
                   ver.anchorId === versions[0].anchorId;
-                const relativeStr = formatRelativeTime(ver.date);
 
                 return (
                   <React.Fragment key={ver.anchorId}>
@@ -316,149 +420,15 @@ export const ChangelogSection: React.FC<ChangelogSectionProps> = ({
                       </div>
                     )}
 
-                    <article
-                      id={ver.anchorId}
-                      className={`cl-version-node ${isLatest ? 'is-latest' : ''}`}
-                    >
-                      {/* Sticky Version Header */}
-                      <header className="cl-version-head">
-                        <span
-                          className={`cl-timeline-dot ${isLatest ? 'is-latest' : ''}`}
-                          aria-hidden="true"
-                        />
-
-                        <div className="cl-version-title-group">
-                          <h3 className="cl-version-tag">
-                            <HighlightedText
-                              text={ver.version}
-                              query={debouncedQuery}
-                            />
-                          </h3>
-
-                          <a
-                            href={`#${ver.anchorId}`}
-                            className="cl-version-anchor"
-                            aria-label={`Anchor link for ${ver.version}`}
-                          >
-                            #
-                          </a>
-
-                          {isLatest && (
-                            <span className="cl-badge-latest">
-                              {t('changelogLatestBadge')}
-                            </span>
-                          )}
-
-                          {!ver.isTagRelease && (
-                            <span className="cl-badge-snapshot">
-                              {t('changelogCommitNodeBadge')}
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="cl-version-meta">
-                          {ver.date && (
-                            <time
-                              dateTime={ver.date}
-                              className="cl-version-date"
-                            >
-                              <span className="cl-date-primary">
-                                {formatDate(ver.date)}
-                              </span>
-                              {relativeStr && (
-                                <span className="cl-date-relative">
-                                  · {relativeStr}
-                                </span>
-                              )}
-                            </time>
-                          )}
-
-                          {ver.compareUrl && (
-                            <a
-                              href={ver.compareUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="cl-github-link"
-                              aria-label={`${t('changelogViewOnGithub')} ${ver.version}`}
-                            >
-                              <span>GitHub</span>
-                              <svg
-                                viewBox="0 0 16 16"
-                                width="12"
-                                height="12"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                aria-hidden="true"
-                              >
-                                <path d="M5 11L11 5M5 5h6v6" />
-                              </svg>
-                            </a>
-                          )}
-                        </div>
-                      </header>
-
-                      {/* Category Sections */}
-                      <div className="cl-sections-stack">
-                        {ver.sections.map((sec) => (
-                          <div
-                            key={sec.category}
-                            className={`cl-group cl-cat-${sec.category}`}
-                          >
-                            <h4 className="cl-group-title">
-                              <span
-                                className={`cl-cat-dot is-${sec.category}`}
-                                aria-hidden="true"
-                              />
-                              <span>{t(getCategoryTitleKey(sec.category))}</span>
-                              <span className="cl-group-count">
-                                {sec.items.length}
-                              </span>
-                            </h4>
-
-                            <ul className="cl-items-list">
-                              {sec.items.map((item) => (
-                                <li key={item.id} className="cl-item">
-                                  <div className="cl-item-content">
-                                    {item.scope && (
-                                      <code className="cl-item-scope">
-                                        <HighlightedText
-                                          text={item.scope}
-                                          query={debouncedQuery}
-                                        />
-                                      </code>
-                                    )}
-
-                                    <span className="cl-item-desc">
-                                      <HighlightedText
-                                        text={item.description}
-                                        query={debouncedQuery}
-                                      />
-                                    </span>
-
-                                    {item.shortHash && item.commitUrl && (
-                                      <a
-                                        href={item.commitUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="cl-commit-hash"
-                                      >
-                                        <HighlightedText
-                                          text={item.shortHash}
-                                          query={debouncedQuery}
-                                        />
-                                      </a>
-                                    )}
-                                  </div>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        ))}
-                      </div>
-                    </article>
+                    <VersionNode
+                      ver={ver}
+                      isLatest={isLatest}
+                      repoSlug={repoSlug}
+                      debouncedQuery={debouncedQuery}
+                      formatDate={formatDate}
+                      formatRelativeTime={formatRelativeTime}
+                      t={t}
+                    />
                   </React.Fragment>
                 );
               })}
