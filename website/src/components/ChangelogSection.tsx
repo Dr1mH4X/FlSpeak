@@ -164,11 +164,6 @@ export const ChangelogSection: React.FC<ChangelogSectionProps> = ({
       <div className="section-two-col">
         {/* Left Sticky Search & Stats Rail */}
         <div className="section-left-rail is-sticky-rail">
-          <div className="section-index-row">
-            <span className="section-index-num">{t('changelogIndex')}</span>
-            <span className="section-index-line" aria-hidden="true" />
-          </div>
-
           <h2 className="section-heading">{t('changelogTitle')}</h2>
 
           <p className="section-meta-badge">
@@ -179,8 +174,6 @@ export const ChangelogSection: React.FC<ChangelogSectionProps> = ({
                 })
               : t('changelogNoStats')}
           </p>
-
-          <p className="section-lead">{t('changelogLead')}</p>
 
           {/* Search Box */}
           <div className="cl-search-box">

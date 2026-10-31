@@ -128,58 +128,22 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className={`site-navbar ${scrolled ? 'is-scrolled' : ''}`}>
-      <a href="#download" className="skip-link">
+      <a href="#changelog" className="skip-link">
         {t('skipToDownloads')}
       </a>
 
       <div className="navbar-inner">
         <a href="#" className="brand-link" aria-label={t('appTitle')}>
           <span className="brand-glyph" aria-hidden="true">
-            <svg viewBox="0 0 28 28" fill="none" className="brand-svg">
-              <rect
-                x="2"
-                y="2"
-                width="24"
-                height="24"
-                rx="8"
-                className="brand-svg-bg"
-              />
-              <path
-                d="M8.5 14.5V13a5.5 5.5 0 0 1 11 0v1.5"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              />
-              <rect
-                x="7"
-                y="13.5"
-                width="3.2"
-                height="5.5"
-                rx="1.6"
-                fill="currentColor"
-              />
-              <rect
-                x="17.8"
-                y="13.5"
-                width="3.2"
-                height="5.5"
-                rx="1.6"
-                fill="currentColor"
-              />
-              <path
-                d="M19.4 18.5v.7a2.3 2.3 0 0 1-2.3 2.3h-2.6"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-              />
-              <circle
-                cx="14"
-                cy="14"
-                r="1.6"
-                className="brand-svg-dot"
-                fill="currentColor"
-              />
-            </svg>
+            <img
+              src="/icon.png"
+              alt=""
+              className="brand-icon-img"
+              onError={(e) => {
+                // If icon.png fails to load, gracefully fall back to placeholder styling
+                (e.currentTarget as HTMLElement).style.display = 'none';
+              }}
+            />
           </span>
           <span className="brand-wordmark">{t('appTitle')}</span>
         </a>
@@ -198,14 +162,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               opacity: inkStyle.opacity,
             }}
           />
-
-          <a
-            href="#download"
-            className="nav-item-link"
-            onMouseEnter={handleItemEnter}
-          >
-            {t('navDownload')}
-          </a>
 
           <a
             href="#changelog"

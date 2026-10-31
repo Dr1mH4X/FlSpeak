@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import type { Locale, TranslationKey } from '../i18n/translations';
+import type { TranslationKey } from '../i18n/translations';
 import type {
   ArchId,
   ClassifiedAsset,
@@ -16,7 +16,6 @@ import { WorkspacePreview } from './WorkspacePreview';
 import { FactsGrid } from './FactsGrid';
 
 interface HeroProps {
-  locale: Locale;
   selectedPlatform: PlatformId;
   selectedArch: ArchId;
   detectedOs: DetectedOs;
@@ -24,6 +23,7 @@ interface HeroProps {
   releaseTag: string | null;
   hasChangelog: boolean;
   classifiedAssets: ClassifiedAsset[];
+  repoSlug?: string;
   t: (key: TranslationKey, vars?: Record<string, string | number>) => string;
 }
 
@@ -57,8 +57,39 @@ function getCtaKindSubtitleKey(
   }
 }
 
+function getExpectedAssetFilename(
+  platform: PlatformId,
+  arch: ArchId,
+  versionTag: string | null
+): string {
+  const ver = versionTag ? versionTag.replace(/^v/, '') : '0.1.0';
+  const archTag = arch === 'arm64' ? 'arm64' : 'amd64';
+  switch (platform) {
+    case 'windows':
+      return `flspeak-${ver}-windows-${archTag}.zip`;
+    case 'macos':
+      return `flspeak-${ver}-macos-${archTag}.zip`;
+    case 'linux':
+      return `flspeak-${ver}-linux-${archTag}.tar.gz`;
+    case 'android':
+      return `flspeak-${ver}-android-arm64.apk`;
+  }
+}
+
+function getPlatformDefaultKindSubtitle(platform: PlatformId): string {
+  switch (platform) {
+    case 'windows':
+      return 'ZIP';
+    case 'macos':
+      return 'App Archive (ZIP)';
+    case 'linux':
+      return 'tar.gz';
+    case 'android':
+      return 'APK';
+  }
+}
+
 export const Hero: React.FC<HeroProps> = ({
-  locale,
   selectedPlatform,
   selectedArch,
   detectedOs,
@@ -66,6 +97,7 @@ export const Hero: React.FC<HeroProps> = ({
   releaseTag,
   hasChangelog,
   classifiedAssets,
+  repoSlug = 'Dr1mH4X/FlSpeak',
   t,
 }) => {
   const ctaRef = useRef<HTMLAnchorElement | null>(null);
@@ -85,23 +117,37 @@ export const Hero: React.FC<HeroProps> = ({
 
   const platformLabel = t(getPlatformLabelKey(selectedPlatform));
 
-  const ctaSubtitle = useMemo(() => {
-    if (!recommendedAsset) {
-      return t('ctaSubSourceNote');
+  const directDownloadUrl = useMemo(() => {
+    if (recommendedAsset) {
+      return recommendedAsset.downloadUrl;
     }
-    const kindLabel = t(getCtaKindSubtitleKey(recommendedAsset.kindKey));
-    const archLabel =
-      recommendedAsset.platform === 'macos'
-        ? recommendedAsset.macChip === 'intel'
-          ? t('chipIntel')
-          : recommendedAsset.macChip === 'universal'
-            ? t('chipUniversal')
-            : t('chipAppleSilicon')
-        : recommendedAsset.arch === 'arm64'
-          ? 'ARM64'
-          : 'x64';
-    return `${archLabel} · ${kindLabel} · ${recommendedAsset.sizeFormatted}`;
-  }, [recommendedAsset, t]);
+    const filename = getExpectedAssetFilename(
+      selectedPlatform,
+      selectedArch,
+      releaseTag
+    );
+    return `https://github.com/${repoSlug}/releases/latest/download/${filename}`;
+  }, [recommendedAsset, selectedPlatform, selectedArch, releaseTag, repoSlug]);
+
+  const ctaSubtitle = useMemo(() => {
+    if (recommendedAsset) {
+      const kindLabel = t(getCtaKindSubtitleKey(recommendedAsset.kindKey));
+      const archLabel =
+        recommendedAsset.platform === 'macos'
+          ? recommendedAsset.macChip === 'intel'
+            ? t('chipIntel')
+            : recommendedAsset.macChip === 'universal'
+              ? t('chipUniversal')
+              : t('chipAppleSilicon')
+          : recommendedAsset.arch === 'arm64'
+            ? 'ARM64'
+            : 'x64';
+      return `${archLabel} · ${kindLabel} · ${recommendedAsset.sizeFormatted}`;
+    }
+    const archLabel = selectedArch === 'arm64' ? 'ARM64' : 'x64';
+    const kindLabel = getPlatformDefaultKindSubtitle(selectedPlatform);
+    return `${archLabel} · ${kindLabel}`;
+  }, [recommendedAsset, selectedPlatform, selectedArch, t]);
 
   const handleCtaPointerMove = (e: React.PointerEvent<HTMLAnchorElement>) => {
     const el = ctaRef.current;
@@ -124,17 +170,15 @@ export const Hero: React.FC<HeroProps> = ({
     setMagnetOffset({ x: 0, y: 0 });
   };
 
+  const displayTag = releaseTag || 'v0.1.0';
+
   return (
     <section className="hero-section">
       <div className="hero-header-stack">
         {(releaseTag || hasChangelog) && (
           <a href="#changelog" className="hero-eyebrow-pill">
             <span className="eyebrow-pulse-dot" aria-hidden="true" />
-            <span>
-              {releaseTag
-                ? t('eyebrowReleased', { tag: releaseTag })
-                : t('eyebrowCommits')}
-            </span>
+            <span>{t('eyebrowReleased', { tag: displayTag })}</span>
             <svg
               viewBox="0 0 16 16"
               width="13"
@@ -180,7 +224,7 @@ export const Hero: React.FC<HeroProps> = ({
         <div className="hero-cta-wrap">
           <a
             ref={ctaRef}
-            href={recommendedAsset ? recommendedAsset.downloadUrl : '#download'}
+            href={directDownloadUrl}
             className="hero-primary-cta"
             style={{
               transform: `translate3d(${magnetOffset.x.toFixed(2)}px, ${magnetOffset.y.toFixed(2)}px, 0)`,
@@ -189,29 +233,12 @@ export const Hero: React.FC<HeroProps> = ({
             onPointerLeave={handleCtaPointerLeave}
           >
             <span className="hero-cta-icon" aria-hidden="true">
-              {recommendedAsset ? (
-                <PlatformIcon platform={selectedPlatform} size={22} />
-              ) : (
-                <svg
-                  viewBox="0 0 24 24"
-                  width="21"
-                  height="21"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.1"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
-                </svg>
-              )}
+              <PlatformIcon platform={selectedPlatform} size={22} />
             </span>
 
             <span className="hero-cta-copy">
               <span className="hero-cta-main">
-                {recommendedAsset
-                  ? t('ctaDownloadFor', { platform: platformLabel })
-                  : t('ctaChooseBuild')}
+                {t('ctaDownloadFor', { platform: platformLabel })}
               </span>
               <span className="hero-cta-sub">{ctaSubtitle}</span>
             </span>
@@ -238,7 +265,7 @@ export const Hero: React.FC<HeroProps> = ({
         </div>
       </div>
 
-      <WorkspacePreview locale={locale} t={t} />
+      <WorkspacePreview />
 
       <FactsGrid t={t} />
     </section>

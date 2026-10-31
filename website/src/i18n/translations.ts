@@ -13,8 +13,8 @@ export const translations = {
     themeSwitchToDark: '切换为深色模式',
 
     // Hero
-    eyebrowReleased: '{tag} 已发布 · 查看更新',
-    eyebrowCommits: '开发主线实时同步 · 查看提交记录',
+    eyebrowReleased: '{tag} 现已发布',
+    eyebrowCommits: '{tag} 现已发布',
     heroTitlePrefix: '适用于',
     heroPlatformTriggerAria: '选择目标操作系统平台，当前为 {platform}',
     heroLede: '另一个多平台、开源的 TeamSpeak 客户端。',
@@ -161,7 +161,7 @@ export const translations = {
     changelogTitle: '更新日志',
     changelogStats: '共 {count} 个版本节点 · 始于 {since}',
     changelogNoStats: '基于 Git 真实提交历史自动生成',
-    changelogLead: '所有记录均直接提取自仓库真实 Git 提交与 Conventional Commits 规范，零人工篡改。',
+    changelogLead: '',
     changelogSearchPlaceholder: '搜索功能、修复、模块或 Commit Hash…',
     changelogSearchShortcutHint: '按 / 搜索',
     changelogSearchStats: '{versions} 个版本中有 {matches} 条匹配',
@@ -201,8 +201,8 @@ export const translations = {
     themeSwitchToDark: 'Switch to dark theme',
 
     // Hero
-    eyebrowReleased: '{tag} released · See what’s new',
-    eyebrowCommits: 'Synced with main branch · View commit log',
+    eyebrowReleased: '{tag} released',
+    eyebrowCommits: '{tag} released',
     heroTitlePrefix: 'for',
     heroPlatformTriggerAria: 'Select target operating system, currently {platform}',
     heroLede: 'Yet another teamspeak client, multi-platform and open-source.',
@@ -349,7 +349,7 @@ export const translations = {
     changelogTitle: 'Changelog',
     changelogStats: '{count} nodes · Since {since}',
     changelogNoStats: 'Generated directly from real Git commit history',
-    changelogLead: 'Every entry is parsed straight from repository Git history and Conventional Commits with zero fabricated entries.',
+    changelogLead: '',
     changelogSearchPlaceholder: 'Search features, fixes, scopes, or commit hashes…',
     changelogSearchShortcutHint: 'Press / to search',
     changelogSearchStats: '{matches} matches across {versions} versions',

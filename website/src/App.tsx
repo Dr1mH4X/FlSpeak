@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AmbientBackground } from './components/AmbientBackground';
 import { ChangelogSection } from './components/ChangelogSection';
-import { DownloadSection } from './components/DownloadSection';
 import { Footer } from './components/Footer';
 import { Hero } from './components/Hero';
 import { Navbar } from './components/Navbar';
@@ -81,11 +80,6 @@ export const App: React.FC = () => {
     setSelectedPlatform(plat);
   }, []);
 
-  const handleSelectArch = useCallback((arch: ArchId) => {
-    urlOverrodeArchRef.current = true;
-    setSelectedArch(arch);
-  }, []);
-
   const handleTargetVersionHandled = useCallback(() => {
     setTargetVersionHash(null);
   }, []);
@@ -109,7 +103,6 @@ export const App: React.FC = () => {
 
       <main className="page-container">
         <Hero
-          locale={locale}
           selectedPlatform={selectedPlatform}
           selectedArch={selectedArch}
           detectedOs={detectedOs}
@@ -117,17 +110,7 @@ export const App: React.FC = () => {
           releaseTag={manifest.tag}
           hasChangelog={changelogVersions.length > 0}
           classifiedAssets={classifiedAssets}
-          t={t}
-        />
-
-        <DownloadSection
-          manifest={manifest}
-          classifiedAssets={classifiedAssets}
-          selectedPlatform={selectedPlatform}
-          selectedArch={selectedArch}
-          onSelectPlatform={handleSelectPlatform}
-          onSelectArch={handleSelectArch}
-          formatDate={formatDate}
+          repoSlug={repoSlug}
           t={t}
         />
 

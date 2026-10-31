@@ -193,8 +193,8 @@ test('bilingual translations and real synced CHANGELOG.md satisfy brand and zero
   const syncedMarkdown = readFileSync(syncedChangelogPath, 'utf8');
   const parsedReal = parseChangelogMarkdown(syncedMarkdown);
   assert.ok(
-    parsedReal.length >= 6,
-    `Expected at least 6 real commit snapshot nodes, got ${parsedReal.length}`
+    parsedReal.length >= 1,
+    `Expected at least 1 version release node, got ${parsedReal.length}`
   );
   assert.equal(parsedReal[0].year, '2026');
 });
