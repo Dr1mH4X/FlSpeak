@@ -80,7 +80,11 @@ impl SettingsManager {
 
     /// 局部更新 UI 设置，避免覆盖网络或服务器状态。
     pub fn update_ui<R, F: FnOnce(&mut UiSettings) -> R>(f: F) -> Result<R, String> {
-        Self::update(|settings| f(&mut settings.ui))
+        Self::update(|settings| {
+            let res = f(&mut settings.ui);
+            settings.ui.normalize_nickname();
+            res
+        })
     }
 
     /// 局部更新音频设置。
@@ -96,8 +100,9 @@ impl SettingsManager {
 
     /// 从 JSON 字符串更新 UI 设置并原子写盘（严格由 manager 内部反序列化）。
     pub fn update_ui_from_json(json: &str) -> Result<(), String> {
-        let ui: UiSettings =
+        let mut ui: UiSettings =
             serde_json::from_str(json).map_err(|e| format!("反序列化 UI 设置失败: {e}"))?;
+        ui.normalize_nickname();
         Self::update_ui(|current| {
             *current = ui;
         })
@@ -171,6 +176,9 @@ impl SettingsManager {
         } else {
             serde_json::from_value(parsed).unwrap_or_default()
         };
+
+        // 规范化 UI 设置（例如空昵称自动回退为默认昵称）
+        settings.ui.normalize_nickname();
 
         // 统一保持最新的 schema 版本
         if settings.schema_version < 4 {
@@ -323,6 +331,55 @@ mod tests {
         assert_eq!(reloaded.ui.nickname, "NewNickname");
         assert_eq!(reloaded.network.servers.len(), 1);
         assert_eq!(reloaded.network.servers[0].id, "ts.example.com:9987");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn nickname_normalization_and_fallback() {
+        let dir =
+            std::env::temp_dir().join(format!("flspeak-settings-nick-{:x}", rand::random::<u64>()));
+        let path = dir.join("settings.json");
+        let _ = std::fs::create_dir_all(&dir);
+
+        let initial = AppSettings::default();
+        SettingsManager::save_atomic(&path, &initial).unwrap();
+
+        let manager = SettingsManager {
+            path: path.clone(),
+            inner: RwLock::new(initial),
+        };
+
+        // 1. 测试 update_ui 闭包内设为空，出口处自动规范化为默认昵称
+        {
+            let mut guard = manager.inner.write().unwrap();
+            guard.ui.nickname = "   ".into();
+            guard.ui.normalize_nickname();
+            SettingsManager::save_atomic(&manager.path, &guard).unwrap();
+        }
+        let reloaded = SettingsManager::load_and_migrate(&path).unwrap();
+        assert_eq!(reloaded.ui.nickname, UiSettings::DEFAULT_NICKNAME);
+
+        // 2. 测试带前后空白的昵称自动 trim
+        {
+            let mut guard = manager.inner.write().unwrap();
+            guard.ui.nickname = "  Bob  ".into();
+            guard.ui.normalize_nickname();
+            SettingsManager::save_atomic(&manager.path, &guard).unwrap();
+        }
+        let reloaded = SettingsManager::load_and_migrate(&path).unwrap();
+        assert_eq!(reloaded.ui.nickname, "Bob");
+
+        // 3. 测试 load_and_migrate 加载空昵称时回退
+        let empty_nick_json = r#"{
+            "schemaVersion": 4,
+            "network": { "servers": [] },
+            "audio": { "vadThreshold": 0.015, "vadHangoverFrames": 15, "pttMode": false, "inputDeviceId": null, "outputDeviceId": null },
+            "ui": { "nickname": "" }
+        }"#;
+        std::fs::write(&path, empty_nick_json).unwrap();
+        let loaded = SettingsManager::load_and_migrate(&path).unwrap();
+        assert_eq!(loaded.ui.nickname, UiSettings::DEFAULT_NICKNAME);
 
         let _ = std::fs::remove_dir_all(&dir);
     }

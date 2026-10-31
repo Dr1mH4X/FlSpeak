@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../core/models.dart';
+import '../../core/preferences.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/app_theme.dart';
@@ -300,5 +301,147 @@ void main() {
     expect(find.text('未连接'), findsNothing);
     expect(find.text('一个身份，连接你熟悉的每个社区。'), findsNothing);
     expect(find.text('身份保存在本机'), findsNothing);
+  });
+
+  testWidgets('通过管理身份弹窗修改昵称并在连接页更新', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_FakeCore()),
+          sessionViewProvider.overrideWith(_TestSessionController.new),
+        ],
+        child: const MaterialApp(
+          locale: Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: ConnectPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('FlSpeakUser'), findsOneWidget);
+
+    await tester.tap(find.text('管理身份'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.edit_rounded));
+    await tester.pumpAndSettle();
+
+    final renameField = find.byWidgetPredicate(
+      (w) => w is TextField && w.decoration?.hintText == '昵称',
+    );
+    await tester.enterText(renameField, 'Alice');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('完成'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Alice'), findsOneWidget);
+    expect(find.text('FlSpeakUser'), findsNothing);
+  });
+
+  testWidgets('管理身份弹窗中输入空昵称点击完成自动回退为默认昵称', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final store = PreferencesStore.inMemory(
+      preferences: const SessionPreferences(nickname: 'Bob'),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_FakeCore()),
+          sessionViewProvider.overrideWith(_TestSessionController.new),
+          preferencesStoreProvider.overrideWithValue(store),
+        ],
+        child: const MaterialApp(
+          locale: Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: ConnectPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Bob'), findsOneWidget);
+
+    await tester.tap(find.text('管理身份'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.edit_rounded));
+    await tester.pumpAndSettle();
+
+    final renameField = find.byWidgetPredicate(
+      (w) => w is TextField && w.decoration?.hintText == '昵称',
+    );
+    await tester.enterText(renameField, '   ');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('完成'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('FlSpeakUser'), findsOneWidget);
+    expect(find.text('Bob'), findsNothing);
+  });
+
+  testWidgets('管理身份弹窗中取消编辑后点击完成不应修改昵称', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final store = PreferencesStore.inMemory(
+      preferences: const SessionPreferences(nickname: 'Charlie'),
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_FakeCore()),
+          sessionViewProvider.overrideWith(_TestSessionController.new),
+          preferencesStoreProvider.overrideWithValue(store),
+        ],
+        child: const MaterialApp(
+          locale: Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: ConnectPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Charlie'), findsOneWidget);
+
+    await tester.tap(find.text('管理身份'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.edit_rounded));
+    await tester.pumpAndSettle();
+
+    final renameField = find.byWidgetPredicate(
+      (w) => w is TextField && w.decoration?.hintText == '昵称',
+    );
+    await tester.enterText(renameField, 'NewCharlie');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsLabel('取消'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('完成'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Charlie'), findsOneWidget);
+    expect(find.text('NewCharlie'), findsNothing);
   });
 }

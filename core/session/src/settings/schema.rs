@@ -97,10 +97,25 @@ pub struct UiSettings {
     pub server_icons: HashMap<String, String>,
 }
 
+impl UiSettings {
+    /// 默认昵称常量。
+    pub const DEFAULT_NICKNAME: &'static str = "FlSpeakUser";
+
+    /// 规范化昵称：去除前后空白字符，若为空值则自动回退为默认昵称。
+    pub fn normalize_nickname(&mut self) {
+        let trimmed = self.nickname.trim();
+        if trimmed.is_empty() {
+            self.nickname = Self::DEFAULT_NICKNAME.to_string();
+        } else {
+            self.nickname = trimmed.to_string();
+        }
+    }
+}
+
 impl Default for UiSettings {
     fn default() -> Self {
         Self {
-            nickname: "FlSpeakUser".to_string(),
+            nickname: Self::DEFAULT_NICKNAME.to_string(),
             theme: "system".to_string(),
             motion: "system".to_string(),
             ptt_hotkey: None,

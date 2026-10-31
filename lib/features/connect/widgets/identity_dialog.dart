@@ -14,13 +14,21 @@ Future<void> showIdentityDialog(
   required String nickname,
   required ValueChanged<String> onRename,
 }) {
+  final contentKey = GlobalKey<_IdentityDialogContentState>();
+
   return showAppModal<void>(
     context,
     title: AppLocalizations.of(context).identityTitle,
-    builder: (context) =>
-        _IdentityDialogContent(nickname: nickname, onRename: onRename),
+    builder: (context) => _IdentityDialogContent(
+      key: contentKey,
+      nickname: nickname,
+      onRename: onRename,
+    ),
     footer: (context) => FilledButton(
-      onPressed: () => Navigator.of(context).pop(),
+      onPressed: () {
+        contentKey.currentState?.commitIfEditing();
+        Navigator.of(context).pop();
+      },
       child: Text(AppLocalizations.of(context).commonDone),
     ),
   );
@@ -28,6 +36,7 @@ Future<void> showIdentityDialog(
 
 class _IdentityDialogContent extends StatefulWidget {
   const _IdentityDialogContent({
+    super.key,
     required this.nickname,
     required this.onRename,
   });
@@ -43,7 +52,14 @@ class _IdentityDialogContentState extends State<_IdentityDialogContent> {
   late final TextEditingController _draft = TextEditingController();
   late String _nickname = widget.nickname;
   bool _editing = false;
-  String? _error;
+
+  @override
+  void didUpdateWidget(covariant _IdentityDialogContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.nickname != widget.nickname && !_editing) {
+      _nickname = widget.nickname;
+    }
+  }
 
   @override
   void dispose() {
@@ -54,7 +70,6 @@ class _IdentityDialogContentState extends State<_IdentityDialogContent> {
   void _startEditing() {
     setState(() {
       _editing = true;
-      _error = null;
       _draft.text = _nickname;
       _draft.selection = TextSelection(
         baseOffset: 0,
@@ -66,23 +81,21 @@ class _IdentityDialogContentState extends State<_IdentityDialogContent> {
   void _cancelEditing() {
     setState(() {
       _editing = false;
-      _error = null;
     });
   }
 
-  void _commit() {
-    final value = _draft.text.trim();
-    if (value.isEmpty) {
-      setState(
-        () => _error = AppLocalizations.of(context).identityNicknameEmpty,
-      );
-      return;
+  void commitIfEditing() {
+    if (_editing) {
+      _commit();
     }
+  }
+
+  void _commit() {
+    final value = _draft.text;
     widget.onRename(value);
     setState(() {
       _nickname = value;
       _editing = false;
-      _error = null;
     });
   }
 
@@ -201,12 +214,11 @@ class _IdentityDialogContentState extends State<_IdentityDialogContent> {
             onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
             inputFormatters: [LengthLimitingTextInputFormatter(32)],
             style: context.texts.bodyLarge?.copyWith(fontSize: 14),
-            onChanged: (_) => setState(() => _error = null),
+            onChanged: (_) => setState(() {}),
             onSubmitted: (_) => _commit(),
             decoration: InputDecoration(
               isDense: true,
               hintText: l10n.connectNicknameLabel,
-              errorText: _error,
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 8,
                 vertical: 8,

@@ -262,11 +262,17 @@ class PreferencesStore {
     );
   }
 
-  Future<void> save(SessionPreferences preferences) async {
+  Future<SessionPreferences> save(SessionPreferences preferences) async {
     _preferences = preferences;
     final target = path;
     if (target == null) {
-      return;
+      // 内存模式（测试）：对齐 Rust 核心行为，由抽象层统一收敛回退与 trim
+      final trimmed = preferences.nickname.trim();
+      final normalizedNickname = trimmed.isEmpty
+          ? SessionPreferences.fallbackNickname
+          : trimmed;
+      _preferences = preferences.copyWith(nickname: normalizedNickname);
+      return _preferences;
     }
 
     final previous = _writeCompleted;
@@ -276,6 +282,13 @@ class PreferencesStore {
       await previous;
       try {
         ffi.updateUiSettingsJson(json: jsonEncode(preferences.toJson()));
+        final jsonStr = ffi.getSettingsJson();
+        final decoded = jsonDecode(jsonStr);
+        if (decoded is Map) {
+          _preferences = SessionPreferences.fromJson(
+            decoded.cast<String, Object?>(),
+          );
+        }
       } on Object catch (e) {
         debugPrint('通过 FFI 保存设置失败，尝试直接落盘 fallback: $e');
         final file = File(target);
@@ -291,13 +304,23 @@ class PreferencesStore {
           } catch (_) {}
         }
 
+        final trimmed = preferences.nickname.trim();
+        final normalizedNickname = trimmed.isEmpty
+            ? SessionPreferences.fallbackNickname
+            : trimmed;
+        final normalizedPreferences = preferences.copyWith(
+          nickname: normalizedNickname,
+        );
+
         final payload = Map<String, Object?>.from(existing);
-        payload.addAll(preferences.toJson());
+        payload.addAll(normalizedPreferences.toJson());
 
         final temporary = File('$target.tmp');
         await temporary.writeAsString(jsonEncode(payload), flush: true);
         await temporary.rename(target);
+        _preferences = normalizedPreferences;
       }
+      return _preferences;
     } finally {
       completed.complete();
     }

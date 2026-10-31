@@ -953,11 +953,10 @@ class PreferencesController extends Notifier<SessionPreferences> {
   SessionPreferences build() => ref.watch(preferencesStoreProvider).current;
 
   void setNickname(String value) {
-    final trimmed = value.trim();
-    if (trimmed.isEmpty || trimmed == state.nickname) {
+    if (value == state.nickname) {
       return;
     }
-    _update(state.copyWith(nickname: trimmed));
+    _update(state.copyWith(nickname: value));
   }
 
   /// `null` 表示跟随系统。
@@ -1026,7 +1025,8 @@ class PreferencesController extends Notifier<SessionPreferences> {
 
   Future<void> _persist(SessionPreferences next) async {
     try {
-      await ref.read(preferencesStoreProvider).save(next);
+      final normalized = await ref.read(preferencesStoreProvider).save(next);
+      state = state.copyWith(nickname: normalized.nickname);
     } on Object catch (error) {
       debugPrint('保存 preferences 失败：$error');
     }
