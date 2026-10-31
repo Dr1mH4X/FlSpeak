@@ -6,7 +6,7 @@
 
 1. TS6 官方客户端的图片消息**不是 URL/BBCode**，而是一条 JSON 文本：
    `{"msg_type":"ts.file.myts", ...}`。
-2. 图片字节不在自托管服务器上，而在 myTeamSpeak 的附件服务里；官方客户端通过
+2. 图片字节不在 TeamSpeak 服务器上，而在 myTeamSpeak 的附件服务里；官方客户端通过
    `tsclient_internal.tschat_downloadAttachment` 取回。消息里的 `file_id` 只是引用，
    不是可直接访问的 HTTP 地址。
 3. 按当前连接边界（不使用 myTeamSpeak 账号体系/官方媒体服务），FlSpeak **不能下载**
@@ -93,7 +93,7 @@ URL 图片已实现：
 
 上传接口接收 `PUT <上传根地址>/<随机文件名>`，请求体是原始图片字节，`Content-Type` 按 PNG/JPEG/GIF/WebP/AVIF 的字节特征确定。配置 token 时附加 `Authorization: Bearer <token>`。服务端返回任意 2xx 即为成功；客户端从公开根地址和相同文件名生成图片 URL，不读取响应正文或重定向地址。
 
-例如上传根地址 `https://images.example.com/upload/`、公开根地址 `https://images.example.com/images/`：图床把 `/upload/<文件名>` 的 PUT 内容保存为 `/images/<文件名>`，并允许接收方通过 GET 访问公开路径。S3 签名、multipart 表单与返回 JSON URL 的接口尚未接线，需要由自托管服务适配上述 PUT 接口。
+例如上传根地址 `https://images.example.com/upload/`、公开根地址 `https://images.example.com/images/`：图床把 `/upload/<文件名>` 的 PUT 内容保存为 `/images/<文件名>`，并允许接收方通过 GET 访问公开路径。S3 签名、multipart 表单与返回 JSON URL 的接口尚未接线，需要由图床服务适配上述 PUT 接口。
 
 上传根地址与公开根地址只接受无凭据、查询参数和片段的 HTTPS URL；本机开发允许 loopback HTTP。两者都检查官方主机清单。上传使用随机文件名、20 MiB 上限与 60 秒超时，不使用环境 HTTP 代理，不跟随重定向。图床配置由用户直接填写；聊天消息不能更改上传目标。
 
@@ -137,4 +137,4 @@ URL 图片已实现：
 ## 后台门禁
 
 格式门禁已关闭。用户已明确不走 myTS token：官方附件只显示“不支持的图片格式”，
-URL 图片走独立抓取，发送使用用户配置的自托管 HTTP PUT 图床。
+URL 图片走独立抓取，发送使用用户配置的 HTTP PUT 图床。

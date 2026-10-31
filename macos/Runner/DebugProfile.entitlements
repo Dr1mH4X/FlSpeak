@@ -8,7 +8,7 @@
 	<true/>
 	<key>com.apple.security.network.server</key>
 	<true/>
-	<!-- 连自托管服务器需要出站 TCP/UDP。 -->
+	<!-- 连 TeamSpeak 服务器需要出站 TCP/UDP。 -->
 	<key>com.apple.security.network.client</key>
 	<true/>
 	<!-- 语音采集。 -->

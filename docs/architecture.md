@@ -84,14 +84,14 @@ tsclient-rs 的建连 future 不是 `Send`。
 | --- | --- |
 | `core/server` | `ServerProfile`、`ServerRegistry`、地址解析；无网络、无协议依赖 |
 | `core/proto` | `resolve_target`、`DenyResolver`、最终连接边界、`client()`、`check_transfer_host()` |
-| `core/session` | `SessionHandle` / actor / 档案与身份持久化 / 第三方图片抓取与自托管上传 |
+| `core/session` | `SessionHandle` / actor / 档案与身份持久化 / 第三方图片抓取与图床上传 |
 | `core/audio` | 设备枚举、双线程采集/播放、Opus、VAD、jitter/PLC、软削波 |
 | `plugins/flspeak_ffi` | Dart 侧类型、转发、事件桥、生成物 |
 | `lib/` | UI、状态收敛、本地化 |
 
 ## 尚未接线
 
-- 聊天图片：官方 myTS 附件只显示“不支持的图片格式”；第三方 URL 抓取与自托管 HTTP PUT 图床上传已接线，磁盘缓存与解码像素上限尚未接线。详见 [images.md](images.md)。
+- 聊天图片：官方 myTS 附件只显示“不支持的图片格式”；第三方 URL 抓取与 HTTP PUT 图床上传已接线，磁盘缓存与解码像素上限尚未接线。详见 [images.md](images.md)。
 - 聊天正文：Dart `MessageContent` 渲染 TS6 Markdown 的一个子集；原始文本不做转换，
   历史里保留原样。
 - TSDNS：可选 legacy fallback，当前只做 SRV，未实现 TSDNS。

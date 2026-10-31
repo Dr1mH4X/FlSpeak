@@ -540,7 +540,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get imageHostTitle => '图片上传';
 
   @override
-  String get imageHostRequired => '请先在图片上传设置中配置自托管图床';
+  String get imageHostRequired => '请先在图片上传设置中配置图床';
 
   @override
   String get imageHostStorageFailed => '无法访问图片上传的安全存储';

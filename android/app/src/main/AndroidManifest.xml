@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- 连接自托管 TeamSpeak 服务器。 -->
+    <!-- 连接 TeamSpeak 服务器。 -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- 语音采集与音量控制。 -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>

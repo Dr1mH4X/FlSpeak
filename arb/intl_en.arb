@@ -266,7 +266,7 @@
   "chatPasteImage": "Paste image",
   "chatRemoveImage": "Remove image",
   "imageHostTitle": "Image uploads",
-  "imageHostRequired": "Configure a self-hosted image host in Image uploads first",
+  "imageHostRequired": "Configure an image host in Image uploads first",
   "imageHostStorageFailed": "Could not access secure storage for image uploads",
   "imageHostUploadBase": "HTTP PUT upload base URL",
   "imageHostPublicBase": "Public image base URL",

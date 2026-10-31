@@ -266,7 +266,7 @@
   "chatPasteImage": "粘贴图片",
   "chatRemoveImage": "移除图片",
   "imageHostTitle": "图片上传",
-  "imageHostRequired": "请先在图片上传设置中配置自托管图床",
+  "imageHostRequired": "请先在图片上传设置中配置图床",
   "imageHostStorageFailed": "无法访问图片上传的安全存储",
   "imageHostUploadBase": "HTTP PUT 上传地址",
   "imageHostPublicBase": "图片访问地址",

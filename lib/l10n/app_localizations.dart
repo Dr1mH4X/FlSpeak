@@ -1091,7 +1091,7 @@ abstract class AppLocalizations {
   /// No description provided for @imageHostRequired.
   ///
   /// In en, this message translates to:
-  /// **'Configure a self-hosted image host in Image uploads first'**
+  /// **'Configure an image host in Image uploads first'**
   String get imageHostRequired;
 
   /// No description provided for @imageHostStorageFailed.

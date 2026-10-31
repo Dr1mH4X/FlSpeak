@@ -86,7 +86,7 @@ export const translations = {
     previewInCurrentChannel: '当前所在房间',
 
     // FactsGrid
-    fact1Title: '自托管优先边界',
+    fact1Title: '项目边界',
     fact1Body: '仅直连你录入的 IP、域名或标准 _ts3._udp SRV 记录；在协议层单点拦截官方云与遥测主机。',
     fact2Title: 'Rust 零跨界双线程音频',
     fact2Body: '采集与播放各占独立 cpal 实时流，Opus 编解码、VAD 与软限幅全在 Rust 内闭环，音频帧永不过 FFI。',
@@ -194,7 +194,7 @@ export const translations = {
 
     // Footer
     footerLicense: '基于 GNU Affero General Public License v3.0 (AGPL-3.0) 开源发布。',
-    footerBoundaryNote: 'FlSpeak 仅连接自托管 TeamSpeak 服务器，不集成任何官方云账号或遥测服务。',
+    footerBoundaryNote: 'FlSpeak 仅连接 TeamSpeak 服务器，不集成任何官方云账号或遥测服务。',
     footerLinkGithub: 'GitHub',
     footerLinkReleases: 'Releases',
     footerLinkIssues: '问题反馈',
@@ -286,7 +286,7 @@ export const translations = {
     previewInCurrentChannel: 'Active voice room',
 
     // FactsGrid
-    fact1Title: 'Self-Hosted Boundary',
+    fact1Title: 'Project Boundary',
     fact1Body: 'Connects exclusively to user-entered IPs, domains, or standard _ts3._udp SRV records. Official cloud endpoints are blocked at the protocol boundary.',
     fact2Title: 'Zero-FFI Dual-Thread Audio',
     fact2Body: 'Dedicated cpal capture and playback streams with Opus coding, VAD, and soft-clipping entirely in Rust. Raw audio frames never cross FFI.',
@@ -394,7 +394,7 @@ export const translations = {
 
     // Footer
     footerLicense: 'Released under the GNU Affero General Public License v3.0 (AGPL-3.0).',
-    footerBoundaryNote: 'FlSpeak connects strictly to self-hosted TeamSpeak servers with zero official cloud or telemetry dependencies.',
+    footerBoundaryNote: 'FlSpeak connects strictly to TeamSpeak servers with zero official cloud or telemetry dependencies.',
     footerLinkGithub: 'GitHub',
     footerLinkReleases: 'Releases',
     footerLinkIssues: 'Issues',

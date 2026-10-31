@@ -550,7 +550,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get imageHostRequired =>
-      'Configure a self-hosted image host in Image uploads first';
+      'Configure an image host in Image uploads first';
 
   @override
   String get imageHostStorageFailed =>

@@ -30,7 +30,7 @@ TeamSpeak 第三方客户端：Flutter 负责界面，Rust 负责协议、连接
 
 ## 硬规则
 
-1. **自托管 only**：客户端只连接用户手动录入的 IP、域名或 localhost，不实现 myTeamSpeak
+1. **项目边界**：客户端只连接用户手动录入的 IP、域名或 localhost，不实现 myTeamSpeak
    账号/云同步，也不调用官方媒体上传或附件下载。裸昵称不接受，`named.myteamspeak.com/lookup`
    不使用。SRV（`_ts3._udp.<domain>`）是标准 DNS，可以解析；最终目标由
    `core/proto` 的 `client` 做一次官方基础设施检查，不在 UI、FFI 或存储层重复审查。
