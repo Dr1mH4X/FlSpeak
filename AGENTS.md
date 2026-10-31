@@ -9,7 +9,7 @@ TeamSpeak 第三方客户端：Flutter 负责界面，Rust 负责协议、连接
 | 仓库结构与不变量 | `.agents/project.md` |
 | 怎么编译、怎么验证 | `docs/development.md` |
 | 测试怎么写、跑哪些 | `docs/testing.md` |
-| 写代码的规矩 | `docs/defensive-patterns.md` |
+| 写代码的规矩 | `docs/defensive-patterns/AGENTS.md` |
 | 分层与数据流 | `docs/architecture.md` |
 | 连接边界为什么长这样 | `docs/connection-boundary.md` |
 | 文档放哪、怎么写 | `docs/AGENTS.md` |
@@ -19,14 +19,17 @@ TeamSpeak 第三方客户端：Flutter 负责界面，Rust 负责协议、连接
 
 | 目录 | 读 |
 | --- | --- |
-| `core/` | `core/AGENTS.md` |
+| `core/` | `core/AGENTS.md` (及其下 `audio/`, `proto/`, `server/`, `session/`) |
+| `plugins/` | `plugins/AGENTS.md` |
 | `plugins/flspeak_ffi/` | `plugins/flspeak_ffi/AGENTS.md` |
-| `lib/` | `lib/AGENTS.md` |
-| `lib/features/settings/` | `lib/features/settings/AGENTS.md` |
-| `docs/` | `docs/AGENTS.md` |
+| `lib/` | `lib/AGENTS.md` (及其下 `core/`, `features/`, `theme/`, `widgets/` 等) |
+| `docs/` | `docs/AGENTS.md` (及其下 `subsystems/`, `defensive-patterns/`, `cookbook/`, `release/`) |
+| `website/` | `website/AGENTS.md` |
+| `tool/` | `tool/AGENTS.md` |
 | `.github/` | `.github/AGENTS.md` |
-| `.agents/notes/` | `.agents/notes/AGENTS.md` |
-| `.agents/skills/` | `.agents/skills/AGENTS.md` |
+| `.agents/` | `.agents/AGENTS.md` (及其下 `notes/`, `skills/`) |
+| `android/`, `macos/`, `linux/`, `windows/` | 各平台根 `AGENTS.md` 与原生宿主层 |
+| `arb/`, `shaders/` | 对应资产与资源目录 `AGENTS.md` |
 
 ## 硬规则
 

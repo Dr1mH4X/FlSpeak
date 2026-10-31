@@ -11,7 +11,7 @@ description: 推送、强推、把 PR 标为可评审或声称检查通过之前
 
 - [docs/development.md](../../../docs/development.md)：Rust/FFI/Flutter 的原始命令、macOS 的 Opus 构建细节。
 - [docs/testing.md](../../../docs/testing.md)：单测摆放、测试范围选择、真实服务器手动测试、CI 测试门。
-- [docs/defensive-patterns.md](../../../docs/defensive-patterns.md)：编码反面与连接边界改动的自查要求。
+- [docs/defensive-patterns/AGENTS.md](../../../docs/defensive-patterns/AGENTS.md)：编码反面与连接边界改动的自查要求。
 - [docs/ci-cd.md](../../../docs/ci-cd.md)：CI 各作业与发布矩阵、本地复现方法。
 - [.github/workflows/checks.yml](../../../.github/workflows/checks.yml)：PR 的实际门禁（`ci.yml` 调用它，并另跑桌面与 Android 构建）。
 
@@ -26,7 +26,7 @@ git diff --stat origin/main...HEAD
 
 2. **按改动面选最小证据**（每个行为改动都要有「回归时会失败」的那条测试或检查）：
    - `core/` 某个 crate 的行为：从 `plugins/flspeak_ffi/rust` 定向跑拥有它的测试，例如 `cargo test -p server -p proto`；改动共享 crate 时再补相邻 crate 的测试。
-   - 连接边界（`core/proto`、`core/server`、`FORBIDDEN_HOST_SUFFIXES`、`check_transfer_host`）：先按 [docs/defensive-patterns.md](../../../docs/defensive-patterns.md) 的连接边界一节自查——决策记录先行，放宽限制必须写清理由与残余风险——再补相似域名与目标重定向的测试。
+   - 连接边界（`core/proto`、`core/server`、`FORBIDDEN_HOST_SUFFIXES`、`check_transfer_host`）：先按 [docs/defensive-patterns/connection.md](../../../docs/defensive-patterns/connection.md) 的连接边界一节自查——决策记录先行，放宽限制必须写清理由与残余风险——再补相似域名与目标重定向的测试。
    - `plugins/flspeak_ffi/rust/src/api/**` 或其中的类型：重跑 `flutter_rust_bridge_codegen generate`，确认生成物一起提交。
    - `lib/`、`arb/`：`dart format lib setup.dart`、`flutter analyze --no-fatal-infos`、`just test`（`flutter test lib`，用例与实现同目录）；改了 `arb/` 先 `flutter gen-l10n`。
    - `docs/`、`.agents/`、`AGENTS.md`：仓库内相对链接与路径是否解析（见验证命令），笔记还要按[核查清单](../../../.agents/notes/AGENTS.md#核查清单)过一遍。

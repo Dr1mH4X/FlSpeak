@@ -17,6 +17,12 @@
   也不要用 `SnackBar`。字段校验留在输入框旁，持久状态（设备不可用 chip、身份提升
   横幅）留在页面上。
 - Dart 单测与被测文件同目录（`foo.dart` 旁 `foo_test.dart`），靠 `just test` 跑；仓库根不设 `test/`，`flutter test` 的默认扫描目录因此用不上。
-- 设置页的文案规则见 [features/settings/AGENTS.md](features/settings/AGENTS.md)。
 
-编码反面见 [../docs/defensive-patterns.md](../docs/defensive-patterns.md)，开发流程与语言约定见 [../docs/development.md](../docs/development.md)。
+子目录规则详见：
+- [lib/core](core/AGENTS.md)
+- [lib/features](features/AGENTS.md)
+- [lib/theme](theme/AGENTS.md)
+- [lib/widgets](widgets/AGENTS.md)
+- [lib/l10n](l10n/AGENTS.md)
+
+编码反面见 [../docs/defensive-patterns/AGENTS.md](../docs/defensive-patterns/AGENTS.md)，开发流程与语言约定见 [../docs/development.md](../docs/development.md)。

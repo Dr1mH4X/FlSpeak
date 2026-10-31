@@ -14,6 +14,12 @@
 - 保持依赖方向：`server` 不依赖网络或协议；`proto` 依赖 `server`；
   `session` 依赖 `proto` 与 `audio`；FFI 只依赖 `session`。
 
+子 crate 特有规则见对应目录：
+- [core/server](server/AGENTS.md)
+- [core/proto](proto/AGENTS.md)
+- [core/session](session/AGENTS.md)
+- [core/audio](audio/AGENTS.md)
+
 ## 实现约定
 
-编码反面与错误处理见 [../docs/defensive-patterns.md](../docs/defensive-patterns.md)，测试约定见 [../docs/testing.md](../docs/testing.md)，开发流程与语言约定见 [../docs/development.md](../docs/development.md)。
+编码反面与错误处理见 [../docs/defensive-patterns/AGENTS.md](../docs/defensive-patterns/AGENTS.md)，测试约定见 [../docs/testing.md](../docs/testing.md)，开发流程与语言约定见 [../docs/development.md](../docs/development.md)。

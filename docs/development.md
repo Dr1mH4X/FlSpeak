@@ -1,6 +1,6 @@
 # 开发流程
 
-所有命令都在仓库根目录执行，除非写明工作目录。日常入口是仓库根的 `justfile`：`just`（或 `just --list`）列出全部任务，`just check` 是提交前的聚合验证，`just ci` 对齐 CI 的静态检查，`just codegen-check` 校验 FFI 生成物。本文保留原始命令，作为各任务的展开与平台细节。编码反面见 [defensive-patterns.md](defensive-patterns.md)，测试约定见 [testing.md](testing.md)。
+所有命令都在仓库根目录执行，除非写明工作目录。日常入口是仓库根的 `justfile`：`just`（或 `just --list`）列出全部任务，`just check` 是提交前的聚合验证，`just ci` 对齐 CI 的静态检查，`just codegen-check` 校验 FFI 生成物。本文保留原始命令，作为各任务的展开与平台细节。编码反面见 [defensive-patterns/AGENTS.md](defensive-patterns/AGENTS.md)，测试约定见 [testing.md](testing.md)。
 
 ## Rust
 
