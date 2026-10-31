@@ -7,10 +7,6 @@
 _Yet another teamspeak client, multi-platform and open-source._
 <!-- prettier-ignore-end -->
 
-  <a href="https://github.com/Dr1mH4X/FlSpeak/actions">
-    <img src="https://img.shields.io/github/actions/workflow/status/Dr1mH4X/FlSpeak/ci.yml?style=for-the-badge&label=Build" alt="FlSpeak Build Status">
-  </a>
-
   <a href="https://github.com/Dr1mH4X/FlSpeak/releases">
     <img src="https://img.shields.io/github/v/release/Dr1mH4X/FlSpeak?style=for-the-badge&color=blue&label=Latest%20Release" alt="FlSpeak Latest Release">
   </a>
