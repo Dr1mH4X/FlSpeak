@@ -1,4 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import type { Locale, TranslationKey } from '../i18n/translations';
 import type { ThemeMode } from '../hooks/useTheme';
 
@@ -13,6 +19,7 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
+  locale,
   onToggleLocale,
   theme,
   onToggleTheme,
@@ -105,10 +112,14 @@ export const Navbar: React.FC<NavbarProps> = ({
     return () => cancelAnimationFrame(rafId);
   }, [stars]);
 
-  const handleItemEnter = (e: React.MouseEvent<HTMLElement>) => {
+  const hoveredTargetRef = useRef<HTMLElement | null>(null);
+
+  const syncInk = useCallback((target: HTMLElement | null) => {
     const container = navGroupRef.current;
-    if (!container) return;
-    const target = e.currentTarget;
+    if (!container || !target) {
+      setInkStyle((prev) => ({ ...prev, opacity: 0 }));
+      return;
+    }
     const containerRect = container.getBoundingClientRect();
     const targetRect = target.getBoundingClientRect();
     setInkStyle({
@@ -116,10 +127,54 @@ export const Navbar: React.FC<NavbarProps> = ({
       width: targetRect.width,
       opacity: 1,
     });
+  }, []);
+
+  const handleItemEnter = (e: React.MouseEvent<HTMLElement>) => {
+    hoveredTargetRef.current = e.currentTarget;
+    syncInk(e.currentTarget);
   };
 
   const handleGroupLeave = () => {
+    hoveredTargetRef.current = null;
     setInkStyle((prev) => ({ ...prev, opacity: 0 }));
+  };
+
+  // Re-align hover ink immediately before paint when locale changes
+  useLayoutEffect(() => {
+    if (hoveredTargetRef.current) {
+      syncInk(hoveredTargetRef.current);
+    }
+  }, [locale, syncInk]);
+
+  // Re-align hover ink whenever navbar elements change dimensions (e.g. text width, font loading)
+  useEffect(() => {
+    const container = navGroupRef.current;
+    if (!container || typeof ResizeObserver === 'undefined') return;
+
+    const observer = new ResizeObserver(() => {
+      if (hoveredTargetRef.current) {
+        syncInk(hoveredTargetRef.current);
+      }
+    });
+
+    observer.observe(container);
+    Array.from(container.children).forEach((child) => {
+      if (!child.classList.contains('nav-hover-ink')) {
+        observer.observe(child);
+      }
+    });
+
+    return () => observer.disconnect();
+  }, [syncInk]);
+
+  const handleToggleLocale = (e: React.MouseEvent<HTMLButtonElement>) => {
+    hoveredTargetRef.current = e.currentTarget;
+    onToggleLocale();
+    requestAnimationFrame(() => {
+      if (hoveredTargetRef.current) {
+        syncInk(hoveredTargetRef.current);
+      }
+    });
   };
 
   const formattedTargetStars =
@@ -224,7 +279,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             type="button"
             className="nav-icon-btn nav-lang-btn"
-            onClick={onToggleLocale}
+            onClick={handleToggleLocale}
             onMouseEnter={handleItemEnter}
             aria-label={t('langSwitchLabel')}
           >

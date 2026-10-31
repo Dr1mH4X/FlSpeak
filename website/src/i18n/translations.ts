@@ -86,14 +86,14 @@ export const translations = {
     previewInCurrentChannel: '当前所在房间',
 
     // FactsGrid
-    fact1Title: '项目边界',
-    fact1Body: '仅直连你录入的 IP、域名或标准 _ts3._udp SRV 记录；在协议层单点拦截官方云与遥测主机。',
-    fact2Title: 'Rust 零跨界双线程音频',
-    fact2Body: '采集与播放各占独立 cpal 实时流，Opus 编解码、VAD 与软限幅全在 Rust 内闭环，音频帧永不过 FFI。',
-    fact3Title: 'Actor 串行会话模型',
-    fact3Body: '单线程 LocalSet Actor 独占协议客户端所有权，消除跨异步锁竞争，断线重连与状态收敛严谨确定。',
-    fact4Title: '原生跨平台表现力',
-    fact4Body: '基于 Flutter 与 Material 3 打造的紧凑三栏工作区，配备同心圆角、弹簧弹出菜单与实时声波电平条。',
+    fact1Title: 'tsclient-rs 驱动',
+    fact1Body: 'Rust语言移植的底层实现。',
+    fact2Title: 'N/A',
+    fact2Body: '',
+    fact3Title: 'N/A',
+    fact3Body: '',
+    fact4Title: '开源',
+    fact4Body: '以 AGPL-3.0 协议开源。',
 
     // Download Section
     downloadIndex: '01',
@@ -286,14 +286,14 @@ export const translations = {
     previewInCurrentChannel: 'Active voice room',
 
     // FactsGrid
-    fact1Title: 'Project Boundary',
-    fact1Body: 'Connects exclusively to user-entered IPs, domains, or standard _ts3._udp SRV records. Official cloud endpoints are blocked at the protocol boundary.',
-    fact2Title: 'Zero-FFI Dual-Thread Audio',
-    fact2Body: 'Dedicated cpal capture and playback streams with Opus coding, VAD, and soft-clipping entirely in Rust. Raw audio frames never cross FFI.',
-    fact3Title: 'Serialized Session Actor',
-    fact3Body: 'A single-threaded LocalSet actor owns the protocol client exclusively, eliminating async lock contention and race conditions across reconnects.',
-    fact4Title: 'Native M3 Craftsmanship',
-    fact4Body: 'Compact three-pane workspace built with Flutter and Material 3, featuring concentric corners, spring popups, and a live voice activity ribbon.',
+    fact1Title: 'Powered by tsclient-rs',
+    fact1Body: 'Underlying protocol implementation ported to Rust.',
+    fact2Title: 'N/A',
+    fact2Body: '',
+    fact3Title: 'N/A',
+    fact3Body: '',
+    fact4Title: 'Open Source',
+    fact4Body: 'Open source under the AGPL-3.0 license.',
 
     // Download Section
     downloadIndex: '01',

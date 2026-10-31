@@ -182,8 +182,8 @@ a {
    ========================================================================== */
 
 .ambient-backdrop {
-  --aura-x: 50%;
-  --aura-y: 32%;
+  --aura-x: 50vw;
+  --aura-y: 35vh;
   position: fixed;
   inset: 0;
   pointer-events: none;
@@ -193,23 +193,13 @@ a {
 
 .ambient-mesh-primary {
   position: absolute;
-  inset: -20%;
+  inset: 0;
   background: radial-gradient(
-    560px circle at var(--aura-x) var(--aura-y),
+    600px circle at var(--aura-x) var(--aura-y),
     var(--aura-primary),
     transparent 70%
   );
   transition: opacity 300ms ease;
-}
-
-.ambient-mesh-secondary {
-  position: absolute;
-  inset: -10%;
-  background: radial-gradient(
-    480px circle at calc(100% - var(--aura-x)) calc(var(--aura-y) + 18%),
-    var(--aura-secondary),
-    transparent 72%
-  );
 }
 
 .ambient-dot-matrix {
@@ -955,6 +945,27 @@ a {
   font-size: 0.85rem;
   line-height: 1.6;
   color: var(--m3-on-surface-variant);
+}
+
+.fact-card.is-placeholder {
+  opacity: 0.35;
+  border-style: dashed;
+  background: transparent;
+  cursor: default;
+}
+
+.fact-card.is-placeholder:hover {
+  transform: none;
+  background: transparent;
+  border-color: var(--subtle-border);
+}
+
+.fact-card.is-placeholder .fact-title {
+  margin: 0;
+  color: var(--m3-on-surface-variant);
+  font-weight: 500;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
 }
 
 /* ==========================================================================

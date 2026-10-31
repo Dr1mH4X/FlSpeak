@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo } from 'react';
 import type { TranslationKey } from '../i18n/translations';
 import type {
   ArchId,
@@ -29,34 +29,6 @@ interface HeroProps {
 
 const BRAND_CHARS = ['F', 'l', 'S', 'p', 'e', 'a', 'k'];
 
-function getCtaKindSubtitleKey(
-  kindKey: ClassifiedAsset['kindKey']
-): TranslationKey {
-  switch (kindKey) {
-    case 'installer':
-      return 'ctaSubInstaller';
-    case 'portable':
-      return 'ctaSubPortable';
-    case 'dmg':
-      return 'ctaSubDmg';
-    case 'appArchive':
-      return 'ctaSubArchive';
-    case 'deb':
-      return 'ctaSubDeb';
-    case 'rpm':
-      return 'ctaSubRpm';
-    case 'appimage':
-      return 'ctaSubAppImage';
-    case 'tarball':
-      return 'ctaSubPortable';
-    case 'apkArm64':
-    case 'apkArmv7':
-    case 'apkX64':
-    case 'apkUniversal':
-      return 'ctaSubApk';
-  }
-}
-
 function getExpectedAssetFilename(
   platform: PlatformId,
   arch: ArchId,
@@ -76,19 +48,6 @@ function getExpectedAssetFilename(
   }
 }
 
-function getPlatformDefaultKindSubtitle(platform: PlatformId): string {
-  switch (platform) {
-    case 'windows':
-      return 'ZIP';
-    case 'macos':
-      return 'App Archive (ZIP)';
-    case 'linux':
-      return 'tar.gz';
-    case 'android':
-      return 'APK';
-  }
-}
-
 export const Hero: React.FC<HeroProps> = ({
   selectedPlatform,
   selectedArch,
@@ -100,12 +59,6 @@ export const Hero: React.FC<HeroProps> = ({
   repoSlug = 'Dr1mH4X/FlSpeak',
   t,
 }) => {
-  const ctaRef = useRef<HTMLAnchorElement | null>(null);
-  const [magnetOffset, setMagnetOffset] = useState<{ x: number; y: number }>({
-    x: 0,
-    y: 0,
-  });
-
   const recommendedAsset = useMemo(() => {
     if (detectedOs === 'ios') return null;
     return findRecommendedAsset(
@@ -131,7 +84,6 @@ export const Hero: React.FC<HeroProps> = ({
 
   const ctaSubtitle = useMemo(() => {
     if (recommendedAsset) {
-      const kindLabel = t(getCtaKindSubtitleKey(recommendedAsset.kindKey));
       const archLabel =
         recommendedAsset.platform === 'macos'
           ? recommendedAsset.macChip === 'intel'
@@ -142,33 +94,18 @@ export const Hero: React.FC<HeroProps> = ({
           : recommendedAsset.arch === 'arm64'
             ? 'ARM64'
             : 'x64';
-      return `${archLabel} · ${kindLabel} · ${recommendedAsset.sizeFormatted}`;
+      return `${archLabel} · ${recommendedAsset.sizeFormatted}`;
     }
-    const archLabel = selectedArch === 'arm64' ? 'ARM64' : 'x64';
-    const kindLabel = getPlatformDefaultKindSubtitle(selectedPlatform);
-    return `${archLabel} · ${kindLabel}`;
+    const archLabel =
+      selectedPlatform === 'macos'
+        ? selectedArch === 'arm64'
+          ? t('chipAppleSilicon')
+          : t('chipIntel')
+        : selectedArch === 'arm64'
+          ? 'ARM64'
+          : 'x64';
+    return archLabel;
   }, [recommendedAsset, selectedPlatform, selectedArch, t]);
-
-  const handleCtaPointerMove = (e: React.PointerEvent<HTMLAnchorElement>) => {
-    const el = ctaRef.current;
-    if (!el) return;
-    const prefersReducedMotion =
-      typeof window !== 'undefined' &&
-      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    if (prefersReducedMotion) return;
-
-    const rect = el.getBoundingClientRect();
-    const relX = (e.clientX - (rect.left + rect.width / 2)) / (rect.width / 2);
-    const relY = (e.clientY - (rect.top + rect.height / 2)) / (rect.height / 2);
-    setMagnetOffset({
-      x: Math.max(-5, Math.min(5, relX * 4.5)),
-      y: Math.max(-3, Math.min(3, relY * 2.8)),
-    });
-  };
-
-  const handleCtaPointerLeave = () => {
-    setMagnetOffset({ x: 0, y: 0 });
-  };
 
   const displayTag = releaseTag || 'v0.1.0';
 
@@ -223,14 +160,8 @@ export const Hero: React.FC<HeroProps> = ({
 
         <div className="hero-cta-wrap">
           <a
-            ref={ctaRef}
             href={directDownloadUrl}
             className="hero-primary-cta"
-            style={{
-              transform: `translate3d(${magnetOffset.x.toFixed(2)}px, ${magnetOffset.y.toFixed(2)}px, 0)`,
-            }}
-            onPointerMove={handleCtaPointerMove}
-            onPointerLeave={handleCtaPointerLeave}
           >
             <span className="hero-cta-icon" aria-hidden="true">
               <PlatformIcon platform={selectedPlatform} size={22} />
