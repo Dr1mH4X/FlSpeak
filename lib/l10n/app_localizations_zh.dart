@@ -10,7 +10,7 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
-  String get appTitle => '自托管 TeamSpeak';
+  String get appTitle => 'FlSpeak';
 
   @override
   String get appName => 'FlSpeak';

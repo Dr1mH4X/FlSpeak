@@ -10,7 +10,7 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String get appTitle => 'Self-hosted TeamSpeak';
+  String get appTitle => 'FlSpeak';
 
   @override
   String get appName => 'FlSpeak';
