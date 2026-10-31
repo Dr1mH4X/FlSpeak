@@ -72,7 +72,7 @@ function getExpectedAssetFilename(
     case 'linux':
       return `flspeak-${ver}-linux-${archTag}.tar.gz`;
     case 'android':
-      return `flspeak-${ver}-android-arm64.apk`;
+      return `flspeak-${ver}-android-arm64-v8a.apk`;
   }
 }
 

@@ -35,6 +35,7 @@ Future<void> main(List<String> args) async {
     'build',
     subcommand,
     '--release',
+    if (platform == 'android') '--split-per-abi',
     '--build-name',
     buildName,
     '--build-number',
@@ -102,11 +103,31 @@ Future<List<String>> _collect(
 
   switch (platform) {
     case 'android':
-      final apk = File('build/app/outputs/flutter-apk/app-release.apk');
-      if (!apk.existsSync()) {
+      final dir = Directory('build/app/outputs/flutter-apk');
+      if (!dir.existsSync()) {
         return const [];
       }
-      return [_copy(apk, p.join(dist.path, '$stem.apk'))];
+      final collected = <String>[];
+      final splitRegex = RegExp(r'^app-(.+)-release\.apk$');
+      final files = dir.listSync().whereType<File>().toList()
+        ..sort((a, b) => a.path.compareTo(b.path));
+      for (final file in files) {
+        final match = splitRegex.firstMatch(p.basename(file.path));
+        if (match != null) {
+          final abi = match.group(1)!;
+          collected.add(
+            _copy(file, p.join(dist.path, 'flspeak-$version-android-$abi.apk')),
+          );
+        }
+      }
+      if (collected.isNotEmpty) {
+        return collected;
+      }
+      final apk = File(p.join(dir.path, 'app-release.apk'));
+      if (apk.existsSync()) {
+        return [_copy(apk, p.join(dist.path, '$stem.apk'))];
+      }
+      return const [];
     case 'macos':
       final app = _first(
         Directory('build/macos/Build/Products/Release'),

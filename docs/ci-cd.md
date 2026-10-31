@@ -63,7 +63,7 @@ codegen 用官方 release 的 x86_64 linux 预编译附件（版本与 sha256 �
 
    | 平台 | runner | 架构 |
    | --- | --- | --- |
-   | android | ubuntu-latest | 通用 APK |
+   | android | ubuntu-latest | arm64-v8a / armeabi-v7a / x86_64（分包 APK） |
    | windows | windows-latest | amd64 |
    | linux | ubuntu-latest | amd64 |
    | macos | macos-15-intel | amd64 |
