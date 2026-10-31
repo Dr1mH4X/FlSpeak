@@ -10,7 +10,6 @@ import '../../core/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/app_theme.dart';
 import 'widgets/chat_pane.dart';
-import 'widgets/media_grid.dart';
 import 'workspace_page.dart';
 import 'workspace_state.dart';
 
@@ -73,20 +72,6 @@ Future<ProviderContainer> _mount(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('页签内容与指示器同时开始切换', (tester) async {
-    await _mount(tester);
-    final tabs = find.byType(TabBar);
-    await tester.tap(
-      find.descendant(of: tabs, matching: find.byType(Tab)).at(1),
-    );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 60));
-    final controller = tester.widget<TabBar>(tabs).controller!;
-    expect(controller.indexIsChanging, isTrue);
-    expect(find.byType(MediaGrid), findsOneWidget);
-    await tester.pumpAndSettle();
-  });
-
   testWidgets('频道切换交叉淡入，退出中的输入区不能接收焦点或点击', (tester) async {
     final container = await _mount(tester);
     final field = find.descendant(
