@@ -8,6 +8,8 @@ build/
 dist/
 .flutter-plugins
 .flutter-plugins-dependencies
+# 插件作为依赖库不提交 pubspec.lock，避免不同镜像源（pub.dev 与国内镜像）覆盖导致 CI 校验失败
+plugins/flspeak_ffi/pubspec.lock
 
 # 注意：flutter_rust_bridge 的生成物（plugins/flspeak_ffi/rust/src/frb_generated.rs、
 # plugins/flspeak_ffi/lib/src/rust/**、plugins/flspeak_ffi/rust/src/api/*.freezed.dart）
