@@ -4,9 +4,10 @@
 
 | 文件 | 触发 | 内容 |
 | --- | --- | --- |
-| `checks.yml` | `workflow_call` | 可复用的检查作业：`rust`、`dart`、`dart-test` |
+| `checks.yml` | `workflow_call` | 可复用的检查作业：`rust`、`dart`、`dart-test`、`website` |
 | `ci.yml` | main push、PR、手动 | 调用 `checks.yml`，再跑 `desktop` 与 `android` 的 debug 构建；纯文档改动不触发 |
-| `release.yml` | `v*` tag、手动输入版本号 | `meta`、`checks`、七平台 `build` 矩阵、`publish` |
+| `release.yml` | `v*` tag、手动输入版本号 | `meta`、`checks`、5 平台 `build` 矩阵、`publish` |
+| `deploy-website.yml` | main push（`website/**`、自身）、release 成功、手动 | 构建官网静态产物并自动部署到 GitHub Pages |
 
 tag 推送只启动 `release.yml`，平台打包因此只发生一次；main 与 PR 仍由 `ci.yml`
 覆盖桌面与 Android 的编译。`ci.yml` 用 `paths-ignore` 跳过只改 `**/*.md` 或
