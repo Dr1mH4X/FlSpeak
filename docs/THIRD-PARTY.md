@@ -4,8 +4,8 @@
 
 | 来源 | 原始许可证 | 复制内容 |
 | --- | --- | --- |
-| [FlClash](https://github.com/chen08209/FlClash) | GPL-3.0 | macOS 标题条布局、窗口尺寸与红绿灯让位，选项弹层、文字模糊切换动效、整屏主题与语言平滑过渡、Liquid Glass 与 Goo 渲染底座 |
-| [FlClash 的 `plugins/window`](https://github.com/chen08209/FlClash/tree/main/plugins/window) | MIT | 隐藏标题栏、窗口拖拽、双击缩放与全屏状态 |
+| [FlClash](https://github.com/chen08209/FlClash) | GPL-3.0 | macOS 标题条布局、窗口尺寸与红绿灯让位，Windows 标题栏控制按钮与 Segoe Fluent 矢量图标，选项弹层、文字模糊切换动效、整屏主题与语言平滑过渡、Liquid Glass 与 Goo 渲染底座 |
+| [FlClash 的 `plugins/window`](https://github.com/chen08209/FlClash/tree/main/plugins/window) | MIT | 隐藏标题栏、窗口拖拽、双击缩放、最小化/最大化/关闭、置顶、系统材质特效（Mica/Acrylic）、单实例检测与全屏状态 |
 
 ## FlClash
 
@@ -30,17 +30,27 @@
 | `lib/widgets/theme_cross_fade.dart` | `lib/ui/theme_cross_fade.dart` |
 | `lib/widgets/popup.dart` | `lib/ui/popup.dart`、`lib/ui/list.dart` |
 | `lib/widgets/app_navigation_sidebar.dart` | `lib/ui/sidebar.dart` |
+| `lib/widgets/caption_icon.dart` | `lib/ui/icons/caption_icon.dart` |
 
 ## FlClash 的 window 插件
 
 位置为 FlClash 仓库的 `plugins/window`，原始许可证为 MIT，见该目录的 `LICENSE`。
 
-复制内容来自 `macos/window/Sources/window/WindowStyle.swift` 的 `.hidden` 标题栏分支，以及 `WindowController.swift` 的 `startDragging`、`maximize`、`setFullScreen` 行为。
+复制内容来自：
+- `macos/window/Sources/window/WindowStyle.swift` 的 `.hidden` 标题栏分支，以及 `WindowController.swift` 的 `startDragging`、`maximize`、`setFullScreen` 行为。
+- `windows/window_style.h` 与 `windows/window_style.cpp` 的隐藏标题栏、DWM 边框延伸、暗色模式与 Mica/Acrylic 材质。
+- `windows/window_controller.h` 与 `windows/window_controller.cpp` 的非客户区消息处理、顶部 1px 细边框 hit-test 与缩放、窗口拖拽、最小化、最大化与全屏。
+- `windows/running_instance.h` 与 `windows/running_instance.cpp` 的单实例进程匹配与激活。
 
 | 本仓库文件 | 原始文件 |
 | --- | --- |
 | `macos/Runner/MainFlutterWindow.swift` | `plugins/window/macos/window/Sources/window/WindowStyle.swift`、`WindowController.swift` |
-| `lib/core/window_chrome.dart` | `plugins/window/lib/src/desktop_window.dart` 的 `startDragging` 调用 |
+| `windows/runner/running_instance.h`、`windows/runner/running_instance.cpp` | `plugins/window/windows/running_instance.h`、`running_instance.cpp` |
+| `windows/runner/window_style.h`、`windows/runner/window_style.cpp` | `plugins/window/windows/window_style.h`、`window_style.cpp` |
+| `windows/runner/window_controller.h`、`windows/runner/window_controller.cpp` | `plugins/window/windows/window_controller.h`、`window_controller.cpp` |
+| `windows/runner/flutter_window.h`、`windows/runner/flutter_window.cpp` | `plugins/window/windows/window_plugin.cpp`、`window_controller.cpp` |
+| `windows/runner/main.cpp` | `windows/runner/main.cpp` |
+| `lib/core/window_chrome.dart` | `plugins/window/lib/src/desktop_window.dart` |
 
 MIT 许可原文：
 

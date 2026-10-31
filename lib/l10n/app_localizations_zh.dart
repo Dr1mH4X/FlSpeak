@@ -19,6 +19,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get homeTitle => '主页';
 
   @override
+  String get windowPin => '置顶';
+
+  @override
+  String get windowUnpin => '取消置顶';
+
+  @override
+  String get windowMinimize => '最小化';
+
+  @override
+  String get windowMaximize => '最大化';
+
+  @override
+  String get windowRestore => '还原';
+
+  @override
   String get commonClose => '关闭';
 
   @override

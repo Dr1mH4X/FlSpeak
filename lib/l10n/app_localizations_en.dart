@@ -19,6 +19,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get homeTitle => 'Home';
 
   @override
+  String get windowPin => 'Pin';
+
+  @override
+  String get windowUnpin => 'Unpin';
+
+  @override
+  String get windowMinimize => 'Minimize';
+
+  @override
+  String get windowMaximize => 'Maximize';
+
+  @override
+  String get windowRestore => 'Restore';
+
+  @override
   String get commonClose => 'Close';
 
   @override

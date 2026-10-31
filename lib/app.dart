@@ -234,6 +234,8 @@ class _WindowFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMacOS = !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
+    final isWindows =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
     final size = MediaQuery.sizeOf(context);
     final isMobileView = size.width < Breakpoints.compact;
     return ValueListenableBuilder<bool>(
@@ -248,6 +250,7 @@ class _WindowFrame extends StatelessWidget {
         ),
         child: WindowHeaderContainer(
           isMacOS: isMacOS,
+          isWindows: isWindows,
           isMobileView: isMobileView,
           child: Stack(
             children: [

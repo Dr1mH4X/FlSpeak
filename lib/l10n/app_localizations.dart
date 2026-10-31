@@ -116,6 +116,36 @@ abstract class AppLocalizations {
   /// **'Home'**
   String get homeTitle;
 
+  /// No description provided for @windowPin.
+  ///
+  /// In en, this message translates to:
+  /// **'Pin'**
+  String get windowPin;
+
+  /// No description provided for @windowUnpin.
+  ///
+  /// In en, this message translates to:
+  /// **'Unpin'**
+  String get windowUnpin;
+
+  /// No description provided for @windowMinimize.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimize'**
+  String get windowMinimize;
+
+  /// No description provided for @windowMaximize.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximize'**
+  String get windowMaximize;
+
+  /// No description provided for @windowRestore.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore'**
+  String get windowRestore;
+
   /// No description provided for @commonClose.
   ///
   /// In en, this message translates to:
