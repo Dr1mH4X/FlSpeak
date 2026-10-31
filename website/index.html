@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FlSpeak — Multi-platform, Open-Source TeamSpeak Client</title>
+    <meta
+      name="description"
+      content="Yet another teamspeak client, multi-platform and open-source. Built with Flutter and Rust for self-hosted servers."
+    />
+    <meta property="og:title" content="FlSpeak" />
+    <meta
+      property="og:description"
+      content="Yet another teamspeak client, multi-platform and open-source."
+    />
+    <meta property="og:type" content="website" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      (function () {
+        try {
+          var savedTheme = localStorage.getItem('flspeak.theme');
+          var prefersLight =
+            window.matchMedia &&
+            window.matchMedia('(prefers-color-scheme: light)').matches;
+          var theme =
+            savedTheme === 'light' || savedTheme === 'dark'
+              ? savedTheme
+              : prefersLight
+                ? 'light'
+                : 'dark';
+          document.documentElement.setAttribute('data-theme', theme);
+          document.documentElement.classList.toggle('dark', theme === 'dark');
+
+          var savedLang = localStorage.getItem('flspeak.lang');
+          var navLang = (navigator.language || '').toLowerCase();
+          var lang =
+            savedLang === 'zh' || savedLang === 'en'
+              ? savedLang
+              : navLang.startsWith('en')
+                ? 'en'
+                : 'zh';
+          document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+        } catch (_) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

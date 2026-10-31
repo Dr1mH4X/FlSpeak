@@ -58,3 +58,10 @@ x86/
 !*.[Cc]ache/
 
 refer/
+
+# Website (Landing Page & Release Hub)
+website/node_modules/
+website/dist/
+website/public/release.json
+website/public/CHANGELOG.md
+

@@ -141,3 +141,32 @@ jobs:
       # 用例与被测文件同目录，`flutter test` 的默认 test/ 目录用不上。
       - name: Test
         run: flutter test lib
+
+  website:
+    name: Website
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          cache-dependency-path: website/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm --dir website install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm --dir website run typecheck
+
+      - name: Build
+        run: pnpm --dir website run build
+

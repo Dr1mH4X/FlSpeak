@@ -96,16 +96,25 @@ run *args:
 setup platform arch version:
     dart setup.dart {{platform}} {{arch}} --version {{version}}
 
+# ── 官网 (website/) ──────────────────────────────────────────────────────────
+
+[group('website')]
+website-check:
+    pnpm --dir website install --frozen-lockfile
+    pnpm --dir website run typecheck
+    pnpm --dir website run build
+
 # ── 聚合 ────────────────────────────────────────────────────────────────────
 
 # 提交前全量验证（AGENTS.md「验证」一节）
-check: fmt rust-clippy rust-test analyze test
+check: fmt rust-clippy rust-test analyze test website-check
 
 # 对齐 CI 的静态检查，只读不落盘；生成物一致性另跑 just codegen-check
-ci: fmt-check rust-clippy rust-test analyze analyze-plugin test
+ci: fmt-check rust-clippy rust-test analyze analyze-plugin test website-check
 
 # 清理构建产物
 clean:
     flutter clean
     cd plugins/flspeak_ffi && flutter clean
     cd plugins/flspeak_ffi/rust && cargo clean
+
