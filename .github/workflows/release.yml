@@ -59,17 +59,11 @@ jobs:
           - platform: android
             os: ubuntu-latest
           - platform: windows
-            os: windows-2022
-            arch: amd64
-          - platform: windows
-            os: windows-11-arm
-            arch: arm64
-          - platform: linux
-            os: ubuntu-22.04
+            os: windows-latest
             arch: amd64
           - platform: linux
-            os: ubuntu-24.04-arm
-            arch: arm64
+            os: ubuntu-latest
+            arch: amd64
           - platform: macos
             os: macos-15-intel
             arch: amd64
@@ -77,15 +71,6 @@ jobs:
             os: macos-latest
             arch: arm64
     steps:
-      # windows-11-arm runner 自带的是 x64 rustup，先装 aarch64 版本。
-      - name: Setup Rust
-        if: startsWith(matrix.os, 'windows-11-arm')
-        shell: pwsh
-        run: |
-          Invoke-WebRequest -Uri "https://win.rustup.rs/aarch64" -OutFile rustup-init.exe
-          .\rustup-init.exe -y --default-toolchain stable
-          Add-Content $env:GITHUB_PATH "$env:USERPROFILE\.cargo\bin"
-
       - name: Checkout
         uses: actions/checkout@v5
 

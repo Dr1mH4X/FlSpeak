@@ -57,16 +57,14 @@ codegen 用官方 release 的 x86_64 linux 预编译附件（版本与 sha256 �
 
 1. `meta` 从 tag 推导版本号；
 2. `checks` 调用可复用工作流，覆盖 Rust、Dart、插件与 FFI 生成物；
-3. `build` 等待 `meta` 与 `checks`，在 7 个条目上跑
+3. `build` 等待 `meta` 与 `checks`，在 5 个条目上跑
    `dart setup.dart <platform> <arch> --version <version>`，产物上传为 artifact：
 
    | 平台 | runner | 架构 |
    | --- | --- | --- |
    | android | ubuntu-latest | 通用 APK |
-   | windows | windows-2022 | amd64 |
-   | windows | windows-11-arm | arm64 |
-   | linux | ubuntu-22.04 | amd64 |
-   | linux | ubuntu-24.04-arm | arm64 |
+   | windows | windows-latest | amd64 |
+   | linux | ubuntu-latest | amd64 |
    | macos | macos-15-intel | amd64 |
    | macos | macos-latest | arm64 |
 

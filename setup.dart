@@ -29,10 +29,11 @@ Future<void> main(List<String> args) async {
 
   final buildNumber = version.contains('+') ? version.split('+').last : '1';
   final buildName = version.split('+').first;
+  final subcommand = platform == 'android' ? 'apk' : platform;
 
   await _run('flutter', [
     'build',
-    platform,
+    subcommand,
     '--release',
     '--build-name',
     buildName,
@@ -204,6 +205,7 @@ Future<void> _run(String executable, List<String> args) async {
     executable,
     args,
     mode: ProcessStartMode.inheritStdio,
+    runInShell: Platform.isWindows,
   );
   final code = await result.exitCode;
   if (code != 0) {
