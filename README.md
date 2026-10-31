@@ -11,11 +11,11 @@ _Yet another teamspeak client, multi-platform and open-source._
     <img src="https://img.shields.io/github/v/release/Dr1mH4X/FlSpeak?style=for-the-badge&color=blue&label=Latest%20Release" alt="FlSpeak Latest Release">
   </a>
 
+  <img src="https://img.shields.io/badge/Platform-Multi--platform-purple?style=for-the-badge" alt="Supported Platforms">
+
   <a href="https://github.com/Dr1mH4X/FlSpeak/blob/main/LICENSE">
     <img src="https://img.shields.io/badge/AGPL--3.0-red?style=for-the-badge" alt="License">
   </a>
-
-  <img src="https://img.shields.io/badge/Platform-Multi--platform-purple?style=for-the-badge" alt="Supported Platforms">
 
   <img src="https://img.shields.io/badge/TeamSpeak-2580C3?style=for-the-badge&logo=teamspeak&logoColor=white" alt="TeamSpeak Support">
 
