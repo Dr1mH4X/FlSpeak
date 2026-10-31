@@ -5,7 +5,7 @@ description: 发版前写 docs/release/<tag>.md、补写或改写某个版本的
 
 # 发版日志
 
-发版日志是仓库里的一个文件：`docs/release/<tag>.md`，文件名与本版 git tag 完全一致（tag `v0.2.0` 对应 `v0.2.0.md`）。它由 git 提交归纳而成，不依赖生成器。`.github/workflows/release.yml` 在 tag 推送后构建七平台产物并开出 draft Release，正文由 GitHub 自动生成；发布人把 draft 的正文替换为本文件后发布，见下。
+发版日志是仓库里的一个文件：`docs/release/<tag>.md`，文件名与本版 git tag 完全一致（tag `v0.2.0` 对应 `v0.2.0.md`）。它由 git 提交归纳而成，不依赖生成器；`.github/workflows/release.yml` 在打 tag 时直接以它为 Release 正文、以 `Release v<版本>` 为 Release 标题，文件缺失或首行不合格式就直接失败。
 
 ## Sources of truth
 
@@ -22,15 +22,7 @@ description: 发版前写 docs/release/<tag>.md、补写或改写某个版本的
 4. **写升级注意**：检查范围内是否动了连接边界行为（`core/proto`、`core/server`）、FFI 接口（`api/**` 变更需要重新生成绑定）、`arb/` 文案、打包产物形态或平台矩阵。有人需要动手就写清受影响的人与确切动作；没有就删掉整节。
 5. **写贡献者**：`git log <range> --pretty=%an` 取人类作者，机器人账号（如 `dependabot[bot]`）不计，写成 `@handle`。
 6. **落盘并随改动提交**：写 `docs/release/<tag>.md`，第一行是 `# <版本> (<发布日期>): <主要更新简述>`，例：`# 0.2.0 (2026-10-25): 双线程全双工语音`；写法判据见 [docs/release/AGENTS.md](../../../docs/release/AGENTS.md)。与该版改动同一个 PR。tag 打完后冻结，只有事实写错才回头修改，并在提交信息里说明改的是哪一处。
-7. **发布**：tag 推送后 release.yml 自动构建并开出 draft Release；把正文替换为本文件后发布：
-
-```sh
-gh release edit <tag> --notes-file "docs/release/<tag>.md"
-gh release edit <tag> --draft=false
-gh release view <tag> --json name,body
-```
-
-首行格式没有机器校验，靠人工按 [docs/release/AGENTS.md](../../../docs/release/AGENTS.md) 保证。未知 tag 不要发明版本号：先与用户确认。
+7. **发布**：tag 推送后 CI 自动把该文件作为 Release 正文公开发布（若带 `-beta`、`-rc`、`-dev` 自动标为 prerelease）；需要手工补发或改写时用 `gh`（见下）。未知 tag 不要发明版本号：先与用户确认。
 
 ## 验证命令
 
@@ -47,10 +39,11 @@ test -f "docs/release/<tag>.md" && echo ok
 head -n 1 "docs/release/<tag>.md"
 grep -n '^## ' "docs/release/<tag>.md"
 
-# 复核 Release 标题与正文
+# 复核或手工修改 Release 标题与正文
 gh release view <tag> --json name,body
+gh release edit <tag> --title "Release <tag>" --notes-file "docs/release/<tag>.md"
 ```
 
 ## 报告要求
 
-给出：目标 tag、Release 标题（`Release v<版本>`）、正文首行（版本、发布日期、主要更新简述）、提交范围与提交数、每个分类的条目数、升级注意的条目（没有就说没有）、贡献者、写出的文件路径，以及 draft 是否已发布。拿不准用户可见性的改动单独列出并说明判断依据，不要为了凑齐分类而写条目。
+给出：目标 tag、Release 标题（`Release v<版本>`）、正文首行（版本、发布日期、主要更新简述）、提交范围与提交数、每个分类的条目数、升级注意的条目（没有就说没有）、贡献者、写出的文件路径。拿不准用户可见性的改动单独列出并说明判断依据，不要为了凑齐分类而写条目。

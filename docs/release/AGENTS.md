@@ -1,8 +1,8 @@
 # AGENTS.md — 发版日志
 
-本目录存放每个版本的 Release 正文，一篇一版：`<tag>.md`，文件名与 git tag 完全一致（tag `v0.2.0` 对应 `v0.2.0.md`）。本仓库还没有第一个正式发布，目录暂空；写第一篇时与该版改动一起提交。
+本目录存放每个版本的 Release 正文，一篇一版：`<tag>.md`，文件名与 git tag 完全一致（tag `v0.2.0` 对应 `v0.2.0.md`）。写新版本时与该版改动一起提交。
 
-发布流程：tag 推送后 `.github/workflows/release.yml` 构建七平台产物并开出 draft Release，正文由 GitHub 自动生成；发布人把 draft 的正文替换为本目录文件后发布，操作步骤见 [.agents/skills/fls-release-log/SKILL.md](../../.agents/skills/fls-release-log/SKILL.md)。流程与发布矩阵见 [../ci-cd.md](../ci-cd.md)。首行格式没有机器校验，靠人工按本文件保证。
+发布流程：tag 推送后 `.github/workflows/release.yml` 构建七平台产物，并直接以本目录的 `<tag>.md` 作为 GitHub Release 正文、以 `Release v<版本>` 作为 Release 标题公开发布（若带 `-beta`、`-rc`、`-dev` 自动标记为预发布）。文件缺失或首行格式不符则终止发布，操作步骤见 [.agents/skills/fls-release-log/SKILL.md](../../.agents/skills/fls-release-log/SKILL.md)。流程与发布矩阵见 [../ci-cd.md](../ci-cd.md)。
 
 ## 生命周期
 
@@ -34,7 +34,7 @@
 
 - 每条一句话，写**行为或归属上的变化**，不抄提交主题原文，不写函数名清单；FFI 接口、事件名、配置键要写出确切名字。
 - 首行的简述是这一版主线的几个字概括，语气与总述第一句一致，不重复总述第一句；没有单一主线时取最贴近的一条（如「多项修复与维护」）。
-- 首行的版本必须等于 tag 去掉前缀 `v`，日期写成 `YYYY-MM-DD`。
+- 首行的版本必须等于 tag 去掉前缀 `v`，日期写成 `YYYY-MM-DD`；`release.yml` 按这三段校验首行，不合格式即终止发布。
 - 能确定来源时在句末附 `（#<PR 号>）`，便于溯源。
 - `## 升级注意` 只在有人需要动手时出现：谁受影响、要做什么。整节没有内容就删掉整节，不写「无」。
 - `## 贡献者` 列出本版的人类贡献者 `@handle`，机器人账号不计。

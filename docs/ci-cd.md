@@ -70,7 +70,7 @@ codegen 用官方 release 的 x86_64 linux 预编译附件（版本与 sha256 �
    | macos | macos-15-intel | amd64 |
    | macos | macos-latest | arm64 |
 
-4. `publish` 汇总产物，生成 `SHA256SUMS.txt`，用 draft release 发布。
+4. `publish`（仅 tag 推送时运行）校验 `docs/release/<tag>.md` 的存在性与首行格式，汇总产物，生成 `SHA256SUMS.txt`，以该日志为正文公开发布 GitHub Release（若带 `-beta`、`-rc`、`-dev` 自动标记为预发布）。
 
 版本号只在 `meta` 作业里从 tag 推导，并通过 `--version` 传给 `setup.dart`；
 产物名和 Flutter build name 使用这个值。

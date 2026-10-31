@@ -26,18 +26,22 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - name: Derive version
         id: version
         run: |
           if [[ "${{ github.event_name }}" == 'workflow_dispatch' ]]; then
             version="${{ inputs.version }}"
+            tag="v${version}"
           else
+            tag="${GITHUB_REF_NAME}"
             version="${GITHUB_REF_NAME#v}"
           fi
           test -n "$version" || { echo '拿不到版本号' >&2; exit 1; }
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "版本：$version"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "版本：$version，Tag：$tag"
 
   # tag 与手动发版都先过同一套检查；任一检查失败，打包矩阵不会启动。
   checks:
@@ -196,6 +200,32 @@ jobs:
       contents: write
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Locate the release log
+        id: release-log
+        run: |
+          tag="${{ needs.meta.outputs.tag }}"
+          version="${{ needs.meta.outputs.version }}"
+          path="docs/release/$tag.md"
+          if [ ! -f "$path" ]; then
+            echo "::error::缺少发版日志 $path；按 docs/release/AGENTS.md 在发版前补齐"
+            exit 1
+          fi
+          heading="$(head -n 1 "$path")"
+          if ! printf '%s\n' "$heading" | grep -Eq "^# ${version} \([0-9]{4}-[0-9]{2}-[0-9]{2}\): [^[:space:]].*$"; then
+            echo "::error::$path 首行必须为 '# $version (<date>): <summary>'；见 docs/release/AGENTS.md"
+            exit 1
+          fi
+          echo "path=$path" >> "$GITHUB_OUTPUT"
+
+          if [[ "$tag" =~ -(beta|rc|dev) ]]; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Download artifacts
         uses: actions/download-artifact@v8
         with:
@@ -212,7 +242,12 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v3
         with:
+          tag_name: ${{ needs.meta.outputs.tag }}
+          name: Release ${{ needs.meta.outputs.tag }}
+          body_path: ${{ steps.release-log.outputs.path }}
+          draft: false
+          prerelease: ${{ steps.release-log.outputs.is_prerelease == 'true' }}
           files: |
             dist/*
-          draft: true
-          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
