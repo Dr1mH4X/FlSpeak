@@ -2,7 +2,9 @@ import 'dart:io' show Platform, Process;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
@@ -34,16 +36,18 @@ Future<bool> openExternalUrl(String url) async {
 }
 
 /// 关于页主信息卡片。
-class AboutCard extends StatelessWidget {
-  const AboutCard({super.key, this.onOpenUrl = openExternalUrl});
+class AboutCard extends ConsumerWidget {
+  const AboutCard({super.key, this.version, this.onOpenUrl = openExternalUrl});
 
+  final String? version;
   final Future<bool> Function(String url) onOpenUrl;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
     final isDark = context.isDark;
+    final String displayVersion = version ?? ref.watch(appVersionProvider);
 
     final sectionBg = isDark
         ? scheme.surfaceContainer
@@ -87,9 +91,13 @@ class AboutCard extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 10),
 
-            // 3. 副标题 / 描述
+            // 3. 版本号胶囊
+            Center(child: _VersionPill(version: displayVersion)),
+            const SizedBox(height: 12),
+
+            // 4. 副标题 / 描述
             Center(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -368,6 +376,36 @@ class _InteractiveLinkState extends State<_InteractiveLink> {
                     : scheme.primary.withValues(alpha: 0.4),
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _VersionPill extends StatelessWidget {
+  const _VersionPill({required this.version});
+
+  final String version;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.scheme;
+    final label = version.startsWith('v') ? version : 'v$version';
+
+    return DecoratedBox(
+      decoration: ShapeDecoration(
+        color: scheme.primary,
+        shape: const StadiumBorder(),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        child: Text(
+          label,
+          style: context.texts.labelSmall?.copyWith(
+            color: scheme.onPrimary,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.2,
           ),
         ),
       ),

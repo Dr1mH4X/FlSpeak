@@ -1,6 +1,6 @@
 name: flspeak_ffi
 description: "Flutter Rust Bridge FFI package built through Native Assets."
-version: 0.0.1
+version: 0.1.0
 publish_to: none
 
 environment:

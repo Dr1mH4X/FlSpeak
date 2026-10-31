@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
@@ -33,6 +34,20 @@ final coreSessionProvider = Provider<CoreSession>(
 final storePathProvider = Provider<String>(
   (ref) => throw StateError('storePathProvider 必须在 ProviderScope 里覆盖'),
 );
+
+/// 提供当前应用的包信息（版本号、构建号等）。
+final packageInfoProvider = FutureProvider<PackageInfo>((ref) {
+  return PackageInfo.fromPlatform();
+});
+
+/// 提供格式化后的版本号字符串（如 `0.1.0`），如果尚未加载完成或异常则回退到备用版本。
+final appVersionProvider = Provider<String>((ref) {
+  final asyncInfo = ref.watch(packageInfoProvider);
+  return switch (asyncInfo) {
+    AsyncData(:final value) => value.version,
+    _ => '0.1.0',
+  };
+});
 
 /// `CoreEvent` 流收敛成的界面状态。
 final sessionViewProvider = NotifierProvider<SessionController, SessionView>(

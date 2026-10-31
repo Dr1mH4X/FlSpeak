@@ -10,6 +10,8 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import 'tool/bump_version.dart';
+
 const _platforms = {'android', 'macos', 'linux', 'windows'};
 
 Future<void> main(List<String> args) async {
@@ -26,6 +28,8 @@ Future<void> main(List<String> args) async {
   final version = _flagValue(args, '--version') ?? _pubspecVersion();
 
   _requireHostPlatform(platform);
+
+  bumpAllVersions(version);
 
   final buildNumber = version.contains('+') ? version.split('+').last : '1';
   final buildName = version.split('+').first;

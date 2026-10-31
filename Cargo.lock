@@ -127,7 +127,7 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
 name = "audio"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "audiopus",
  "cpal",
@@ -739,7 +739,7 @@ checksum = "aedcfb3409746eddb02b9e19ebda1c3394f759a152e48ee875a0844d1b955484"
 
 [[package]]
 name = "flspeak_ffi"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "audio",
  "flutter_rust_bridge",
@@ -2014,7 +2014,7 @@ dependencies = [
 
 [[package]]
 name = "proto"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "async-trait",
  "hickory-resolver 0.24.4",
@@ -2479,7 +2479,7 @@ dependencies = [
 
 [[package]]
 name = "server"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "serde",
  "thiserror 2.0.21",
@@ -2487,7 +2487,7 @@ dependencies = [
 
 [[package]]
 name = "session"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "audio",
  "base64 0.22.1",

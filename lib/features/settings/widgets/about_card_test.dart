@@ -1,6 +1,7 @@
 // ignore_for_file: depend_on_referenced_packages
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flspeak/features/settings/widgets/about_card.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
@@ -9,15 +10,21 @@ import 'package:flspeak/widgets/common.dart';
 void main() {
   Widget buildTestWidget({
     Locale locale = const Locale('zh'),
+    String? version,
     Future<bool> Function(String url)? onOpenUrl,
   }) {
-    return MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      locale: locale,
-      home: Scaffold(
-        body: SingleChildScrollView(
-          child: AboutCard(onOpenUrl: onOpenUrl ?? (_) async => true),
+    return ProviderScope(
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        locale: locale,
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: AboutCard(
+              version: version,
+              onOpenUrl: onOpenUrl ?? (_) async => true,
+            ),
+          ),
         ),
       ),
     );
@@ -32,6 +39,7 @@ void main() {
 
     expect(find.byType(HairlineCard), findsOneWidget);
     expect(find.text('FlSpeak'), findsOneWidget);
+    expect(find.text('v0.1.0'), findsOneWidget);
     expect(find.text('又一个跨平台、开源的 TeamSpeak 客户端'), findsOneWidget);
     expect(find.text('项目与源码'), findsOneWidget);
     expect(find.text('GitHub'), findsOneWidget);
@@ -108,4 +116,14 @@ void main() {
       expect(opened, contains('https://github.com/Dr1mH4X/tsclient-rs'));
     },
   );
+
+  testWidgets('renders custom version in pill correctly', (tester) async {
+    await tester.pumpWidget(buildTestWidget(version: '0.2.5'));
+    await tester.pumpAndSettle();
+    expect(find.text('v0.2.5'), findsOneWidget);
+
+    await tester.pumpWidget(buildTestWidget(version: 'v1.0.0'));
+    await tester.pumpAndSettle();
+    expect(find.text('v1.0.0'), findsOneWidget);
+  });
 }
