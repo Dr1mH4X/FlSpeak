@@ -142,13 +142,19 @@ Future<List<String>> _collect(
       if (bundle == null) {
         return const [];
       }
-      return [await _archive(bundle.path, p.join(dist.path, '$stem.tar.gz'))];
+      final stagedBundle = _prepareNamedDirectory(bundle, 'FlSpeak');
+      return [
+        await _archive(stagedBundle.path, p.join(dist.path, '$stem.tar.gz')),
+      ];
     case 'windows':
       final release = _firstRelease(Directory('build/windows'));
       if (release == null) {
         return const [];
       }
-      return [await _archive(release.path, p.join(dist.path, '$stem.zip'))];
+      final stagedRelease = _prepareNamedDirectory(release, 'FlSpeak');
+      return [
+        await _archive(stagedRelease.path, p.join(dist.path, '$stem.zip')),
+      ];
     default:
       return const [];
   }
@@ -169,6 +175,10 @@ Directory? _firstBundle(Directory root, String name) {
     return null;
   }
   for (final archDir in root.listSync().whereType<Directory>()) {
+    final named = Directory(p.join(archDir.path, 'release', 'FlSpeak'));
+    if (named.existsSync()) {
+      return named;
+    }
     final bundle = Directory(p.join(archDir.path, 'release', name));
     if (bundle.existsSync()) {
       return bundle;
@@ -182,12 +192,27 @@ Directory? _firstRelease(Directory root) {
     return null;
   }
   for (final archDir in root.listSync().whereType<Directory>()) {
+    final named = Directory(p.join(archDir.path, 'runner', 'FlSpeak'));
+    if (named.existsSync()) {
+      return named;
+    }
     final release = Directory(p.join(archDir.path, 'runner', 'Release'));
     if (release.existsSync()) {
       return release;
     }
   }
   return null;
+}
+
+Directory _prepareNamedDirectory(Directory source, String targetName) {
+  if (p.basename(source.path) == targetName) {
+    return source;
+  }
+  final target = Directory(p.join(source.parent.path, targetName));
+  if (target.existsSync()) {
+    target.deleteSync(recursive: true);
+  }
+  return source.renameSync(target.path);
 }
 
 String _copy(File source, String target) {
