@@ -20,8 +20,8 @@ tag 推送只启动 `release.yml`，平台打包因此只发生一次；main 与
 | 作业 | 内容 |
 | --- | --- |
 | `rust` | `cargo fmt --check`、`clippy -D warnings`、`cargo test`（`--all-features`，含音频） |
-| `dart` | `dart format --output=none --set-exit-if-changed lib setup.dart`、`flutter analyze` |
-| `dart-test` | `flutter test lib`（用例与实现同目录）与插件检查共用一个作业：重跑 `flutter_rust_bridge_codegen generate` 并用 `git diff` 校验生成物，再分析插件。`flutter test` 会触发 native assets 钩子，因此作业装 Rust 音频依赖并缓存 cargo 与钩子产物；两项检查共用这次编译 |
+| `dart` | `dart format --output=none --set-exit-if-changed lib test setup.dart`、`flutter analyze` |
+| `dart-test` | `flutter test`（针对 `test/` 目录）与插件检查共用一个作业：重跑 `flutter_rust_bridge_codegen generate` 并用 `git diff` 校验生成物，再分析插件。`flutter test` 会触发 native assets 钩子，因此作业装 Rust 音频依赖并缓存 cargo 与钩子产物；两项检查共用这次编译 |
 
 codegen 用官方 release 的 x86_64 linux 预编译附件（版本与 sha256 固定在
 `checks.yml` 顶部），不再从源码 `cargo install`；升级 `flutter_rust_bridge` 时把
@@ -150,5 +150,5 @@ CMAKE_POLICY_VERSION_MINIMUM=3.5 cargo test --workspace --all-features
 # Dart
 cd ../../..
 flutter pub get && flutter analyze --no-fatal-infos
-flutter test lib          # 会先编 native assets（Rust），故需要上面那组音频依赖
+flutter test              # 会先编 native assets（Rust），故需要上面那组音频依赖
 ```

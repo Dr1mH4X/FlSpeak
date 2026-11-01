@@ -74,10 +74,10 @@ l10n:
 analyze:
     flutter analyze --no-fatal-infos
 
-# Dart 单测（用例与实现同目录，跑 lib 而不是 test/）
+# Dart 单测（统一放在 test/ 目录）
 [group('flutter')]
 test:
-    flutter test lib
+    flutter test
 
 [group('flutter')]
 [working-directory: 'plugins/flspeak_ffi']

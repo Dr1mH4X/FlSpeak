@@ -138,7 +138,6 @@ jobs:
         working-directory: plugins/flspeak_ffi
         run: flutter analyze --no-fatal-infos
 
-      # 用例与被测文件同目录，`flutter test` 的默认 test/ 目录用不上。
       - name: Test
-        run: flutter test lib
+        run: flutter test
 

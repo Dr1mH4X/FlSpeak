@@ -16,7 +16,7 @@
   `lib/widgets/notice_host.dart` 在右上角渲染；不要在页面或卡片里自建错误横幅，
   也不要用 `SnackBar`。字段校验留在输入框旁，持久状态（设备不可用 chip、身份提升
   横幅）留在页面上。
-- Dart 单测与被测文件同目录（`foo.dart` 旁 `foo_test.dart`），靠 `just test` 跑；仓库根不设 `test/`，`flutter test` 的默认扫描目录因此用不上。
+- Dart 单测统一存放在根目录 `test/` 下（镜像 `lib/` 目录结构），靠 `just test`（即 `flutter test`）跑。
 
 子目录规则详见：
 - [lib/core](core/AGENTS.md)
