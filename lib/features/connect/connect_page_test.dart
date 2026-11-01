@@ -3,6 +3,7 @@
 import 'dart:async';
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,6 +16,7 @@ import '../../theme/app_theme.dart';
 import '../../router.dart';
 import 'connect_page.dart';
 import 'widgets/identity_card.dart';
+import 'widgets/server_row.dart';
 
 class _FakeCore extends Fake implements CoreSession {
   @override
@@ -409,5 +411,74 @@ void main() {
 
     expect(find.text('Charlie'), findsOneWidget);
     expect(find.text('NewCharlie'), findsNothing);
+  });
+
+  testWidgets('桌面端服务器行不显示三点按钮，右键在点击位置呼出菜单而非卡片最左侧', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_FakeCore()),
+          sessionViewProvider.overrideWith(_TestSessionController.new),
+        ],
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const ConnectPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.more_vert_rounded), findsNothing);
+    final rowRect = tester.getRect(find.byType(ServerRow));
+    final clickPoint = Offset(
+      rowRect.left + rowRect.width * 0.65,
+      rowRect.center.dy,
+    );
+    await tester.tapAt(clickPoint, buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+
+    final menuLeft = tester.getTopLeft(find.byType(MenuItemButton).first).dx;
+    expect(menuLeft, closeTo(clickPoint.dx, 4.0));
+  });
+
+  testWidgets('窄屏下服务器行显示三点按钮并从按钮位置呼出菜单', (tester) async {
+    tester.view.physicalSize = const Size(500, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_FakeCore()),
+          sessionViewProvider.overrideWith(_TestSessionController.new),
+        ],
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const ConnectPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final rowRect = tester.getRect(find.byType(ServerRow));
+    final moreFinder = find.byIcon(Icons.more_vert_rounded);
+    expect(moreFinder, findsOneWidget);
+    await tester.tap(moreFinder);
+    await tester.pumpAndSettle();
+
+    final menuLeft = tester.getTopLeft(find.byType(MenuItemButton).first).dx;
+    expect(menuLeft, greaterThan(rowRect.center.dx));
   });
 }

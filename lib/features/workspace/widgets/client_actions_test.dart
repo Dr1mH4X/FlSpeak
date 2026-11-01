@@ -1,6 +1,7 @@
 // ignore_for_file: depend_on_referenced_packages
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -27,7 +28,7 @@ class _Controller extends SessionController {
 
 void main() {
   testWidgets(
-    'member action submits a poke and preserves text on server failure',
+    'member action opens via right-click on desktop without three-dots button, submits poke and preserves text on failure',
     (tester) async {
       final container = ProviderContainer(
         overrides: [sessionViewProvider.overrideWith(_Controller.new)],
@@ -49,12 +50,15 @@ void main() {
                   uid: 'peer',
                   channelId: 1,
                 ),
+                child: SizedBox(width: 240, height: 40, child: Text('Peer')),
               ),
             ),
           ),
         ),
       );
-      await tester.tap(find.byIcon(Icons.more_horiz_rounded));
+      expect(find.byIcon(Icons.more_vert_rounded), findsNothing);
+      expect(find.byIcon(Icons.more_horiz_rounded), findsNothing);
+      await tester.tap(find.text('Peer'), buttons: kSecondaryButton);
       await tester.pumpAndSettle();
       final menuButtons = tester
           .widgetList<MenuItemButton>(find.byType(MenuItemButton))
@@ -99,6 +103,52 @@ void main() {
         (uid: 'peer', clientId: 2, message: 'hello 🌍'),
         (uid: 'peer', clientId: 2, message: 'hello 🌍'),
       ]);
+    },
+  );
+
+  testWidgets(
+    'member action shows three-dots button on compact screen and opens anchored to the button',
+    (tester) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final container = ProviderContainer(
+        overrides: [sessionViewProvider.overrideWith(_Controller.new)],
+      );
+      addTearDown(container.dispose);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            locale: const Locale('zh'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const Scaffold(
+              body: SizedBox(
+                width: 360,
+                child: ClientActionsButton(
+                  client: ClientView(
+                    id: 2,
+                    nickname: 'Peer',
+                    uid: 'peer',
+                    channelId: 1,
+                  ),
+                  child: Text('Peer'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      final moreFinder = find.byIcon(Icons.more_vert_rounded);
+      expect(moreFinder, findsOneWidget);
+      await tester.tap(moreFinder);
+      await tester.pumpAndSettle();
+      final menuLeft = tester.getTopLeft(find.byType(MenuItemButton).first).dx;
+      expect(menuLeft, greaterThan(100));
     },
   );
 }

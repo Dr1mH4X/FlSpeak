@@ -58,200 +58,174 @@ class _ServerRowState extends ConsumerState<ServerRow> {
         ? Duration.zero
         : Motion.effectsDefault;
 
+    final compact = context.isCompact;
+    final showMoreButton = compact && !widget.connecting;
+
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: SecondaryMenu(
-        openOnSecondaryTap: true,
-        items: [
-          MenuItemButton(
-            leadingIcon: const Icon(Icons.palette_outlined),
-            onPressed: () async {
-              final current =
+      child: AnimatedContainer(
+        duration: animations,
+        curve: Motion.effectsDefaultCurve,
+        color: connected
+            ? scheme.primaryContainer.withValues(alpha: 0.3)
+            : Colors.transparent,
+        child: SecondaryMenu(
+          openOnSecondaryTap: true,
+          enabled: !widget.connecting,
+          moreSemanticLabel: widget.connecting
+              ? null
+              : MaterialLocalizations.of(context).showMenuTooltip,
+          morePadding: const EdgeInsets.only(right: 8),
+          items: [
+            MenuItemButton(
+              leadingIcon: const Icon(Icons.palette_outlined),
+              onPressed: () async {
+                final current =
+                    ref
+                        .read(preferencesProvider)
+                        .serverIcons[widget.profile.id] ??
+                    ServerIcon.community;
+                final icon = await showServerIconPicker(context, current);
+                if (mounted && icon != null) {
                   ref
-                      .read(preferencesProvider)
-                      .serverIcons[widget.profile.id] ??
-                  ServerIcon.community;
-              final icon = await showServerIconPicker(context, current);
-              if (mounted && icon != null) {
-                ref
-                    .read(preferencesProvider.notifier)
-                    .setServerIcon(widget.profile.id, icon);
-              }
-            },
-            child: Text(l10n.serverIconChange),
-          ),
-          MenuItemButton(
-            leadingIcon: const Icon(Icons.delete_rounded),
-            onPressed: connected ? null : widget.onRemove,
-            child: Text(l10n.serverRemoveFromList),
-          ),
-        ],
-        builder: (context, menuController) => AnimatedContainer(
-          duration: animations,
-          curve: Motion.effectsDefaultCurve,
-          color: connected
-              ? scheme.primaryContainer.withValues(alpha: 0.3)
-              : Colors.transparent,
-          child: Row(
-            children: [
-              Expanded(
-                child: Semantics(
-                  button: true,
-                  enabled: active,
-                  child: AnimatedInkWell(
-                    onTap: widget.enabled ? widget.onTap : null,
-                    // M3 state layer：hover 是 onSurface 8%，不再自定底色。
-                    hoverColor: scheme.onSurface.withValues(alpha: 0.08),
-                    child: AnimatedOpacity(
-                      duration: animations,
-                      curve: Motion.effectsDefaultCurve,
-                      opacity: active ? 1 : 0.5,
-                      child: Padding(
-                        // 与身份卡的内容缩进（20）对齐，两卡头像才能落在同一条线上。
-                        padding: EdgeInsets.fromLTRB(
-                          narrow ? 16 : 20,
-                          12,
-                          !connected && !widget.connecting ? 4 : 20,
-                          12,
-                        ),
-                        child: Row(
+                      .read(preferencesProvider.notifier)
+                      .setServerIcon(widget.profile.id, icon);
+                }
+              },
+              child: Text(l10n.serverIconChange),
+            ),
+            MenuItemButton(
+              leadingIcon: const Icon(Icons.delete_rounded),
+              onPressed: connected ? null : widget.onRemove,
+              child: Text(l10n.serverRemoveFromList),
+            ),
+          ],
+          builder: (context, _) => Semantics(
+            button: true,
+            enabled: active,
+            child: AnimatedInkWell(
+              onTap: widget.enabled ? widget.onTap : null,
+              // M3 state layer：hover 是 onSurface 8%，不再自定底色。
+              hoverColor: scheme.onSurface.withValues(alpha: 0.08),
+              child: AnimatedOpacity(
+                duration: animations,
+                curve: Motion.effectsDefaultCurve,
+                opacity: active ? 1 : 0.5,
+                child: Padding(
+                  // 与身份卡的内容缩进（20）对齐，两卡头像才能落在同一条线上。
+                  padding: EdgeInsets.fromLTRB(
+                    narrow ? 16 : 20,
+                    12,
+                    showMoreButton ? 4 : 20,
+                    12,
+                  ),
+                  child: Row(
+                    children: [
+                      ServerBadge(
+                        id: widget.profile.id,
+                        size: 44,
+                        online: connected,
+                        selected: connected,
+                        loading: widget.connecting,
+                      ),
+                      SizedBox(width: narrow ? 12 : 16),
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            ServerBadge(
-                              id: widget.profile.id,
-                              size: 44,
-                              online: connected,
-                              selected: connected,
-                              loading: widget.connecting,
+                            Text(
+                              widget.profile.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: texts.titleMedium,
                             ),
-                            SizedBox(width: narrow ? 12 : 16),
-                            Expanded(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    widget.profile.label,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: texts.titleMedium,
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '${widget.profile.host}:${widget.profile.port}',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: texts.bodySmall?.copyWith(
-                                      color: scheme.onSurfaceVariant,
-                                      fontFeatures: tabularFigures,
-                                    ),
-                                  ),
-                                  if (narrow &&
-                                      (connected || widget.connecting))
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 4),
-                                      child: Text(
-                                        widget.connecting
-                                            ? l10n.sessionConnecting
-                                            : l10n.sessionConnected,
-                                        style: texts.labelSmall?.copyWith(
-                                          color: scheme.primary,
-                                        ),
-                                      ),
-                                    ),
-                                ],
+                            const SizedBox(height: 2),
+                            Text(
+                              '${widget.profile.host}:${widget.profile.port}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: texts.bodySmall?.copyWith(
+                                color: scheme.onSurfaceVariant,
+                                fontFeatures: tabularFigures,
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            if (!narrow && widget.connecting)
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const SizedBox.square(
-                                    dimension: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    l10n.sessionConnecting,
-                                    style: texts.labelMedium?.copyWith(
-                                      fontSize: 12,
-                                      color: scheme.primary,
-                                    ),
-                                  ),
-                                ],
-                              )
-                            else if (!narrow && connected)
-                              _ConnectedChip(label: l10n.sessionConnected)
-                            else if (showLastConnected)
-                              ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  maxWidth: 160,
-                                ),
+                            if (narrow && (connected || widget.connecting))
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
                                 child: Text(
-                                  lastConnectedLabel(
-                                    context,
-                                    widget.lastConnected,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: texts.bodySmall?.copyWith(
-                                    color: scheme.onSurfaceVariant,
-                                    fontFeatures: tabularFigures,
+                                  widget.connecting
+                                      ? l10n.sessionConnecting
+                                      : l10n.sessionConnected,
+                                  style: texts.labelSmall?.copyWith(
+                                    color: scheme.primary,
                                   ),
                                 ),
                               ),
-                            const SizedBox(width: 6),
-                            // hover 反馈按 M3 归到 effects fast：nudge 只有 2px，
-                            // 用 slow 的 spatial 档反而拖沓。
-                            AnimatedContainer(
-                              duration: MediaQuery.disableAnimationsOf(context)
-                                  ? Duration.zero
-                                  : Motion.effectsFast,
-                              curve: Motion.effectsFastCurve,
-                              transform: Matrix4.translationValues(
-                                _hovered && active ? 2 : 0,
-                                0,
-                                0,
-                              ),
-                              child: Icon(
-                                Icons.arrow_forward_rounded,
-                                size: IconSizes.medium,
-                                color: connected
-                                    ? scheme.primary
-                                    : scheme.onSurfaceVariant,
-                              ),
-                            ),
                           ],
                         ),
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      if (!narrow && widget.connecting)
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const SizedBox.square(
+                              dimension: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              l10n.sessionConnecting,
+                              style: texts.labelMedium?.copyWith(
+                                fontSize: 12,
+                                color: scheme.primary,
+                              ),
+                            ),
+                          ],
+                        )
+                      else if (!narrow && connected)
+                        _ConnectedChip(label: l10n.sessionConnected)
+                      else if (showLastConnected)
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 160),
+                          child: Text(
+                            lastConnectedLabel(context, widget.lastConnected),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: texts.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                              fontFeatures: tabularFigures,
+                            ),
+                          ),
+                        ),
+                      const SizedBox(width: 6),
+                      // hover 反馈按 M3 归到 effects fast：nudge 只有 2px，
+                      // 用 slow 的 spatial 档反而拖沓。
+                      AnimatedContainer(
+                        duration: MediaQuery.disableAnimationsOf(context)
+                            ? Duration.zero
+                            : Motion.effectsFast,
+                        curve: Motion.effectsFastCurve,
+                        transform: Matrix4.translationValues(
+                          _hovered && active ? 2 : 0,
+                          0,
+                          0,
+                        ),
+                        child: Icon(
+                          Icons.arrow_forward_rounded,
+                          size: IconSizes.medium,
+                          color: connected
+                              ? scheme.primary
+                              : scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-              // 右键菜单在触屏和键盘上不可达；这里给出同一条目的可见入口。
-              if (!connected && !widget.connecting)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: IconButton(
-                    onPressed: menuController.open,
-                    iconSize: IconSizes.medium,
-                    color: scheme.onSurfaceVariant,
-                    style: IconButton.styleFrom(
-                      minimumSize: const Size(Sizes.touch, Sizes.touch),
-                      maximumSize: const Size(Sizes.touch, Sizes.touch),
-                      padding: EdgeInsets.zero,
-                    ),
-                    icon: Icon(
-                      Icons.more_vert_rounded,
-                      semanticLabel: MaterialLocalizations.of(context)
-                          .showMenuTooltip,
-                    ),
-                  ),
-                ),
-            ],
+            ),
           ),
         ),
       ),

@@ -5,21 +5,25 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../router.dart';
-import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
 import 'member_permissions_dialog.dart';
 import 'kick_client_dialog.dart';
 
 class ClientActionsButton extends ConsumerWidget {
-  const ClientActionsButton({required this.client, super.key});
+  const ClientActionsButton({
+    required this.client,
+    this.child = const SizedBox.shrink(),
+    super.key,
+  });
 
   final ClientView client;
+  final Widget child;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final view = ref.watch(sessionViewProvider);
     if (client.id == view.selfClientId || client.uid.isEmpty) {
-      return const SizedBox.shrink();
+      return child;
     }
     final l10n = AppLocalizations.of(context);
     final access = ref.watch(sessionAccessProvider).asData?.value;
@@ -27,6 +31,9 @@ class ClientActionsButton extends ConsumerWidget {
         (access?.memberAddPower ?? 0) > 0 ||
         (access?.memberRemovePower ?? 0) > 0;
     return SecondaryMenu(
+      openOnSecondaryTap: true,
+      enabled: view.connected && !view.busy,
+      moreSemanticLabel: l10n.memberActions(client.nickname),
       items: [
         MenuItemButton(
           leadingIcon: const Icon(Icons.chat_bubble_outline_rounded),
@@ -81,16 +88,7 @@ class ClientActionsButton extends ConsumerWidget {
             ),
           ),
       ],
-      builder: (context, controller) => IconButton(
-        onPressed: !view.connected || view.busy
-            ? null
-            : () => controller.isOpen ? controller.close() : controller.open(),
-        iconSize: IconSizes.medium,
-        icon: Icon(
-          Icons.more_horiz_rounded,
-          semanticLabel: l10n.memberActions(client.nickname),
-        ),
-      ),
+      builder: (_, _) => child,
     );
   }
 }

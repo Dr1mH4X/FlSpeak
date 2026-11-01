@@ -295,14 +295,19 @@ class _ModalPanel extends StatelessWidget {
 ///
 /// - 右键菜单：[openOnSecondaryTap] 为 true 时在触发点弹出；[enabled] 为
 ///   false 不响应右键（比如未连接的服务器、自己已在的频道）。
+/// - 小屏「更多」按钮：传入 [moreSemanticLabel] 时，仅在窄屏（`< 768`）行尾
+///   渲染竖向三点按钮，并锚定在按钮自身位置打开菜单；桌面宽屏不渲染三点按钮，
+///   直接由整行右键呼出。
 /// - 按钮打开：[openOnSecondaryTap] 保持 false，[builder] 里拿到控制器，
-///   由子组件决定打开时机（比如「更多」按钮）。
+///   由子组件决定打开时机。
 class SecondaryMenu extends StatelessWidget {
   const SecondaryMenu({
     required this.items,
     required this.builder,
     this.openOnSecondaryTap = false,
     this.enabled = true,
+    this.moreSemanticLabel,
+    this.morePadding = EdgeInsets.zero,
     super.key,
   });
 
@@ -316,13 +321,64 @@ class SecondaryMenu extends StatelessWidget {
   final bool openOnSecondaryTap;
   final bool enabled;
 
+  /// 非空时在窄屏（[AppSchemeOf.isCompact]）行尾追加竖向三点按钮。
+  final String? moreSemanticLabel;
+
+  /// 窄屏三点按钮的外边距。
+  final EdgeInsetsGeometry morePadding;
+
   @override
   Widget build(BuildContext context) {
+    final showMore = moreSemanticLabel != null && context.isCompact;
     return MenuAnchor(
       clipBehavior: Clip.antiAlias,
       menuChildren: items,
-      builder: (context, controller, child) {
-        final content = builder(context, controller);
+      builder: (anchorContext, controller, child) {
+        Widget content = builder(anchorContext, controller);
+        if (showMore) {
+          content = Row(
+            children: [
+              Expanded(child: content),
+              Padding(
+                padding: morePadding,
+                child: Builder(
+                  builder: (buttonContext) => IconButton(
+                    onPressed: !enabled
+                        ? null
+                        : () {
+                            if (controller.isOpen) {
+                              controller.close();
+                              return;
+                            }
+                            final buttonBox =
+                                buttonContext.findRenderObject() as RenderBox?;
+                            final anchorBox =
+                                anchorContext.findRenderObject() as RenderBox?;
+                            final position =
+                                (buttonBox != null && anchorBox != null)
+                                ? buttonBox.localToGlobal(
+                                    Offset(0, buttonBox.size.height),
+                                    ancestor: anchorBox,
+                                  )
+                                : null;
+                            controller.open(position: position);
+                          },
+                    iconSize: IconSizes.medium,
+                    style: IconButton.styleFrom(
+                      minimumSize: const Size(Sizes.touch, Sizes.touch),
+                      maximumSize: const Size(Sizes.touch, Sizes.touch),
+                      padding: EdgeInsets.zero,
+                    ),
+                    icon: Icon(
+                      Icons.more_vert_rounded,
+                      semanticLabel: moreSemanticLabel,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
         if (!openOnSecondaryTap) {
           return content;
         }

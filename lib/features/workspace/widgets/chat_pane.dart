@@ -10,6 +10,7 @@ import '../../../core/image_host.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/common.dart';
 import '../../../widgets/monogram.dart';
 import 'media_viewer.dart';
 import 'message_content.dart';
@@ -482,18 +483,8 @@ class _ChatPaneState extends State<ChatPane> {
                   enabled: !_sending && !widget.busy,
                 ),
                 if (widget.onPickImage != null || widget.onPasteImage != null)
-                  MenuAnchor(
-                    builder: (context, menu, child) => IconButton(
-                      onPressed: _sending || widget.busy
-                          ? null
-                          : () => menu.isOpen ? menu.close() : menu.open(),
-                      icon: Icon(
-                        Icons.add_photo_alternate_outlined,
-                        size: IconSizes.toolbar,
-                        semanticLabel: l10n.chatAttachImage,
-                      ),
-                    ),
-                    menuChildren: [
+                  SecondaryMenu(
+                    items: [
                       if (widget.onPickImage != null)
                         MenuItemButton(
                           onPressed: () => _selectImage(widget.onPickImage!),
@@ -510,6 +501,16 @@ class _ChatPaneState extends State<ChatPane> {
                           child: Text(l10n.imageHostTitle),
                         ),
                     ],
+                    builder: (context, menu) => IconButton(
+                      onPressed: _sending || widget.busy
+                          ? null
+                          : () => menu.isOpen ? menu.close() : menu.open(),
+                      icon: Icon(
+                        Icons.add_photo_alternate_outlined,
+                        size: IconSizes.toolbar,
+                        semanticLabel: l10n.chatAttachImage,
+                      ),
+                    ),
                   ),
                 const SizedBox(width: 4),
                 Expanded(

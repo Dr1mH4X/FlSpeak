@@ -46,52 +46,54 @@ class MembersPane extends StatelessWidget {
           for (final member in members)
             Padding(
               padding: const EdgeInsets.only(bottom: 20),
-              child: Row(
-                children: [
-                  MemberAvatar(
-                    label: initialsOf(member.nickname),
-                    size: 36,
-                    speaking:
-                        view.speaking.contains(member.id) ||
-                        (member.id == view.selfClientId && view.selfSpeaking),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          member.nickname,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: context.texts.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        Text(
+              child: ClientActionsButton(
+                client: member,
+                child: Row(
+                  children: [
+                    MemberAvatar(
+                      label: initialsOf(member.nickname),
+                      size: 36,
+                      speaking:
                           view.speaking.contains(member.id) ||
-                                  (member.id == view.selfClientId &&
-                                      view.selfSpeaking)
-                              ? l10n.memberSpeaking
-                              : (member.away ?? false)
-                              ? l10n.memberAway
-                              : l10n.memberListening,
-                          style: context.texts.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
+                          (member.id == view.selfClientId && view.selfSpeaking),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            member.nickname,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: context.texts.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
-                        ),
-                      ],
+                          Text(
+                            view.speaking.contains(member.id) ||
+                                    (member.id == view.selfClientId &&
+                                        view.selfSpeaking)
+                                ? l10n.memberSpeaking
+                                : (member.away ?? false)
+                                ? l10n.memberAway
+                                : l10n.memberListening,
+                            style: context.texts.bodySmall?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  ClientActionsButton(client: member),
-                  if (member.inputMuted ?? false)
-                    Icon(
-                      Icons.mic_off_rounded,
-                      size: IconSizes.small,
-                      color: scheme.onSurfaceVariant,
-                      semanticLabel: l10n.memberMicMuted,
-                    ),
-                ],
+                    if (member.inputMuted ?? false)
+                      Icon(
+                        Icons.mic_off_rounded,
+                        size: IconSizes.small,
+                        color: scheme.onSurfaceVariant,
+                        semanticLabel: l10n.memberMicMuted,
+                      ),
+                  ],
+                ),
               ),
             ),
         ],

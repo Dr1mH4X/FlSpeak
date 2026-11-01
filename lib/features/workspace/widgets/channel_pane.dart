@@ -519,48 +519,50 @@ class _MemberTile extends StatelessWidget {
 
     return Padding(
       padding: EdgeInsets.only(left: 40.0 + (depth - 1) * 16.0, right: 14),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(
-          children: [
-            // 头像本身用光环表达说话；读屏靠外层标签拿到同一个状态。
-            speaking
-                ? Semantics(label: l10n.memberSpeaking, child: avatar)
-                : avatar,
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                client.nickname,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: context.texts.bodySmall?.copyWith(
-                  fontSize: 13,
-                  color: scheme.onSurfaceVariant,
+      child: ClientActionsButton(
+        client: client,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            children: [
+              // 头像本身用光环表达说话；读屏靠外层标签拿到同一个状态。
+              speaking
+                  ? Semantics(label: l10n.memberSpeaking, child: avatar)
+                  : avatar,
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  client.nickname,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.texts.bodySmall?.copyWith(
+                    fontSize: 13,
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
               ),
-            ),
-            ClientActionsButton(client: client),
-            // 服务器回显的设备状态：快照没带标志（null）时不显示。
-            if (client.inputMuted ?? false)
-              _MemberFlag(
-                label: l10n.memberMicMuted,
-                icon: Icons.mic_off_rounded,
-              ),
-            if (client.outputMuted ?? false)
-              _MemberFlag(
-                label: l10n.memberSpeakerMuted,
-                icon: Icons.volume_off_rounded,
-              ),
-            if (client.away ?? false)
-              _MemberFlag(
-                label: switch (client.awayMessage) {
-                  null || '' => l10n.memberAway,
-                  final message => l10n.memberAwayWith(message),
-                },
-                icon: Icons.schedule_rounded,
-                color: scheme.primary,
-              ),
-          ],
+              // 服务器回显的设备状态：快照没带标志（null）时不显示。
+              if (client.inputMuted ?? false)
+                _MemberFlag(
+                  label: l10n.memberMicMuted,
+                  icon: Icons.mic_off_rounded,
+                ),
+              if (client.outputMuted ?? false)
+                _MemberFlag(
+                  label: l10n.memberSpeakerMuted,
+                  icon: Icons.volume_off_rounded,
+                ),
+              if (client.away ?? false)
+                _MemberFlag(
+                  label: switch (client.awayMessage) {
+                    null || '' => l10n.memberAway,
+                    final message => l10n.memberAwayWith(message),
+                  },
+                  icon: Icons.schedule_rounded,
+                  color: scheme.primary,
+                ),
+            ],
+          ),
         ),
       ),
     );

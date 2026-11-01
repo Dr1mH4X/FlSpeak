@@ -270,7 +270,6 @@ class _SidebarButton extends StatelessWidget {
     required this.child,
     this.selected = false,
     this.semanticLabel,
-    this.onSecondaryTap,
     this.onLongPress,
   });
 
@@ -280,7 +279,6 @@ class _SidebarButton extends StatelessWidget {
   final bool selected;
   final String? semanticLabel;
   final VoidCallback onTap;
-  final VoidCallback? onSecondaryTap;
   final VoidCallback? onLongPress;
   final Widget child;
 
@@ -301,7 +299,6 @@ class _SidebarButton extends StatelessWidget {
           shape: _itemShape,
           child: InkWell(
             onTap: onTap,
-            onSecondaryTap: onSecondaryTap,
             onLongPress: onLongPress,
             customBorder: _itemShape,
             mouseCursor: SystemMouseCursors.basic,
@@ -659,7 +656,6 @@ class _SidebarServerTile extends StatelessWidget {
         selected: selected,
         semanticLabel: '${server.label} · ${server.host}:${server.port}',
         onTap: () => onTap?.call(),
-        onSecondaryTap: menuController.open,
         onLongPress: menuController.open,
         child: _SidebarServerRow(
           server: server,

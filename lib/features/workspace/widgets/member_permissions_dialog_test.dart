@@ -1,6 +1,7 @@
 // ignore_for_file: depend_on_referenced_packages
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -96,13 +97,14 @@ Future<ProviderContainer> _mount(
               uid: 'peer',
               channelId: 5,
             ),
+            child: SizedBox(width: 120, height: 40),
           ),
         ),
       ),
     ),
   );
   await tester.pumpAndSettle();
-  await tester.tap(find.byIcon(Icons.more_horiz_rounded));
+  await tester.tap(find.byType(ClientActionsButton), buttons: kSecondaryButton);
   await tester.pumpAndSettle();
   return container;
 }

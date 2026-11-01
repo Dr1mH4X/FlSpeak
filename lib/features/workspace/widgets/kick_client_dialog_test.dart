@@ -3,6 +3,7 @@
 import 'dart:async';
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -73,6 +74,19 @@ class _Access {
   int server;
 }
 
+Future<void> _openActionsMenu(WidgetTester tester) async {
+  final more = find.byIcon(Icons.more_vert_rounded);
+  if (more.evaluate().isNotEmpty) {
+    await tester.tap(more);
+  } else {
+    await tester.tap(
+      find.byType(ClientActionsButton),
+      buttons: kSecondaryButton,
+    );
+  }
+  await tester.pumpAndSettle();
+}
+
 Future<({ProviderContainer container, _Controller controller, _Access access})>
 _mount(
   WidgetTester tester, {
@@ -107,13 +121,17 @@ _mount(
         ),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: const Scaffold(body: ClientActionsButton(client: _peer)),
+        home: const Scaffold(
+          body: ClientActionsButton(
+            client: _peer,
+            child: SizedBox(width: 120, height: 40),
+          ),
+        ),
       ),
     ),
   );
   await tester.pumpAndSettle();
-  await tester.tap(find.byIcon(Icons.more_horiz_rounded));
-  await tester.pumpAndSettle();
+  await _openActionsMenu(tester);
   return (container: container, controller: controller, access: access);
 }
 
@@ -201,8 +219,7 @@ void main() {
     await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
     expect(context.controller.calls, isEmpty);
-    await tester.tap(find.byIcon(Icons.more_horiz_rounded));
-    await tester.pumpAndSettle();
+    await _openActionsMenu(tester);
     await tester.tap(find.text('踢出频道'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '确认踢出'));
