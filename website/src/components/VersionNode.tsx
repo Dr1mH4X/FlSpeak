@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { LuArrowUpRight, LuChevronDown } from 'react-icons/lu';
 import type { TranslationKey } from '../i18n/translations';
 import type {
   ChangelogCategory,
@@ -142,19 +143,7 @@ export const VersionNode: React.FC<VersionNodeProps> = ({
               aria-label={`${t('changelogViewOnGithub')} ${ver.version}`}
             >
               <span>GitHub</span>
-              <svg
-                viewBox="0 0 16 16"
-                width="12"
-                height="12"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M5 11L11 5M5 5h6v6" />
-              </svg>
+              <LuArrowUpRight size={12} strokeWidth={2} aria-hidden="true" />
             </a>
           )}
         </div>
@@ -254,20 +243,12 @@ export const VersionNode: React.FC<VersionNodeProps> = ({
             onClick={() => setCommitsExpanded((prev) => !prev)}
             aria-expanded={showRawCommits}
           >
-            <svg
-              viewBox="0 0 16 16"
-              width="14"
-              height="14"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+            <LuChevronDown
+              size={14}
+              strokeWidth={2}
               className={`cl-toggle-chevron ${showRawCommits ? 'is-open' : ''}`}
               aria-hidden="true"
-            >
-              <path d="M4 6l4 4 4-4" />
-            </svg>
+            />
             <span>
               {showRawCommits
                 ? t('changelogCollapseCommits')

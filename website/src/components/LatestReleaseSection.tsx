@@ -1,4 +1,5 @@
 import React from 'react';
+import { LuArrowRight } from 'react-icons/lu';
 import type { TranslationKey } from '../i18n/translations';
 import type { ChangelogVersion } from '../types/release';
 import { VersionNode } from './VersionNode';
@@ -44,19 +45,7 @@ export const LatestReleaseSection: React.FC<LatestReleaseSectionProps> = ({
               <span>
                 {t('changelogViewAllHistory', { total: versions.length })}
               </span>
-              <svg
-                viewBox="0 0 20 20"
-                width="16"
-                height="16"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M5 10h10M10 5l5 5-5 5" />
-              </svg>
+              <LuArrowRight size={16} strokeWidth={2} aria-hidden="true" />
             </a>
           </div>
         </div>
@@ -81,19 +70,7 @@ export const LatestReleaseSection: React.FC<LatestReleaseSectionProps> = ({
                 <span>
                   {t('changelogViewAllHistory', { total: versions.length })}
                 </span>
-                <svg
-                  viewBox="0 0 20 20"
-                  width="18"
-                  height="18"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M5 10h10M10 5l5 5-5 5" />
-                </svg>
+                <LuArrowRight size={18} strokeWidth={2} aria-hidden="true" />
               </a>
             </div>
           </div>

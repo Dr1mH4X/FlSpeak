@@ -1,42 +1,50 @@
 import React, { useState } from 'react';
+import { LuImage } from 'react-icons/lu';
 
 interface WorkspacePreviewProps {
-  imageSrc?: string;
+  darkSrc?: string;
+  lightSrc?: string;
 }
 
 export const WorkspacePreview: React.FC<WorkspacePreviewProps> = ({
-  imageSrc = '/preview.png',
+  darkSrc = '/preview-dark.png',
+  lightSrc = '/preview-light.png',
 }) => {
-  const [hasError, setHasError] = useState(false);
+  const [darkError, setDarkError] = useState(false);
+  const [lightError, setLightError] = useState(false);
+
+  const hasError = darkError && lightError;
 
   return (
     <div className="workspace-preview-stage">
       <div className="workspace-placeholder-frame">
         {!hasError ? (
-          <img
-            src={imageSrc}
-            alt="FlSpeak Workspace Preview"
-            className="workspace-placeholder-img"
-            onError={() => setHasError(true)}
-          />
+          <>
+            {!darkError && (
+              <img
+                src={darkSrc}
+                alt="FlSpeak Workspace Preview (Dark)"
+                className="workspace-placeholder-img workspace-placeholder-img-dark"
+                onError={() => setDarkError(true)}
+              />
+            )}
+            {!lightError && (
+              <img
+                src={lightSrc}
+                alt="FlSpeak Workspace Preview (Light)"
+                className="workspace-placeholder-img workspace-placeholder-img-light"
+                onError={() => setLightError(true)}
+              />
+            )}
+          </>
         ) : (
           <div className="workspace-placeholder-empty">
-            <svg
+            <LuImage
               className="workspace-placeholder-icon"
-              viewBox="0 0 24 24"
-              width="48"
-              height="48"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+              size={48}
+              strokeWidth={1.5}
               aria-hidden="true"
-            >
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-              <circle cx="8.5" cy="8.5" r="1.5" />
-              <polyline points="21 15 16 10 5 21" />
-            </svg>
+            />
           </div>
         )}
       </div>

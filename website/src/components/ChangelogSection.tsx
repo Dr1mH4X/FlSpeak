@@ -1,4 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  LuArrowLeft,
+  LuArrowUpRight,
+  LuChevronDown,
+  LuSearch,
+  LuX,
+} from 'react-icons/lu';
 import type { TranslationKey } from '../i18n/translations';
 import type { ChangelogVersion } from '../types/release';
 import {
@@ -196,19 +203,7 @@ export const ChangelogSection: React.FC<ChangelogSectionProps> = ({
       {/* Back to Home Breadcrumb Header */}
       <div className="cl-top-nav-bar">
         <a href="#/" className="cl-back-home-btn">
-          <svg
-            viewBox="0 0 20 20"
-            width="16"
-            height="16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M15 10H5M10 15l-5-5 5-5" />
-          </svg>
+          <LuArrowLeft size={16} strokeWidth={2} aria-hidden="true" />
           <span>{t('changelogBackToHome')}</span>
         </a>
       </div>
@@ -234,18 +229,7 @@ export const ChangelogSection: React.FC<ChangelogSectionProps> = ({
           {/* Search Box */}
           <div className="cl-search-box">
             <span className="cl-search-icon" aria-hidden="true">
-              <svg
-                viewBox="0 0 20 20"
-                width="16"
-                height="16"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              >
-                <circle cx="8.5" cy="8.5" r="5.5" />
-                <path d="M13 13l4 4" />
-              </svg>
+              <LuSearch size={16} strokeWidth={2} />
             </span>
 
             <input
@@ -275,17 +259,7 @@ export const ChangelogSection: React.FC<ChangelogSectionProps> = ({
                 }}
                 aria-label={t('changelogClearSearch')}
               >
-                <svg
-                  viewBox="0 0 16 16"
-                  width="13"
-                  height="13"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                >
-                  <path d="M4 4l8 8M12 4l-8 8" />
-                </svg>
+                <LuX size={13} strokeWidth={2} aria-hidden="true" />
               </button>
             ) : (
               <kbd className="cl-search-kbd" aria-hidden="true">
@@ -370,19 +344,7 @@ export const ChangelogSection: React.FC<ChangelogSectionProps> = ({
                 className="build-empty-link"
               >
                 <span>{t('changelogViewCommits')}</span>
-                <svg
-                  viewBox="0 0 20 20"
-                  width="15"
-                  height="15"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M6 14L14 6M6 6h8v8" />
-                </svg>
+                <LuArrowUpRight size={15} strokeWidth={2} aria-hidden="true" />
               </a>
             </div>
           ) : displayedVersions.length === 0 ? (
@@ -445,19 +407,7 @@ export const ChangelogSection: React.FC<ChangelogSectionProps> = ({
                     <span>
                       {t('changelogShowMore', { remaining: remainingCount })}
                     </span>
-                    <svg
-                      viewBox="0 0 20 20"
-                      width="16"
-                      height="16"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
-                    >
-                      <path d="M5 7.5L10 12.5 15 7.5" />
-                    </svg>
+                    <LuChevronDown size={16} strokeWidth={2} aria-hidden="true" />
                   </button>
                 </div>
               )}

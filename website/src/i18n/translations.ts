@@ -40,8 +40,8 @@ export const translations = {
     platformPopupTitle: '选择目标平台',
     platformSubWindows: 'Windows 10 / 11 · x64 与 ARM64',
     platformSubMacos: 'macOS 13+ · Apple Silicon 与 Intel',
-    platformSubLinux: '主流发行版 · X11 / Wayland / ALSA',
-    platformSubAndroid: 'Android 8.0+ · 原生 Rust 语音引擎',
+    platformSubLinux: '主流发行版 · x64 与 ARM64',
+    platformSubAndroid: 'Android 8.0+ · ARM64',
 
     // Workspace Preview
     previewBadge: '交互式工作区预览 · 1:1 还原 Flutter 桌面端界面',
@@ -194,7 +194,6 @@ export const translations = {
 
     // Footer
     footerLicense: '基于 GNU Affero General Public License v3.0 (AGPL-3.0) 开源发布。',
-    footerBoundaryNote: 'FlSpeak 仅连接 TeamSpeak 服务器，不集成任何官方云账号或遥测服务。',
     footerLinkGithub: 'GitHub',
     footerLinkReleases: 'Releases',
     footerLinkIssues: '问题反馈',
@@ -240,8 +239,8 @@ export const translations = {
     platformPopupTitle: 'Select platform',
     platformSubWindows: 'Windows 10 / 11 · x64 & ARM64',
     platformSubMacos: 'macOS 13+ · Apple Silicon & Intel',
-    platformSubLinux: 'Major distros · X11 / Wayland / ALSA',
-    platformSubAndroid: 'Android 8.0+ · Native Rust audio engine',
+    platformSubLinux: 'Major distros · x64 & ARM64',
+    platformSubAndroid: 'Android 8.0+ · ARM64',
 
     // Workspace Preview
     previewBadge: 'Interactive Workspace Preview · 1:1 Flutter Desktop Replica',
@@ -394,7 +393,6 @@ export const translations = {
 
     // Footer
     footerLicense: 'Released under the GNU Affero General Public License v3.0 (AGPL-3.0).',
-    footerBoundaryNote: 'FlSpeak connects strictly to TeamSpeak servers with zero official cloud or telemetry dependencies.',
     footerLinkGithub: 'GitHub',
     footerLinkReleases: 'Releases',
     footerLinkIssues: 'Issues',

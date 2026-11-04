@@ -15,11 +15,17 @@ export const Footer: React.FC<FooterProps> = ({ repoSlug, t }) => {
         <div className="footer-brand-col">
           <div className="footer-brand-row">
             <span className="footer-brand-mark" aria-hidden="true">
-              FL
+              <img
+                src="/icon.png"
+                alt=""
+                className="footer-brand-icon-img"
+                onError={(e) => {
+                  (e.currentTarget as HTMLElement).style.display = 'none';
+                }}
+              />
             </span>
             <span className="footer-brand-name">{t('appTitle')}</span>
           </div>
-          <p className="footer-note">{t('footerBoundaryNote')}</p>
           <p className="footer-license">{t('footerLicense')}</p>
         </div>
 

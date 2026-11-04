@@ -1,4 +1,6 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
+import { FaAndroid, FaApple, FaLinux, FaWindows } from 'react-icons/fa6';
+import { LuCheck, LuChevronDown } from 'react-icons/lu';
 import type { TranslationKey } from '../i18n/translations';
 import type { PlatformId } from '../types/release';
 
@@ -22,62 +24,13 @@ export const PlatformIcon: React.FC<{
 }> = ({ platform, size = 18, className }) => {
   switch (platform) {
     case 'windows':
-      return (
-        <svg
-          viewBox="0 0 24 24"
-          width={size}
-          height={size}
-          fill="currentColor"
-          className={className}
-          aria-hidden="true"
-        >
-          <path d="M3 4.8L10.8 3.7v7.5H3V4.8zm8.9-1.25L21 2.2v9H11.9V3.55zM3 12.6h7.8v7.6L3 19.1v-6.5zm8.9 0H21v9.2l-9.1-1.3v-7.9z" />
-        </svg>
-      );
+      return <FaWindows size={size} className={className} aria-hidden="true" />;
     case 'macos':
-      return (
-        <svg
-          viewBox="0 0 24 24"
-          width={size}
-          height={size}
-          fill="currentColor"
-          className={className}
-          aria-hidden="true"
-        >
-          <path d="M16.52 12.66c.02 2.45 2.15 3.26 2.17 3.27-.02.06-.34 1.16-1.12 2.3-.67.98-1.37 1.96-2.47 1.98-1.08.02-1.43-.64-2.66-.64-1.24 0-1.63.62-2.64.66-1.06.04-1.87-1.06-2.55-2.04-1.38-2-2.44-5.64-1.02-8.11.71-1.23 1.98-2 3.35-2.02 1.05-.02 2.04.7 2.68.7.64 0 1.84-.87 3.1-.74.53.02 2.01.21 2.96 1.6-.08.05-1.77 1.03-1.8 3.04zM14.48 6.4c.56-.68.94-1.63.84-2.58-.81.03-1.79.54-2.37 1.22-.52.6-.98 1.56-.86 2.49.9.07 1.83-.45 2.39-1.13z" />
-        </svg>
-      );
+      return <FaApple size={size} className={className} aria-hidden="true" />;
     case 'linux':
-      return (
-        <svg
-          viewBox="0 0 24 24"
-          width={size}
-          height={size}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.85"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className={className}
-          aria-hidden="true"
-        >
-          <rect x="3" y="4" width="18" height="16" rx="3.5" />
-          <path d="M7.5 9.5L10.5 12l-3 2.5M12.5 15h4" />
-        </svg>
-      );
+      return <FaLinux size={size} className={className} aria-hidden="true" />;
     case 'android':
-      return (
-        <svg
-          viewBox="0 0 24 24"
-          width={size}
-          height={size}
-          fill="currentColor"
-          className={className}
-          aria-hidden="true"
-        >
-          <path d="M17.6 9.48l1.84-3.18a.6.6 0 0 0-1.04-.6l-1.88 3.24a11.4 11.4 0 0 0-9.04 0L5.6 5.7a.6.6 0 0 0-1.04.6l1.84 3.18A10.7 10.7 0 0 0 2 18h20a10.7 10.7 0 0 0-4.4-8.52zM7.5 14.5a1 1 0 1 1 0-2 1 1 0 0 1 0 2zm9 0a1 1 0 1 1 0-2 1 1 0 0 1 0 2z" />
-        </svg>
-      );
+      return <FaAndroid size={size} className={className} aria-hidden="true" />;
   }
 };
 
@@ -227,18 +180,7 @@ export const PlatformPopup: React.FC<PlatformPopupProps> = ({
           className={`fls-popup-chevron ${open ? 'is-open' : ''}`}
           aria-hidden="true"
         >
-          <svg
-            viewBox="0 0 24 24"
-            width="20"
-            height="20"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M6 9l6 6 6-6" />
-          </svg>
+          <LuChevronDown size={20} strokeWidth={2.2} />
         </span>
       </button>
 
@@ -281,18 +223,7 @@ export const PlatformPopup: React.FC<PlatformPopupProps> = ({
                   className={`fls-popup-option-check ${isSelected ? 'is-visible' : ''}`}
                   aria-hidden="true"
                 >
-                  <svg
-                    viewBox="0 0 24 24"
-                    width="18"
-                    height="18"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M20 6L9 17l-5-5" />
-                  </svg>
+                  <LuCheck size={18} strokeWidth={2.4} />
                 </span>
               </button>
             );
