@@ -404,6 +404,8 @@ a {
   font-size: 0.88rem;
   font-weight: 500;
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
   transition: color 150ms var(--ease-effects-fast);
 }
 
@@ -2031,9 +2033,28 @@ a {
 
 @media (max-width: 680px) {
   .page-container,
-  .navbar-inner,
   .footer-inner {
     padding: 0 16px;
+  }
+
+  .navbar-inner {
+    padding: 0 16px;
+    gap: 8px;
+  }
+
+  .nav-actions-group {
+    gap: 2px;
+  }
+
+  .nav-item-link,
+  .nav-icon-btn {
+    padding: 0 8px;
+    font-size: 0.84rem;
+    gap: 5px;
+  }
+
+  .nav-divider {
+    margin: 0 2px;
   }
 
   .nav-github-text {
@@ -2107,6 +2128,26 @@ a {
   .platform-segmented-control {
     width: 100%;
     overflow-x: auto;
+  }
+}
+
+@media (max-width: 440px) {
+  .navbar-inner {
+    padding: 0 10px;
+  }
+
+  .brand-wordmark {
+    font-size: 1rem;
+  }
+
+  .nav-item-link,
+  .nav-icon-btn {
+    padding: 0 6px;
+    font-size: 0.82rem;
+  }
+
+  .nav-star-pill {
+    display: none;
   }
 }
 
