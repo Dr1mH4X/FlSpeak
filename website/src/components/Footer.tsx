@@ -63,7 +63,7 @@ export const Footer: React.FC<FooterProps> = ({ repoSlug, t }) => {
             {t('footerLinkLicense')}
           </a>
           <a
-            href="https://github.com/flier/tsclient-rs"
+            href="https://github.com/Dr1mH4X/tsclient-rs"
             target="_blank"
             rel="noopener noreferrer"
             className="footer-ext-link"
