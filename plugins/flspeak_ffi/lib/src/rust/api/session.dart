@@ -9,7 +9,7 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'session.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `runtime`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 /// 抓取第三方图片 URL。myTS 的 `ts.file.myts` 附件不经过这里。
 Future<Uint8List> fetchImage({required String url}) =>
@@ -78,6 +78,8 @@ abstract class CoreSession implements RustOpaqueInterface {
 
   Future<Uint8List> fetchIcon({required int iconId});
 
+  Future<void> joinStream({required String streamId, required int sourceClid});
+
   Future<void> kick({
     required String uid,
     required int clientId,
@@ -86,6 +88,8 @@ abstract class CoreSession implements RustOpaqueInterface {
     required String reason,
     required int connectionEpoch,
   });
+
+  Future<void> leaveStream({required String streamId});
 
   Future<AudioDevicesView> listAudioDevices();
 
@@ -130,6 +134,20 @@ abstract class CoreSession implements RustOpaqueInterface {
 
   /// 主动拉一次频道/成员快照。连接期间 actor 也会每 30 秒自动刷新。
   Future<void> requestSnapshot();
+
+  Future<void> sendStreamAnswer({
+    required String streamId,
+    required int targetClid,
+    required String sdp,
+  });
+
+  Future<void> sendStreamIceCandidate({
+    required String streamId,
+    required int targetClid,
+    required String sdp,
+    String? mid,
+    int? mLine,
+  });
 
   Future<void> sendText({
     required int targetMode,
@@ -487,6 +505,26 @@ sealed class CoreEvent with _$CoreEvent {
   }) = CoreEvent_TransferProgress;
   const factory CoreEvent.transferFinished({required int id, String? error}) =
       CoreEvent_TransferFinished;
+  const factory CoreEvent.streams({
+    required List<StreamView> streams,
+    String? watching,
+  }) = CoreEvent_Streams;
+  const factory CoreEvent.streamOffer({
+    required String streamId,
+    required int sourceClientId,
+    required String sdp,
+  }) = CoreEvent_StreamOffer;
+  const factory CoreEvent.streamIceCandidate({
+    required String streamId,
+    required int sourceClientId,
+    required String sdp,
+    String? mid,
+    int? mLine,
+  }) = CoreEvent_StreamIceCandidate;
+  const factory CoreEvent.streamEnded({
+    required String streamId,
+    required StreamEndReason reason,
+  }) = CoreEvent_StreamEnded;
   const factory CoreEvent.log({
     required String level,
     required String message,
@@ -676,4 +714,43 @@ class ServerProfileView {
           label == other.label &&
           host == other.host &&
           port == other.port;
+}
+
+enum StreamEndReason {
+  sourceStopped,
+  sourceLeft,
+  sourceMoved,
+  selfMoved,
+  disconnected,
+  removed,
+  rejected,
+  left,
+}
+
+class StreamView {
+  final String id;
+  final int clientId;
+  final String name;
+  final bool hasAudio;
+
+  const StreamView({
+    required this.id,
+    required this.clientId,
+    required this.name,
+    required this.hasAudio,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^ clientId.hashCode ^ name.hashCode ^ hasAudio.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StreamView &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          clientId == other.clientId &&
+          name == other.name &&
+          hasAudio == other.hasAudio;
 }

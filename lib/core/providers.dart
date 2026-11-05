@@ -937,6 +937,12 @@ class SessionController extends Notifier<SessionView> {
           },
         );
         _transferReplies.remove(id)?.complete(error == null);
+      case CoreEvent_Streams():
+      case CoreEvent_StreamOffer():
+      case CoreEvent_StreamIceCandidate():
+      case CoreEvent_StreamEnded():
+        // TS6 屏幕共享事件暂不进 UI（阶段一仅实现信令与状态机），后续媒体与渲染阶段接入。
+        break;
       case CoreEvent_Log():
         // 协议日志不进界面，避免刷屏。
         break;

@@ -152,6 +152,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<ServerProfileView> dco_decode_list_server_profile_view(dynamic raw);
 
   @protected
+  List<StreamView> dco_decode_list_stream_view(dynamic raw);
+
+  @protected
   MemberGroupView dco_decode_member_group_view(dynamic raw);
 
   @protected
@@ -174,6 +177,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ServerProfileView dco_decode_server_profile_view(dynamic raw);
+
+  @protected
+  StreamEndReason dco_decode_stream_end_reason(dynamic raw);
+
+  @protected
+  StreamView dco_decode_stream_view(dynamic raw);
 
   @protected
   int dco_decode_u_16(dynamic raw);
@@ -339,6 +348,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  List<StreamView> sse_decode_list_stream_view(SseDeserializer deserializer);
+
+  @protected
   MemberGroupView sse_decode_member_group_view(SseDeserializer deserializer);
 
   @protected
@@ -363,6 +375,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ServerProfileView sse_decode_server_profile_view(
     SseDeserializer deserializer,
   );
+
+  @protected
+  StreamEndReason sse_decode_stream_end_reason(SseDeserializer deserializer);
+
+  @protected
+  StreamView sse_decode_stream_view(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_16(SseDeserializer deserializer);
@@ -572,6 +590,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_stream_view(
+    List<StreamView> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_member_group_view(
     MemberGroupView self,
     SseSerializer serializer,
@@ -600,6 +624,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     ServerProfileView self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_stream_end_reason(
+    StreamEndReason self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_stream_view(StreamView self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_16(int self, SseSerializer serializer);

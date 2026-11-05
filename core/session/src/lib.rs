@@ -14,8 +14,10 @@ mod image_upload;
 mod images;
 pub mod settings;
 mod store;
+mod streams;
 
 pub use settings::{AppSettings, AudioSettings, NetworkSettings, SettingsManager, UiSettings};
+pub use streams::{StreamEndReason, StreamView};
 
 mod channel_tools;
 pub mod text_format;
@@ -200,6 +202,30 @@ pub enum SessionEvent {
         id: u64,
         error: Option<String>,
     },
+    /// 当前频道的屏幕共享目录或观看状态变了；`watching` 是正在观看的流 id。
+    Streams {
+        streams: Vec<StreamView>,
+        watching: Option<String>,
+    },
+    /// 推流者发来的 SDP Offer。
+    StreamOffer {
+        stream_id: String,
+        source_client_id: i32,
+        sdp: String,
+    },
+    /// 推流者发来的 ICE 候选；`sdp` 是候选行（TS6 线上字段名）。
+    StreamIceCandidate {
+        stream_id: String,
+        source_client_id: i32,
+        sdp: String,
+        mid: Option<String>,
+        m_line: Option<i32>,
+    },
+    /// 正在观看的流结束；随后的 `Streams` 事件里 `watching` 为空。
+    StreamEnded {
+        stream_id: String,
+        reason: StreamEndReason,
+    },
     Log {
         level: String,
         message: String,
@@ -360,6 +386,29 @@ pub enum SessionCommand {
         password: String,
         reply: oneshot::Sender<Result<Vec<ChannelFileView>, SessionError>>,
     },
+    JoinStream {
+        stream_id: String,
+        source_clid: i32,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
+    LeaveStream {
+        stream_id: String,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
+    SendStreamAnswer {
+        stream_id: String,
+        target_clid: i32,
+        sdp: String,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
+    SendStreamIceCandidate {
+        stream_id: String,
+        target_clid: i32,
+        sdp: String,
+        mid: Option<String>,
+        m_line: Option<i32>,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
     Shutdown,
 }
 
@@ -400,6 +449,9 @@ pub enum SessionError {
 
     #[error("尚未进入频道")]
     NotInChannel,
+
+    #[error("屏幕共享: {0}")]
+    Stream(String),
 
     #[error("actor 线程启动失败: {0}")]
     Spawn(String),
@@ -814,6 +866,63 @@ impl SessionHandle {
     pub async fn fetch_icon(&self, icon_id: u32) -> Result<Vec<u8>, SessionError> {
         let (reply, rx) = oneshot::channel();
         self.send(SessionCommand::FetchIcon { icon_id, reply })?;
+        rx.await.map_err(|_| SessionError::Closed)?
+    }
+
+    /// 申请观看当前频道里的一路屏幕共享；Offer 随后经 `StreamOffer` 事件送达。
+    pub async fn join_stream(
+        &self,
+        stream_id: String,
+        source_clid: i32,
+    ) -> Result<(), SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::JoinStream {
+            stream_id,
+            source_clid,
+            reply,
+        })?;
+        rx.await.map_err(|_| SessionError::Closed)?
+    }
+
+    pub async fn leave_stream(&self, stream_id: String) -> Result<(), SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::LeaveStream { stream_id, reply })?;
+        rx.await.map_err(|_| SessionError::Closed)?
+    }
+
+    pub async fn send_stream_answer(
+        &self,
+        stream_id: String,
+        target_clid: i32,
+        sdp: String,
+    ) -> Result<(), SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::SendStreamAnswer {
+            stream_id,
+            target_clid,
+            sdp,
+            reply,
+        })?;
+        rx.await.map_err(|_| SessionError::Closed)?
+    }
+
+    pub async fn send_stream_ice_candidate(
+        &self,
+        stream_id: String,
+        target_clid: i32,
+        sdp: String,
+        mid: Option<String>,
+        m_line: Option<i32>,
+    ) -> Result<(), SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::SendStreamIceCandidate {
+            stream_id,
+            target_clid,
+            sdp,
+            mid,
+            m_line,
+            reply,
+        })?;
         rx.await.map_err(|_| SessionError::Closed)?
     }
 

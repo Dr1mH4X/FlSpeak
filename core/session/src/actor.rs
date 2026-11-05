@@ -20,6 +20,7 @@ use tsclient_rs::{
 };
 
 use crate::store::{self, identity_path};
+use crate::streams::{self, StreamCoordinator, StreamEndReason};
 use crate::{
     AudioDeviceView, AudioDevicesView, ChannelView, ClientView, SessionCommand, SessionError,
     SessionEvent, SessionState, SettingsManager, TextMessageView, TransferDirection,
@@ -47,6 +48,10 @@ const MAX_TEXT_MESSAGE_BYTES: usize = 8192;
 
 /// 音频线程到 actor 的事件队列，溢出时丢的是语音包而不是协议命令。
 pub(crate) const AUDIO_EVENT_CAPACITY: usize = 64;
+
+/// TeamSpeak 的 “command not found”：服务器不支持 TS6 屏幕共享命令。
+const COMMAND_NOT_FOUND: &str = "256";
+const STREAM_PROBE_TIMEOUT_MS: u64 = 5_000;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct ChannelMetadata {
@@ -95,6 +100,20 @@ pub(crate) enum SessionSignal {
         epoch: u64,
         message: String,
     },
+    ClientLeft {
+        epoch: u64,
+        id: i32,
+    },
+    /// TS6 屏幕共享相关的原始通知，一条通知可能带多行。
+    StreamNotification {
+        epoch: u64,
+        name: String,
+        items: Vec<HashMap<String, String>>,
+    },
+    /// 原始通知队列溢出过，流目录可能漏了更新，需要重新发现。
+    StreamResync {
+        epoch: u64,
+    },
 }
 
 pub(crate) struct SessionAudio {
@@ -142,6 +161,9 @@ pub(crate) struct Actor {
     next_transfer_id: u64,
     connection_epoch: u64,
     epoch: Arc<AtomicU64>,
+    streams: StreamCoordinator,
+    /// 当前连接的服务器是否认识 TS6 流命令；首次探测返回 command not found 后关闭。
+    streams_supported: bool,
 }
 
 impl Actor {
@@ -200,6 +222,8 @@ impl Actor {
             next_transfer_id: 1,
             connection_epoch: 0,
             epoch: Arc::new(AtomicU64::new(0)),
+            streams: StreamCoordinator::default(),
+            streams_supported: true,
         }
     }
 
@@ -522,6 +546,53 @@ impl Actor {
                         .await,
                 );
             }
+            SessionCommand::JoinStream {
+                stream_id,
+                source_clid,
+                reply,
+            } => {
+                let _ = reply.send(self.join_stream(stream_id, source_clid).await);
+            }
+            SessionCommand::LeaveStream { stream_id, reply } => {
+                let _ = reply.send(self.leave_stream(stream_id).await);
+            }
+            SessionCommand::SendStreamAnswer {
+                stream_id,
+                target_clid,
+                sdp,
+                reply,
+            } => {
+                let result = match self.streams.check_signal_target(&stream_id, target_clid) {
+                    Ok(()) => {
+                        self.stream_signaling(
+                            &stream_id,
+                            target_clid,
+                            streams::answer_payload(&sdp),
+                        )
+                        .await
+                    }
+                    Err(err) => Err(err),
+                };
+                let _ = reply.send(result);
+            }
+            SessionCommand::SendStreamIceCandidate {
+                stream_id,
+                target_clid,
+                sdp,
+                mid,
+                m_line,
+                reply,
+            } => {
+                let result = match self.streams.check_signal_target(&stream_id, target_clid) {
+                    Ok(()) => {
+                        let payload = streams::ice_payload(&sdp, mid.as_deref(), m_line);
+                        self.stream_signaling(&stream_id, target_clid, payload)
+                            .await
+                    }
+                    Err(err) => Err(err),
+                };
+                let _ = reply.send(result);
+            }
         }
         true
     }
@@ -671,6 +742,7 @@ impl Actor {
                 self.ever_connected = true;
                 self.last_snapshot = None;
                 self.channel_codecs.clear();
+                self.streams_supported = true;
                 self.set_state(SessionState::Connected {
                     client_id,
                     channel_id,
@@ -738,6 +810,7 @@ impl Actor {
         self.invalidate_handlers();
         self.channel_codecs.clear();
         self.current_codec = VOICE_CODEC;
+        self.reset_streams(StreamEndReason::Disconnected);
         let Some(client) = self.client.take() else {
             self.active_server_id = None;
             self.self_client_id = None;
@@ -1044,6 +1117,7 @@ impl Actor {
             self.last_snapshot = Some((channels.clone(), clients.clone()));
             self.emit(SessionEvent::Snapshot { channels, clients });
         }
+        self.sync_stream_channel().await;
         Ok(())
     }
 
@@ -1550,8 +1624,47 @@ impl Actor {
                 id,
                 channel_id,
             } => {
-                if epoch == self.connection_epoch && self.self_client_id == Some(id) {
+                if epoch != self.connection_epoch {
+                    return;
+                }
+                if self.self_client_id == Some(id) {
                     self.on_self_moved(channel_id).await;
+                    self.sync_stream_channel().await;
+                } else {
+                    let events = self.streams.client_moved(id, channel_id);
+                    self.emit_all(events);
+                    // 已在共享的人进了本频道：问一次他的流。
+                    if channel_id != 0 && channel_id == self.streams.channel() {
+                        self.query_stream_info(id).await;
+                    }
+                }
+            }
+            SessionSignal::ClientLeft { epoch, id } => {
+                if epoch == self.connection_epoch {
+                    let events = self.streams.client_left(id);
+                    self.emit_all(events);
+                }
+            }
+            SessionSignal::StreamNotification { epoch, name, items } => {
+                if epoch != self.connection_epoch {
+                    return;
+                }
+                let client = self.client.as_ref();
+                let last_snapshot = self.last_snapshot.as_ref();
+                let mut out = Vec::new();
+                for params in &items {
+                    let events =
+                        self.streams
+                            .notification(&name, params, self.self_client_id, |clid| {
+                                client_channel(client, last_snapshot, clid)
+                            });
+                    out.extend(events);
+                }
+                self.emit_all(out);
+            }
+            SessionSignal::StreamResync { epoch } => {
+                if epoch == self.connection_epoch {
+                    self.discover_streams().await;
                 }
             }
             SessionSignal::Snapshot { epoch, clients } => {
@@ -1599,6 +1712,7 @@ impl Actor {
         self.self_channel_id = 0;
         self.channel_codecs.clear();
         self.current_codec = VOICE_CODEC;
+        self.reset_streams(StreamEndReason::Disconnected);
         self.stop_voice();
         let will_reconnect = allow_reconnect
             && self.auto_reconnect
@@ -1731,6 +1845,196 @@ impl Actor {
         self.apply_self_channel(channel_id, codec);
     }
 
+    /// 流目录跟随自己所在的频道。频道变了就作废旧目录、退出旧流，再在新频道里发现。
+    async fn sync_stream_channel(&mut self) {
+        let channel = self.self_channel_id;
+        if self.streams.channel() == channel {
+            return;
+        }
+        let watched = self.streams.watching().map(|(id, _)| id.to_string());
+        let events = self.streams.reset(channel, StreamEndReason::SelfMoved);
+        self.emit_all(events);
+        if let Some(stream_id) = watched {
+            self.leave_stream_best_effort(&stream_id).await;
+        }
+        if channel != 0 {
+            self.discover_streams().await;
+        }
+    }
+
+    /// 断线时只清本地状态：连接已不可用，服务器会自己回收观看关系。
+    fn reset_streams(&mut self, reason: StreamEndReason) {
+        let events = self.streams.reset(0, reason);
+        self.emit_all(events);
+    }
+
+    /// TS6 进频道时不重放已有的流，逐个问本频道成员。
+    ///
+    /// 第一条用带回执的命令探测服务器是否认识 `requeststreaminfo`；其余不等回执，
+    /// 避免成员多时每人一个往返地卡住 actor。结果经 `notifystreaminfo` 回来。
+    async fn discover_streams(&mut self) {
+        if !self.streams_supported {
+            return;
+        }
+        let Some(client) = self.client.clone() else {
+            return;
+        };
+        let targets = self.channel_peers(self.streams.channel());
+        for (index, clid) in targets.into_iter().enumerate() {
+            let command = format!("requeststreaminfo clid={clid}");
+            if index == 0 {
+                match client.exec_command(&command, STREAM_PROBE_TIMEOUT_MS).await {
+                    Ok(()) => {}
+                    Err(tsclient_rs::Error::ServerError { id, .. }) if id == COMMAND_NOT_FOUND => {
+                        self.streams_supported = false;
+                        self.emit(SessionEvent::Log {
+                            level: "info".into(),
+                            message: "服务器不支持 TS6 屏幕共享".into(),
+                        });
+                        return;
+                    }
+                    Err(err) => self.emit(SessionEvent::Log {
+                        level: "debug".into(),
+                        message: format!("查询客户端 {clid} 的屏幕共享失败: {err}"),
+                    }),
+                }
+            } else if let Err(err) = client.send_command_no_wait(&command).await {
+                self.emit(SessionEvent::Log {
+                    level: "warn".into(),
+                    message: format!("屏幕共享发现中断: {err}"),
+                });
+                return;
+            }
+        }
+    }
+
+    async fn query_stream_info(&self, clid: i32) {
+        if !self.streams_supported {
+            return;
+        }
+        let Some(client) = self.client.clone() else {
+            return;
+        };
+        if let Err(err) = client
+            .send_command_no_wait(&format!("requeststreaminfo clid={clid}"))
+            .await
+        {
+            self.emit(SessionEvent::Log {
+                level: "debug".into(),
+                message: format!("查询客户端 {clid} 的屏幕共享失败: {err}"),
+            });
+        }
+    }
+
+    async fn join_stream(
+        &mut self,
+        stream_id: String,
+        source_clid: i32,
+    ) -> Result<(), SessionError> {
+        self.connected()?;
+        let (previous, events) = self.streams.begin_join(&stream_id, source_clid)?;
+        self.emit_all(events);
+        if let Some(previous) = previous {
+            self.leave_stream_best_effort(&previous).await;
+        }
+        let result = self
+            .stream_command(
+                "joinstreamrequest",
+                &streams::join_request(&stream_id, source_clid),
+            )
+            .await;
+        if result.is_err() {
+            let events = self.streams.abandon_join(&stream_id);
+            self.emit_all(events);
+        }
+        result
+    }
+
+    /// 本地状态先清掉再通知服务器，命令失败也不会留下悬空的观看状态。
+    async fn leave_stream(&mut self, stream_id: String) -> Result<(), SessionError> {
+        let events = self.streams.leave(&stream_id)?;
+        self.emit_all(events);
+        self.send_stream_leave(&stream_id).await
+    }
+
+    async fn leave_stream_best_effort(&self, stream_id: &str) {
+        if let Err(err) = self.send_stream_leave(stream_id).await {
+            self.emit(SessionEvent::Log {
+                level: "warn".into(),
+                message: format!("退出屏幕共享 {stream_id} 失败: {err}"),
+            });
+        }
+    }
+
+    async fn send_stream_leave(&self, stream_id: &str) -> Result<(), SessionError> {
+        let self_clid = self.self_client_id.ok_or(SessionError::NotConnected)?;
+        self.stream_command(
+            "removeclientfromstream",
+            &streams::leave_request(stream_id, self_clid),
+        )
+        .await
+    }
+
+    async fn stream_signaling(
+        &self,
+        stream_id: &str,
+        target_clid: i32,
+        payload: String,
+    ) -> Result<(), SessionError> {
+        self.stream_command(
+            "streamsignaling",
+            &[
+                ("id", stream_id.to_string()),
+                ("clid", target_clid.to_string()),
+                ("json", payload),
+            ],
+        )
+        .await
+    }
+
+    async fn stream_command(
+        &self,
+        command: &str,
+        params: &[(&'static str, String)],
+    ) -> Result<(), SessionError> {
+        let client = self.connected()?;
+        let params: Vec<(&str, &str)> = params.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        client
+            .send_raw_command(command, &params)
+            .await
+            .map_err(protocol_error)
+    }
+
+    fn channel_peers(&self, channel: u64) -> Vec<i32> {
+        let mut peers = Vec::new();
+        let mut seen = HashSet::new();
+        if let Some(snapshot) = self
+            .client
+            .as_ref()
+            .and_then(|client| client.directory_snapshot())
+        {
+            for row in snapshot.clients {
+                if row.channel_id == channel
+                    && Some(row.id) != self.self_client_id
+                    && seen.insert(row.id)
+                {
+                    peers.push(row.id);
+                }
+            }
+        }
+        if let Some((_, clients)) = &self.last_snapshot {
+            for row in clients {
+                if row.channel_id == channel
+                    && Some(row.id) != self.self_client_id
+                    && seen.insert(row.id)
+                {
+                    peers.push(row.id);
+                }
+            }
+        }
+        peers
+    }
+
     fn handle_audio(&mut self, event: AudioEvent) {
         match event {
             AudioEvent::Outbound {
@@ -1845,6 +2149,7 @@ impl Actor {
         self.stop_voice();
         self.channel_codecs.clear();
         self.current_codec = VOICE_CODEC;
+        self.reset_streams(StreamEndReason::Disconnected);
         self.set_state(SessionState::Disconnected);
     }
 
@@ -1880,6 +2185,12 @@ impl Actor {
 
     fn emit(&self, event: SessionEvent) {
         emit(&self.events, event);
+    }
+
+    fn emit_all(&self, events: Vec<SessionEvent>) {
+        for event in events {
+            self.emit(event);
+        }
     }
 }
 
@@ -2149,6 +2460,30 @@ fn emit(events: &broadcast::Sender<SessionEvent>, event: SessionEvent) {
     let _ = events.send(event);
 }
 
+fn client_channel(
+    client: Option<&Arc<Client>>,
+    last_snapshot: Option<&(Vec<ChannelView>, Vec<ClientView>)>,
+    clid: i32,
+) -> Option<u64> {
+    client
+        .and_then(|client| client.directory_snapshot())
+        .and_then(|snapshot| {
+            snapshot
+                .clients
+                .iter()
+                .find(|row| row.id == clid && row.channel_id != 0)
+                .map(|row| row.channel_id)
+        })
+        .or_else(|| {
+            last_snapshot.and_then(|(_, clients)| {
+                clients
+                    .iter()
+                    .find(|row| row.id == clid && row.channel_id != 0)
+                    .map(|row| row.channel_id)
+            })
+        })
+}
+
 /// 每类事件只注册一个处理器：tsclient-rs 会为每个处理器、每个包 spawn 一个任务。
 fn register_handlers(
     client: &Client,
@@ -2217,6 +2552,7 @@ fn register_handlers(
     }));
 
     let channel = events.clone();
+    let left = signals.clone();
     let live = Arc::clone(&current);
     client.on_client_leave(Arc::new(move |event: ProtocolEvent| {
         if live.load(Ordering::Relaxed) != epoch {
@@ -2224,6 +2560,7 @@ fn register_handlers(
         }
         if let ProtocolEvent::ClientLeave(info) = event {
             emit(&channel, SessionEvent::ClientLeft { id: info.id });
+            let _ = left.send(SessionSignal::ClientLeft { epoch, id: info.id });
         }
     }));
 
@@ -2298,7 +2635,7 @@ fn register_handlers(
         }
     }));
 
-    let channel = signals;
+    let channel = signals.clone();
     let live = Arc::clone(&current);
     client.on_kicked(Arc::new(move |event: ProtocolEvent| {
         if live.load(Ordering::Relaxed) != epoch {
@@ -2309,6 +2646,25 @@ fn register_handlers(
                 epoch,
                 message: format!("被服务器移出: {reason}"),
             });
+        }
+    }));
+
+    let channel = signals;
+    let live = Arc::clone(&current);
+    client.on_raw_notification(Arc::new(move |event: ProtocolEvent| {
+        if live.load(Ordering::Relaxed) != epoch {
+            return;
+        }
+        match event {
+            ProtocolEvent::RawNotification { name, items }
+                if streams::is_stream_notification(&name) =>
+            {
+                let _ = channel.send(SessionSignal::StreamNotification { epoch, name, items });
+            }
+            ProtocolEvent::NotificationOverflow { .. } => {
+                let _ = channel.send(SessionSignal::StreamResync { epoch });
+            }
+            _ => {}
         }
     }));
 
