@@ -25,4 +25,4 @@
 - [lib/widgets](widgets/AGENTS.md)
 - [lib/l10n](l10n/AGENTS.md)
 
-编码反面见 [../docs/defensive-patterns/AGENTS.md](../docs/defensive-patterns/AGENTS.md)，开发流程与语言约定见 [../docs/development.md](../docs/development.md)。
+编码反面见 [../docs/defensive-patterns/AGENTS.md](../docs/defensive-patterns/AGENTS.md)，Flutter 文案与操作按钮约束见 [../docs/defensive-patterns/ui.md](../docs/defensive-patterns/ui.md)，开发流程与语言约定见 [../docs/development.md](../docs/development.md)。

@@ -21,7 +21,7 @@
 | `docs/architecture.md` | 索引与拓扑：分层、一次连接的时序、事件流、线程模型、目录职责与「尚未接线」 | 跨文件契约与序列（→ 主题文档或 `docs/subsystems/`）、决策理由 |
 | `docs/` 主题文档（`audio.md`、`backend.md`、`channels.md`、`connection-boundary.md`、`images.md`） | 按链路组织的深潜文档：一条跨 crate 的链路或边界的契约、关键序列与已知限制 | 决策理由（→ `.agents/notes/`）、逐行实现细节（→ 源码） |
 | `docs/subsystems/` | 每个子系统一篇：契约、关键路径与序列、不变量；规则见其 `AGENTS.md` | 决策理由（→ `.agents/notes/`）、逐行实现细节（→ 源码） |
-| `docs/defensive-patterns/` | 编码反面与规范替代：按领域拆分的审查强制准则（general, connection, audio, review） | 子系统内部契约、常规开发流程 |
+| `docs/defensive-patterns/` | 编码反面与规范替代：按领域拆分的审查强制准则（general, connection, audio, review, ui） | 子系统内部契约、常规开发流程 |
 | `docs/cookbook/` | 任务驱动式 Step-by-Step 实操指南，带带号步骤与验证命令 | 架构设计决策理由、语法级参考手册 |
 | `docs/development.md` | 开发流程与环境：常用命令、构建依赖与平台细节、FFI 绑定生成、语言约定、发版打包 | 架构图、测试约定、决策理由 |
 | `docs/testing.md` | 测试约定：单测摆放、测试范围选择、真实服务器手动测试、CI 测试门 | 测试用例代码誊写 |
