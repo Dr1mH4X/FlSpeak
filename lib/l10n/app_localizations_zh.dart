@@ -687,4 +687,46 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get aboutCopySuccess => '链接已复制到剪贴板';
+
+  @override
+  String get streamSharing => '正在共享屏幕';
+
+  @override
+  String get streamWatch => '观看';
+
+  @override
+  String get streamWatchScreen => '观看屏幕共享';
+
+  @override
+  String get streamWatching => '正在观看';
+
+  @override
+  String get streamStopWatching => '关闭观看';
+
+  @override
+  String get streamConnecting => '正在连接画面…';
+
+  @override
+  String get streamMute => '静音画面';
+
+  @override
+  String get streamUnmute => '取消静音画面';
+
+  @override
+  String get streamExpand => '展开画面';
+
+  @override
+  String get streamCollapse => '收起画面';
+
+  @override
+  String get streamEndedStopped => '对方已结束屏幕共享';
+
+  @override
+  String get streamEndedRejected => '观看请求被拒绝';
+
+  @override
+  String get streamEndedRemoved => '已从屏幕共享中移除';
+
+  @override
+  String get streamNegotiationFailed => '屏幕共享直连失败，请重试';
 }

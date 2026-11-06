@@ -1369,6 +1369,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Link copied to clipboard'**
   String get aboutCopySuccess;
+
+  /// No description provided for @streamSharing.
+  ///
+  /// In en, this message translates to:
+  /// **'Sharing screen'**
+  String get streamSharing;
+
+  /// No description provided for @streamWatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Watch'**
+  String get streamWatch;
+
+  /// No description provided for @streamWatchScreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Watch screen share'**
+  String get streamWatchScreen;
+
+  /// No description provided for @streamWatching.
+  ///
+  /// In en, this message translates to:
+  /// **'Watching'**
+  String get streamWatching;
+
+  /// No description provided for @streamStopWatching.
+  ///
+  /// In en, this message translates to:
+  /// **'Close stream'**
+  String get streamStopWatching;
+
+  /// No description provided for @streamConnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting to stream…'**
+  String get streamConnecting;
+
+  /// No description provided for @streamMute.
+  ///
+  /// In en, this message translates to:
+  /// **'Mute stream'**
+  String get streamMute;
+
+  /// No description provided for @streamUnmute.
+  ///
+  /// In en, this message translates to:
+  /// **'Unmute stream'**
+  String get streamUnmute;
+
+  /// No description provided for @streamExpand.
+  ///
+  /// In en, this message translates to:
+  /// **'Expand stream'**
+  String get streamExpand;
+
+  /// No description provided for @streamCollapse.
+  ///
+  /// In en, this message translates to:
+  /// **'Collapse stream'**
+  String get streamCollapse;
+
+  /// No description provided for @streamEndedStopped.
+  ///
+  /// In en, this message translates to:
+  /// **'Screen share has ended'**
+  String get streamEndedStopped;
+
+  /// No description provided for @streamEndedRejected.
+  ///
+  /// In en, this message translates to:
+  /// **'Watch request was declined'**
+  String get streamEndedRejected;
+
+  /// No description provided for @streamEndedRemoved.
+  ///
+  /// In en, this message translates to:
+  /// **'Removed from screen share'**
+  String get streamEndedRemoved;
+
+  /// No description provided for @streamNegotiationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Screen share connection failed. Try again.'**
+  String get streamNegotiationFailed;
 }
 
 class _AppLocalizationsDelegate

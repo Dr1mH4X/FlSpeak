@@ -340,5 +340,19 @@
   "aboutSourceCode": "Source Code",
   "aboutIssueTracker": "Issue Tracker",
   "aboutLicense": "License",
-  "aboutCopySuccess": "Link copied to clipboard"
+  "aboutCopySuccess": "Link copied to clipboard",
+  "streamSharing": "Sharing screen",
+  "streamWatch": "Watch",
+  "streamWatchScreen": "Watch screen share",
+  "streamWatching": "Watching",
+  "streamStopWatching": "Close stream",
+  "streamConnecting": "Connecting to stream…",
+  "streamMute": "Mute stream",
+  "streamUnmute": "Unmute stream",
+  "streamExpand": "Expand stream",
+  "streamCollapse": "Collapse stream",
+  "streamEndedStopped": "Screen share has ended",
+  "streamEndedRejected": "Watch request was declined",
+  "streamEndedRemoved": "Removed from screen share",
+  "streamNegotiationFailed": "Screen share connection failed. Try again."
 }

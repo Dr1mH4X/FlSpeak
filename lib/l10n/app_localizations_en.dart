@@ -704,4 +704,47 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aboutCopySuccess => 'Link copied to clipboard';
+
+  @override
+  String get streamSharing => 'Sharing screen';
+
+  @override
+  String get streamWatch => 'Watch';
+
+  @override
+  String get streamWatchScreen => 'Watch screen share';
+
+  @override
+  String get streamWatching => 'Watching';
+
+  @override
+  String get streamStopWatching => 'Close stream';
+
+  @override
+  String get streamConnecting => 'Connecting to stream…';
+
+  @override
+  String get streamMute => 'Mute stream';
+
+  @override
+  String get streamUnmute => 'Unmute stream';
+
+  @override
+  String get streamExpand => 'Expand stream';
+
+  @override
+  String get streamCollapse => 'Collapse stream';
+
+  @override
+  String get streamEndedStopped => 'Screen share has ended';
+
+  @override
+  String get streamEndedRejected => 'Watch request was declined';
+
+  @override
+  String get streamEndedRemoved => 'Removed from screen share';
+
+  @override
+  String get streamNegotiationFailed =>
+      'Screen share connection failed. Try again.';
 }

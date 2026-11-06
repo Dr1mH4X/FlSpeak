@@ -249,6 +249,7 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
             speaking:
                 view.speaking.contains(client.id) ||
                 (client.id == view.selfClientId && view.selfSpeaking),
+            stream: view.streamForClient(client.id),
           ),
         };
       },
@@ -500,11 +501,13 @@ class _MemberTile extends StatelessWidget {
     required this.client,
     required this.depth,
     required this.speaking,
+    this.stream,
   });
 
   final ClientView client;
   final int depth;
   final bool speaking;
+  final StreamView? stream;
 
   @override
   Widget build(BuildContext context) {
@@ -541,6 +544,12 @@ class _MemberTile extends StatelessWidget {
                   ),
                 ),
               ),
+              if (stream != null)
+                _MemberFlag(
+                  label: l10n.streamSharing,
+                  icon: Icons.screen_share_rounded,
+                  color: scheme.primary,
+                ),
               // 服务器回显的设备状态：快照没带标志（null）时不显示。
               if (client.inputMuted ?? false)
                 _MemberFlag(

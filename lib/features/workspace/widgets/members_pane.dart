@@ -1,21 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models.dart';
+import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/monogram.dart';
 import 'client_actions.dart';
 
-class MembersPane extends StatelessWidget {
+class MembersPane extends ConsumerWidget {
   const MembersPane({required this.view, required this.channelId, super.key});
 
   final SessionView view;
   final int channelId;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
+    final controller = ref.read(sessionViewProvider.notifier);
     final members = view.clients
         .where((client) => client.channelId == channelId)
         .toList();
@@ -85,6 +88,28 @@ class MembersPane extends StatelessWidget {
                         ],
                       ),
                     ),
+                    if (view.streamForClient(member.id) case final stream?)
+                      IconButton(
+                        key: ValueKey('member-stream-${member.id}'),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () {
+                          if (view.watchingStreamId == stream.id) {
+                            controller.leaveStream(stream.id);
+                          } else {
+                            controller.watchStream(stream);
+                          }
+                        },
+                        icon: Icon(
+                          Icons.screen_share_rounded,
+                          size: IconSizes.small,
+                          color: view.watchingStreamId == stream.id
+                              ? scheme.primary
+                              : scheme.onSurfaceVariant,
+                          semanticLabel: view.watchingStreamId == stream.id
+                              ? l10n.streamStopWatching
+                              : l10n.streamWatchScreen,
+                        ),
+                      ),
                     if (member.inputMuted ?? false)
                       Icon(
                         Icons.mic_off_rounded,

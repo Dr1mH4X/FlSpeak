@@ -16,6 +16,7 @@ import 'image_host.dart';
 import 'notices.dart';
 import 'preferences.dart';
 import 'server_icon.dart';
+import 'stream_viewer.dart';
 import 'voice_levels.dart';
 
 final _localizationsProvider = Provider<AppLocalizations>((ref) {
@@ -389,6 +390,55 @@ class SessionController extends Notifier<SessionView> {
     );
   }
 
+  /// 加入指定成员正在共享的屏幕流并准备 WebRTC 观看会话。
+  Future<bool> watchStream(StreamView stream) async {
+    if (!state.connected) return false;
+    final previousId = state.watchingStreamId;
+    if (previousId != null && previousId != stream.id) {
+      try {
+        await ref.read(coreSessionProvider).leaveStream(streamId: previousId);
+      } on CoreError catch (_) {
+        // 切换观看流时旧流退出失败不阻塞新流加入。
+      }
+    }
+    await ref
+        .read(streamViewerProvider.notifier)
+        .prepareWatch(streamId: stream.id, sourceClientId: stream.clientId);
+    if (!ref.mounted) return false;
+    state = state.copyWith(watchingStreamId: stream.id);
+    try {
+      await ref
+          .read(coreSessionProvider)
+          .joinStream(streamId: stream.id, sourceClid: stream.clientId);
+      return ref.mounted;
+    } on CoreError catch (error) {
+      if (ref.mounted) {
+        state = state.copyWith(watchingStreamId: null);
+        await ref.read(streamViewerProvider.notifier).closeSession();
+        _notifyCoreError(error);
+      }
+      return false;
+    }
+  }
+
+  /// 关闭当前正在观看的屏幕流并销毁 WebRTC 与渲染器资源。
+  Future<void> leaveStream([String? streamId]) async {
+    final targetId =
+        streamId ??
+        state.watchingStreamId ??
+        ref.read(streamViewerProvider).streamId;
+    if (state.watchingStreamId != null) {
+      state = state.copyWith(watchingStreamId: null);
+    }
+    await ref.read(streamViewerProvider.notifier).closeSession();
+    if (targetId == null || !ref.mounted) return;
+    try {
+      await ref.read(coreSessionProvider).leaveStream(streamId: targetId);
+    } on CoreError catch (error) {
+      _notifyCoreError(error);
+    }
+  }
+
   /// 上传可能跨越服务器/频道切换；发送闭包绑定用户发起操作时的目标。
   Future<bool> Function(String) prepareMessageSender() {
     final target = _messageDestination;
@@ -687,6 +737,10 @@ class SessionController extends Notifier<SessionView> {
         if (next is! CoreSessionState_Connected) {
           _latestLevels = VoiceLevels.silent;
           _levels.add(_latestLevels);
+          unawaited(ref.read(streamViewerProvider.notifier).closeSession());
+        } else if (current.selfChannelId != null &&
+            next.channelId != current.selfChannelId) {
+          unawaited(ref.read(streamViewerProvider.notifier).closeSession());
         }
         state = switch (next) {
           CoreSessionState_Disconnected() => current.copyWith(
@@ -694,6 +748,8 @@ class SessionController extends Notifier<SessionView> {
             activeServerId: null,
             channels: const [],
             clients: const [],
+            streams: const [],
+            watchingStreamId: null,
             speaking: const {},
             selfSpeaking: false,
             identityUpgradeTarget: null,
@@ -710,6 +766,8 @@ class SessionController extends Notifier<SessionView> {
                 : _connectingServerId,
             channels: const [],
             clients: const [],
+            streams: const [],
+            watchingStreamId: null,
             messages: const [],
             chatScope: ChatScope.channel,
             directRecipientUid: null,
@@ -724,6 +782,8 @@ class SessionController extends Notifier<SessionView> {
                 (_awaitingDisconnect ? null : _connectingServerId),
             channels: const [],
             clients: const [],
+            streams: const [],
+            watchingStreamId: null,
             speaking: const {},
             selfSpeaking: false,
           ),
@@ -808,6 +868,9 @@ class SessionController extends Notifier<SessionView> {
           clients: current.clients.where((client) => client.id != id).toList(),
         );
       case CoreEvent_ClientMoved(:final id, :final channelId):
+        if (id == current.selfClientId && channelId != current.selfChannelId) {
+          unawaited(ref.read(streamViewerProvider.notifier).closeSession());
+        }
         state = current.copyWith(
           clients: [
             for (final client in current.clients)
@@ -937,12 +1000,73 @@ class SessionController extends Notifier<SessionView> {
           },
         );
         _transferReplies.remove(id)?.complete(error == null);
-      case CoreEvent_Streams():
-      case CoreEvent_StreamOffer():
-      case CoreEvent_StreamIceCandidate():
-      case CoreEvent_StreamEnded():
-        // TS6 屏幕共享事件暂不进 UI（阶段一仅实现信令与状态机），后续媒体与渲染阶段接入。
-        break;
+      case CoreEvent_Streams(:final streams, :final watching):
+        state = current.copyWith(streams: streams, watchingStreamId: watching);
+        unawaited(
+          ref
+              .read(streamViewerProvider.notifier)
+              .syncStreams(streams: streams, watchingStreamId: watching),
+        );
+      case CoreEvent_StreamOffer(
+        :final streamId,
+        :final sourceClientId,
+        :final sdp,
+      ):
+        if (current.watchingStreamId == null ||
+            current.watchingStreamId == streamId) {
+          state = current.copyWith(watchingStreamId: streamId);
+          unawaited(
+            ref
+                .read(streamViewerProvider.notifier)
+                .handleOffer(
+                  streamId: streamId,
+                  sourceClientId: sourceClientId,
+                  sdp: sdp,
+                ),
+          );
+        }
+      case CoreEvent_StreamIceCandidate(
+        :final streamId,
+        :final sourceClientId,
+        :final sdp,
+        :final mid,
+        :final mLine,
+      ):
+        unawaited(
+          ref
+              .read(streamViewerProvider.notifier)
+              .handleRemoteIceCandidate(
+                streamId: streamId,
+                sourceClientId: sourceClientId,
+                sdp: sdp,
+                mid: mid,
+                mLine: mLine,
+              ),
+        );
+      case CoreEvent_StreamEnded(:final streamId, :final reason):
+        if (current.watchingStreamId == streamId) {
+          state = current.copyWith(watchingStreamId: null);
+        }
+        unawaited(
+          ref
+              .read(streamViewerProvider.notifier)
+              .handleStreamEnded(streamId: streamId, reason: reason),
+        );
+        final l10n = ref.read(_localizationsProvider);
+        switch (reason) {
+          case StreamEndReason.sourceStopped:
+            _notify(l10n.streamEndedStopped, tone: NoticeTone.info);
+          case StreamEndReason.rejected:
+            _notify(l10n.streamEndedRejected);
+          case StreamEndReason.removed:
+            _notify(l10n.streamEndedRemoved, tone: NoticeTone.info);
+          case StreamEndReason.sourceLeft:
+          case StreamEndReason.sourceMoved:
+          case StreamEndReason.selfMoved:
+          case StreamEndReason.disconnected:
+          case StreamEndReason.left:
+            break;
+        }
       case CoreEvent_Log():
         // 协议日志不进界面，避免刷屏。
         break;
