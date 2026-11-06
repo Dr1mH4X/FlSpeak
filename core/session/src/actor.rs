@@ -9,7 +9,7 @@ use std::task::{Context, Poll};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use audio::engine::{AudioEvent, AudioStage, VoiceEngine};
-use audio::format::{VOICE_CODEC, is_supported_codec};
+use audio::format::{MAX_PACKET_BYTES, VOICE_CODEC, is_supported_codec};
 use audio::playback::VoiceFrame;
 use base64::Engine;
 use proto::ConnectError;
@@ -37,10 +37,7 @@ const IDENTITY_STEP: i32 = 5;
 const IDENTITY_MAX_LEVEL: i32 = 29;
 /// 首轮成功会话前最多重试次数；成功连上过之后不限次。
 const STARTUP_RECONNECT_LIMIT: u32 = 5;
-/// TS 单个数据报上限 500 字节；扣掉 tag/头/语音头后 Opus 载荷约 484 字节。
-const MAX_VOICE_PAYLOAD: usize = 484;
 const MAX_VOICE_QUEUE_DELAY: Duration = Duration::from_millis(100);
-const _: () = assert!(MAX_VOICE_PAYLOAD < 500);
 
 /// ServerQuery 单行消息上限。
 #[allow(dead_code)]
@@ -1806,7 +1803,7 @@ impl Actor {
                 if !self.can_send_voice(codec, produced_at, Instant::now()) {
                     return;
                 }
-                if data.len() > MAX_VOICE_PAYLOAD {
+                if data.len() > MAX_PACKET_BYTES {
                     self.voice_state.message =
                         Some(format!("语音包 {} 字节超过发送上限", data.len()));
                     self.emit_voice_state();
@@ -2739,6 +2736,25 @@ mod tests {
         actor.voice_state.deafened = false;
         actor.capture_active = false;
         assert!(!actor.can_send_voice(VOICE_CODEC, at, now));
+    }
+
+    #[test]
+    fn outbound_voice_guard_uses_the_encoder_budget() {
+        let mut actor = audio_actor();
+        let mut events = actor.events.subscribe();
+        actor.handle_audio(AudioEvent::Outbound {
+            codec: VOICE_CODEC,
+            data: vec![0; MAX_PACKET_BYTES],
+            produced_at: Instant::now(),
+        });
+        assert!(events.try_recv().is_err());
+        actor.handle_audio(AudioEvent::Outbound {
+            codec: VOICE_CODEC,
+            data: vec![0; MAX_PACKET_BYTES + 1],
+            produced_at: Instant::now(),
+        });
+        assert!(matches!(events.try_recv(), Ok(SessionEvent::Voice(_))));
+        assert!(actor.voice_state.message.is_some());
     }
 
     #[tokio::test]

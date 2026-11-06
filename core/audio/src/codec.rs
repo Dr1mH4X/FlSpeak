@@ -10,8 +10,8 @@ use audiopus::{Application, Bitrate, Channels, MutSignals, SampleRate};
 
 use crate::AudioError;
 use crate::format::{
-    MAX_OPUS_SAMPLES, MUSIC_BITRATE_BPS, MUSIC_CODEC, VOICE_BITRATE_BPS, VOICE_CODEC,
-    codec_channels,
+    MAX_OPUS_SAMPLES, MAX_PACKET_BYTES, MUSIC_BITRATE_BPS, MUSIC_CODEC, VOICE_BITRATE_BPS,
+    VOICE_CODEC, codec_channels,
 };
 
 pub struct OpusEncoder {
@@ -72,7 +72,11 @@ impl OpusEncoder {
                 self.channels
             )));
         }
-        self.inner.encode(pcm, output).map_err(codec_error)
+        // Opus 按 max_data_bytes 编出完整包，VBR 峰值也必须满足发送预算。
+        let capacity = output.len().min(MAX_PACKET_BYTES);
+        self.inner
+            .encode(pcm, &mut output[..capacity])
+            .map_err(codec_error)
     }
 }
 
@@ -171,6 +175,56 @@ mod tests {
                 .unwrap(),
             FRAME_SAMPLES_PER_CHANNEL
         );
+    }
+
+    #[test]
+    fn variable_bitrate_packets_fit_transport_after_talkspurt_resets() {
+        for codec in [VOICE_CODEC, MUSIC_CODEC] {
+            let mut encoder = OpusEncoder::new(codec).unwrap();
+            let mut decoder = OpusDecoder::new().unwrap();
+            // A caller may supply a larger buffer than the transport can carry.
+            let mut packet = [0u8; 1275];
+            let mut decoded = vec![0i16; MAX_OPUS_SAMPLES];
+            let mut noise = 0x1234_5678u32;
+            for frame_index in 0..240 {
+                if frame_index % 12 == 0 {
+                    encoder.reset().unwrap();
+                }
+                let pcm: Vec<i16> = (0..FRAME_SAMPLES_PER_CHANNEL * encoder.channels() as usize)
+                    .map(|index| {
+                        noise ^= noise << 13;
+                        noise ^= noise >> 17;
+                        noise ^= noise << 5;
+                        match frame_index % 4 {
+                            0 => {
+                                ((index as f32 * (frame_index as f32 + 1.0) * 0.0007).sin()
+                                    * 30000.0) as i16
+                            }
+                            1 => noise as i16,
+                            2 => {
+                                if index % 80 < 40 {
+                                    28000
+                                } else {
+                                    -28000
+                                }
+                            }
+                            _ => 0,
+                        }
+                    })
+                    .collect();
+                let written = encoder.encode(&pcm, &mut packet).unwrap();
+                assert!(
+                    written <= 484,
+                    "codec {codec}, frame {frame_index}: {written} byte payload exceeds transport"
+                );
+                assert_eq!(
+                    decoder
+                        .decode(Some(&packet[..written]), &mut decoded)
+                        .unwrap(),
+                    FRAME_SAMPLES_PER_CHANNEL
+                );
+            }
+        }
     }
 
     #[test]

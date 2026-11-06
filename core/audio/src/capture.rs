@@ -327,6 +327,30 @@ mod tests {
     }
 
     #[test]
+    fn music_talkspurts_fit_transport_and_decode_after_ptt_resets() {
+        let mut pipeline = CapturePipeline::new(MUSIC_CODEC).unwrap();
+        pipeline.begin();
+        pipeline.set_ptt_mode(true);
+        let samples: Vec<f32> = (0..frame_samples(2))
+            .map(|index| (index as f32 * 0.0007).sin() * 0.92)
+            .collect();
+        let mut decoder = crate::codec::OpusDecoder::new().unwrap();
+        let mut decoded = vec![0i16; crate::format::MAX_OPUS_SAMPLES];
+        for _ in 0..3 {
+            pipeline.set_ptt_active(true);
+            pipeline.push_capture(&samples, OPUS_STEREO);
+            let packet = pipeline.take_packet().unwrap().unwrap();
+            assert!(packet.data.len() <= 484);
+            assert_eq!(
+                decoder.decode(Some(&packet.data), &mut decoded).unwrap(),
+                FRAME_SAMPLES_PER_CHANNEL
+            );
+            pipeline.set_ptt_active(false);
+            assert!(pipeline.take_packet().unwrap().is_none());
+        }
+    }
+
+    #[test]
     fn muted_pipeline_does_not_send() {
         let mut pipeline = CapturePipeline::new(VOICE_CODEC).unwrap();
         pipeline.begin();
