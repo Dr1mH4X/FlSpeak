@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -21,12 +22,14 @@ class ScreenSharePickerSelection {
     required this.sourceName,
     required this.resolution,
     required this.frameRate,
+    this.shareAudio = false,
   });
 
   final String sourceId;
   final String sourceName;
   final ScreenShareResolutionPreset resolution;
   final ScreenShareFrameRatePreset frameRate;
+  final bool shareAudio;
 }
 
 /// Opens the desktop screen/window source picker modal and starts screen
@@ -51,6 +54,7 @@ Future<bool> showScreenSharePickerAndStart(
         sourceName: selection.sourceName,
         resolution: selection.resolution,
         frameRate: selection.frameRate,
+        audio: selection.shareAudio,
       );
 }
 
@@ -72,6 +76,11 @@ class _ScreenSharePickerSheetState
   bool _loading = true;
   late ScreenShareResolutionPreset _resolution;
   late ScreenShareFrameRatePreset _frameRate;
+
+  static bool get isAudioLoopbackSupported =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.linux);
 
   @override
   void initState() {
@@ -155,6 +164,7 @@ class _ScreenSharePickerSheetState
         sourceName: source.name,
         resolution: _resolution,
         frameRate: _frameRate,
+        shareAudio: isAudioLoopbackSupported,
       ),
     );
   }
