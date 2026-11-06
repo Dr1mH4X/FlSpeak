@@ -85,9 +85,13 @@ void main() {
         final container = await _mountPtt(tester, controller);
         container.read(routerProvider).go(AppRoutes.settings);
         await tester.pumpAndSettle();
-        final voiceCategory = find.text('语音');
-        await tester.ensureVisible(voiceCategory);
-        await tester.tap(voiceCategory);
+        final generalCategory = find.text('通用');
+        await tester.ensureVisible(generalCategory);
+        await tester.tap(generalCategory);
+        await tester.pumpAndSettle();
+        final voiceTile = find.text('语音');
+        await tester.ensureVisible(voiceTile);
+        await tester.tap(voiceTile);
         await tester.pumpAndSettle();
         final shortcut = find.text('按住说话快捷键');
         await tester.ensureVisible(shortcut);

@@ -26,9 +26,11 @@ import 'widgets/ptt_hotkey_recorder.dart';
 import 'widgets/settings_dialogs.dart';
 import 'widgets/settings_section.dart';
 
-enum SettingsCategory { appearance, voice, screenShare, general, data, about }
+enum SettingsCategory { appearance, general, data, about }
 
-/// 设置项页面：左侧全局导航侧边栏，右侧为两级菜单设计（二级占满内容区）。
+enum GeneralSubcategory { voice, screenShare }
+
+/// 设置项页面：左侧全局导航侧边栏，右侧为多级菜单设计（二级/三级占满内容区）。
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
 
@@ -38,8 +40,13 @@ class SettingsPage extends ConsumerStatefulWidget {
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
   SettingsCategory? _activeCategory;
+  GeneralSubcategory? _activeGeneralSubcategory;
 
   void _back() {
+    if (_activeGeneralSubcategory != null) {
+      setState(() => _activeGeneralSubcategory = null);
+      return;
+    }
     if (_activeCategory != null) {
       setState(() => _activeCategory = null);
       return;
@@ -218,24 +225,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         ? null
         : LogicalKeyboardKey.findKeyByKeyId(preferences.pttHotkey!);
 
-    final isSubPage = _activeCategory != null;
+    final isSubPage =
+        _activeCategory != null || _activeGeneralSubcategory != null;
 
-    final String pageTitle = switch (_activeCategory) {
-      SettingsCategory.appearance => l10n.settingsTheme,
-      SettingsCategory.voice => l10n.settingsVoice,
-      SettingsCategory.screenShare => l10n.settingsScreenShare,
-      SettingsCategory.general => l10n.settingsGeneral,
-      SettingsCategory.data => l10n.settingsData,
-      SettingsCategory.about => l10n.settingsAbout,
-      null => l10n.settingsTitle,
+    final String pageTitle = switch (_activeGeneralSubcategory) {
+      GeneralSubcategory.voice => l10n.settingsVoice,
+      GeneralSubcategory.screenShare => l10n.settingsScreenShare,
+      null => switch (_activeCategory) {
+        SettingsCategory.appearance => l10n.settingsTheme,
+        SettingsCategory.general => l10n.settingsGeneral,
+        SettingsCategory.data => l10n.settingsData,
+        SettingsCategory.about => l10n.settingsAbout,
+        null => l10n.settingsTitle,
+      },
     };
 
-    // 一级概览卡片入口
+    // 一级概览卡片入口（一级不允许小标题）
     final Widget overviewContent = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         generateSection(
-          title: l10n.settingsTitle,
           items: [
             SettingsOptionsTile<String?>(
               icon: Icons.translate_rounded,
@@ -253,19 +262,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               title: l10n.settingsTheme,
               onTap: () =>
                   setState(() => _activeCategory = SettingsCategory.appearance),
-            ),
-            SettingsTile(
-              icon: Icons.headphones_outlined,
-              title: l10n.settingsVoice,
-              onTap: () =>
-                  setState(() => _activeCategory = SettingsCategory.voice),
-            ),
-            SettingsTile(
-              icon: Icons.screen_share_outlined,
-              title: l10n.settingsScreenShare,
-              onTap: () => setState(
-                () => _activeCategory = SettingsCategory.screenShare,
-              ),
             ),
             SettingsTile(
               icon: Icons.tune_rounded,
@@ -290,7 +286,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       ],
     );
 
-    // 二级页面（占满主区域）
+    // 二级/三级页面（占满主区域）
     Widget subPageContent;
     switch (_activeCategory) {
       case SettingsCategory.appearance:
@@ -305,7 +301,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               ),
             ),
             generateSection(
-              title: l10n.settingsMotion,
               items: [
                 SettingsTile(
                   icon: Icons.animation_rounded,
@@ -327,151 +322,180 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ),
           ],
         );
-      case SettingsCategory.voice:
-        subPageContent = Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            generateSection(
-              title: l10n.settingsPttMode,
-              items: [
-                SettingsTile(
-                  icon: Icons.record_voice_over_rounded,
-                  title: l10n.settingsPttMode,
-                  trailing: Switch(
-                    value: view.pttMode,
-                    onChanged: (enabled) => unawaited(
-                      ref
-                          .read(sessionViewProvider.notifier)
-                          .setPttMode(enabled),
-                    ),
-                  ),
-                  onTap: () => unawaited(
-                    ref
-                        .read(sessionViewProvider.notifier)
-                        .setPttMode(!view.pttMode),
-                  ),
-                ),
-                SettingsTile(
-                  icon: Icons.keyboard_rounded,
-                  title: l10n.settingsPttHotkey,
-                  subtitle: pttHotkeyKey == null
-                      ? l10n.settingsPttHotkeyNone
-                      : pttHotkeyDisplayName(pttHotkeyKey),
-                  onTap: () => unawaited(_pickPttHotkey()),
-                ),
-              ],
-            ),
-            generateSection(
-              title: l10n.settingsInputDevice,
-              items: [
-                SettingsTile(
-                  icon: Icons.mic_rounded,
-                  title: l10n.settingsInputDevice,
-                  subtitle:
-                      audioSelection.inputName ?? l10n.settingsDeviceDefault,
-                  onTap: () => unawaited(
-                    _pickAudioDevice(selection: audioSelection, output: false),
-                  ),
-                ),
-                SettingsTile(
-                  icon: Icons.volume_up_rounded,
-                  title: l10n.settingsOutputDevice,
-                  subtitle:
-                      audioSelection.outputName ?? l10n.settingsDeviceDefault,
-                  onTap: () => unawaited(
-                    _pickAudioDevice(selection: audioSelection, output: true),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        );
-      case SettingsCategory.screenShare:
-        subPageContent = Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            generateSection(
-              title: l10n.settingsScreenShareCapture,
-              items: [
-                SettingsTile(
-                  icon: Icons.hd_rounded,
-                  title: l10n.settingsScreenShareResolution,
-                  subtitle: _screenShareResolutionLabel(
-                    l10n,
-                    preferences.screenShareResolution,
-                  ),
-                  onTap: () => unawaited(
-                    _pickScreenShareResolution(
-                      preferences.screenShareResolution,
-                    ),
-                  ),
-                ),
-                SettingsTile(
-                  icon: Icons.speed_rounded,
-                  title: l10n.settingsScreenShareFrameRate,
-                  subtitle: _screenShareFrameRateLabel(
-                    l10n,
-                    preferences.screenShareFrameRate,
-                  ),
-                  onTap: () => unawaited(
-                    _pickScreenShareFrameRate(preferences.screenShareFrameRate),
-                  ),
-                ),
-              ],
-            ),
-            generateSection(
-              title: l10n.settingsScreenShareEncoding,
-              items: [
-                SettingsTile(
-                  icon: Icons.memory_rounded,
-                  title: l10n.settingsScreenShareCodec,
-                  subtitle: _screenShareCodecLabel(
-                    l10n,
-                    preferences.screenShareCodec,
-                  ),
-                  onTap: () => unawaited(
-                    _pickScreenShareCodec(preferences.screenShareCodec),
-                  ),
-                ),
-                SettingsTile(
-                  icon: Icons.network_check_rounded,
-                  title: l10n.settingsScreenShareDegradation,
-                  subtitle: _screenShareDegradationLabel(
-                    l10n,
-                    preferences.screenShareDegradation,
-                  ),
-                  onTap: () => unawaited(
-                    _pickScreenShareDegradation(
-                      preferences.screenShareDegradation,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        );
       case SettingsCategory.general:
-        subPageContent = Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            generateSection(
-              title: l10n.settingsGeneral,
-              items: [
-                SettingsTile(
-                  icon: Icons.cloud_upload_outlined,
-                  title: l10n.imageHostTitle,
-                  onTap: () => showImageHostSettings(context),
-                ),
-              ],
-            ),
-          ],
-        );
+        if (_activeGeneralSubcategory == null) {
+          subPageContent = Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              generateSection(
+                items: [
+                  SettingsTile(
+                    icon: Icons.headphones_outlined,
+                    title: l10n.settingsVoice,
+                    onTap: () => setState(
+                      () =>
+                          _activeGeneralSubcategory = GeneralSubcategory.voice,
+                    ),
+                  ),
+                  SettingsTile(
+                    icon: Icons.screen_share_outlined,
+                    title: l10n.settingsScreenShare,
+                    onTap: () => setState(
+                      () => _activeGeneralSubcategory =
+                          GeneralSubcategory.screenShare,
+                    ),
+                  ),
+                  SettingsTile(
+                    icon: Icons.cloud_upload_outlined,
+                    title: l10n.imageHostTitle,
+                    onTap: () => showImageHostSettings(context),
+                  ),
+                ],
+              ),
+            ],
+          );
+        } else {
+          switch (_activeGeneralSubcategory!) {
+            case GeneralSubcategory.voice:
+              subPageContent = Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  generateSection(
+                    title: l10n.settingsPttMode,
+                    items: [
+                      SettingsTile(
+                        icon: Icons.record_voice_over_rounded,
+                        title: l10n.settingsPttMode,
+                        trailing: Switch(
+                          value: view.pttMode,
+                          onChanged: (enabled) => unawaited(
+                            ref
+                                .read(sessionViewProvider.notifier)
+                                .setPttMode(enabled),
+                          ),
+                        ),
+                        onTap: () => unawaited(
+                          ref
+                              .read(sessionViewProvider.notifier)
+                              .setPttMode(!view.pttMode),
+                        ),
+                      ),
+                      SettingsTile(
+                        icon: Icons.keyboard_rounded,
+                        title: l10n.settingsPttHotkey,
+                        subtitle: pttHotkeyKey == null
+                            ? l10n.settingsPttHotkeyNone
+                            : pttHotkeyDisplayName(pttHotkeyKey),
+                        onTap: () => unawaited(_pickPttHotkey()),
+                      ),
+                    ],
+                  ),
+                  generateSection(
+                    title: l10n.settingsInputDevice,
+                    items: [
+                      SettingsTile(
+                        icon: Icons.mic_rounded,
+                        title: l10n.settingsInputDevice,
+                        subtitle:
+                            audioSelection.inputName ??
+                            l10n.settingsDeviceDefault,
+                        onTap: () => unawaited(
+                          _pickAudioDevice(
+                            selection: audioSelection,
+                            output: false,
+                          ),
+                        ),
+                      ),
+                      SettingsTile(
+                        icon: Icons.volume_up_rounded,
+                        title: l10n.settingsOutputDevice,
+                        subtitle:
+                            audioSelection.outputName ??
+                            l10n.settingsDeviceDefault,
+                        onTap: () => unawaited(
+                          _pickAudioDevice(
+                            selection: audioSelection,
+                            output: true,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            case GeneralSubcategory.screenShare:
+              subPageContent = Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  generateSection(
+                    title: l10n.settingsScreenShareCapture,
+                    items: [
+                      SettingsTile(
+                        icon: Icons.hd_rounded,
+                        title: l10n.settingsScreenShareResolution,
+                        subtitle: _screenShareResolutionLabel(
+                          l10n,
+                          preferences.screenShareResolution,
+                        ),
+                        onTap: () => unawaited(
+                          _pickScreenShareResolution(
+                            preferences.screenShareResolution,
+                          ),
+                        ),
+                      ),
+                      SettingsTile(
+                        icon: Icons.speed_rounded,
+                        title: l10n.settingsScreenShareFrameRate,
+                        subtitle: _screenShareFrameRateLabel(
+                          l10n,
+                          preferences.screenShareFrameRate,
+                        ),
+                        onTap: () => unawaited(
+                          _pickScreenShareFrameRate(
+                            preferences.screenShareFrameRate,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  generateSection(
+                    title: l10n.settingsScreenShareEncoding,
+                    items: [
+                      SettingsTile(
+                        icon: Icons.memory_rounded,
+                        title: l10n.settingsScreenShareCodec,
+                        subtitle: _screenShareCodecLabel(
+                          l10n,
+                          preferences.screenShareCodec,
+                        ),
+                        onTap: () => unawaited(
+                          _pickScreenShareCodec(preferences.screenShareCodec),
+                        ),
+                      ),
+                      SettingsTile(
+                        icon: Icons.network_check_rounded,
+                        title: l10n.settingsScreenShareDegradation,
+                        subtitle: _screenShareDegradationLabel(
+                          l10n,
+                          preferences.screenShareDegradation,
+                        ),
+                        onTap: () => unawaited(
+                          _pickScreenShareDegradation(
+                            preferences.screenShareDegradation,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+          }
+        }
       case SettingsCategory.data:
         subPageContent = Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             generateSection(
-              title: l10n.settingsStorePath,
               items: [
                 SettingsTile(
                   icon: Icons.folder_rounded,
@@ -535,10 +559,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         child: Focus(
           autofocus: true,
           child: PopScope(
-            canPop: _activeCategory == null,
+            canPop:
+                _activeCategory == null && _activeGeneralSubcategory == null,
             onPopInvokedWithResult: (didPop, _) {
               if (didPop) return;
-              if (_activeCategory != null) {
+              if (_activeGeneralSubcategory != null) {
+                setState(() => _activeGeneralSubcategory = null);
+              } else if (_activeCategory != null) {
                 setState(() => _activeCategory = null);
               }
             },
