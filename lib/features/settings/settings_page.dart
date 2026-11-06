@@ -26,7 +26,7 @@ import 'widgets/ptt_hotkey_recorder.dart';
 import 'widgets/settings_dialogs.dart';
 import 'widgets/settings_section.dart';
 
-enum SettingsCategory { appearance, voice, general, data, about }
+enum SettingsCategory { appearance, voice, screenShare, general, data, about }
 
 /// 设置项页面：左侧全局导航侧边栏，右侧为两级菜单设计（二级占满内容区）。
 class SettingsPage extends ConsumerStatefulWidget {
@@ -83,6 +83,77 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       return;
     }
     ref.read(preferencesProvider.notifier).setVoiceMeterSource(source);
+  }
+
+  Future<void> _pickScreenShareResolution(
+    ScreenShareResolutionPreset current,
+  ) async {
+    final l10n = AppLocalizations.of(context);
+    final preset = await showSettingsOptions<ScreenShareResolutionPreset>(
+      context,
+      title: l10n.settingsScreenShareResolution,
+      options: ScreenShareResolutionPreset.values,
+      current: current,
+      labelBuilder: (context, value) =>
+          _screenShareResolutionLabel(l10n, value),
+    );
+    if (!mounted || preset == null) {
+      return;
+    }
+    ref.read(preferencesProvider.notifier).setScreenShareResolution(preset);
+  }
+
+  Future<void> _pickScreenShareFrameRate(
+    ScreenShareFrameRatePreset current,
+  ) async {
+    final l10n = AppLocalizations.of(context);
+    final preset = await showSettingsOptions<ScreenShareFrameRatePreset>(
+      context,
+      title: l10n.settingsScreenShareFrameRate,
+      options: ScreenShareFrameRatePreset.values,
+      current: current,
+      labelBuilder: (context, value) => _screenShareFrameRateLabel(l10n, value),
+    );
+    if (!mounted || preset == null) {
+      return;
+    }
+    ref.read(preferencesProvider.notifier).setScreenShareFrameRate(preset);
+  }
+
+  Future<void> _pickScreenShareCodec(ScreenShareCodecPreference current) async {
+    final l10n = AppLocalizations.of(context);
+    final codec = await showSettingsOptions<ScreenShareCodecPreference>(
+      context,
+      title: l10n.settingsScreenShareCodec,
+      options: ScreenShareCodecPreference.values,
+      current: current,
+      labelBuilder: (context, value) => _screenShareCodecLabel(l10n, value),
+    );
+    if (!mounted || codec == null) {
+      return;
+    }
+    ref.read(preferencesProvider.notifier).setScreenShareCodec(codec);
+  }
+
+  Future<void> _pickScreenShareDegradation(
+    ScreenShareDegradationPreference current,
+  ) async {
+    final l10n = AppLocalizations.of(context);
+    final degradation =
+        await showSettingsOptions<ScreenShareDegradationPreference>(
+          context,
+          title: l10n.settingsScreenShareDegradation,
+          options: ScreenShareDegradationPreference.values,
+          current: current,
+          labelBuilder: (context, value) =>
+              _screenShareDegradationLabel(l10n, value),
+        );
+    if (!mounted || degradation == null) {
+      return;
+    }
+    ref
+        .read(preferencesProvider.notifier)
+        .setScreenShareDegradation(degradation);
   }
 
   Future<void> _pickAudioDevice({
@@ -152,6 +223,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final String pageTitle = switch (_activeCategory) {
       SettingsCategory.appearance => l10n.settingsTheme,
       SettingsCategory.voice => l10n.settingsVoice,
+      SettingsCategory.screenShare => l10n.settingsScreenShare,
       SettingsCategory.general => l10n.settingsGeneral,
       SettingsCategory.data => l10n.settingsData,
       SettingsCategory.about => l10n.settingsAbout,
@@ -187,6 +259,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               title: l10n.settingsVoice,
               onTap: () =>
                   setState(() => _activeCategory = SettingsCategory.voice),
+            ),
+            SettingsTile(
+              icon: Icons.screen_share_outlined,
+              title: l10n.settingsScreenShare,
+              onTap: () => setState(
+                () => _activeCategory = SettingsCategory.screenShare,
+              ),
             ),
             SettingsTile(
               icon: Icons.tune_rounded,
@@ -301,6 +380,70 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       audioSelection.outputName ?? l10n.settingsDeviceDefault,
                   onTap: () => unawaited(
                     _pickAudioDevice(selection: audioSelection, output: true),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      case SettingsCategory.screenShare:
+        subPageContent = Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            generateSection(
+              title: l10n.settingsScreenShareCapture,
+              items: [
+                SettingsTile(
+                  icon: Icons.hd_rounded,
+                  title: l10n.settingsScreenShareResolution,
+                  subtitle: _screenShareResolutionLabel(
+                    l10n,
+                    preferences.screenShareResolution,
+                  ),
+                  onTap: () => unawaited(
+                    _pickScreenShareResolution(
+                      preferences.screenShareResolution,
+                    ),
+                  ),
+                ),
+                SettingsTile(
+                  icon: Icons.speed_rounded,
+                  title: l10n.settingsScreenShareFrameRate,
+                  subtitle: _screenShareFrameRateLabel(
+                    l10n,
+                    preferences.screenShareFrameRate,
+                  ),
+                  onTap: () => unawaited(
+                    _pickScreenShareFrameRate(preferences.screenShareFrameRate),
+                  ),
+                ),
+              ],
+            ),
+            generateSection(
+              title: l10n.settingsScreenShareEncoding,
+              items: [
+                SettingsTile(
+                  icon: Icons.memory_rounded,
+                  title: l10n.settingsScreenShareCodec,
+                  subtitle: _screenShareCodecLabel(
+                    l10n,
+                    preferences.screenShareCodec,
+                  ),
+                  onTap: () => unawaited(
+                    _pickScreenShareCodec(preferences.screenShareCodec),
+                  ),
+                ),
+                SettingsTile(
+                  icon: Icons.network_check_rounded,
+                  title: l10n.settingsScreenShareDegradation,
+                  subtitle: _screenShareDegradationLabel(
+                    l10n,
+                    preferences.screenShareDegradation,
+                  ),
+                  onTap: () => unawaited(
+                    _pickScreenShareDegradation(
+                      preferences.screenShareDegradation,
+                    ),
                   ),
                 ),
               ],
@@ -574,3 +717,37 @@ String _motionLabel(AppLocalizations l10n, AppMotionPreference motion) =>
       AppMotionPreference.on => l10n.settingsMotionOn,
       AppMotionPreference.off => l10n.settingsMotionOff,
     };
+
+String _screenShareResolutionLabel(
+  AppLocalizations l10n,
+  ScreenShareResolutionPreset preset,
+) => switch (preset) {
+  ScreenShareResolutionPreset.p720 => l10n.settingsScreenShareResolution720p,
+  ScreenShareResolutionPreset.p1080 => l10n.settingsScreenShareResolution1080p,
+};
+
+String _screenShareFrameRateLabel(
+  AppLocalizations l10n,
+  ScreenShareFrameRatePreset preset,
+) => switch (preset) {
+  ScreenShareFrameRatePreset.fps30 => l10n.settingsScreenShareFrameRate30,
+  ScreenShareFrameRatePreset.fps60 => l10n.settingsScreenShareFrameRate60,
+};
+
+String _screenShareCodecLabel(
+  AppLocalizations l10n,
+  ScreenShareCodecPreference codec,
+) => switch (codec) {
+  ScreenShareCodecPreference.vp8 => l10n.settingsScreenShareCodecVp8,
+  ScreenShareCodecPreference.h264 => l10n.settingsScreenShareCodecH264,
+};
+
+String _screenShareDegradationLabel(
+  AppLocalizations l10n,
+  ScreenShareDegradationPreference degradation,
+) => switch (degradation) {
+  ScreenShareDegradationPreference.maintainResolution =>
+    l10n.settingsScreenShareDegradationResolution,
+  ScreenShareDegradationPreference.maintainFramerate =>
+    l10n.settingsScreenShareDegradationFramerate,
+};

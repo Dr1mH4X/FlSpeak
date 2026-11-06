@@ -329,4 +329,67 @@ void main() {
       expect(find.widgetWithText(SettingsTile, '存储目录'), findsOneWidget);
     },
   );
+
+  testWidgets(
+    'screen share settings category updates resolution, framerate, codec, and degradation preferences',
+    (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_Core()),
+          sessionViewProvider.overrideWith(_Session.new),
+          storePathProvider.overrideWithValue(
+            '/tmp/flspeak-test/preferences.json',
+          ),
+          preferencesStoreProvider.overrideWithValue(
+            PreferencesStore.inMemory(
+              preferences: const SessionPreferences(nickname: 'Test'),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            locale: const Locale('zh'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const SettingsPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final screenShareCategory = find.widgetWithText(SettingsTile, '屏幕共享');
+      expect(screenShareCategory, findsOneWidget);
+      await tester.ensureVisible(screenShareCategory);
+      await tester.tap(screenShareCategory);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Tooltip), findsNothing);
+
+      final resolutionRow = find.widgetWithText(SettingsTile, '默认分辨率');
+      await tester.tap(resolutionRow);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('720p (1280×720)').last);
+      await tester.pumpAndSettle();
+      expect(
+        container.read(preferencesProvider).screenShareResolution,
+        ScreenShareResolutionPreset.p720,
+      );
+
+      final codecRow = find.widgetWithText(SettingsTile, '视频编码与硬件加速');
+      await tester.tap(codecRow);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('H.264 优先（硬件编解码加速）').last);
+      await tester.pumpAndSettle();
+      expect(
+        container.read(preferencesProvider).screenShareCodec,
+        ScreenShareCodecPreference.h264,
+      );
+    },
+  );
 }

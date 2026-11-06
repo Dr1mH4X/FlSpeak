@@ -8,9 +8,11 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import 'package:flspeak/core/models.dart';
 import 'package:flspeak/core/providers.dart';
+import 'package:flspeak/core/stream_publisher.dart';
 import 'package:flspeak/core/stream_viewer.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
 import 'package:flspeak/theme/app_theme.dart';
+import 'package:flspeak/features/workspace/widgets/channel_pane.dart';
 import 'package:flspeak/features/workspace/widgets/chat_pane.dart';
 import 'package:flspeak/features/workspace/workspace_page.dart';
 import 'package:flspeak/features/workspace/workspace_state.dart';
@@ -18,6 +20,9 @@ import 'package:flspeak/features/workspace/workspace_state.dart';
 class _Core extends Fake implements CoreSession {
   final joined = <({String streamId, int sourceClid})>[];
   final left = <String>[];
+  final startedShares =
+      <({String name, bool audio, int bitrate, int viewerLimit})>[];
+  int stoppedShares = 0;
 
   @override
   Future<AccessView> access() async => const AccessView();
@@ -40,6 +45,33 @@ class _Core extends Fake implements CoreSession {
     required String streamId,
     required int targetClid,
     required String sdp,
+  }) async {}
+
+  @override
+  Future<void> startScreenShare({
+    required String name,
+    required bool audio,
+    required int bitrate,
+    required int viewerLimit,
+  }) async {
+    startedShares.add((
+      name: name,
+      audio: audio,
+      bitrate: bitrate,
+      viewerLimit: viewerLimit,
+    ));
+  }
+
+  @override
+  Future<void> stopScreenShare() async {
+    stoppedShares++;
+  }
+
+  @override
+  Future<void> respondStreamJoinRequest({
+    required int viewerClid,
+    required bool accept,
+    required String offerSdp,
   }) async {}
 }
 
@@ -135,7 +167,26 @@ class _FakeWidgetPeer extends Fake implements RTCPeerConnection {
   }
 }
 
+class _FakeWidgetVideoTrack extends Fake implements MediaStreamTrack {
+  @override
+  StreamTrackCallback? onEnded;
+
+  @override
+  String? get id => 'widget-video-track';
+
+  @override
+  String? get kind => 'video';
+
+  @override
+  Future<void> applyConstraints([Map<String, dynamic>? constraints]) async {}
+
+  @override
+  Future<void> stop() async {}
+}
+
 class _FakeWidgetMediaStream extends Fake implements MediaStream {
+  final _videoTrack = _FakeWidgetVideoTrack();
+
   @override
   String get id => 'widget-stream';
 
@@ -143,15 +194,35 @@ class _FakeWidgetMediaStream extends Fake implements MediaStream {
   List<MediaStreamTrack> getAudioTracks() => const [];
 
   @override
-  List<MediaStreamTrack> getTracks() => const [];
+  List<MediaStreamTrack> getVideoTracks() => [_videoTrack];
+
+  @override
+  List<MediaStreamTrack> getTracks() => [_videoTrack];
 
   @override
   Future<void> dispose() async {}
 }
 
-class _FakeWidgetWebRtcBindings implements WebRtcBindings {
+class _FakeWidgetWebRtcBindings extends WebRtcBindings {
   final renderers = <_FakeWidgetRenderer>[];
   final peers = <_FakeWidgetPeer>[];
+
+  @override
+  Future<List<DesktopCapturerSource>> getDesktopSources({
+    List<SourceType> types = const [SourceType.Screen, SourceType.Window],
+    ThumbnailSize? thumbnailSize,
+  }) async => [
+    DesktopSourceEntry(
+      id: 'screen:1',
+      name: 'Display 1',
+      type: SourceType.Screen,
+    ),
+  ];
+
+  @override
+  Future<MediaStream> getDisplayMedia(
+    Map<String, dynamic> mediaConstraints,
+  ) async => _FakeWidgetMediaStream();
 
   @override
   Future<RTCPeerConnection> createPeer(
@@ -216,10 +287,11 @@ class _Session extends SessionController {
 
 Future<ProviderContainer> _mount(
   WidgetTester tester, {
+  Size size = const Size(1000, 800),
   _Core? core,
   _FakeWidgetWebRtcBindings? bindings,
 }) async {
-  tester.view.physicalSize = const Size(1000, 800);
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
@@ -336,6 +408,29 @@ void main() {
     await tester.pump();
     expect(container.read(streamViewerProvider).isMuted, isTrue);
 
+    // Enter fullscreen -> opens full-window stage with floating bottom bar.
+    await tester.tap(find.byKey(const ValueKey('stream-fullscreen-toggle')));
+    await tester.pump();
+    await tester.pump();
+    expect(container.read(streamViewerProvider).isFullScreen, isTrue);
+    expect(
+      find.byKey(const ValueKey('stream-fullscreen-stage')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('stream-fullscreen-controls')),
+      findsOneWidget,
+    );
+
+    // Exit fullscreen via floating bottom bar button.
+    await tester.tap(
+      find.byKey(const ValueKey('stream-fullscreen-exit-button')),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(container.read(streamViewerProvider).isFullScreen, isFalse);
+    expect(find.byKey(const ValueKey('stream-fullscreen-stage')), findsNothing);
+
     // Click close button -> leaves stream and disposes renderer & peer.
     await tester.tap(find.byKey(const ValueKey('stream-close-button')));
     await tester.pump();
@@ -345,5 +440,162 @@ void main() {
     expect(bindings.renderers.single.disposed, isTrue);
     expect(bindings.peers.single.closed, isTrue);
     expect(bindings.peers.single.disposed, isTrue);
+  });
+
+  testWidgets('推流状态栏展示当前屏幕共享源与本地预览开关，并可通过控制器停止共享', (tester) async {
+    final core = _Core();
+    final bindings = _FakeWidgetWebRtcBindings();
+    final container = await _mount(tester, core: core, bindings: bindings);
+
+    final started = await container
+        .read(sessionViewProvider.notifier)
+        .startScreenShare(sourceId: 'screen:1', sourceName: 'Display 1');
+    expect(started, isTrue);
+    container
+        .read(streamPublisherProvider.notifier)
+        .handlePublished(streamId: 'pub-1');
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey('stream-publisher-banner')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Display 1'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('stream-publisher-viewer-count')),
+      findsOneWidget,
+    );
+    expect(find.text('0 人观看'), findsOneWidget);
+
+    // Toggle local preview stage.
+    await tester.tap(
+      find.byKey(const ValueKey('stream-publisher-preview-toggle')),
+    );
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('stream-publisher-preview-stage')),
+      findsOneWidget,
+    );
+
+    // Stop sharing via session controller.
+    await container.read(sessionViewProvider.notifier).stopScreenShare();
+    await tester.pump();
+    expect(core.stoppedShares, 1);
+    expect(find.byKey(const ValueKey('stream-publisher-banner')), findsNothing);
+  });
+
+  testWidgets('矮窗口下展开推流本地预览并存在其他屏幕共享横幅时不会发生纵向溢出', (tester) async {
+    final core = _Core();
+    final bindings = _FakeWidgetWebRtcBindings();
+    final container = await _mount(
+      tester,
+      size: const Size(900, 420),
+      core: core,
+      bindings: bindings,
+    );
+    (container.read(sessionViewProvider.notifier) as _Session).publishStreams(
+      const [
+        StreamView(
+          id: 'remote-stream-1',
+          clientId: 2,
+          name: 'Bob Screen',
+          hasAudio: true,
+        ),
+      ],
+    );
+    await tester.pump();
+
+    final started = await container
+        .read(sessionViewProvider.notifier)
+        .startScreenShare(sourceId: 'screen:1', sourceName: 'Display 1');
+    expect(started, isTrue);
+    container
+        .read(streamPublisherProvider.notifier)
+        .handlePublished(streamId: 'pub-1');
+    await tester.pump();
+
+    // Expand local preview on a 420px tall window -> must not overflow.
+    await tester.tap(
+      find.byKey(const ValueKey('stream-publisher-preview-toggle')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      find.byKey(const ValueKey('stream-publisher-preview-stage')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('语音控制栏屏幕共享按钮呼出桌面源选择弹窗并可选择分辨率与帧率开播', (tester) async {
+    final core = _Core();
+    final bindings = _FakeWidgetWebRtcBindings();
+    tester.view.physicalSize = const Size(1000, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final container = ProviderContainer(
+      overrides: [
+        coreSessionProvider.overrideWithValue(core),
+        webRtcBindingsProvider.overrideWithValue(bindings),
+        sessionViewProvider.overrideWith(_Session.new),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const Scaffold(
+            body: SizedBox(width: 288, child: ChannelPanel()),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Tap "Share screen" toggle in voice footer -> opens picker modal.
+    final shareBtn = find.byKey(const ValueKey('voice-screen-share-toggle'));
+    expect(shareBtn, findsOneWidget);
+    await tester.tap(shareBtn);
+    await tester.pumpAndSettle();
+
+    expect(find.text('选择共享内容'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('screen-source-screen:1')),
+      findsOneWidget,
+    );
+    expect(find.byType(Tooltip), findsNothing);
+
+    // Choose 720p and 60 FPS in the picker.
+    await tester.tap(find.byKey(const ValueKey('screen-share-res-720p')));
+    await tester.tap(find.byKey(const ValueKey('screen-share-fps-60')));
+    await tester.pump();
+
+    // Confirm start sharing.
+    await tester.tap(find.byKey(const ValueKey('screen-share-confirm-start')));
+    await tester.pumpAndSettle();
+
+    expect(core.startedShares, [
+      (
+        name: 'Display 1',
+        audio: false,
+        bitrate: 5000,
+        viewerLimit: defaultMaxStreamViewers,
+      ),
+    ]);
+    expect(container.read(streamPublisherProvider).isActive, isTrue);
+
+    // Tap the highlighted voice control bar button again to stop sharing.
+    await tester.tap(shareBtn);
+    await tester.pumpAndSettle();
+    expect(core.stoppedShares, 1);
+    expect(container.read(streamPublisherProvider).isActive, isFalse);
   });
 }

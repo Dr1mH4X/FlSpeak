@@ -5,7 +5,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
+import 'preferences.dart';
 import 'providers.dart';
+import 'window_chrome.dart';
 
 /// Default STUN server configuration for TS6 screen-share viewer connections.
 const List<Map<String, dynamic>> defaultStreamIceServers = [
@@ -17,11 +19,14 @@ const List<Map<String, dynamic>> defaultStreamIceServers = [
 /// Default timeout for WebRTC offer/answer + ICE negotiation.
 const Duration defaultStreamNegotiationTimeout = Duration(seconds: 15);
 
-/// Reorders the `m=video` payload type list in [sdp] so `VP8` (and its
-/// associated `rtx` payload types) appear first, while keeping `m=audio`
-/// and all MID attributes intact for TS6 native client compatibility.
-String preferVp8InSdp(String sdp) {
+/// Reorders the `m=video` payload type list in [sdp] so [preferredCodec] (e.g.
+/// `VP8` or `H264`, along with its associated `rtx` payload types) appears
+/// first, while keeping `m=audio` and all MID attributes intact for TS6 native
+/// client compatibility.
+String preferCodecInSdp(String sdp, String preferredCodec) {
   if (sdp.isEmpty) return sdp;
+  final targetCodec = preferredCodec.trim().toUpperCase();
+  if (targetCodec.isEmpty) return sdp;
   final lineSeparator = sdp.contains('\r\n') ? '\r\n' : '\n';
   final lines = sdp.split(RegExp(r'\r?\n'));
 
@@ -51,7 +56,7 @@ String preferVp8InSdp(String sdp) {
   final headerPrefix = mLineParts.sublist(0, 3);
   final payloadTypes = mLineParts.sublist(3);
 
-  final vp8Pts = <String>{};
+  final matchingPts = <String>{};
   final rtxAptMap = <String, String>{};
   final rtpmapRegex = RegExp(
     r'^a=rtpmap:(\d+)\s+([^/\s]+)/',
@@ -68,8 +73,8 @@ String preferVp8InSdp(String sdp) {
     if (rtpmapMatch != null) {
       final pt = rtpmapMatch.group(1)!;
       final codec = rtpmapMatch.group(2)!.toUpperCase();
-      if (codec == 'VP8') {
-        vp8Pts.add(pt);
+      if (codec == targetCodec) {
+        matchingPts.add(pt);
       }
       continue;
     }
@@ -81,14 +86,14 @@ String preferVp8InSdp(String sdp) {
     }
   }
 
-  if (vp8Pts.isEmpty) {
+  if (matchingPts.isEmpty) {
     return sdp;
   }
 
   final prioritizedPts = <String>{
-    ...vp8Pts,
+    ...matchingPts,
     for (final entry in rtxAptMap.entries)
-      if (vp8Pts.contains(entry.value)) entry.key,
+      if (matchingPts.contains(entry.value)) entry.key,
   };
 
   final preferredOrder = <String>[
@@ -102,6 +107,11 @@ String preferVp8InSdp(String sdp) {
       '${headerPrefix.join(' ')} ${preferredOrder.join(' ')}';
   return lines.join(lineSeparator);
 }
+
+/// Reorders the `m=video` payload type list in [sdp] so `VP8` (and its
+/// associated `rtx` payload types) appear first, while keeping `m=audio`
+/// and all MID attributes intact for TS6 native client compatibility.
+String preferVp8InSdp(String sdp) => preferCodecInSdp(sdp, 'VP8');
 
 /// Inspects an SDP string to verify TS6 native compatibility invariants:
 /// - Contains both `m=video` and `m=audio` sections.
@@ -176,30 +186,65 @@ SdpMediaLayout inspectSdpMediaLayout(String sdp) {
 }
 
 /// Normalizes an Offer or Answer SDP for TS6 native compatibility:
-/// prioritizes `VP8` in `m=video` and preserves `m=audio` (appending a
-/// minimal recvonly `m=audio` section with `a=mid:1` only if a malformed SDP
-/// omitted it).
-String normalizeSdpForTs6(String sdp) {
+/// prioritizes [preferredVideoCodec] (`VP8` by default, or `H264`) in `m=video`
+/// and preserves `m=audio` (appending a minimal `m=audio` section with
+/// `a=mid:1` and `a=$fallbackAudioDirection` only if a malformed SDP omitted it).
+String normalizeSdpForTs6(
+  String sdp, {
+  String preferredVideoCodec = 'VP8',
+  String fallbackAudioDirection = 'recvonly',
+}) {
   if (sdp.isEmpty) return sdp;
-  final vp8Prioritized = preferVp8InSdp(sdp);
-  final layout = inspectSdpMediaLayout(vp8Prioritized);
+  final codecPrioritized = preferCodecInSdp(sdp, preferredVideoCodec);
+  final layout = inspectSdpMediaLayout(codecPrioritized);
   if (layout.hasAudio || !layout.hasVideo) {
-    return vp8Prioritized;
+    return codecPrioritized;
   }
-  final lineSeparator = vp8Prioritized.contains('\r\n') ? '\r\n' : '\n';
-  final trimmed = vp8Prioritized.endsWith(lineSeparator)
-      ? vp8Prioritized
-      : '$vp8Prioritized$lineSeparator';
+  final lineSeparator = codecPrioritized.contains('\r\n') ? '\r\n' : '\n';
+  final trimmed = codecPrioritized.endsWith(lineSeparator)
+      ? codecPrioritized
+      : '$codecPrioritized$lineSeparator';
   final fallbackAudioSection = [
     'm=audio 9 UDP/TLS/RTP/SAVPF 111',
     'c=IN IP4 0.0.0.0',
     'a=rtcp:9 IN IP4 0.0.0.0',
     'a=mid:1',
-    'a=recvonly',
+    'a=$fallbackAudioDirection',
     'a=rtcp-mux',
     'a=rtpmap:111 opus/48000/2',
   ].join(lineSeparator);
   return '$trimmed$fallbackAudioSection$lineSeparator';
+}
+
+/// Applies codec preference ordering on a video [transceiver] so codecs
+/// matching [preferredMimeType] (e.g. `video/vp8` or `video/h264`) appear first.
+Future<void> preferVideoCodecOnTransceiver({
+  required RTCRtpCapabilities? capabilities,
+  required RTCRtpTransceiver transceiver,
+  String preferredMimeType = 'video/vp8',
+}) async {
+  final codecs = capabilities?.codecs;
+  if (codecs == null || codecs.isEmpty) return;
+
+  final targetMime = preferredMimeType.trim().toLowerCase();
+  final preferredCodecs = <RTCRtpCodecCapability>[];
+  final otherCodecs = <RTCRtpCodecCapability>[];
+  for (final codec in codecs) {
+    final mime = codec.mimeType.toLowerCase();
+    if (mime == targetMime) {
+      preferredCodecs.add(codec);
+    } else {
+      otherCodecs.add(codec);
+    }
+  }
+  if (preferredCodecs.isEmpty) return;
+
+  try {
+    await transceiver.setCodecPreferences([...preferredCodecs, ...otherCodecs]);
+  } catch (_) {
+    // Ignore platforms that do not support setCodecPreferences; SDP
+    // normalization (`preferCodecInSdp`) still reorders the preferred codec first.
+  }
 }
 
 /// Abstraction over `flutter_webrtc` factory functions for testability.
@@ -215,7 +260,18 @@ abstract class WebRtcBindings {
 
   Future<RTCRtpCapabilities?> getVideoReceiverCapabilities();
 
+  Future<RTCRtpCapabilities?> getVideoSenderCapabilities() async => null;
+
   Future<void> setTrackVolume(double volume, MediaStreamTrack track);
+
+  Future<List<DesktopCapturerSource>> getDesktopSources({
+    List<SourceType> types = const [SourceType.Screen, SourceType.Window],
+    ThumbnailSize? thumbnailSize,
+  }) async => const [];
+
+  Future<MediaStream> getDisplayMedia(Map<String, dynamic> mediaConstraints) {
+    throw UnimplementedError('getDisplayMedia is not implemented');
+  }
 }
 
 /// Default production bindings backed by `flutter_webrtc`.
@@ -250,12 +306,37 @@ class FlutterWebRtcBindings implements WebRtcBindings {
   }
 
   @override
+  Future<RTCRtpCapabilities?> getVideoSenderCapabilities() async {
+    try {
+      return await getRtpSenderCapabilities('video');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
   Future<void> setTrackVolume(double volume, MediaStreamTrack track) async {
     try {
       await Helper.setVolume(volume, track);
     } catch (_) {
       // Ignore platform errors if audio track was already stopped.
     }
+  }
+
+  @override
+  Future<List<DesktopCapturerSource>> getDesktopSources({
+    List<SourceType> types = const [SourceType.Screen, SourceType.Window],
+    ThumbnailSize? thumbnailSize,
+  }) {
+    return desktopCapturer.getSources(
+      types: types,
+      thumbnailSize: thumbnailSize,
+    );
+  }
+
+  @override
+  Future<MediaStream> getDisplayMedia(Map<String, dynamic> mediaConstraints) {
+    return navigator.mediaDevices.getDisplayMedia(mediaConstraints);
   }
 }
 
@@ -276,7 +357,7 @@ class StreamViewerState {
     this.isConnecting = false,
     this.hasVideo = false,
     this.isMuted = false,
-    this.isExpanded = false,
+    this.isFullScreen = false,
     this.endNotice,
   });
 
@@ -286,7 +367,7 @@ class StreamViewerState {
   final bool isConnecting;
   final bool hasVideo;
   final bool isMuted;
-  final bool isExpanded;
+  final bool isFullScreen;
   final StreamEndNotice? endNotice;
 
   bool get isActive => streamId != null;
@@ -301,7 +382,7 @@ class StreamViewerState {
     bool? isConnecting,
     bool? hasVideo,
     bool? isMuted,
-    bool? isExpanded,
+    bool? isFullScreen,
     StreamEndNotice? endNotice,
     bool clearEndNotice = false,
   }) {
@@ -314,7 +395,7 @@ class StreamViewerState {
       isConnecting: isConnecting ?? this.isConnecting,
       hasVideo: hasVideo ?? this.hasVideo,
       isMuted: isMuted ?? this.isMuted,
-      isExpanded: isExpanded ?? this.isExpanded,
+      isFullScreen: isFullScreen ?? this.isFullScreen,
       endNotice: clearEndNotice ? null : (endNotice ?? this.endNotice),
     );
   }
@@ -330,15 +411,29 @@ class StreamViewerController extends Notifier<StreamViewerState> {
   RTCPeerConnection? _peer;
   RTCVideoRenderer? _renderer;
   MediaStream? _fallbackStream;
+  final List<RTCIceCandidate> _pendingLocalCandidates = [];
   final List<RTCIceCandidate> _pendingRemoteCandidates = [];
   final List<MediaStreamTrack> _remoteAudioTracks = [];
   Timer? _negotiationTimer;
   bool _remoteDescriptionSet = false;
+  bool _answerSent = false;
+  bool _windowWasFullScreenBeforeStream = false;
+  bool _changingWindowFullScreen = false;
   int _generation = 0;
 
   @override
   StreamViewerState build() {
+    void handleWindowFullScreenChanged() {
+      if (_changingWindowFullScreen || !ref.mounted) return;
+      if (!WindowChrome.fullScreen.value && state.isFullScreen) {
+        _windowWasFullScreenBeforeStream = false;
+        state = state.copyWith(isFullScreen: false);
+      }
+    }
+
+    WindowChrome.fullScreen.addListener(handleWindowFullScreenChanged);
     ref.onDispose(() {
+      WindowChrome.fullScreen.removeListener(handleWindowFullScreenChanged);
       unawaited(_disposeResources(updateState: false));
     });
     return const StreamViewerState();
@@ -355,7 +450,7 @@ class StreamViewerController extends Notifier<StreamViewerState> {
       sourceClientId: sourceClientId,
       isConnecting: true,
       isMuted: state.isMuted,
-      isExpanded: state.isExpanded,
+      isFullScreen: state.isFullScreen,
     );
   }
 
@@ -422,7 +517,7 @@ class StreamViewerController extends Notifier<StreamViewerState> {
       isConnecting: true,
       hasVideo: false,
       isMuted: state.isMuted,
-      isExpanded: state.isExpanded,
+      isFullScreen: state.isFullScreen,
     );
 
     try {
@@ -450,20 +545,35 @@ class StreamViewerController extends Notifier<StreamViewerState> {
       );
       if (!_isCurrentGeneration(currentGeneration)) return;
 
-      await _preferVp8OnTransceiver(bindings, videoTransceiver);
+      final codecPreference = ref.read(preferencesProvider).screenShareCodec;
+      final preferredCodec = codecPreference == ScreenShareCodecPreference.h264
+          ? 'H264'
+          : 'VP8';
+      final preferredMime = codecPreference == ScreenShareCodecPreference.h264
+          ? 'video/h264'
+          : 'video/vp8';
+
+      await _preferCodecOnTransceiver(
+        bindings,
+        videoTransceiver,
+        preferredMimeType: preferredMime,
+      );
       if (!_isCurrentGeneration(currentGeneration)) return;
 
       peer.onIceCandidate = (candidate) {
         if (!_isCurrentGeneration(currentGeneration)) return;
         final candidateSdp = candidate.candidate;
         if (candidateSdp == null || candidateSdp.isEmpty) return;
+        if (!_answerSent) {
+          _pendingLocalCandidates.add(candidate);
+          return;
+        }
         unawaited(
-          coreSession.sendStreamIceCandidate(
+          _sendLocalIceCandidate(
+            generation: currentGeneration,
             streamId: streamId,
             targetClid: sourceClientId,
-            sdp: candidateSdp,
-            mid: candidate.sdpMid,
-            mLine: candidate.sdpMLineIndex,
+            candidate: candidate,
           ),
         );
       };
@@ -502,7 +612,10 @@ class StreamViewerController extends Notifier<StreamViewerState> {
 
       _armNegotiationTimer(currentGeneration);
 
-      final normalizedOfferSdp = normalizeSdpForTs6(sdp);
+      final normalizedOfferSdp = normalizeSdpForTs6(
+        sdp,
+        preferredVideoCodec: preferredCodec,
+      );
       await peer.setRemoteDescription(
         RTCSessionDescription(normalizedOfferSdp, 'offer'),
       );
@@ -515,7 +628,10 @@ class StreamViewerController extends Notifier<StreamViewerState> {
       final rawAnswer = await peer.createAnswer();
       if (!_isCurrentGeneration(currentGeneration)) return;
 
-      final answerSdp = normalizeSdpForTs6(rawAnswer.sdp ?? '');
+      final answerSdp = normalizeSdpForTs6(
+        rawAnswer.sdp ?? '',
+        preferredVideoCodec: preferredCodec,
+      );
       final answerDescription = RTCSessionDescription(
         answerSdp,
         rawAnswer.type ?? 'answer',
@@ -527,6 +643,13 @@ class StreamViewerController extends Notifier<StreamViewerState> {
         streamId: streamId,
         targetClid: sourceClientId,
         sdp: answerSdp,
+      );
+      if (!_isCurrentGeneration(currentGeneration)) return;
+      _answerSent = true;
+      await _flushPendingLocalCandidates(
+        generation: currentGeneration,
+        streamId: streamId,
+        targetClid: sourceClientId,
       );
     } catch (_) {
       if (_isCurrentGeneration(currentGeneration)) {
@@ -606,9 +729,41 @@ class StreamViewerController extends Notifier<StreamViewerState> {
     }
   }
 
-  /// Toggles whether the viewer stage is expanded.
-  void toggleExpanded() {
-    state = state.copyWith(isExpanded: !state.isExpanded);
+  /// Toggles whether the viewer stage occupies OS screen fullscreen.
+  Future<void> toggleFullScreen() async {
+    await setFullScreen(!state.isFullScreen);
+  }
+
+  /// Enters or exits OS screen fullscreen for the active stream viewer.
+  Future<void> setFullScreen(bool fullScreen) async {
+    if (state.isFullScreen == fullScreen) return;
+    if (fullScreen && !state.isActive) return;
+
+    if (fullScreen) {
+      _windowWasFullScreenBeforeStream = WindowChrome.fullScreen.value;
+      state = state.copyWith(isFullScreen: true);
+      if (!_windowWasFullScreenBeforeStream) {
+        _changingWindowFullScreen = true;
+        try {
+          await WindowChrome.setFullScreen(true);
+        } finally {
+          _changingWindowFullScreen = false;
+        }
+      }
+      return;
+    }
+
+    final shouldExitNativeWindow = !_windowWasFullScreenBeforeStream;
+    _windowWasFullScreenBeforeStream = false;
+    state = state.copyWith(isFullScreen: false);
+    if (shouldExitNativeWindow && WindowChrome.fullScreen.value) {
+      _changingWindowFullScreen = true;
+      try {
+        await WindowChrome.setFullScreen(false);
+      } finally {
+        _changingWindowFullScreen = false;
+      }
+    }
   }
 
   /// Clears any transient stream end notice.
@@ -620,38 +775,78 @@ class StreamViewerController extends Notifier<StreamViewerState> {
   /// Destroys the active `RTCPeerConnection` and `RTCVideoRenderer` immediately.
   Future<void> closeSession({StreamEndNotice? endNotice}) async {
     final preserveMuted = state.isMuted;
+    final wasFullScreen = state.isFullScreen;
+    final shouldExitNativeWindow =
+        wasFullScreen && !_windowWasFullScreenBeforeStream;
+    _windowWasFullScreenBeforeStream = false;
     await _disposeResources();
     state = StreamViewerState(isMuted: preserveMuted, endNotice: endNotice);
+    if (shouldExitNativeWindow && WindowChrome.fullScreen.value) {
+      _changingWindowFullScreen = true;
+      try {
+        await WindowChrome.setFullScreen(false);
+      } finally {
+        _changingWindowFullScreen = false;
+      }
+    }
   }
 
   bool _isCurrentGeneration(int generation) => _generation == generation;
 
-  Future<void> _preferVp8OnTransceiver(
-    WebRtcBindings bindings,
-    RTCRtpTransceiver transceiver,
-  ) async {
-    final capabilities = await bindings.getVideoReceiverCapabilities();
-    final codecs = capabilities?.codecs;
-    if (codecs == null || codecs.isEmpty) return;
-
-    final vp8Codecs = <RTCRtpCodecCapability>[];
-    final otherCodecs = <RTCRtpCodecCapability>[];
-    for (final codec in codecs) {
-      final mime = codec.mimeType.toLowerCase();
-      if (mime == 'video/vp8') {
-        vp8Codecs.add(codec);
-      } else {
-        otherCodecs.add(codec);
-      }
-    }
-    if (vp8Codecs.isEmpty) return;
-
+  Future<void> _sendLocalIceCandidate({
+    required int generation,
+    required String streamId,
+    required int targetClid,
+    required RTCIceCandidate candidate,
+  }) async {
+    if (!_isCurrentGeneration(generation)) return;
+    final candidateSdp = candidate.candidate;
+    if (candidateSdp == null || candidateSdp.isEmpty) return;
     try {
-      await transceiver.setCodecPreferences([...vp8Codecs, ...otherCodecs]);
+      await ref
+          .read(coreSessionProvider)
+          .sendStreamIceCandidate(
+            streamId: streamId,
+            targetClid: targetClid,
+            sdp: candidateSdp,
+            mid: candidate.sdpMid,
+            mLine: candidate.sdpMLineIndex,
+          );
     } catch (_) {
-      // Ignore platforms that do not support setCodecPreferences; SDP
-      // normalization (`preferVp8InSdp`) still reorders VP8 first.
+      // Ignore late ICE candidate signaling errors if the stream already ended.
     }
+  }
+
+  Future<void> _flushPendingLocalCandidates({
+    required int generation,
+    required String streamId,
+    required int targetClid,
+  }) async {
+    if (_pendingLocalCandidates.isEmpty) return;
+    final pending = List<RTCIceCandidate>.of(_pendingLocalCandidates);
+    _pendingLocalCandidates.clear();
+    for (final candidate in pending) {
+      if (!_isCurrentGeneration(generation)) return;
+      await _sendLocalIceCandidate(
+        generation: generation,
+        streamId: streamId,
+        targetClid: targetClid,
+        candidate: candidate,
+      );
+    }
+  }
+
+  Future<void> _preferCodecOnTransceiver(
+    WebRtcBindings bindings,
+    RTCRtpTransceiver transceiver, {
+    required String preferredMimeType,
+  }) async {
+    final capabilities = await bindings.getVideoReceiverCapabilities();
+    await preferVideoCodecOnTransceiver(
+      capabilities: capabilities,
+      transceiver: transceiver,
+      preferredMimeType: preferredMimeType,
+    );
   }
 
   Future<void> _flushPendingRemoteCandidates(
@@ -769,6 +964,8 @@ class StreamViewerController extends Notifier<StreamViewerState> {
     _generation++;
     _clearNegotiationTimer();
     _remoteDescriptionSet = false;
+    _answerSent = false;
+    _pendingLocalCandidates.clear();
     _pendingRemoteCandidates.clear();
     _remoteAudioTracks.clear();
 

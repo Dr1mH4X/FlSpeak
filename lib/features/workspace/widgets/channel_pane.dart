@@ -8,6 +8,7 @@ import 'package:flspeak_ffi/flspeak_ffi.dart';
 import '../../../core/channel_display.dart';
 import '../../../core/models.dart';
 import '../../../core/providers.dart';
+import '../../../core/stream_publisher.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
@@ -19,6 +20,7 @@ import '../../../widgets/window_header.dart';
 import '../workspace_state.dart';
 import 'channel_password_dialog.dart';
 import 'client_actions.dart';
+import 'screen_share_picker_dialog.dart';
 import 'voice_activity_ribbon.dart';
 
 /// 频道栏：服务器身份、统一的频道树、当前用户。
@@ -54,6 +56,9 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
     final scheme = context.scheme;
     final view = ref.watch(sessionViewProvider);
     final activeId = ref.watch(activeChannelIdProvider);
+    final isPublishing = ref.watch(
+      streamPublisherProvider.select((state) => state.isActive),
+    );
 
     void select(ChannelView channel) {
       ref
@@ -151,6 +156,7 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
             muted: view.muted,
             deafened: view.deafened,
             away: view.away,
+            sharingScreen: isPublishing,
             onToggleMute: () =>
                 ref.read(sessionViewProvider.notifier).setMuted(!view.muted),
             onToggleDeafen: () => ref
@@ -158,6 +164,16 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
                 .setDeafened(!view.deafened),
             onToggleAway: () =>
                 ref.read(sessionViewProvider.notifier).setAway(!view.away),
+            onToggleScreenShare: () {
+              if (!view.connected || view.selfChannelId == null) return;
+              if (isPublishing) {
+                unawaited(
+                  ref.read(sessionViewProvider.notifier).stopScreenShare(),
+                );
+              } else {
+                unawaited(showScreenSharePickerAndStart(context, ref));
+              }
+            },
           ),
         ],
       ),
@@ -609,9 +625,11 @@ class _UserFooter extends StatelessWidget {
     required this.muted,
     required this.deafened,
     required this.away,
+    required this.sharingScreen,
     required this.onToggleMute,
     required this.onToggleDeafen,
     required this.onToggleAway,
+    required this.onToggleScreenShare,
     this.onDisconnect,
   });
 
@@ -619,9 +637,11 @@ class _UserFooter extends StatelessWidget {
   final bool muted;
   final bool deafened;
   final bool away;
+  final bool sharingScreen;
   final VoidCallback onToggleMute;
   final VoidCallback onToggleDeafen;
   final VoidCallback onToggleAway;
+  final VoidCallback onToggleScreenShare;
   final VoidCallback? onDisconnect;
 
   @override
@@ -681,6 +701,18 @@ class _UserFooter extends StatelessWidget {
                       ],
                     ),
                   ),
+                  if (view.connected && view.selfChannelId != null)
+                    _IconToggle(
+                      key: const ValueKey('voice-screen-share-toggle'),
+                      label: sharingScreen
+                          ? l10n.streamStopShare
+                          : l10n.streamStartShare,
+                      icon: sharingScreen
+                          ? Icons.stop_screen_share_rounded
+                          : Icons.screen_share_rounded,
+                      active: sharingScreen,
+                      onTap: onToggleScreenShare,
+                    ),
                   if (onDisconnect != null)
                     IconButton(
                       onPressed: view.busy ? null : onDisconnect,
@@ -757,6 +789,7 @@ class _IconToggle extends StatelessWidget {
     required this.onTap,
     this.activeContainer,
     this.activeOnContainer,
+    super.key,
   });
 
   final String label;

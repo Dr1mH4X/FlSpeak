@@ -351,8 +351,47 @@
   "streamUnmute": "Unmute stream",
   "streamExpand": "Expand stream",
   "streamCollapse": "Collapse stream",
+  "streamFullscreen": "Enter fullscreen",
+  "streamExitFullscreen": "Exit fullscreen",
   "streamEndedStopped": "Screen share has ended",
   "streamEndedRejected": "Watch request was declined",
   "streamEndedRemoved": "Removed from screen share",
-  "streamNegotiationFailed": "Screen share connection failed. Try again."
+  "streamNegotiationFailed": "Screen share connection failed. Try again.",
+  "streamStartShare": "Share screen",
+  "streamStopShare": "Stop sharing",
+  "streamPublishing": "Sharing",
+  "streamViewerCount": "{count, plural, =0{0 viewers} =1{1 viewer} other{{count} viewers}}",
+  "@streamViewerCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "streamPreviewShow": "Show local preview",
+  "streamPreviewHide": "Hide local preview",
+  "streamPublishFailed": "Could not start screen share. Check screen recording permissions and try again.",
+  "streamPickerTitle": "Share your screen",
+  "streamPickerScreens": "Screens",
+  "streamPickerWindows": "Windows",
+  "streamPickerRefresh": "Refresh sources",
+  "streamPickerEmpty": "No shareable screens or windows found",
+  "streamPickerResolution": "Resolution",
+  "streamPickerFrameRate": "Frame rate",
+  "streamPickerStart": "Start sharing",
+  "settingsScreenShare": "Screen share",
+  "settingsScreenShareCapture": "Default capture quality",
+  "settingsScreenShareResolution": "Default resolution",
+  "settingsScreenShareResolution720p": "720p (1280×720)",
+  "settingsScreenShareResolution1080p": "1080p (1920×1080)",
+  "settingsScreenShareFrameRate": "Default frame rate",
+  "settingsScreenShareFrameRate30": "30 FPS",
+  "settingsScreenShareFrameRate60": "60 FPS",
+  "settingsScreenShareEncoding": "Encoding & network",
+  "settingsScreenShareCodec": "Video codec & hardware acceleration",
+  "settingsScreenShareCodecVp8": "VP8 first (Recommended for TS6)",
+  "settingsScreenShareCodecH264": "H.264 first (Hardware encode/decode)",
+  "settingsScreenShareDegradation": "Bandwidth degradation preference",
+  "settingsScreenShareDegradationResolution": "Maintain resolution (Drop frame rate first)",
+  "settingsScreenShareDegradationFramerate": "Maintain frame rate (Drop resolution first)"
 }

@@ -453,6 +453,7 @@ impl StreamCoordinator {
     }
 
     /// 校验推流端向观众发送 ICE 候选的目标，返回当前活动推流的 `stream_id`。
+    /// 仅当观众已通过 `respond_viewer_join` 接受（`ViewerPeerState::Accepted`）后才允许发信令。
     pub(crate) fn check_publisher_signal_target(
         &self,
         viewer_clid: i32,
@@ -460,13 +461,25 @@ impl StreamCoordinator {
         match &self.publish {
             LocalPublishState::Active {
                 stream_id, viewers, ..
-            } if viewers.contains_key(&viewer_clid) => Ok(stream_id.as_str()),
+            } if matches!(viewers.get(&viewer_clid), Some(ViewerPeerState::Accepted)) => {
+                Ok(stream_id.as_str())
+            }
+            LocalPublishState::Active { viewers, .. } if viewers.contains_key(&viewer_clid) => Err(
+                SessionError::Stream("观众尚未完成加入应答，不能发送信令".into()),
+            ),
             LocalPublishState::Active { .. } => {
                 Err(SessionError::Stream("信令目标不是当前推流的观众".into()))
             }
             LocalPublishState::Idle | LocalPublishState::Starting { .. } => {
                 Err(SessionError::Stream("当前没有活动的屏幕共享推流".into()))
             }
+        }
+    }
+
+    /// 当 `respondjoinstreamrequest` 或下行信令在服务器端因观众已退出而失败时移除该观众。
+    pub(crate) fn remove_viewer(&mut self, viewer_clid: i32) {
+        if let LocalPublishState::Active { viewers, .. } = &mut self.publish {
+            viewers.remove(&viewer_clid);
         }
     }
 
@@ -1186,6 +1199,8 @@ mod tests {
             [SessionEvent::StreamViewerJoinRequested { stream_id, viewer_clid: 77 }]
                 if stream_id == "pub-stream-1"
         ));
+        // 尚未调用 respond_viewer_join 前，不允许向 Requested 状态的观众提前发送 ICE 信令
+        assert!(coordinator.check_publisher_signal_target(77).is_err());
 
         // 4. 回复 Offer 接受观众
         let respond = coordinator

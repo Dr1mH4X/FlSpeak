@@ -2078,8 +2078,13 @@ impl Actor {
         let params = self
             .streams
             .respond_viewer_join(viewer_clid, accept, &offer_sdp)?;
-        self.stream_command("respondjoinstreamrequest", &params)
-            .await
+        let result = self
+            .stream_command("respondjoinstreamrequest", &params)
+            .await;
+        if result.is_err() {
+            self.streams.remove_viewer(viewer_clid);
+        }
+        result
     }
 
     async fn send_publisher_ice_candidate(

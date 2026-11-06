@@ -289,7 +289,7 @@ class _FakePeerConnection extends Fake implements RTCPeerConnection {
   }
 }
 
-class _FakeWebRtcBindings implements WebRtcBindings {
+class _FakeWebRtcBindings extends WebRtcBindings {
   _FakeWebRtcBindings({this.remoteDescriptionGate});
 
   final Completer<void>? remoteDescriptionGate;

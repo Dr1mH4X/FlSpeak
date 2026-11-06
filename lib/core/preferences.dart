@@ -67,6 +67,103 @@ enum VoiceMeterSource {
   }
 }
 
+/// 屏幕共享默认分辨率与码率档位。
+enum ScreenShareResolutionPreset {
+  p720('720p', width: 1280, height: 720, bitrateKbps: 5000),
+  p1080('1080p', width: 1920, height: 1080, bitrateKbps: 8000);
+
+  const ScreenShareResolutionPreset(
+    this.id, {
+    required this.width,
+    required this.height,
+    required this.bitrateKbps,
+  });
+
+  final String id;
+  final int width;
+  final int height;
+  final int bitrateKbps;
+
+  int get maxBitrateBps => bitrateKbps * 1000;
+
+  static ScreenShareResolutionPreset fromId(Object? value) {
+    for (final preset in values) {
+      if (preset.id == value) {
+        return preset;
+      }
+    }
+    return ScreenShareResolutionPreset.p1080;
+  }
+}
+
+/// 屏幕共享默认帧率档位。
+enum ScreenShareFrameRatePreset {
+  fps30(30),
+  fps60(60);
+
+  const ScreenShareFrameRatePreset(this.fps);
+
+  final int fps;
+
+  static ScreenShareFrameRatePreset fromFps(Object? value) {
+    if (value is num) {
+      final intVal = value.toInt();
+      for (final preset in values) {
+        if (preset.fps == intVal) {
+          return preset;
+        }
+      }
+    } else if (value is String) {
+      final parsed = int.tryParse(value);
+      if (parsed != null) {
+        return fromFps(parsed);
+      }
+    }
+    return ScreenShareFrameRatePreset.fps30;
+  }
+}
+
+/// 屏幕共享视频编码器与硬件加速偏好。
+enum ScreenShareCodecPreference {
+  /// VP8 优先（TS6 官方桌面端兼容性最佳）。
+  vp8('vp8'),
+
+  /// H.264 优先（优先调用显卡硬件编码与解码加速）。
+  h264('h264');
+
+  const ScreenShareCodecPreference(this.id);
+
+  final String id;
+
+  static ScreenShareCodecPreference fromId(Object? value) {
+    for (final codec in values) {
+      if (codec.id == value) {
+        return codec;
+      }
+    }
+    return ScreenShareCodecPreference.vp8;
+  }
+}
+
+/// 屏幕共享在带宽受限时的降级策略。
+enum ScreenShareDegradationPreference {
+  maintainResolution('maintainResolution'),
+  maintainFramerate('maintainFramerate');
+
+  const ScreenShareDegradationPreference(this.id);
+
+  final String id;
+
+  static ScreenShareDegradationPreference fromId(Object? value) {
+    for (final pref in values) {
+      if (pref.id == value) {
+        return pref;
+      }
+    }
+    return ScreenShareDegradationPreference.maintainResolution;
+  }
+}
+
 /// 昵称、最近连接时间与界面偏好。
 ///
 /// 这是界面元数据，不是身份私钥：私钥始终只由 Rust 读写。等后端把身份模型
@@ -83,6 +180,11 @@ class SessionPreferences {
     this.channelPanelWidth,
     this.voiceMeterSource = VoiceMeterSource.microphone,
     this.serverIcons = const {},
+    this.screenShareResolution = ScreenShareResolutionPreset.p1080,
+    this.screenShareFrameRate = ScreenShareFrameRatePreset.fps30,
+    this.screenShareCodec = ScreenShareCodecPreference.vp8,
+    this.screenShareDegradation =
+        ScreenShareDegradationPreference.maintainResolution,
   });
 
   /// 没有设置过昵称时的默认值。
@@ -111,6 +213,10 @@ class SessionPreferences {
 
   final VoiceMeterSource voiceMeterSource;
   final Map<String, ServerIcon> serverIcons;
+  final ScreenShareResolutionPreset screenShareResolution;
+  final ScreenShareFrameRatePreset screenShareFrameRate;
+  final ScreenShareCodecPreference screenShareCodec;
+  final ScreenShareDegradationPreference screenShareDegradation;
 
   SessionPreferences copyWith({
     String? nickname,
@@ -122,6 +228,10 @@ class SessionPreferences {
     Object? channelPanelWidth = _unset,
     VoiceMeterSource? voiceMeterSource,
     Map<String, ServerIcon>? serverIcons,
+    ScreenShareResolutionPreset? screenShareResolution,
+    ScreenShareFrameRatePreset? screenShareFrameRate,
+    ScreenShareCodecPreference? screenShareCodec,
+    ScreenShareDegradationPreference? screenShareDegradation,
   }) => SessionPreferences(
     nickname: nickname ?? this.nickname,
     lastConnected: lastConnected ?? this.lastConnected,
@@ -136,6 +246,11 @@ class SessionPreferences {
         : channelPanelWidth as double?,
     voiceMeterSource: voiceMeterSource ?? this.voiceMeterSource,
     serverIcons: serverIcons ?? this.serverIcons,
+    screenShareResolution: screenShareResolution ?? this.screenShareResolution,
+    screenShareFrameRate: screenShareFrameRate ?? this.screenShareFrameRate,
+    screenShareCodec: screenShareCodec ?? this.screenShareCodec,
+    screenShareDegradation:
+        screenShareDegradation ?? this.screenShareDegradation,
   );
 
   Map<String, Object?> toJson() => {
@@ -152,6 +267,10 @@ class SessionPreferences {
     'channelPanelWidth': channelPanelWidth,
     'voiceMeterSource': voiceMeterSource.id,
     'serverIcons': serverIcons.map((id, icon) => MapEntry(id, icon.id)),
+    'screenShareResolution': screenShareResolution.id,
+    'screenShareFrameRate': screenShareFrameRate.fps,
+    'screenShareCodec': screenShareCodec.id,
+    'screenShareDegradation': screenShareDegradation.id,
   };
 
   static SessionPreferences fromJson(Map<String, Object?> json) {
@@ -198,6 +317,18 @@ class SessionPreferences {
           : null,
       voiceMeterSource: VoiceMeterSource.fromId(ui['voiceMeterSource']),
       serverIcons: Map.unmodifiable(serverIcons),
+      screenShareResolution: ScreenShareResolutionPreset.fromId(
+        ui['screenShareResolution'],
+      ),
+      screenShareFrameRate: ScreenShareFrameRatePreset.fromFps(
+        ui['screenShareFrameRate'],
+      ),
+      screenShareCodec: ScreenShareCodecPreference.fromId(
+        ui['screenShareCodec'],
+      ),
+      screenShareDegradation: ScreenShareDegradationPreference.fromId(
+        ui['screenShareDegradation'],
+      ),
     );
   }
 }

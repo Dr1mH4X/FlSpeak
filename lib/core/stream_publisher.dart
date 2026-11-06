@@ -1,0 +1,932 @@
+import 'dart:async';
+
+import 'package:flspeak_ffi/flspeak_ffi.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
+
+import 'preferences.dart';
+import 'providers.dart';
+import 'stream_viewer.dart';
+
+/// Default maximum concurrent viewers for 1-to-N WebRTC screen share publishing.
+const int defaultMaxStreamViewers = 5;
+
+/// Lightweight, testable representation of a desktop screen or window source.
+class DesktopSourceEntry extends DesktopCapturerSource {
+  DesktopSourceEntry({
+    required this.id,
+    required this.name,
+    required this.type,
+    this.thumbnail,
+    ThumbnailSize? thumbnailSize,
+  }) : thumbnailSize = thumbnailSize ?? ThumbnailSize(320, 180);
+
+  @override
+  final String id;
+
+  @override
+  final String name;
+
+  @override
+  final SourceType type;
+
+  @override
+  final Uint8List? thumbnail;
+
+  @override
+  final ThumbnailSize thumbnailSize;
+}
+
+/// Immutable state for the screen-share publisher (`StreamPublisherController`).
+@immutable
+class StreamPublisherState {
+  const StreamPublisherState({
+    this.streamId,
+    this.sourceId,
+    this.sourceName,
+    this.resolution = ScreenShareResolutionPreset.p1080,
+    this.frameRate = ScreenShareFrameRatePreset.fps30,
+    this.hasAudio = false,
+    this.isStarting = false,
+    this.isSharing = false,
+    this.isPreviewExpanded = false,
+    this.viewerIds = const <int>{},
+    this.maxViewers = defaultMaxStreamViewers,
+    this.renderer,
+  });
+
+  final String? streamId;
+  final String? sourceId;
+  final String? sourceName;
+  final ScreenShareResolutionPreset resolution;
+  final ScreenShareFrameRatePreset frameRate;
+  final bool hasAudio;
+  final bool isStarting;
+  final bool isSharing;
+  final bool isPreviewExpanded;
+  final Set<int> viewerIds;
+  final int maxViewers;
+  final RTCVideoRenderer? renderer;
+
+  bool get isActive => isSharing || isStarting;
+
+  int get viewerCount => viewerIds.length;
+
+  StreamPublisherState copyWith({
+    String? streamId,
+    bool clearStreamId = false,
+    String? sourceId,
+    bool clearSourceId = false,
+    String? sourceName,
+    bool clearSourceName = false,
+    ScreenShareResolutionPreset? resolution,
+    ScreenShareFrameRatePreset? frameRate,
+    bool? hasAudio,
+    bool? isStarting,
+    bool? isSharing,
+    bool? isPreviewExpanded,
+    Set<int>? viewerIds,
+    int? maxViewers,
+    RTCVideoRenderer? renderer,
+    bool clearRenderer = false,
+  }) {
+    return StreamPublisherState(
+      streamId: clearStreamId ? null : (streamId ?? this.streamId),
+      sourceId: clearSourceId ? null : (sourceId ?? this.sourceId),
+      sourceName: clearSourceName ? null : (sourceName ?? this.sourceName),
+      resolution: resolution ?? this.resolution,
+      frameRate: frameRate ?? this.frameRate,
+      hasAudio: hasAudio ?? this.hasAudio,
+      isStarting: isStarting ?? this.isStarting,
+      isSharing: isSharing ?? this.isSharing,
+      isPreviewExpanded: isPreviewExpanded ?? this.isPreviewExpanded,
+      viewerIds: viewerIds ?? this.viewerIds,
+      maxViewers: maxViewers ?? this.maxViewers,
+      renderer: clearRenderer ? null : (renderer ?? this.renderer),
+    );
+  }
+}
+
+final streamPublisherProvider =
+    NotifierProvider<StreamPublisherController, StreamPublisherState>(
+      StreamPublisherController.new,
+    );
+
+class _ViewerPeerSession {
+  _ViewerPeerSession({required this.viewerClid, required this.peerGeneration});
+
+  final int viewerClid;
+  final int peerGeneration;
+  RTCPeerConnection? peer;
+  bool offerSent = false;
+  bool remoteDescriptionSet = false;
+  final List<RTCIceCandidate> pendingLocalCandidates = [];
+  final List<RTCIceCandidate> pendingRemoteCandidates = [];
+  Timer? negotiationTimer;
+}
+
+/// Manages local desktop media capture and 1-to-N viewer `RTCPeerConnection`s
+/// for TS6 screen sharing.
+class StreamPublisherController extends Notifier<StreamPublisherState> {
+  MediaStream? _localStream;
+  RTCVideoRenderer? _previewRenderer;
+  final Map<int, _ViewerPeerSession> _viewerSessions = {};
+  int _generation = 0;
+  int _peerGenerationCounter = 0;
+  bool _stopping = false;
+
+  /// Read-only view of active viewer `RTCPeerConnection`s keyed by `viewerClid`.
+  Map<int, RTCPeerConnection> get activePeers => Map.unmodifiable({
+    for (final entry in _viewerSessions.entries)
+      if (entry.value.peer != null) entry.key: entry.value.peer!,
+  });
+
+  @override
+  StreamPublisherState build() {
+    ref.onDispose(() {
+      unawaited(_disposeAllResources(updateState: false));
+    });
+    return const StreamPublisherState();
+  }
+
+  /// Enumerates available desktop screens and application windows.
+  Future<List<DesktopCapturerSource>> getDesktopSources({
+    List<SourceType> types = const [SourceType.Screen, SourceType.Window],
+    ThumbnailSize? thumbnailSize,
+  }) async {
+    final bindings = ref.read(webRtcBindingsProvider);
+    return bindings.getDesktopSources(
+      types: types,
+      thumbnailSize: thumbnailSize ?? ThumbnailSize(320, 180),
+    );
+  }
+
+  /// Captures the selected desktop source via `getDisplayMedia`, binds the OS
+  /// banner stop callback (`videoTrack.onEnded`), and registers the stream on
+  /// the TS6 server via FFI `startScreenShare`.
+  Future<bool> startScreenShare({
+    required String sourceId,
+    required String sourceName,
+    ScreenShareResolutionPreset? resolution,
+    ScreenShareFrameRatePreset? frameRate,
+    bool audio = false,
+    int maxViewers = defaultMaxStreamViewers,
+  }) async {
+    await _disposeAllResources();
+    final currentGeneration = ++_generation;
+    _stopping = false;
+
+    final prefs = ref.read(preferencesProvider);
+    final selectedResolution = resolution ?? prefs.screenShareResolution;
+    final selectedFrameRate = frameRate ?? prefs.screenShareFrameRate;
+    final normalizedName = sourceName.trim().isEmpty
+        ? 'Screen Share'
+        : sourceName.trim();
+
+    final bindings = ref.read(webRtcBindingsProvider);
+    final coreSession = ref.read(coreSessionProvider);
+
+    state = StreamPublisherState(
+      sourceId: sourceId,
+      sourceName: normalizedName,
+      resolution: selectedResolution,
+      frameRate: selectedFrameRate,
+      hasAudio: audio,
+      isStarting: true,
+      isSharing: false,
+      maxViewers: maxViewers,
+    );
+
+    try {
+      final mediaConstraints = <String, dynamic>{
+        'video': <String, dynamic>{
+          'deviceId': <String, dynamic>{'exact': sourceId},
+          'mandatory': <String, dynamic>{
+            'frameRate': selectedFrameRate.fps,
+            'minWidth': selectedResolution.width,
+            'minHeight': selectedResolution.height,
+            'maxWidth': selectedResolution.width,
+            'maxHeight': selectedResolution.height,
+          },
+        },
+        'audio': audio,
+      };
+
+      final stream = await bindings.getDisplayMedia(mediaConstraints);
+      if (!_isCurrentGeneration(currentGeneration)) {
+        await _disposeMediaStream(stream);
+        return false;
+      }
+
+      final videoTracks = stream.getVideoTracks();
+      if (videoTracks.isEmpty) {
+        await _disposeMediaStream(stream);
+        await _disposeAllResources();
+        return false;
+      }
+
+      _localStream = stream;
+      final videoTrack = videoTracks.first;
+
+      // Apply ideal capture constraints if the platform supports it.
+      try {
+        await videoTrack.applyConstraints(<String, dynamic>{
+          'width': selectedResolution.width,
+          'height': selectedResolution.height,
+          'frameRate': selectedFrameRate.fps,
+        });
+      } catch (_) {
+        // Not all desktop platforms implement applyConstraints after capture.
+      }
+      if (!_isCurrentGeneration(currentGeneration)) return false;
+
+      // Automatically stop sharing when the user clicks "Stop sharing" in the
+      // native OS screen-capture banner.
+      videoTrack.onEnded = () {
+        if (!_isCurrentGeneration(currentGeneration)) return;
+        unawaited(stopScreenShare());
+      };
+
+      final renderer = bindings.createVideoRenderer();
+      _previewRenderer = renderer;
+      await renderer.initialize();
+      if (!_isCurrentGeneration(currentGeneration)) return false;
+      renderer.srcObject = stream;
+
+      final hasAudioTrack = audio && stream.getAudioTracks().isNotEmpty;
+      state = state.copyWith(
+        hasAudio: hasAudioTrack,
+        isStarting: true,
+        isSharing: true,
+        renderer: renderer,
+      );
+
+      await coreSession.startScreenShare(
+        name: normalizedName,
+        audio: hasAudioTrack,
+        bitrate: selectedResolution.bitrateKbps,
+        viewerLimit: maxViewers,
+      );
+      if (!_isCurrentGeneration(currentGeneration)) return false;
+
+      state = state.copyWith(isStarting: false, isSharing: true);
+      return true;
+    } catch (_) {
+      if (_isCurrentGeneration(currentGeneration)) {
+        await _disposeAllResources();
+      }
+      rethrow;
+    }
+  }
+
+  /// Handles `CoreEvent_ScreenSharePublished` from the Rust session actor.
+  void handlePublished({required String streamId}) {
+    if (!state.isActive) return;
+    state = state.copyWith(
+      streamId: streamId,
+      isStarting: false,
+      isSharing: true,
+    );
+  }
+
+  /// Handles `CoreEvent_ScreenShareStopped` from the Rust session actor.
+  Future<void> handleStopped() async {
+    await _disposeAllResources();
+  }
+
+  /// Stops screen sharing, closes all viewer `RTCPeerConnection`s, disposes the
+  /// local capture stream, and notifies the server via FFI `stopScreenShare`.
+  Future<void> stopScreenShare({bool notifyServer = true}) async {
+    if (_stopping) return;
+    final wasActive = state.isActive || _localStream != null;
+    _stopping = true;
+    try {
+      await _disposeAllResources();
+      if (notifyServer && wasActive) {
+        try {
+          await ref.read(coreSessionProvider).stopScreenShare();
+        } catch (_) {
+          // Ignore FFI errors if already disconnected or stopped.
+        }
+      }
+    } finally {
+      _stopping = false;
+    }
+  }
+
+  /// Toggles whether the local preview video stage is expanded in the workspace.
+  void togglePreviewExpanded() {
+    if (!state.isActive) return;
+    state = state.copyWith(isPreviewExpanded: !state.isPreviewExpanded);
+  }
+
+  /// Handles `CoreEvent_StreamViewerJoinRequested`:
+  /// - Rejects with `accept: false` if concurrent viewer count has reached `maxViewers`.
+  /// - Creates a dedicated `RTCPeerConnection` for `viewerClid`.
+  /// - Strictly adds video first (`MID 0 = video`) and audio or `SendOnly`
+  ///   audio transceiver second (`MID 1 = audio`) for TS6 compatibility.
+  /// - Sets `RTCDegradationPreference` (default `MAINTAIN_RESOLUTION`) and
+  ///   bitrate/framerate encoding parameters on the video `RTCRtpSender`.
+  /// - Creates an Offer with VP8 preferred by default (or H.264 if configured),
+  ///   calls `setLocalDescription`, and sends via FFI `respondStreamJoinRequest`.
+  Future<void> handleViewerJoinRequested({
+    required String streamId,
+    required int viewerClid,
+  }) async {
+    final localStream = _localStream;
+    if (!state.isActive || localStream == null) return;
+    if (state.streamId != null && state.streamId != streamId) return;
+
+    final videoTracks = localStream.getVideoTracks();
+    if (videoTracks.isEmpty) return;
+
+    final coreSession = ref.read(coreSessionProvider);
+
+    // If this viewer already had an existing session, clean it up before
+    // re-negotiating so they don't consume two slots.
+    if (_viewerSessions.containsKey(viewerClid)) {
+      await _closeViewerSession(viewerClid);
+    }
+
+    if (_viewerSessions.length >= state.maxViewers) {
+      try {
+        await coreSession.respondStreamJoinRequest(
+          viewerClid: viewerClid,
+          accept: false,
+          offerSdp: '',
+        );
+      } catch (_) {}
+      return;
+    }
+
+    final currentGeneration = _generation;
+    final peerGeneration = ++_peerGenerationCounter;
+    final viewerSession = _ViewerPeerSession(
+      viewerClid: viewerClid,
+      peerGeneration: peerGeneration,
+    );
+    _viewerSessions[viewerClid] = viewerSession;
+    _syncViewerIds();
+
+    final bindings = ref.read(webRtcBindingsProvider);
+    final prefs = ref.read(preferencesProvider);
+    final preferredCodec =
+        prefs.screenShareCodec == ScreenShareCodecPreference.h264
+        ? 'H264'
+        : 'VP8';
+    final preferredMime =
+        prefs.screenShareCodec == ScreenShareCodecPreference.h264
+        ? 'video/h264'
+        : 'video/vp8';
+
+    try {
+      final peer = await bindings.createPeer({
+        'iceServers': defaultStreamIceServers,
+        'sdpSemantics': 'unified-plan',
+      });
+      viewerSession.peer = peer;
+      if (!_isViewerSessionValid(
+        currentGeneration,
+        viewerClid,
+        peerGeneration,
+      )) {
+        await _safeDisposePeer(peer);
+        return;
+      }
+
+      // 1. Strict MID order: add video track FIRST so MID 0 is video.
+      final videoTrack = videoTracks.first;
+      final videoSender = await peer.addTrack(videoTrack, localStream);
+      if (!_isViewerSessionValid(
+        currentGeneration,
+        viewerClid,
+        peerGeneration,
+      )) {
+        return;
+      }
+
+      // 2. Add audio track or SendOnly audio transceiver SECOND so MID 1 is audio.
+      // Never omit m=audio or TS6 official clients will reject the Offer.
+      final audioTracks = localStream.getAudioTracks();
+      if (state.hasAudio && audioTracks.isNotEmpty) {
+        await peer.addTrack(audioTracks.first, localStream);
+      } else {
+        await peer.addTransceiver(
+          kind: RTCRtpMediaType.RTCRtpMediaTypeAudio,
+          init: RTCRtpTransceiverInit(direction: TransceiverDirection.SendOnly),
+        );
+      }
+      if (!_isViewerSessionValid(
+        currentGeneration,
+        viewerClid,
+        peerGeneration,
+      )) {
+        return;
+      }
+
+      // Configure transceiver directions and preferred video codec.
+      await _configurePublisherTransceivers(
+        bindings: bindings,
+        peer: peer,
+        preferredMimeType: preferredMime,
+      );
+      if (!_isViewerSessionValid(
+        currentGeneration,
+        viewerClid,
+        peerGeneration,
+      )) {
+        return;
+      }
+
+      // Configure video RtpSender degradationPreference & encoding limits.
+      await _configureVideoSenderParameters(
+        videoSender: videoSender,
+        resolution: state.resolution,
+        frameRate: state.frameRate,
+        degradationPreference: prefs.screenShareDegradation,
+      );
+      if (!_isViewerSessionValid(
+        currentGeneration,
+        viewerClid,
+        peerGeneration,
+      )) {
+        return;
+      }
+
+      peer.onIceCandidate = (candidate) {
+        if (!_isViewerSessionValid(
+          currentGeneration,
+          viewerClid,
+          peerGeneration,
+        )) {
+          return;
+        }
+        final candidateSdp = candidate.candidate;
+        if (candidateSdp == null || candidateSdp.isEmpty) return;
+        if (!viewerSession.offerSent) {
+          viewerSession.pendingLocalCandidates.add(candidate);
+          return;
+        }
+        unawaited(
+          _sendLocalViewerCandidate(
+            currentGeneration: currentGeneration,
+            viewerSession: viewerSession,
+            candidate: candidate,
+          ),
+        );
+      };
+
+      peer.onConnectionState = (connectionState) {
+        if (!_isViewerSessionValid(
+          currentGeneration,
+          viewerClid,
+          peerGeneration,
+        )) {
+          return;
+        }
+        if (connectionState ==
+            RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+          _clearViewerNegotiationTimer(viewerSession);
+        } else if (connectionState ==
+                RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
+            connectionState ==
+                RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
+          unawaited(_closeViewerSession(viewerClid));
+        }
+      };
+
+      peer.onIceConnectionState = (iceState) {
+        if (!_isViewerSessionValid(
+          currentGeneration,
+          viewerClid,
+          peerGeneration,
+        )) {
+          return;
+        }
+        if (iceState == RTCIceConnectionState.RTCIceConnectionStateConnected ||
+            iceState == RTCIceConnectionState.RTCIceConnectionStateCompleted) {
+          _clearViewerNegotiationTimer(viewerSession);
+        } else if (iceState ==
+                RTCIceConnectionState.RTCIceConnectionStateFailed ||
+            iceState == RTCIceConnectionState.RTCIceConnectionStateClosed) {
+          unawaited(_closeViewerSession(viewerClid));
+        }
+      };
+
+      _armViewerNegotiationTimer(
+        currentGeneration: currentGeneration,
+        viewerSession: viewerSession,
+      );
+
+      final rawOffer = await peer.createOffer();
+      if (!_isViewerSessionValid(
+        currentGeneration,
+        viewerClid,
+        peerGeneration,
+      )) {
+        return;
+      }
+
+      final offerSdp = normalizeSdpForTs6(
+        rawOffer.sdp ?? '',
+        preferredVideoCodec: preferredCodec,
+        fallbackAudioDirection: 'sendonly',
+      );
+      final offerDescription = RTCSessionDescription(
+        offerSdp,
+        rawOffer.type ?? 'offer',
+      );
+      await peer.setLocalDescription(offerDescription);
+      if (!_isViewerSessionValid(
+        currentGeneration,
+        viewerClid,
+        peerGeneration,
+      )) {
+        return;
+      }
+
+      await coreSession.respondStreamJoinRequest(
+        viewerClid: viewerClid,
+        accept: true,
+        offerSdp: offerSdp,
+      );
+      if (!_isViewerSessionValid(
+        currentGeneration,
+        viewerClid,
+        peerGeneration,
+      )) {
+        return;
+      }
+      viewerSession.offerSent = true;
+      await _flushPendingLocalViewerCandidates(
+        currentGeneration: currentGeneration,
+        viewerSession: viewerSession,
+      );
+    } catch (_) {
+      if (_isViewerSessionValid(
+        currentGeneration,
+        viewerClid,
+        peerGeneration,
+      )) {
+        await _closeViewerSession(viewerClid);
+        try {
+          await coreSession.respondStreamJoinRequest(
+            viewerClid: viewerClid,
+            accept: false,
+            offerSdp: '',
+          );
+        } catch (_) {}
+      }
+    }
+  }
+
+  /// Handles `CoreEvent_PublisherSignalReceived` (viewer Answer or ICE candidate).
+  Future<void> handlePublisherSignal({
+    required String streamId,
+    required int viewerClid,
+    required PublisherSignal signal,
+  }) async {
+    if (!state.isActive) return;
+    if (state.streamId != null && state.streamId != streamId) return;
+
+    final viewerSession = _viewerSessions[viewerClid];
+    if (viewerSession == null) return;
+
+    final currentGeneration = _generation;
+    final peerGeneration = viewerSession.peerGeneration;
+
+    switch (signal) {
+      case PublisherSignal_Answer(:final sdp):
+        if (sdp.trim().isEmpty) return;
+        final peer = viewerSession.peer;
+        if (peer == null) return;
+        final prefs = ref.read(preferencesProvider);
+        final preferredCodec =
+            prefs.screenShareCodec == ScreenShareCodecPreference.h264
+            ? 'H264'
+            : 'VP8';
+        final normalizedAnswer = normalizeSdpForTs6(
+          sdp,
+          preferredVideoCodec: preferredCodec,
+        );
+        try {
+          await peer.setRemoteDescription(
+            RTCSessionDescription(normalizedAnswer, 'answer'),
+          );
+          if (!_isViewerSessionValid(
+            currentGeneration,
+            viewerClid,
+            peerGeneration,
+          )) {
+            return;
+          }
+          viewerSession.remoteDescriptionSet = true;
+          await _flushPendingViewerCandidates(
+            currentGeneration: currentGeneration,
+            viewerSession: viewerSession,
+          );
+        } catch (_) {
+          if (_isViewerSessionValid(
+            currentGeneration,
+            viewerClid,
+            peerGeneration,
+          )) {
+            await _closeViewerSession(viewerClid);
+          }
+        }
+      case PublisherSignal_IceCandidate(:final sdp, :final mid, :final mLine):
+        if (sdp.trim().isEmpty) return;
+        final candidate = RTCIceCandidate(sdp, mid, mLine);
+        final peer = viewerSession.peer;
+        if (peer == null || !viewerSession.remoteDescriptionSet) {
+          viewerSession.pendingRemoteCandidates.add(candidate);
+          return;
+        }
+        try {
+          await peer.addCandidate(candidate);
+        } catch (_) {
+          // Ignore duplicate or obsolete ICE candidates.
+        }
+    }
+  }
+
+  /// Handles `CoreEvent_StreamViewerLeft` by closing only that viewer's peer.
+  Future<void> handleViewerLeft({
+    required String streamId,
+    required int viewerClid,
+  }) async {
+    if (state.streamId != null && state.streamId != streamId) return;
+    await _closeViewerSession(viewerClid);
+  }
+
+  bool _isCurrentGeneration(int generation) => _generation == generation;
+
+  bool _isViewerSessionValid(
+    int generation,
+    int viewerClid,
+    int peerGeneration,
+  ) {
+    if (_generation != generation) return false;
+    final current = _viewerSessions[viewerClid];
+    return current != null && current.peerGeneration == peerGeneration;
+  }
+
+  Future<void> _configurePublisherTransceivers({
+    required WebRtcBindings bindings,
+    required RTCPeerConnection peer,
+    required String preferredMimeType,
+  }) async {
+    List<RTCRtpTransceiver> transceivers;
+    try {
+      transceivers = await peer.getTransceivers();
+    } catch (_) {
+      return;
+    }
+    if (transceivers.isEmpty) return;
+
+    final capabilities = await bindings.getVideoSenderCapabilities();
+    for (var i = 0; i < transceivers.length; i++) {
+      final transceiver = transceivers[i];
+      try {
+        await transceiver.setDirection(TransceiverDirection.SendOnly);
+      } catch (_) {}
+      // Video transceiver is always added first (index 0 / MID 0).
+      if (i == 0) {
+        await preferVideoCodecOnTransceiver(
+          capabilities: capabilities,
+          transceiver: transceiver,
+          preferredMimeType: preferredMimeType,
+        );
+      }
+    }
+  }
+
+  Future<void> _configureVideoSenderParameters({
+    required RTCRtpSender videoSender,
+    required ScreenShareResolutionPreset resolution,
+    required ScreenShareFrameRatePreset frameRate,
+    required ScreenShareDegradationPreference degradationPreference,
+  }) async {
+    try {
+      final params = videoSender.parameters;
+      params.degradationPreference =
+          degradationPreference ==
+              ScreenShareDegradationPreference.maintainFramerate
+          ? RTCDegradationPreference.MAINTAIN_FRAMERATE
+          : RTCDegradationPreference.MAINTAIN_RESOLUTION;
+
+      final encodings = params.encodings;
+      if (encodings == null || encodings.isEmpty) {
+        params.encodings = [
+          RTCRtpEncoding(
+            active: true,
+            maxBitrate: resolution.maxBitrateBps,
+            maxFramerate: frameRate.fps,
+            scaleResolutionDownBy: 1.0,
+          ),
+        ];
+      } else {
+        for (final encoding in encodings) {
+          encoding.maxBitrate = resolution.maxBitrateBps;
+          encoding.maxFramerate = frameRate.fps;
+          encoding.scaleResolutionDownBy = 1.0;
+        }
+      }
+      await videoSender.setParameters(params);
+    } catch (_) {
+      // Ignore platforms where sender.parameters is not mutable prior to negotiation.
+    }
+  }
+
+  Future<void> _sendLocalViewerCandidate({
+    required int currentGeneration,
+    required _ViewerPeerSession viewerSession,
+    required RTCIceCandidate candidate,
+  }) async {
+    if (!_isViewerSessionValid(
+      currentGeneration,
+      viewerSession.viewerClid,
+      viewerSession.peerGeneration,
+    )) {
+      return;
+    }
+    final candidateSdp = candidate.candidate;
+    if (candidateSdp == null || candidateSdp.isEmpty) return;
+    try {
+      await ref
+          .read(coreSessionProvider)
+          .sendPublisherIceCandidate(
+            viewerClid: viewerSession.viewerClid,
+            sdp: candidateSdp,
+            mid: candidate.sdpMid,
+            mLine: candidate.sdpMLineIndex,
+          );
+    } catch (_) {
+      // Ignore late ICE candidate signaling errors when a viewer has already
+      // disconnected or left the stream.
+    }
+  }
+
+  Future<void> _flushPendingLocalViewerCandidates({
+    required int currentGeneration,
+    required _ViewerPeerSession viewerSession,
+  }) async {
+    if (viewerSession.pendingLocalCandidates.isEmpty) return;
+    final pending = List<RTCIceCandidate>.of(
+      viewerSession.pendingLocalCandidates,
+    );
+    viewerSession.pendingLocalCandidates.clear();
+    for (final candidate in pending) {
+      if (!_isViewerSessionValid(
+        currentGeneration,
+        viewerSession.viewerClid,
+        viewerSession.peerGeneration,
+      )) {
+        return;
+      }
+      await _sendLocalViewerCandidate(
+        currentGeneration: currentGeneration,
+        viewerSession: viewerSession,
+        candidate: candidate,
+      );
+    }
+  }
+
+  Future<void> _flushPendingViewerCandidates({
+    required int currentGeneration,
+    required _ViewerPeerSession viewerSession,
+  }) async {
+    final peer = viewerSession.peer;
+    if (peer == null || viewerSession.pendingRemoteCandidates.isEmpty) return;
+    final pending = List<RTCIceCandidate>.of(
+      viewerSession.pendingRemoteCandidates,
+    );
+    viewerSession.pendingRemoteCandidates.clear();
+    for (final candidate in pending) {
+      if (!_isViewerSessionValid(
+        currentGeneration,
+        viewerSession.viewerClid,
+        viewerSession.peerGeneration,
+      )) {
+        return;
+      }
+      try {
+        await peer.addCandidate(candidate);
+      } catch (_) {}
+    }
+  }
+
+  void _armViewerNegotiationTimer({
+    required int currentGeneration,
+    required _ViewerPeerSession viewerSession,
+  }) {
+    _clearViewerNegotiationTimer(viewerSession);
+    viewerSession.negotiationTimer = Timer(defaultStreamNegotiationTimeout, () {
+      if (!_isViewerSessionValid(
+        currentGeneration,
+        viewerSession.viewerClid,
+        viewerSession.peerGeneration,
+      )) {
+        return;
+      }
+      unawaited(_closeViewerSession(viewerSession.viewerClid));
+    });
+  }
+
+  void _clearViewerNegotiationTimer(_ViewerPeerSession viewerSession) {
+    viewerSession.negotiationTimer?.cancel();
+    viewerSession.negotiationTimer = null;
+  }
+
+  void _syncViewerIds() {
+    if (!ref.mounted) return;
+    state = state.copyWith(
+      viewerIds: Set<int>.unmodifiable(_viewerSessions.keys),
+    );
+  }
+
+  Future<void> _closeViewerSession(int viewerClid) async {
+    final session = _viewerSessions.remove(viewerClid);
+    if (session == null) return;
+    _clearViewerNegotiationTimer(session);
+    session.pendingLocalCandidates.clear();
+    session.pendingRemoteCandidates.clear();
+    _syncViewerIds();
+
+    final peer = session.peer;
+    session.peer = null;
+    if (peer != null) {
+      await _safeDisposePeer(peer);
+    }
+  }
+
+  Future<void> _safeDisposePeer(RTCPeerConnection peer) async {
+    peer.onIceCandidate = null;
+    peer.onTrack = null;
+    peer.onAddStream = null;
+    peer.onConnectionState = null;
+    peer.onIceConnectionState = null;
+    try {
+      await peer.close();
+    } catch (_) {}
+    try {
+      await peer.dispose();
+    } catch (_) {}
+  }
+
+  Future<void> _disposeMediaStream(MediaStream stream) async {
+    try {
+      for (final track in stream.getTracks()) {
+        track.onEnded = null;
+        try {
+          await track.stop();
+        } catch (_) {}
+      }
+    } catch (_) {}
+    try {
+      await stream.dispose();
+    } catch (_) {}
+  }
+
+  Future<void> _disposeAllResources({bool updateState = true}) async {
+    _generation++;
+    final sessions = _viewerSessions.values.toList(growable: false);
+    _viewerSessions.clear();
+    for (final session in sessions) {
+      _clearViewerNegotiationTimer(session);
+      session.pendingLocalCandidates.clear();
+      session.pendingRemoteCandidates.clear();
+    }
+
+    final localStream = _localStream;
+    final previewRenderer = _previewRenderer;
+    _localStream = null;
+    _previewRenderer = null;
+
+    if (updateState && ref.mounted) {
+      state = const StreamPublisherState();
+    }
+
+    for (final session in sessions) {
+      final peer = session.peer;
+      session.peer = null;
+      if (peer != null) {
+        await _safeDisposePeer(peer);
+      }
+    }
+
+    if (previewRenderer != null) {
+      try {
+        previewRenderer.srcObject = null;
+      } catch (_) {}
+      try {
+        await previewRenderer.dispose();
+      } catch (_) {}
+    }
+
+    if (localStream != null) {
+      await _disposeMediaStream(localStream);
+    }
+  }
+}
