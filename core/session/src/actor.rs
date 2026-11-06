@@ -1804,9 +1804,11 @@ impl Actor {
                     return;
                 }
                 if data.len() > MAX_PACKET_BYTES {
-                    self.voice_state.message =
-                        Some(format!("语音包 {} 字节超过发送上限", data.len()));
-                    self.emit_voice_state();
+                    tracing::error!(
+                        "编码层约束失效：{} 字节 > {} 字节，这是 bug 或 whisper 未动态下发上限",
+                        data.len(),
+                        MAX_PACKET_BYTES
+                    );
                     return;
                 }
                 if let Some(client) = &self.client {
@@ -2748,13 +2750,16 @@ mod tests {
             produced_at: Instant::now(),
         });
         assert!(events.try_recv().is_err());
+        assert!(actor.voice_state.message.is_none());
+
         actor.handle_audio(AudioEvent::Outbound {
             codec: VOICE_CODEC,
             data: vec![0; MAX_PACKET_BYTES + 1],
             produced_at: Instant::now(),
         });
-        assert!(matches!(events.try_recv(), Ok(SessionEvent::Voice(_))));
-        assert!(actor.voice_state.message.is_some());
+        // 防御性拦截超限包：断言未发出且未污染 UI message 状态
+        assert!(events.try_recv().is_err());
+        assert!(actor.voice_state.message.is_none());
     }
 
     #[tokio::test]

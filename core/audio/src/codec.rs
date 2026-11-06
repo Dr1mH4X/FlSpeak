@@ -8,11 +8,11 @@ use audiopus::coder::{Decoder, Encoder, GenericCtl};
 use audiopus::packet::Packet;
 use audiopus::{Application, Bitrate, Channels, MutSignals, SampleRate};
 
-use crate::AudioError;
 use crate::format::{
     MAX_OPUS_SAMPLES, MAX_PACKET_BYTES, MUSIC_BITRATE_BPS, MUSIC_CODEC, VOICE_BITRATE_BPS,
     VOICE_CODEC, codec_channels,
 };
+use crate::{AudioError, CodecError};
 
 pub struct OpusEncoder {
     inner: Encoder,
@@ -40,6 +40,8 @@ impl OpusEncoder {
         };
         let mut inner =
             Encoder::new(SampleRate::Hz48000, opus_channels, application).map_err(codec_error)?;
+        inner.set_vbr(true).map_err(codec_error)?;
+        inner.set_vbr_constraint(true).map_err(codec_error)?;
         inner
             .set_bitrate(Bitrate::BitsPerSecond(bitrate))
             .map_err(codec_error)?;
@@ -66,17 +68,33 @@ impl OpusEncoder {
     /// 编码一帧 20ms PCM，返回写入 `output` 的字节数。
     pub fn encode(&mut self, pcm: &[i16], output: &mut [u8]) -> Result<usize, AudioError> {
         if pcm.len() != crate::format::FRAME_SAMPLES_PER_CHANNEL * self.channels as usize {
-            return Err(AudioError::Codec(format!(
+            return Err(CodecError::Opus(format!(
                 "PCM 长度 {} 与 {} 声道不匹配",
                 pcm.len(),
                 self.channels
-            )));
+            ))
+            .into());
         }
         // Opus 按 max_data_bytes 编出完整包，VBR 峰值也必须满足发送预算。
         let capacity = output.len().min(MAX_PACKET_BYTES);
-        self.inner
-            .encode(pcm, &mut output[..capacity])
-            .map_err(codec_error)
+        if capacity == 0 {
+            return Err(CodecError::BufferTooSmall {
+                capacity: 0,
+                max_data_bytes: MAX_PACKET_BYTES,
+            }
+            .into());
+        }
+        match self.inner.encode(pcm, &mut output[..capacity]) {
+            Ok(n) => Ok(n),
+            Err(audiopus::Error::Opus(audiopus::ErrorCode::BufferTooSmall)) => {
+                Err(CodecError::BufferTooSmall {
+                    capacity,
+                    max_data_bytes: MAX_PACKET_BYTES,
+                }
+                .into())
+            }
+            Err(err) => Err(codec_error(err)),
+        }
     }
 }
 
@@ -95,10 +113,11 @@ impl OpusDecoder {
     /// 返回值是每声道样本数；`pcm` 必须是至少 `MAX_OPUS_SAMPLES` 的交织缓冲。
     pub fn decode(&mut self, packet: Option<&[u8]>, pcm: &mut [i16]) -> Result<usize, AudioError> {
         if pcm.len() < MAX_OPUS_SAMPLES {
-            return Err(AudioError::Codec(format!(
+            return Err(CodecError::Opus(format!(
                 "Opus 解码缓冲太小: {} < {MAX_OPUS_SAMPLES}",
                 pcm.len()
-            )));
+            ))
+            .into());
         }
         let packet = packet
             .map(Packet::try_from)
@@ -112,7 +131,14 @@ impl OpusDecoder {
 }
 
 fn codec_error(err: audiopus::Error) -> AudioError {
-    AudioError::Codec(err.to_string())
+    match err {
+        audiopus::Error::Opus(audiopus::ErrorCode::BufferTooSmall) => CodecError::BufferTooSmall {
+            capacity: 0,
+            max_data_bytes: MAX_PACKET_BYTES,
+        }
+        .into(),
+        other => CodecError::Opus(other.to_string()).into(),
+    }
 }
 
 #[cfg(test)]
@@ -252,6 +278,18 @@ mod tests {
         assert!(matches!(
             OpusEncoder::new(3),
             Err(AudioError::UnsupportedCodec(3))
+        ));
+    }
+
+    #[test]
+    fn empty_buffer_returns_buffer_too_small() {
+        let mut encoder = OpusEncoder::new(VOICE_CODEC).unwrap();
+        let pcm = vec![0i16; FRAME_SAMPLES_PER_CHANNEL];
+        let mut empty = [];
+        let err = encoder.encode(&pcm, &mut empty).unwrap_err();
+        assert!(matches!(
+            err,
+            AudioError::Codec(CodecError::BufferTooSmall { capacity: 0, .. })
         ));
     }
 }

@@ -5,11 +5,11 @@
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
-use crate::AudioError;
 use crate::codec::OpusEncoder;
 use crate::convert::FormatConverter;
 use crate::format::{AudioFormat, MAX_PACKET_BYTES, codec_format, frame_samples};
 use crate::vad::{EnergyVad, Vad};
+use crate::{AudioError, CodecError};
 
 /// 采集缓冲上限：约 240ms。超过就丢到两帧，避免延迟累积。
 const MAX_PENDING_FRAMES: usize = 12;
@@ -84,6 +84,7 @@ pub struct CapturePipeline {
     speaking: bool,
     enabled: bool,
     received_any: bool,
+    too_small_streak: usize,
 }
 
 impl CapturePipeline {
@@ -107,6 +108,7 @@ impl CapturePipeline {
             speaking: false,
             enabled: false,
             received_any: false,
+            too_small_streak: 0,
         })
     }
 
@@ -148,6 +150,7 @@ impl CapturePipeline {
         self.vad.reset();
         self.speaking = false;
         self.received_any = false;
+        self.too_small_streak = 0;
         Ok(())
     }
 
@@ -267,7 +270,34 @@ impl CapturePipeline {
         );
 
         let mut packet = [0u8; MAX_PACKET_BYTES];
-        let written = self.encoder.encode(&self.pcm16, &mut packet)?;
+        let written = match self.encoder.encode(&self.pcm16, &mut packet) {
+            Ok(written) => {
+                self.too_small_streak = 0;
+                written
+            }
+            Err(AudioError::Codec(CodecError::BufferTooSmall { capacity: 0, .. })) => {
+                tracing::error!("编码输出缓冲容量为 0，检查 capture 初始化");
+                return Err(AudioError::Codec(CodecError::BufferTooSmall {
+                    capacity: 0,
+                    max_data_bytes: MAX_PACKET_BYTES,
+                }));
+            }
+            Err(AudioError::Codec(CodecError::BufferTooSmall {
+                capacity,
+                max_data_bytes,
+            })) => {
+                tracing::warn!(capacity, max_data_bytes, "Opus 帧超 484 预算，降级");
+                self.too_small_streak += 1;
+                if self.too_small_streak >= 50 {
+                    return Err(AudioError::Codec(CodecError::BufferTooSmall {
+                        capacity,
+                        max_data_bytes,
+                    }));
+                }
+                return Ok(None);
+            }
+            Err(err) => return Err(err),
+        };
         Ok(Some(CapturePacket {
             codec: self.codec,
             data: packet[..written].to_vec(),
