@@ -27,6 +27,9 @@ pub enum ServerError {
 
     #[error("服务器 {0} 未在本地档案中登记")]
     NotRegistered(String),
+
+    #[error("服务器 {0} 已在本地档案中登记")]
+    AlreadyRegistered(String),
 }
 
 /// 解析后的连接目标。
@@ -116,6 +119,31 @@ impl ServerRegistry {
             .iter()
             .find(|profile| profile.id == id)
             .ok_or_else(|| ServerError::NotRegistered(id.to_string()))
+    }
+
+    pub fn update(
+        &mut self,
+        id: &str,
+        label: &str,
+        address: &str,
+    ) -> Result<ServerProfile, ServerError> {
+        let mut profile = self.require(id)?.clone();
+        let target = parse_address(address)?;
+        let next_id = target.authority();
+        if next_id != id && self.profiles.iter().any(|entry| entry.id == next_id) {
+            return Err(ServerError::AlreadyRegistered(next_id));
+        }
+        profile.id = next_id;
+        profile.label = label.trim().to_string();
+        profile.host = target.host;
+        profile.port = target.port;
+        for entry in &mut self.profiles {
+            if entry.id == id {
+                *entry = profile.clone();
+                break;
+            }
+        }
+        Ok(profile)
     }
 
     pub fn remove(&mut self, id: &str) -> bool {
@@ -283,5 +311,41 @@ mod tests {
             profile.target(),
             Err(AddressError::HostRequired { .. })
         ));
+    }
+
+    #[test]
+    fn editing_rekeys_in_place_and_preserves_connection_options() {
+        let mut registry = ServerRegistry::new();
+        let original = registry.register("Old", "old.example.com").unwrap();
+        registry.profiles[0].server_password = Some("secret".into());
+        registry.profiles[0].default_channel = Some("Lobby".into());
+        registry.profiles[0].default_channel_password = Some("channel-secret".into());
+        let updated = registry
+            .update(&original.id, " New ", "[::1]:9999")
+            .unwrap();
+        assert_eq!(updated.id, "[::1]:9999");
+        assert_eq!(updated.label, "New");
+        assert_eq!(updated.server_password.as_deref(), Some("secret"));
+        assert_eq!(updated.default_channel.as_deref(), Some("Lobby"));
+        assert_eq!(
+            updated.default_channel_password.as_deref(),
+            Some("channel-secret")
+        );
+        assert_eq!(registry.profiles(), &[updated]);
+        assert!(registry.require(&original.id).is_err());
+    }
+
+    #[test]
+    fn invalid_or_duplicate_edits_preserve_both_profiles() {
+        let mut registry = ServerRegistry::new();
+        let first = registry.register("First", "a.example.com").unwrap();
+        registry.register("Second", "b.example.com").unwrap();
+        let before = registry.profiles().to_vec();
+        assert!(matches!(
+            registry.update(&first.id, "New", "b.example.com"),
+            Err(ServerError::AlreadyRegistered(_))
+        ));
+        assert!(registry.update(&first.id, "New", "nickname").is_err());
+        assert_eq!(registry.profiles(), before);
     }
 }

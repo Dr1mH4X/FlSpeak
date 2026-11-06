@@ -19,6 +19,8 @@ import '../../../widgets/window_header.dart';
 import '../workspace_state.dart';
 import 'channel_password_dialog.dart';
 import 'client_actions.dart';
+import 'member_avatar.dart';
+import 'network_status.dart';
 import 'voice_activity_ribbon.dart';
 
 /// 频道栏：服务器身份、统一的频道树、当前用户。
@@ -510,8 +512,9 @@ class _MemberTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
-    final avatar = MemberAvatar(
-      label: initialsOf(client.nickname),
+    final avatar = SessionMemberAvatar(
+      uid: client.uid,
+      nickname: client.nickname,
       size: AvatarSize.small,
       speaking: speaking,
       onSurface: true,
@@ -634,47 +637,24 @@ class _UserFooter extends StatelessWidget {
         children: [
           if (view.connected || view.reconnecting)
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 4, 4),
+              padding: const EdgeInsets.fromLTRB(4, 8, 4, 4),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.network_check_rounded,
-                    size: IconSizes.toolbar,
-                    color: view.connected
-                        ? context.status.live
-                        : scheme.primary,
-                  ),
-                  const SizedBox(width: 10),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          view.connected
-                              ? l10n.voiceConnected
-                              : l10n.sessionConnecting,
-                          style: context.texts.labelMedium?.copyWith(
-                            color: view.connected
-                                ? context.status.live
-                                : scheme.primary,
-                          ),
-                        ),
-                        Text(
-                          channel == null
-                              ? (view.activeServer?.label ?? l10n.appName)
-                              : channelDisplayName(channel),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: context.texts.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
+                    child: NetworkStatus(
+                      view: view,
+                      channelLabel: channel == null
+                          ? (view.activeServer?.label ?? l10n.appName)
+                          : channelDisplayName(channel),
                     ),
                   ),
                   if (onDisconnect != null)
-                    IconButton(
+                    IconButton.filled(
                       onPressed: view.busy ? null : onDisconnect,
+                      style: IconButton.styleFrom(
+                        backgroundColor: scheme.error,
+                        foregroundColor: scheme.onError,
+                      ),
                       icon: Icon(
                         Icons.call_end_rounded,
                         size: IconSizes.toolbar,

@@ -11,6 +11,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use audio::engine::{AudioEvent, AudioStage, VoiceEngine};
 use audio::format::{VOICE_CODEC, is_supported_codec};
 use audio::playback::VoiceFrame;
+use base64::Engine;
 use proto::ConnectError;
 use server::{ServerError, ServerProfile, ServerRegistry, ServerTarget};
 use tokio::io::{AsyncRead, ReadBuf};
@@ -142,6 +143,7 @@ pub(crate) struct Actor {
     next_transfer_id: u64,
     connection_epoch: u64,
     epoch: Arc<AtomicU64>,
+    network_monitor: Option<crate::network::NetworkMonitor>,
 }
 
 impl Actor {
@@ -200,6 +202,7 @@ impl Actor {
             next_transfer_id: 1,
             connection_epoch: 0,
             epoch: Arc::new(AtomicU64::new(0)),
+            network_monitor: None,
         }
     }
 
@@ -252,6 +255,14 @@ impl Actor {
             }
             SessionCommand::RemoveServer { id, reply } => {
                 let _ = reply.send(self.remove(id).await);
+            }
+            SessionCommand::UpdateServer {
+                id,
+                label,
+                address,
+                reply,
+            } => {
+                let _ = reply.send(self.update_server(id, label, address));
             }
             SessionCommand::ListServers { reply } => {
                 let _ = reply.send(self.registry.profiles().to_vec());
@@ -510,6 +521,12 @@ impl Actor {
             SessionCommand::FetchIcon { icon_id, reply } => {
                 self.fetch_icon(icon_id, reply).await;
             }
+            SessionCommand::FetchAvatar { uid, reply } => match avatar_file_name(&uid) {
+                Ok(path) => self.fetch_server_image(&path, reply).await,
+                Err(error) => {
+                    let _ = reply.send(Err(error));
+                }
+            },
             SessionCommand::DownloadFile {
                 remote_path,
                 local_path,
@@ -554,6 +571,31 @@ impl Actor {
         self.registry = registry;
         self.emit(SessionEvent::Servers(self.registry.profiles().to_vec()));
         Ok(())
+    }
+
+    fn update_server(
+        &mut self,
+        id: String,
+        label: String,
+        address: String,
+    ) -> Result<ServerProfile, SessionError> {
+        let mut registry = self.registry.clone();
+        let profile = registry.update(&id, &label, &address)?;
+        if profile.id != id
+            && self.active_server_id.as_deref() == Some(&id)
+            && !matches!(self.state, SessionState::Disconnected)
+        {
+            return Err(SessionError::Protocol(
+                "修改服务器地址前请先断开连接".into(),
+            ));
+        }
+        SettingsManager::update(|settings| {
+            settings.network.servers = registry.profiles().to_vec();
+        })
+        .map_err(SessionError::Storage)?;
+        self.registry = registry;
+        self.emit(SessionEvent::Servers(self.registry.profiles().to_vec()));
+        Ok(profile)
     }
 
     async fn connect(
@@ -658,6 +700,7 @@ impl Actor {
                 let client_id = client.client_id();
                 let channel_id = client.channel_id();
                 self.client = Some(Arc::new(client));
+                self.network_monitor = Some(crate::network::NetworkMonitor::new());
                 self.transfer_target = Some(resolved.target);
                 self.self_client_id = Some(client_id);
                 self.self_channel_id = channel_id;
@@ -798,7 +841,7 @@ impl Actor {
             .map_err(crate::channel_tools::protocol_error)
     }
 
-    async fn list_channels(&self) -> Result<Vec<ChannelView>, SessionError> {
+    async fn list_channels(&mut self) -> Result<Vec<ChannelView>, SessionError> {
         let client = self.connected()?;
         let directory = self.read_channel_directory(&client).await?;
         if let Some(err) = directory.metadata_error {
@@ -1070,10 +1113,20 @@ impl Actor {
     }
 
     async fn read_channel_directory(
-        &self,
+        &mut self,
         client: &Client,
     ) -> Result<ChannelDirectory, SessionError> {
-        let (channels, explicit_list_worked) = match tsclient_rs::listChannels(client).await {
+        // 复用已有目录请求采样，避免额外探测占用语音发送所在的 actor。
+        let started = Instant::now();
+        let result = tsclient_rs::listChannels(client).await;
+        if let Some(monitor) = &mut self.network_monitor {
+            // 权限拒绝也是服务器的有效回复，不能当作网络丢失。
+            let reached = matches!(&result, Ok(_) | Err(tsclient_rs::Error::ServerError { .. }));
+            let round_trip_ms = reached.then(|| started.elapsed().as_secs_f64() * 1_000.0);
+            let telemetry = monitor.record(round_trip_ms, now_millis());
+            self.emit(SessionEvent::Network(telemetry));
+        }
+        let (channels, explicit_list_worked) = match result {
             Ok(channels) => (channels, true),
             Err(err) => {
                 let Some(snapshot) = client
@@ -1352,10 +1405,22 @@ impl Actor {
         icon_id: u32,
         reply: oneshot::Sender<Result<Vec<u8>, SessionError>>,
     ) {
+        if icon_id == 0 {
+            let _ = reply.send(Err(SessionError::Transfer(
+                "icon id must be nonzero".into(),
+            )));
+            return;
+        }
+        self.fetch_server_image(&tsclient_rs::icon_file_name(icon_id), reply)
+            .await;
+    }
+
+    async fn fetch_server_image(
+        &self,
+        remote_path: &str,
+        reply: oneshot::Sender<Result<Vec<u8>, SessionError>>,
+    ) {
         let negotiated = async {
-            if icon_id == 0 {
-                return Err(SessionError::Transfer("icon id must be nonzero".into()));
-            }
             let client = self.connected()?;
             let target = self
                 .transfer_target
@@ -1363,13 +1428,13 @@ impl Actor {
                 .ok_or(SessionError::NotConnected)?;
             proto::check_transfer_host(target, &target.host)?;
             let info = client
-                .file_transfer_init_download(0, &tsclient_rs::icon_file_name(icon_id), "")
+                .file_transfer_init_download(0, remote_path, "")
                 .await
                 .map_err(protocol_error)?;
             validate_port(info.port)?;
             if info.size == 0 || info.size > 1024 * 1024 {
                 return Err(SessionError::Transfer(
-                    "icon size must be between 1 byte and 1 MiB".into(),
+                    "image size must be between 1 byte and 1 MiB".into(),
                 ));
             }
             Ok((target.host.clone(), info))
@@ -2085,6 +2150,28 @@ fn now_millis() -> u64 {
         .unwrap_or(0)
 }
 
+fn avatar_file_name(uid: &str) -> Result<String, SessionError> {
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(uid)
+        .map_err(|error| SessionError::Transfer(format!("invalid avatar UID: {error}")))?;
+    if bytes.len() != 20 {
+        return Err(SessionError::Transfer(
+            "avatar UID must contain 20 bytes".into(),
+        ));
+    }
+    // TeamSpeak 头像文件把 UID 的每个半字节映射到 a..p。
+    let suffix: String = bytes
+        .into_iter()
+        .flat_map(|byte| {
+            [
+                char::from(b'a' + (byte >> 4)),
+                char::from(b'a' + (byte & 15)),
+            ]
+        })
+        .collect();
+    Ok(format!("/avatar_{suffix}"))
+}
+
 /// 官方客户端的标志语义：deafen 同时置 input 与 output，解除 deafen 后
 /// input 恢复用户自己的静音选择。
 fn mute_flags(muted: bool, deafened: bool) -> (&'static str, &'static str) {
@@ -2442,9 +2529,123 @@ impl AsyncRead for ProgressReader {
 mod tests {
     use super::*;
 
+    struct RefusedDirectory {
+        calls: Arc<std::sync::Mutex<Vec<String>>>,
+    }
+
+    type TestCommandHandler = Arc<
+        dyn Fn(
+                String,
+            )
+                -> Pin<Box<dyn std::future::Future<Output = Result<(), tsclient_rs::Error>> + Send>>
+            + Send
+            + Sync,
+    >;
+
+    impl tsclient_rs::CommandMiddleware for RefusedDirectory {
+        fn wrap(&self, _: TestCommandHandler) -> TestCommandHandler {
+            let calls = Arc::clone(&self.calls);
+            Arc::new(move |command| {
+                calls.lock().unwrap().push(command);
+                Box::pin(async {
+                    Err(tsclient_rs::Error::ServerError {
+                        id: "2568".into(),
+                        server_message: "insufficient client permissions".into(),
+                        extra_message: None,
+                    })
+                })
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn telemetry_only_samples_existing_directory_requests() {
+        tokio::task::LocalSet::new()
+            .run_until(async {
+                let calls = Arc::new(std::sync::Mutex::new(Vec::new()));
+                let client = Client::new(
+                    tsclient_rs::generateIdentity(0),
+                    "127.0.0.1:9987".into(),
+                    "test".into(),
+                    tsclient_rs::ClientOptions {
+                        command_middleware: vec![Box::new(RefusedDirectory {
+                            calls: Arc::clone(&calls),
+                        })],
+                        ..Default::default()
+                    },
+                );
+                client.mark_connected();
+                let mut actor = audio_actor();
+                actor.client = Some(Arc::new(client));
+                actor.state = SessionState::Connected {
+                    client_id: 1,
+                    channel_id: 1,
+                };
+                actor.network_monitor = Some(crate::network::NetworkMonitor::new());
+                let mut events = actor.events.subscribe();
+                let (commands, receiver) = mpsc::unbounded_channel();
+                let task = tokio::task::spawn_local(async move {
+                    actor.run(receiver).await;
+                });
+                tokio::time::sleep(Duration::from_millis(5_100)).await;
+                let idle_calls = calls.lock().unwrap().clone();
+                let (reply, result) = oneshot::channel();
+                commands
+                    .send(SessionCommand::ListChannels { reply })
+                    .unwrap();
+                assert!(result.await.unwrap().is_err());
+                let telemetry = loop {
+                    if let SessionEvent::Network(telemetry) = events.recv().await.unwrap() {
+                        break telemetry;
+                    }
+                };
+                let directory_calls = calls.lock().unwrap().clone();
+                commands.send(SessionCommand::Shutdown).unwrap();
+                task.await.unwrap();
+                assert!(idle_calls.is_empty());
+                assert_eq!(directory_calls.len(), 1);
+                assert!(directory_calls[0].starts_with("channellist "));
+                assert_eq!(telemetry.probes_sent, 1);
+                assert_eq!(telemetry.probes_failed, 0);
+                assert!(telemetry.round_trip_ms.is_some());
+            })
+            .await;
+    }
+
+    #[test]
+    fn avatar_paths_encode_uid_bytes_without_allowing_arbitrary_paths() {
+        let uid = base64::engine::general_purpose::STANDARD.encode((0_u8..20).collect::<Vec<_>>());
+        assert_eq!(
+            avatar_file_name(&uid).unwrap(),
+            "/avatar_aaabacadaeafagahaiajakalamanaoapbabbbcbd"
+        );
+        for invalid in ["", "../avatar", "https://example.com/a.png", "YQ=="] {
+            assert!(avatar_file_name(invalid).is_err());
+        }
+    }
+
+    #[test]
+    fn editing_an_active_address_requires_disconnect_before_persistence() {
+        let mut actor = audio_actor();
+        let original = actor
+            .registry
+            .register("Original", "a.example.com")
+            .unwrap();
+        actor.active_server_id = Some(original.id.clone());
+        actor.state = SessionState::Connected {
+            client_id: 1,
+            channel_id: 1,
+        };
+        assert!(matches!(
+            actor.update_server(original.id.clone(), "New".into(), "b.example.com".into()),
+            Err(SessionError::Protocol(_))
+        ));
+        assert_eq!(actor.registry.profiles(), &[original]);
+    }
+
     #[tokio::test]
     async fn failed_registry_writes_reject_the_operation_and_preserve_memory() {
-        for removing in [false, true] {
+        for operation in ["add", "remove", "edit"] {
             let root = std::env::temp_dir().join(format!(
                 "flspeak-registry-operation-{:x}",
                 rand::random::<u64>()
@@ -2462,13 +2663,19 @@ mod tests {
                 .register("Original", "a.example.com")
                 .unwrap();
             let mut events = actor.events.subscribe();
-            let rejected = if removing {
-                actor.remove(original.id.clone()).await.is_err()
-            } else {
-                actor
+            let rejected = match operation {
+                "remove" => actor.remove(original.id.clone()).await.is_err(),
+                "edit" => actor
+                    .update_server(
+                        original.id.clone(),
+                        "Renamed".into(),
+                        "b.example.com".into(),
+                    )
+                    .is_err(),
+                _ => actor
                     .register("New".into(), "b.example.com".into())
                     .await
-                    .is_err()
+                    .is_err(),
             };
             let profiles = actor.registry.profiles().to_vec();
             let emitted = events.try_recv().is_ok();

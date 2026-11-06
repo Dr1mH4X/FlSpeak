@@ -638,6 +638,13 @@ class _SidebarServerTile extends StatelessWidget {
       openOnSecondaryTap: true,
       items: [
         MenuItemButton(
+          leadingIcon: const Icon(Icons.edit_outlined),
+          onPressed: loading
+              ? null
+              : () => showAddServerDialog(context, server: server),
+          child: Text(l10n.serverEdit),
+        ),
+        MenuItemButton(
           leadingIcon: const Icon(Icons.palette_outlined),
           onPressed: onChangeIcon,
           child: Text(l10n.serverIconChange),
