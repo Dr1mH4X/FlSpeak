@@ -37,6 +37,46 @@ class _Controller extends SessionController {
 }
 
 void main() {
+  testWidgets('timeouts retry with a cooldown and stop after three attempts', (
+    tester,
+  ) async {
+    final core = _Core();
+    final container = ProviderContainer(
+      overrides: [
+        coreSessionProvider.overrideWithValue(core),
+        sessionViewProvider.overrideWith(_Controller.new),
+      ],
+    );
+    final provider = memberAvatarProvider('uid');
+    final subscription = container.listen(provider, (_, _) {});
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      expect(core.requests, hasLength(attempt));
+      final failure = expectLater(
+        container.read(provider.future),
+        throwsA(isA<TimeoutException>()),
+      );
+      core.requests.last.completeError(TimeoutException('temporary'));
+      await tester.pump();
+      await failure;
+      await tester.pump(const Duration(seconds: 29));
+      expect(core.requests, hasLength(attempt));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
+    }
+    expect(core.requests, hasLength(3));
+    await tester.pump(const Duration(minutes: 2));
+    expect(core.requests, hasLength(3));
+    container.invalidate(provider);
+    final refreshed = container.read(provider.future);
+    expect(core.requests, hasLength(4));
+    core.requests.last.complete(Uint8List.fromList([9]));
+    await tester.pump();
+    expect(await refreshed, [9]);
+    subscription.close();
+    container.dispose();
+    await tester.pump();
+  });
+
   for (final hasAvatar in [true, false]) {
     test(
       'recycled rows retain cached avatars and missing results, present=$hasAvatar',
