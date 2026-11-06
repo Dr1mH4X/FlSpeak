@@ -20,10 +20,10 @@ pub const FRAME_MS: u64 = 20;
 pub const MAX_OPUS_SAMPLES_PER_CHANNEL: usize = 5_760;
 pub const MAX_OPUS_SAMPLES: usize = MAX_OPUS_SAMPLES_PER_CHANNEL * 2;
 
-/// Opus 输出缓冲上限；实际发送前还要过 TS 的 500 字节数据报上限。
-pub const MAX_PACKET_BYTES: usize = 1_275;
+/// 上行 Opus 载荷预算：TS 的 500 字节数据报减去 8 字节 tag、5 字节头与 3 字节语音头。
+pub const MAX_PACKET_BYTES: usize = 500 - 8 - 5 - 3;
 
-/// 人声 64kbps、音乐 128kbps；两者在 20ms 帧下都远低于 500 字节包上限。
+/// VBR 目标平均码率；单帧包长另由 `MAX_PACKET_BYTES` 硬限制。
 pub const VOICE_BITRATE_BPS: i32 = 64_000;
 pub const MUSIC_BITRATE_BPS: i32 = 128_000;
 

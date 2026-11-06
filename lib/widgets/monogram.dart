@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -117,12 +119,14 @@ class MemberAvatar extends StatelessWidget {
     this.size = AvatarSize.medium,
     this.speaking = false,
     this.onSurface = false,
+    this.image,
     super.key,
   });
 
   final String label;
   final double size;
   final bool speaking;
+  final Uint8List? image;
 
   /// 放在卡片上时环色跟着卡片走；默认跟着页面底色。
   final bool onSurface;
@@ -131,6 +135,15 @@ class MemberAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = context.scheme;
     final ringColor = onSurface ? context.cardColor : context.pageColor;
+    final fallback = Text(
+      label,
+      style: TextStyle(
+        color: scheme.onPrimaryContainer,
+        fontSize: size * 0.33,
+        fontWeight: FontWeight.w500,
+        height: 1,
+      ),
+    );
 
     // 说话描边用透明边占位过渡：边框出现/消失不再挤动布局，也不瞬跳。
     final avatar = AnimatedContainer(
@@ -149,15 +162,19 @@ class MemberAvatar extends StatelessWidget {
           width: 2,
         ),
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: scheme.onPrimaryContainer,
-          fontSize: size * 0.33,
-          fontWeight: FontWeight.w500,
-          height: 1,
-        ),
-      ),
+      child: image == null
+          ? fallback
+          : ClipOval(
+              child: Image.memory(
+                image!,
+                width: size - 4,
+                height: size - 4,
+                fit: BoxFit.cover,
+                cacheWidth: (size * 2).ceil(),
+                errorBuilder: (context, error, stack) =>
+                    Center(child: fallback),
+              ),
+            ),
     );
 
     if (!speaking) {

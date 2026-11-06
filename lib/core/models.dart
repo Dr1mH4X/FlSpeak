@@ -83,11 +83,13 @@ class SessionView {
     this.identityUpgradeTarget,
     this.transfers = const {},
     this.activeFileDownloads = const {},
+    this.network,
   });
 
   final Map<int, FileTransfer> transfers;
   final Map<(int, int), int?> activeFileDownloads;
   final CoreSessionState state;
+  final NetworkTelemetry? network;
   final List<ServerProfileView> servers;
   final List<ChannelView> channels;
   final List<ClientView> clients;
@@ -282,6 +284,7 @@ class SessionView {
   }
 
   SessionView copyWith({
+    Object? network = _unset,
     Map<int, FileTransfer>? transfers,
     Map<(int, int), int?>? activeFileDownloads,
     CoreSessionState? state,
@@ -307,6 +310,9 @@ class SessionView {
     bool? pttMode,
     Object? identityUpgradeTarget = _unset,
   }) => SessionView(
+    network: identical(network, _unset)
+        ? this.network
+        : network as NetworkTelemetry?,
     transfers: transfers ?? this.transfers,
     activeFileDownloads: activeFileDownloads ?? this.activeFileDownloads,
     state: state ?? this.state,

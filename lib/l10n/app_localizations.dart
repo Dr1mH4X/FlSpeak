@@ -878,6 +878,144 @@ abstract class AppLocalizations {
   /// **'Channel members'**
   String get membersTitle;
 
+  /// No description provided for @memberDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'User details'**
+  String get memberDetails;
+
+  /// No description provided for @memberNickname.
+  ///
+  /// In en, this message translates to:
+  /// **'Nickname'**
+  String get memberNickname;
+
+  /// No description provided for @memberUid.
+  ///
+  /// In en, this message translates to:
+  /// **'Unique ID (UID)'**
+  String get memberUid;
+
+  /// No description provided for @memberChannel.
+  ///
+  /// In en, this message translates to:
+  /// **'Channel'**
+  String get memberChannel;
+
+  /// No description provided for @memberUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'This user is offline'**
+  String get memberUnavailable;
+
+  /// No description provided for @serverEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit server'**
+  String get serverEdit;
+
+  /// No description provided for @commonSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get commonSave;
+
+  /// No description provided for @serverSaving.
+  ///
+  /// In en, this message translates to:
+  /// **'Saving…'**
+  String get serverSaving;
+
+  /// No description provided for @serverAddressDisconnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnect to change the address'**
+  String get serverAddressDisconnect;
+
+  /// No description provided for @networkDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Network telemetry'**
+  String get networkDetails;
+
+  /// No description provided for @networkMeasuring.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking network'**
+  String get networkMeasuring;
+
+  /// No description provided for @networkDegraded.
+  ///
+  /// In en, this message translates to:
+  /// **'Unstable network'**
+  String get networkDegraded;
+
+  /// No description provided for @networkPoor.
+  ///
+  /// In en, this message translates to:
+  /// **'Poor network quality'**
+  String get networkPoor;
+
+  /// No description provided for @networkLatency.
+  ///
+  /// In en, this message translates to:
+  /// **'Directory request latency'**
+  String get networkLatency;
+
+  /// No description provided for @networkJitter.
+  ///
+  /// In en, this message translates to:
+  /// **'Latency variation'**
+  String get networkJitter;
+
+  /// No description provided for @networkFailureRate.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent response failure rate'**
+  String get networkFailureRate;
+
+  /// No description provided for @networkProbesSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Sampled requests'**
+  String get networkProbesSent;
+
+  /// No description provided for @networkProbesFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Requests without a valid response'**
+  String get networkProbesFailed;
+
+  /// No description provided for @networkConnectedTime.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection duration'**
+  String get networkConnectedTime;
+
+  /// No description provided for @networkUpdatedAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated at'**
+  String get networkUpdatedAt;
+
+  /// No description provided for @networkUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Unavailable'**
+  String get networkUnavailable;
+
+  /// No description provided for @networkMilliseconds.
+  ///
+  /// In en, this message translates to:
+  /// **'{value} ms'**
+  String networkMilliseconds(String value);
+
+  /// No description provided for @networkProbeExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'Samples reuse the existing 30-second directory refresh without extra probes. Latency includes server processing and command throttling. The failure rate covers requests without a valid response among the last 10 samples, not UDP packet loss. The protocol library does not expose local packet loss or traffic counters.'**
+  String get networkProbeExplanation;
+
   /// No description provided for @voiceConnected.
   ///
   /// In en, this message translates to:

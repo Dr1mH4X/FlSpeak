@@ -40,7 +40,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1849858746;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1324118188;
 
 // Section: executor
 
@@ -456,6 +456,66 @@ fn wire__crate__api__session__CoreSession_events_impl(
                         crate::api::session::CoreSession::events(&*api_that_guard, api_sink)?;
                     std::result::Result::Ok(output_ok)
                 })())
+            }
+        },
+    )
+}
+fn wire__crate__api__session__CoreSession_fetch_avatar_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "CoreSession_fetch_avatar",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<CoreSession>,
+            >>::sse_decode(&mut deserializer);
+            let api_uid = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::api::session::CoreError>(
+                    (move || async move {
+                        let mut api_that_guard = None;
+                        let decode_indices_ =
+                            flutter_rust_bridge::for_generated::lockable_compute_decode_order(
+                                vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                    &api_that, 0, false,
+                                )],
+                            );
+                        for i in decode_indices_ {
+                            match i {
+                                0 => {
+                                    api_that_guard =
+                                        Some(api_that.lockable_decode_async_ref().await)
+                                }
+                                _ => unreachable!(),
+                            }
+                        }
+                        let api_that_guard = api_that_guard.unwrap();
+                        let output_ok = crate::api::session::CoreSession::fetch_avatar(
+                            &*api_that_guard,
+                            api_uid,
+                        )
+                        .await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
             }
         },
     )
@@ -1947,6 +2007,70 @@ fn wire__crate__api__session__CoreSession_state_impl(
         },
     )
 }
+fn wire__crate__api__session__CoreSession_update_server_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "CoreSession_update_server",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_that = <RustOpaqueMoi<
+                flutter_rust_bridge::for_generated::RustAutoOpaqueInner<CoreSession>,
+            >>::sse_decode(&mut deserializer);
+            let api_id = <String>::sse_decode(&mut deserializer);
+            let api_label = <String>::sse_decode(&mut deserializer);
+            let api_address = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::api::session::CoreError>(
+                    (move || async move {
+                        let mut api_that_guard = None;
+                        let decode_indices_ =
+                            flutter_rust_bridge::for_generated::lockable_compute_decode_order(
+                                vec![flutter_rust_bridge::for_generated::LockableOrderInfo::new(
+                                    &api_that, 0, false,
+                                )],
+                            );
+                        for i in decode_indices_ {
+                            match i {
+                                0 => {
+                                    api_that_guard =
+                                        Some(api_that.lockable_decode_async_ref().await)
+                                }
+                                _ => unreachable!(),
+                            }
+                        }
+                        let api_that_guard = api_that_guard.unwrap();
+                        let output_ok = crate::api::session::CoreSession::update_server(
+                            &*api_that_guard,
+                            api_id,
+                            api_label,
+                            api_address,
+                        )
+                        .await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 fn wire__crate__api__session__CoreSession_upload_file_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -2470,21 +2594,28 @@ impl SseDecode for crate::api::session::CoreEvent {
         let mut tag_ = <i32>::sse_decode(deserializer);
         match tag_ {
             0 => {
-                return crate::api::session::CoreEvent::AccessChanged;
+                let mut var_telemetry =
+                    <crate::api::session::NetworkTelemetry>::sse_decode(deserializer);
+                return crate::api::session::CoreEvent::Network {
+                    telemetry: var_telemetry,
+                };
             }
             1 => {
+                return crate::api::session::CoreEvent::AccessChanged;
+            }
+            2 => {
                 let mut var_state =
                     <crate::api::session::CoreSessionState>::sse_decode(deserializer);
                 return crate::api::session::CoreEvent::State { state: var_state };
             }
-            2 => {
+            3 => {
                 let mut var_profiles =
                     <Vec<crate::api::session::ServerProfileView>>::sse_decode(deserializer);
                 return crate::api::session::CoreEvent::Servers {
                     profiles: var_profiles,
                 };
             }
-            3 => {
+            4 => {
                 let mut var_channels =
                     <Vec<crate::api::session::ChannelView>>::sse_decode(deserializer);
                 let mut var_clients =
@@ -2494,14 +2625,14 @@ impl SseDecode for crate::api::session::CoreEvent {
                     clients: var_clients,
                 };
             }
-            4 => {
+            5 => {
                 let mut var_messages =
                     <Vec<crate::api::session::CoreMessage>>::sse_decode(deserializer);
                 return crate::api::session::CoreEvent::History {
                     messages: var_messages,
                 };
             }
-            5 => {
+            6 => {
                 let mut var_from = <String>::sse_decode(deserializer);
                 let mut var_fromUid = <String>::sse_decode(deserializer);
                 let mut var_fromId = <i32>::sse_decode(deserializer);
@@ -2519,7 +2650,7 @@ impl SseDecode for crate::api::session::CoreEvent {
                     at: var_at,
                 };
             }
-            6 => {
+            7 => {
                 let mut var_from = <String>::sse_decode(deserializer);
                 let mut var_message = <String>::sse_decode(deserializer);
                 return crate::api::session::CoreEvent::Poked {
@@ -2527,7 +2658,7 @@ impl SseDecode for crate::api::session::CoreEvent {
                     message: var_message,
                 };
             }
-            7 => {
+            8 => {
                 let mut var_id = <i32>::sse_decode(deserializer);
                 let mut var_nickname = <String>::sse_decode(deserializer);
                 let mut var_uid = <String>::sse_decode(deserializer);
@@ -2539,11 +2670,11 @@ impl SseDecode for crate::api::session::CoreEvent {
                     channel_id: var_channelId,
                 };
             }
-            8 => {
+            9 => {
                 let mut var_id = <i32>::sse_decode(deserializer);
                 return crate::api::session::CoreEvent::ClientLeft { id: var_id };
             }
-            9 => {
+            10 => {
                 let mut var_id = <i32>::sse_decode(deserializer);
                 let mut var_channelId = <u64>::sse_decode(deserializer);
                 return crate::api::session::CoreEvent::ClientMoved {
@@ -2551,7 +2682,7 @@ impl SseDecode for crate::api::session::CoreEvent {
                     channel_id: var_channelId,
                 };
             }
-            10 => {
+            11 => {
                 let mut var_id = <i32>::sse_decode(deserializer);
                 let mut var_inputMuted = <Option<bool>>::sse_decode(deserializer);
                 let mut var_outputMuted = <Option<bool>>::sse_decode(deserializer);
@@ -2565,23 +2696,23 @@ impl SseDecode for crate::api::session::CoreEvent {
                     away_message: var_awayMessage,
                 };
             }
-            11 => {
+            12 => {
                 let mut var_state = <crate::api::session::CoreVoiceState>::sse_decode(deserializer);
                 return crate::api::session::CoreEvent::Voice { state: var_state };
             }
-            12 => {
+            13 => {
                 let mut var_clientIds = <Vec<i32>>::sse_decode(deserializer);
                 return crate::api::session::CoreEvent::Speaking {
                     client_ids: var_clientIds,
                 };
             }
-            13 => {
+            14 => {
                 let mut var_speaking = <bool>::sse_decode(deserializer);
                 return crate::api::session::CoreEvent::SelfSpeaking {
                     speaking: var_speaking,
                 };
             }
-            14 => {
+            15 => {
                 let mut var_mic = <f64>::sse_decode(deserializer);
                 let mut var_received = <f64>::sse_decode(deserializer);
                 return crate::api::session::CoreEvent::Levels {
@@ -2589,7 +2720,7 @@ impl SseDecode for crate::api::session::CoreEvent {
                     received: var_received,
                 };
             }
-            15 => {
+            16 => {
                 let mut var_from = <i32>::sse_decode(deserializer);
                 let mut var_to = <i32>::sse_decode(deserializer);
                 return crate::api::session::CoreEvent::IdentityUpgrade {
@@ -2597,11 +2728,11 @@ impl SseDecode for crate::api::session::CoreEvent {
                     to: var_to,
                 };
             }
-            16 => {
+            17 => {
                 let mut var_level = <i32>::sse_decode(deserializer);
                 return crate::api::session::CoreEvent::IdentityUpgraded { level: var_level };
             }
-            17 => {
+            18 => {
                 let mut var_id = <u64>::sse_decode(deserializer);
                 let mut var_direction =
                     <crate::api::session::CoreTransferDirection>::sse_decode(deserializer);
@@ -2614,7 +2745,7 @@ impl SseDecode for crate::api::session::CoreEvent {
                     total: var_total,
                 };
             }
-            18 => {
+            19 => {
                 let mut var_id = <u64>::sse_decode(deserializer);
                 let mut var_transferred = <u64>::sse_decode(deserializer);
                 let mut var_total = <u64>::sse_decode(deserializer);
@@ -2624,7 +2755,7 @@ impl SseDecode for crate::api::session::CoreEvent {
                     total: var_total,
                 };
             }
-            19 => {
+            20 => {
                 let mut var_id = <u64>::sse_decode(deserializer);
                 let mut var_error = <Option<String>>::sse_decode(deserializer);
                 return crate::api::session::CoreEvent::TransferFinished {
@@ -2632,7 +2763,7 @@ impl SseDecode for crate::api::session::CoreEvent {
                     error: var_error,
                 };
             }
-            20 => {
+            21 => {
                 let mut var_level = <String>::sse_decode(deserializer);
                 let mut var_message = <String>::sse_decode(deserializer);
                 return crate::api::session::CoreEvent::Log {
@@ -2640,13 +2771,13 @@ impl SseDecode for crate::api::session::CoreEvent {
                     message: var_message,
                 };
             }
-            21 => {
+            22 => {
                 let mut var_message = <String>::sse_decode(deserializer);
                 return crate::api::session::CoreEvent::Denied {
                     message: var_message,
                 };
             }
-            22 => {
+            23 => {
                 let mut var_message = <String>::sse_decode(deserializer);
                 return crate::api::session::CoreEvent::Failed {
                     message: var_message,
@@ -2927,6 +3058,28 @@ impl SseDecode for crate::api::session::MemberGroupView {
     }
 }
 
+impl SseDecode for crate::api::session::NetworkTelemetry {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_roundTripMs = <Option<f64>>::sse_decode(deserializer);
+        let mut var_jitterMs = <Option<f64>>::sse_decode(deserializer);
+        let mut var_recentFailurePercent = <f64>::sse_decode(deserializer);
+        let mut var_probesSent = <u64>::sse_decode(deserializer);
+        let mut var_probesFailed = <u64>::sse_decode(deserializer);
+        let mut var_connectedSeconds = <u64>::sse_decode(deserializer);
+        let mut var_sampledAt = <u64>::sse_decode(deserializer);
+        return crate::api::session::NetworkTelemetry {
+            round_trip_ms: var_roundTripMs,
+            jitter_ms: var_jitterMs,
+            recent_failure_percent: var_recentFailurePercent,
+            probes_sent: var_probesSent,
+            probes_failed: var_probesFailed,
+            connected_seconds: var_connectedSeconds,
+            sampled_at: var_sampledAt,
+        };
+    }
+}
+
 impl SseDecode for Option<u64> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -2954,6 +3107,17 @@ impl SseDecode for Option<bool> {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<bool>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<f64> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<f64>::sse_decode(deserializer));
         } else {
             return None;
         }
@@ -3085,132 +3249,144 @@ fn pde_ffi_dispatcher_primary_impl(
             data_len,
         ),
         7 => wire__crate__api__session__CoreSession_events_impl(port, ptr, rust_vec_len, data_len),
-        8 => wire__crate__api__session__CoreSession_fetch_icon_impl(
+        8 => wire__crate__api__session__CoreSession_fetch_avatar_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        9 => wire__crate__api__session__CoreSession_kick_impl(port, ptr, rust_vec_len, data_len),
-        10 => wire__crate__api__session__CoreSession_list_audio_devices_impl(
+        9 => wire__crate__api__session__CoreSession_fetch_icon_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        11 => wire__crate__api__session__CoreSession_list_channels_impl(
+        10 => wire__crate__api__session__CoreSession_kick_impl(port, ptr, rust_vec_len, data_len),
+        11 => wire__crate__api__session__CoreSession_list_audio_devices_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        12 => wire__crate__api__session__CoreSession_list_clients_impl(
+        12 => wire__crate__api__session__CoreSession_list_channels_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        13 => wire__crate__api__session__CoreSession_list_files_impl(
+        13 => wire__crate__api__session__CoreSession_list_clients_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        14 => wire__crate__api__session__CoreSession_list_servers_impl(
+        14 => wire__crate__api__session__CoreSession_list_files_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        15 => wire__crate__api__session__CoreSession_member_groups_impl(
+        15 => wire__crate__api__session__CoreSession_list_servers_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        16 => wire__crate__api__session__CoreSession_move_to_channel_impl(
+        16 => wire__crate__api__session__CoreSession_member_groups_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        18 => wire__crate__api__session__CoreSession_poke_impl(port, ptr, rust_vec_len, data_len),
-        19 => wire__crate__api__session__CoreSession_register_server_impl(
+        17 => wire__crate__api__session__CoreSession_move_to_channel_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        20 => wire__crate__api__session__CoreSession_remove_server_impl(
+        19 => wire__crate__api__session__CoreSession_poke_impl(port, ptr, rust_vec_len, data_len),
+        20 => wire__crate__api__session__CoreSession_register_server_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        21 => wire__crate__api__session__CoreSession_request_snapshot_impl(
+        21 => wire__crate__api__session__CoreSession_remove_server_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        22 => {
+        22 => wire__crate__api__session__CoreSession_request_snapshot_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        23 => {
             wire__crate__api__session__CoreSession_send_text_impl(port, ptr, rust_vec_len, data_len)
         }
-        23 => wire__crate__api__session__CoreSession_set_audio_devices_impl(
+        24 => wire__crate__api__session__CoreSession_set_audio_devices_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        24 => wire__crate__api__session__CoreSession_set_auto_reconnect_impl(
+        25 => wire__crate__api__session__CoreSession_set_auto_reconnect_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        25 => {
+        26 => {
             wire__crate__api__session__CoreSession_set_away_impl(port, ptr, rust_vec_len, data_len)
         }
-        26 => wire__crate__api__session__CoreSession_set_deafened_impl(
+        27 => wire__crate__api__session__CoreSession_set_deafened_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        27 => wire__crate__api__session__CoreSession_set_member_group_impl(
+        28 => wire__crate__api__session__CoreSession_set_member_group_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        28 => {
+        29 => {
             wire__crate__api__session__CoreSession_set_muted_impl(port, ptr, rust_vec_len, data_len)
         }
-        29 => wire__crate__api__session__CoreSession_set_ptt_active_impl(
+        30 => wire__crate__api__session__CoreSession_set_ptt_active_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        30 => wire__crate__api__session__CoreSession_set_ptt_mode_impl(
+        31 => wire__crate__api__session__CoreSession_set_ptt_mode_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        31 => {
+        32 => {
             wire__crate__api__session__CoreSession_shutdown_impl(port, ptr, rust_vec_len, data_len)
         }
-        32 => wire__crate__api__session__CoreSession_state_impl(port, ptr, rust_vec_len, data_len),
-        33 => wire__crate__api__session__CoreSession_upload_file_impl(
+        33 => wire__crate__api__session__CoreSession_state_impl(port, ptr, rust_vec_len, data_len),
+        34 => wire__crate__api__session__CoreSession_update_server_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        34 => wire__crate__api__session__fetch_image_impl(port, ptr, rust_vec_len, data_len),
-        39 => wire__crate__api__session__upload_image_impl(port, ptr, rust_vec_len, data_len),
-        40 => {
+        35 => wire__crate__api__session__CoreSession_upload_file_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        36 => wire__crate__api__session__fetch_image_impl(port, ptr, rust_vec_len, data_len),
+        41 => wire__crate__api__session__upload_image_impl(port, ptr, rust_vec_len, data_len),
+        42 => {
             wire__crate__api__session__validate_image_host_impl(port, ptr, rust_vec_len, data_len)
         }
         _ => unreachable!(),
@@ -3225,13 +3401,13 @@ fn pde_ffi_dispatcher_sync_impl(
 ) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        17 => wire__crate__api__session__CoreSession_new_impl(ptr, rust_vec_len, data_len),
-        35 => wire__crate__api__session__get_settings_json_impl(ptr, rust_vec_len, data_len),
-        36 => wire__crate__api__session__init_settings_impl(ptr, rust_vec_len, data_len),
-        37 => {
+        18 => wire__crate__api__session__CoreSession_new_impl(ptr, rust_vec_len, data_len),
+        37 => wire__crate__api__session__get_settings_json_impl(ptr, rust_vec_len, data_len),
+        38 => wire__crate__api__session__init_settings_impl(ptr, rust_vec_len, data_len),
+        39 => {
             wire__crate__api__session__update_audio_settings_json_impl(ptr, rust_vec_len, data_len)
         }
-        38 => wire__crate__api__session__update_ui_settings_json_impl(ptr, rust_vec_len, data_len),
+        40 => wire__crate__api__session__update_ui_settings_json_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -3438,21 +3614,24 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::session::CoreError>
 impl flutter_rust_bridge::IntoDart for crate::api::session::CoreEvent {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         match self {
-            crate::api::session::CoreEvent::AccessChanged => [0.into_dart()].into_dart(),
+            crate::api::session::CoreEvent::Network { telemetry } => {
+                [0.into_dart(), telemetry.into_into_dart().into_dart()].into_dart()
+            }
+            crate::api::session::CoreEvent::AccessChanged => [1.into_dart()].into_dart(),
             crate::api::session::CoreEvent::State { state } => {
-                [1.into_dart(), state.into_into_dart().into_dart()].into_dart()
+                [2.into_dart(), state.into_into_dart().into_dart()].into_dart()
             }
             crate::api::session::CoreEvent::Servers { profiles } => {
-                [2.into_dart(), profiles.into_into_dart().into_dart()].into_dart()
+                [3.into_dart(), profiles.into_into_dart().into_dart()].into_dart()
             }
             crate::api::session::CoreEvent::Snapshot { channels, clients } => [
-                3.into_dart(),
+                4.into_dart(),
                 channels.into_into_dart().into_dart(),
                 clients.into_into_dart().into_dart(),
             ]
             .into_dart(),
             crate::api::session::CoreEvent::History { messages } => {
-                [4.into_dart(), messages.into_into_dart().into_dart()].into_dart()
+                [5.into_dart(), messages.into_into_dart().into_dart()].into_dart()
             }
             crate::api::session::CoreEvent::TextMessage {
                 from,
@@ -3463,7 +3642,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::session::CoreEvent {
                 target_id,
                 at,
             } => [
-                5.into_dart(),
+                6.into_dart(),
                 from.into_into_dart().into_dart(),
                 from_uid.into_into_dart().into_dart(),
                 from_id.into_into_dart().into_dart(),
@@ -3474,7 +3653,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::session::CoreEvent {
             ]
             .into_dart(),
             crate::api::session::CoreEvent::Poked { from, message } => [
-                6.into_dart(),
+                7.into_dart(),
                 from.into_into_dart().into_dart(),
                 message.into_into_dart().into_dart(),
             ]
@@ -3485,7 +3664,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::session::CoreEvent {
                 uid,
                 channel_id,
             } => [
-                7.into_dart(),
+                8.into_dart(),
                 id.into_into_dart().into_dart(),
                 nickname.into_into_dart().into_dart(),
                 uid.into_into_dart().into_dart(),
@@ -3493,10 +3672,10 @@ impl flutter_rust_bridge::IntoDart for crate::api::session::CoreEvent {
             ]
             .into_dart(),
             crate::api::session::CoreEvent::ClientLeft { id } => {
-                [8.into_dart(), id.into_into_dart().into_dart()].into_dart()
+                [9.into_dart(), id.into_into_dart().into_dart()].into_dart()
             }
             crate::api::session::CoreEvent::ClientMoved { id, channel_id } => [
-                9.into_dart(),
+                10.into_dart(),
                 id.into_into_dart().into_dart(),
                 channel_id.into_into_dart().into_dart(),
             ]
@@ -3508,7 +3687,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::session::CoreEvent {
                 away,
                 away_message,
             } => [
-                10.into_dart(),
+                11.into_dart(),
                 id.into_into_dart().into_dart(),
                 input_muted.into_into_dart().into_dart(),
                 output_muted.into_into_dart().into_dart(),
@@ -3517,28 +3696,28 @@ impl flutter_rust_bridge::IntoDart for crate::api::session::CoreEvent {
             ]
             .into_dart(),
             crate::api::session::CoreEvent::Voice { state } => {
-                [11.into_dart(), state.into_into_dart().into_dart()].into_dart()
+                [12.into_dart(), state.into_into_dart().into_dart()].into_dart()
             }
             crate::api::session::CoreEvent::Speaking { client_ids } => {
-                [12.into_dart(), client_ids.into_into_dart().into_dart()].into_dart()
+                [13.into_dart(), client_ids.into_into_dart().into_dart()].into_dart()
             }
             crate::api::session::CoreEvent::SelfSpeaking { speaking } => {
-                [13.into_dart(), speaking.into_into_dart().into_dart()].into_dart()
+                [14.into_dart(), speaking.into_into_dart().into_dart()].into_dart()
             }
             crate::api::session::CoreEvent::Levels { mic, received } => [
-                14.into_dart(),
+                15.into_dart(),
                 mic.into_into_dart().into_dart(),
                 received.into_into_dart().into_dart(),
             ]
             .into_dart(),
             crate::api::session::CoreEvent::IdentityUpgrade { from, to } => [
-                15.into_dart(),
+                16.into_dart(),
                 from.into_into_dart().into_dart(),
                 to.into_into_dart().into_dart(),
             ]
             .into_dart(),
             crate::api::session::CoreEvent::IdentityUpgraded { level } => {
-                [16.into_dart(), level.into_into_dart().into_dart()].into_dart()
+                [17.into_dart(), level.into_into_dart().into_dart()].into_dart()
             }
             crate::api::session::CoreEvent::TransferStarted {
                 id,
@@ -3546,7 +3725,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::session::CoreEvent {
                 remote_path,
                 total,
             } => [
-                17.into_dart(),
+                18.into_dart(),
                 id.into_into_dart().into_dart(),
                 direction.into_into_dart().into_dart(),
                 remote_path.into_into_dart().into_dart(),
@@ -3558,29 +3737,29 @@ impl flutter_rust_bridge::IntoDart for crate::api::session::CoreEvent {
                 transferred,
                 total,
             } => [
-                18.into_dart(),
+                19.into_dart(),
                 id.into_into_dart().into_dart(),
                 transferred.into_into_dart().into_dart(),
                 total.into_into_dart().into_dart(),
             ]
             .into_dart(),
             crate::api::session::CoreEvent::TransferFinished { id, error } => [
-                19.into_dart(),
+                20.into_dart(),
                 id.into_into_dart().into_dart(),
                 error.into_into_dart().into_dart(),
             ]
             .into_dart(),
             crate::api::session::CoreEvent::Log { level, message } => [
-                20.into_dart(),
+                21.into_dart(),
                 level.into_into_dart().into_dart(),
                 message.into_into_dart().into_dart(),
             ]
             .into_dart(),
             crate::api::session::CoreEvent::Denied { message } => {
-                [21.into_dart(), message.into_into_dart().into_dart()].into_dart()
+                [22.into_dart(), message.into_into_dart().into_dart()].into_dart()
             }
             crate::api::session::CoreEvent::Failed { message } => {
-                [22.into_dart(), message.into_into_dart().into_dart()].into_dart()
+                [23.into_dart(), message.into_into_dart().into_dart()].into_dart()
             }
             _ => {
                 unimplemented!("");
@@ -3780,6 +3959,32 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::session::MemberGroupView>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::session::NetworkTelemetry {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.round_trip_ms.into_into_dart().into_dart(),
+            self.jitter_ms.into_into_dart().into_dart(),
+            self.recent_failure_percent.into_into_dart().into_dart(),
+            self.probes_sent.into_into_dart().into_dart(),
+            self.probes_failed.into_into_dart().into_dart(),
+            self.connected_seconds.into_into_dart().into_dart(),
+            self.sampled_at.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::session::NetworkTelemetry
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::session::NetworkTelemetry>
+    for crate::api::session::NetworkTelemetry
+{
+    fn into_into_dart(self) -> crate::api::session::NetworkTelemetry {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::session::ServerProfileView {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -3953,24 +4158,28 @@ impl SseEncode for crate::api::session::CoreEvent {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         match self {
-            crate::api::session::CoreEvent::AccessChanged => {
+            crate::api::session::CoreEvent::Network { telemetry } => {
                 <i32>::sse_encode(0, serializer);
+                <crate::api::session::NetworkTelemetry>::sse_encode(telemetry, serializer);
+            }
+            crate::api::session::CoreEvent::AccessChanged => {
+                <i32>::sse_encode(1, serializer);
             }
             crate::api::session::CoreEvent::State { state } => {
-                <i32>::sse_encode(1, serializer);
+                <i32>::sse_encode(2, serializer);
                 <crate::api::session::CoreSessionState>::sse_encode(state, serializer);
             }
             crate::api::session::CoreEvent::Servers { profiles } => {
-                <i32>::sse_encode(2, serializer);
+                <i32>::sse_encode(3, serializer);
                 <Vec<crate::api::session::ServerProfileView>>::sse_encode(profiles, serializer);
             }
             crate::api::session::CoreEvent::Snapshot { channels, clients } => {
-                <i32>::sse_encode(3, serializer);
+                <i32>::sse_encode(4, serializer);
                 <Vec<crate::api::session::ChannelView>>::sse_encode(channels, serializer);
                 <Vec<crate::api::session::ClientView>>::sse_encode(clients, serializer);
             }
             crate::api::session::CoreEvent::History { messages } => {
-                <i32>::sse_encode(4, serializer);
+                <i32>::sse_encode(5, serializer);
                 <Vec<crate::api::session::CoreMessage>>::sse_encode(messages, serializer);
             }
             crate::api::session::CoreEvent::TextMessage {
@@ -3982,7 +4191,7 @@ impl SseEncode for crate::api::session::CoreEvent {
                 target_id,
                 at,
             } => {
-                <i32>::sse_encode(5, serializer);
+                <i32>::sse_encode(6, serializer);
                 <String>::sse_encode(from, serializer);
                 <String>::sse_encode(from_uid, serializer);
                 <i32>::sse_encode(from_id, serializer);
@@ -3992,7 +4201,7 @@ impl SseEncode for crate::api::session::CoreEvent {
                 <u64>::sse_encode(at, serializer);
             }
             crate::api::session::CoreEvent::Poked { from, message } => {
-                <i32>::sse_encode(6, serializer);
+                <i32>::sse_encode(7, serializer);
                 <String>::sse_encode(from, serializer);
                 <String>::sse_encode(message, serializer);
             }
@@ -4002,18 +4211,18 @@ impl SseEncode for crate::api::session::CoreEvent {
                 uid,
                 channel_id,
             } => {
-                <i32>::sse_encode(7, serializer);
+                <i32>::sse_encode(8, serializer);
                 <i32>::sse_encode(id, serializer);
                 <String>::sse_encode(nickname, serializer);
                 <String>::sse_encode(uid, serializer);
                 <u64>::sse_encode(channel_id, serializer);
             }
             crate::api::session::CoreEvent::ClientLeft { id } => {
-                <i32>::sse_encode(8, serializer);
+                <i32>::sse_encode(9, serializer);
                 <i32>::sse_encode(id, serializer);
             }
             crate::api::session::CoreEvent::ClientMoved { id, channel_id } => {
-                <i32>::sse_encode(9, serializer);
+                <i32>::sse_encode(10, serializer);
                 <i32>::sse_encode(id, serializer);
                 <u64>::sse_encode(channel_id, serializer);
             }
@@ -4024,7 +4233,7 @@ impl SseEncode for crate::api::session::CoreEvent {
                 away,
                 away_message,
             } => {
-                <i32>::sse_encode(10, serializer);
+                <i32>::sse_encode(11, serializer);
                 <i32>::sse_encode(id, serializer);
                 <Option<bool>>::sse_encode(input_muted, serializer);
                 <Option<bool>>::sse_encode(output_muted, serializer);
@@ -4032,29 +4241,29 @@ impl SseEncode for crate::api::session::CoreEvent {
                 <Option<String>>::sse_encode(away_message, serializer);
             }
             crate::api::session::CoreEvent::Voice { state } => {
-                <i32>::sse_encode(11, serializer);
+                <i32>::sse_encode(12, serializer);
                 <crate::api::session::CoreVoiceState>::sse_encode(state, serializer);
             }
             crate::api::session::CoreEvent::Speaking { client_ids } => {
-                <i32>::sse_encode(12, serializer);
+                <i32>::sse_encode(13, serializer);
                 <Vec<i32>>::sse_encode(client_ids, serializer);
             }
             crate::api::session::CoreEvent::SelfSpeaking { speaking } => {
-                <i32>::sse_encode(13, serializer);
+                <i32>::sse_encode(14, serializer);
                 <bool>::sse_encode(speaking, serializer);
             }
             crate::api::session::CoreEvent::Levels { mic, received } => {
-                <i32>::sse_encode(14, serializer);
+                <i32>::sse_encode(15, serializer);
                 <f64>::sse_encode(mic, serializer);
                 <f64>::sse_encode(received, serializer);
             }
             crate::api::session::CoreEvent::IdentityUpgrade { from, to } => {
-                <i32>::sse_encode(15, serializer);
+                <i32>::sse_encode(16, serializer);
                 <i32>::sse_encode(from, serializer);
                 <i32>::sse_encode(to, serializer);
             }
             crate::api::session::CoreEvent::IdentityUpgraded { level } => {
-                <i32>::sse_encode(16, serializer);
+                <i32>::sse_encode(17, serializer);
                 <i32>::sse_encode(level, serializer);
             }
             crate::api::session::CoreEvent::TransferStarted {
@@ -4063,7 +4272,7 @@ impl SseEncode for crate::api::session::CoreEvent {
                 remote_path,
                 total,
             } => {
-                <i32>::sse_encode(17, serializer);
+                <i32>::sse_encode(18, serializer);
                 <u64>::sse_encode(id, serializer);
                 <crate::api::session::CoreTransferDirection>::sse_encode(direction, serializer);
                 <String>::sse_encode(remote_path, serializer);
@@ -4074,27 +4283,27 @@ impl SseEncode for crate::api::session::CoreEvent {
                 transferred,
                 total,
             } => {
-                <i32>::sse_encode(18, serializer);
+                <i32>::sse_encode(19, serializer);
                 <u64>::sse_encode(id, serializer);
                 <u64>::sse_encode(transferred, serializer);
                 <u64>::sse_encode(total, serializer);
             }
             crate::api::session::CoreEvent::TransferFinished { id, error } => {
-                <i32>::sse_encode(19, serializer);
+                <i32>::sse_encode(20, serializer);
                 <u64>::sse_encode(id, serializer);
                 <Option<String>>::sse_encode(error, serializer);
             }
             crate::api::session::CoreEvent::Log { level, message } => {
-                <i32>::sse_encode(20, serializer);
+                <i32>::sse_encode(21, serializer);
                 <String>::sse_encode(level, serializer);
                 <String>::sse_encode(message, serializer);
             }
             crate::api::session::CoreEvent::Denied { message } => {
-                <i32>::sse_encode(21, serializer);
+                <i32>::sse_encode(22, serializer);
                 <String>::sse_encode(message, serializer);
             }
             crate::api::session::CoreEvent::Failed { message } => {
-                <i32>::sse_encode(22, serializer);
+                <i32>::sse_encode(23, serializer);
                 <String>::sse_encode(message, serializer);
             }
             _ => {
@@ -4326,6 +4535,19 @@ impl SseEncode for crate::api::session::MemberGroupView {
     }
 }
 
+impl SseEncode for crate::api::session::NetworkTelemetry {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <Option<f64>>::sse_encode(self.round_trip_ms, serializer);
+        <Option<f64>>::sse_encode(self.jitter_ms, serializer);
+        <f64>::sse_encode(self.recent_failure_percent, serializer);
+        <u64>::sse_encode(self.probes_sent, serializer);
+        <u64>::sse_encode(self.probes_failed, serializer);
+        <u64>::sse_encode(self.connected_seconds, serializer);
+        <u64>::sse_encode(self.sampled_at, serializer);
+    }
+}
+
 impl SseEncode for Option<u64> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -4352,6 +4574,16 @@ impl SseEncode for Option<bool> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <bool>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<f64> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <f64>::sse_encode(value, serializer);
         }
     }
 }

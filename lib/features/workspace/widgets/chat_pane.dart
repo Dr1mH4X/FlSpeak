@@ -41,6 +41,7 @@ class ChatPane extends StatefulWidget {
     this.onPasteImage,
     this.onUploadImage,
     this.onConfigureImageHost,
+    this.avatarBuilder,
     super.key,
   });
 
@@ -64,6 +65,7 @@ class ChatPane extends StatefulWidget {
   final Future<PickedChatImage?> Function()? onPasteImage;
   final Future<String?> Function(Uint8List)? onUploadImage;
   final VoidCallback? onConfigureImageHost;
+  final Widget Function(ChatMessage message)? avatarBuilder;
 
   @override
   State<ChatPane> createState() => _ChatPaneState();
@@ -368,6 +370,9 @@ class _ChatPaneState extends State<ChatPane> {
                           description: widget.description,
                         )
                       : _MessageRow(
+                          avatar: widget.avatarBuilder?.call(
+                            widget.messages[index - 1],
+                          ),
                           message: widget.messages[index - 1],
                           onImageTap: _openImage,
                           onReply:
@@ -782,12 +787,14 @@ class _Welcome extends StatelessWidget {
 
 class _MessageRow extends StatefulWidget {
   const _MessageRow({
+    this.avatar,
     required this.message,
     required this.onImageTap,
     required this.onReply,
   });
 
   final ChatMessage message;
+  final Widget? avatar;
   final ValueChanged<String> onImageTap;
   final ValueChanged<ChatMessage>? onReply;
 
@@ -838,7 +845,8 @@ class _MessageRowState extends State<_MessageRow>
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ClientAvatar(nickname: message.from, size: AvatarSize.medium),
+          widget.avatar ??
+              ClientAvatar(nickname: message.from, size: AvatarSize.medium),
           const SizedBox(width: 12),
           Expanded(
             child: Column(

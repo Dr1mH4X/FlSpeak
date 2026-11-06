@@ -81,6 +81,17 @@ pub struct CoreVoiceState {
 }
 
 #[derive(Debug, Clone)]
+pub struct NetworkTelemetry {
+    pub round_trip_ms: Option<f64>,
+    pub jitter_ms: Option<f64>,
+    pub recent_failure_percent: f64,
+    pub probes_sent: u64,
+    pub probes_failed: u64,
+    pub connected_seconds: u64,
+    pub sampled_at: u64,
+}
+
+#[derive(Debug, Clone)]
 pub struct AudioDeviceView {
     pub id: String,
     pub name: String,
@@ -110,6 +121,9 @@ pub enum CoreSessionState {
 /// 送往 Dart 的事件。语音帧不走这里，它在 Rust 侧直接进音频后端。
 #[derive(Debug, Clone)]
 pub enum CoreEvent {
+    Network {
+        telemetry: NetworkTelemetry,
+    },
     AccessChanged,
     State {
         state: CoreSessionState,
@@ -326,6 +340,15 @@ impl CoreSession {
         Ok(self.handle.remove_server(id).await?)
     }
 
+    pub async fn update_server(
+        &self,
+        id: String,
+        label: String,
+        address: String,
+    ) -> Result<ServerProfileView, CoreError> {
+        Ok(self.handle.update_server(id, label, address).await?.into())
+    }
+
     pub async fn state(&self) -> Result<CoreSessionState, CoreError> {
         Ok(self.handle.state().await?.into())
     }
@@ -441,6 +464,10 @@ impl CoreSession {
 
     pub async fn fetch_icon(&self, icon_id: u32) -> Result<Vec<u8>, CoreError> {
         Ok(self.handle.fetch_icon(icon_id).await?)
+    }
+
+    pub async fn fetch_avatar(&self, uid: String) -> Result<Vec<u8>, CoreError> {
+        Ok(self.handle.fetch_avatar(uid).await?)
     }
 
     pub async fn access(&self) -> Result<AccessView, CoreError> {
@@ -739,6 +766,17 @@ impl From<session::AudioDevicesView> for AudioDevicesView {
 impl From<SessionEvent> for CoreEvent {
     fn from(event: SessionEvent) -> Self {
         match event {
+            SessionEvent::Network(telemetry) => CoreEvent::Network {
+                telemetry: NetworkTelemetry {
+                    round_trip_ms: telemetry.round_trip_ms,
+                    jitter_ms: telemetry.jitter_ms,
+                    recent_failure_percent: telemetry.recent_failure_percent,
+                    probes_sent: telemetry.probes_sent,
+                    probes_failed: telemetry.probes_failed,
+                    connected_seconds: telemetry.connected_seconds,
+                    sampled_at: telemetry.sampled_at,
+                },
+            },
             SessionEvent::AccessChanged => CoreEvent::AccessChanged,
             SessionEvent::State { state, .. } => CoreEvent::State {
                 state: state.into(),

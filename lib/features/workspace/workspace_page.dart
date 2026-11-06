@@ -17,6 +17,7 @@ import 'widgets/channel_details_pane.dart';
 import 'widgets/media_grid.dart';
 import 'widgets/media_viewer.dart';
 import 'widgets/members_pane.dart';
+import 'widgets/member_avatar.dart';
 import 'workspace_state.dart';
 
 /// 主区域：频道标题 + 消息 / 媒体两个视图，以及掉线后的空状态。
@@ -199,6 +200,8 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
         );
       case _MainTab.chat:
         return ChatPane(
+          avatarBuilder: (message) =>
+              SessionMemberAvatar(uid: message.fromUid, nickname: message.from),
           key: ValueKey(channel.id),
           channelName: channelDisplayName(channel),
           messages: view.visibleMessages(channelId: channel.id),
