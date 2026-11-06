@@ -178,6 +178,7 @@ class SessionPreferences {
     this.motion = AppMotionPreference.system,
     this.pttHotkey,
     this.channelPanelWidth,
+    this.streamViewerHeight,
     this.voiceMeterSource = VoiceMeterSource.microphone,
     this.serverIcons = const {},
     this.screenShareResolution = ScreenShareResolutionPreset.p1080,
@@ -211,6 +212,9 @@ class SessionPreferences {
   /// 频道栏宽度（逻辑像素）；`null` 表示用默认宽度。
   final double? channelPanelWidth;
 
+  /// 屏幕共享展示区域高度（逻辑像素）；`null` 表示用默认自适应高度。
+  final double? streamViewerHeight;
+
   final VoiceMeterSource voiceMeterSource;
   final Map<String, ServerIcon> serverIcons;
   final ScreenShareResolutionPreset screenShareResolution;
@@ -226,6 +230,7 @@ class SessionPreferences {
     AppMotionPreference? motion,
     Object? pttHotkey = _unset,
     Object? channelPanelWidth = _unset,
+    Object? streamViewerHeight = _unset,
     VoiceMeterSource? voiceMeterSource,
     Map<String, ServerIcon>? serverIcons,
     ScreenShareResolutionPreset? screenShareResolution,
@@ -244,6 +249,9 @@ class SessionPreferences {
     channelPanelWidth: identical(channelPanelWidth, _unset)
         ? this.channelPanelWidth
         : channelPanelWidth as double?,
+    streamViewerHeight: identical(streamViewerHeight, _unset)
+        ? this.streamViewerHeight
+        : streamViewerHeight as double?,
     voiceMeterSource: voiceMeterSource ?? this.voiceMeterSource,
     serverIcons: serverIcons ?? this.serverIcons,
     screenShareResolution: screenShareResolution ?? this.screenShareResolution,
@@ -265,6 +273,7 @@ class SessionPreferences {
     'motion': motion.id,
     'pttHotkey': pttHotkey,
     'channelPanelWidth': channelPanelWidth,
+    'streamViewerHeight': streamViewerHeight,
     'voiceMeterSource': voiceMeterSource.id,
     'serverIcons': serverIcons.map((id, icon) => MapEntry(id, icon.id)),
     'screenShareResolution': screenShareResolution.id,
@@ -302,6 +311,7 @@ class SessionPreferences {
     final rawLocale = ui['locale'];
     final rawPttHotkey = ui['pttHotkey'];
     final rawPanelWidth = ui['channelPanelWidth'];
+    final rawStreamViewerHeight = ui['streamViewerHeight'];
     return SessionPreferences(
       nickname: nickname.isEmpty || nickname == _legacyFallbackNickname
           ? fallbackNickname
@@ -314,6 +324,10 @@ class SessionPreferences {
       // 文件可能被手改或跨版本：不是有限数就当未设置，尺寸交给渲染时的夹取。
       channelPanelWidth: rawPanelWidth is num && rawPanelWidth.isFinite
           ? rawPanelWidth.toDouble()
+          : null,
+      streamViewerHeight:
+          rawStreamViewerHeight is num && rawStreamViewerHeight.isFinite
+          ? rawStreamViewerHeight.toDouble()
           : null,
       voiceMeterSource: VoiceMeterSource.fromId(ui['voiceMeterSource']),
       serverIcons: Map.unmodifiable(serverIcons),

@@ -452,6 +452,12 @@ abstract class AppLocalizations {
   /// **'Resize channel pane'**
   String get channelPaneResize;
 
+  /// No description provided for @streamViewerResize.
+  ///
+  /// In en, this message translates to:
+  /// **'Resize screen share height'**
+  String get streamViewerResize;
+
   /// No description provided for @voiceMute.
   ///
   /// In en, this message translates to:

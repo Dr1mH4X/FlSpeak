@@ -108,6 +108,7 @@
   "channelPasswordProtected": "需要频道密码",
   "channelJoinMenu": "加入频道",
   "channelPaneResize": "调整频道栏宽度",
+  "streamViewerResize": "调整屏幕共享高度",
   "voiceMute": "静音",
   "voiceUnmute": "取消静音",
   "voiceDeafen": "关闭声音",

@@ -1236,6 +1236,14 @@ class PreferencesController extends Notifier<SessionPreferences> {
     _update(state.copyWith(channelPanelWidth: width));
   }
 
+  /// `null` 表示回到默认自适应高度。
+  void setStreamViewerHeight(double? height) {
+    if (height == state.streamViewerHeight) {
+      return;
+    }
+    _update(state.copyWith(streamViewerHeight: height));
+  }
+
   void setVoiceMeterSource(VoiceMeterSource source) {
     if (source == state.voiceMeterSource) {
       return;

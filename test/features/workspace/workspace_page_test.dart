@@ -382,12 +382,60 @@ void main() {
       findsOneWidget,
     );
     expect(find.byKey(const ValueKey('member-stream-2')), findsOneWidget);
+    // Remote stream banner reuses compact icon button and does not use big button.
+    expect(find.byType(FilledButton), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('stream-banner-stream-1')),
+        matching: find.byType(IconButton),
+      ),
+      findsOneWidget,
+    );
+    // When no video is expanded, resize handle is not shown.
+    expect(
+      find.byKey(const ValueKey('stream-viewer-resize-handle')),
+      findsNothing,
+    );
 
     // Click watch button in top banner -> triggers JoinStream.
     await tester.tap(find.byKey(const ValueKey('stream-watch-stream-1')));
     await tester.pump();
     expect(core.joined, [(streamId: 'stream-1', sourceClid: 2)]);
     expect(find.byKey(const ValueKey('stream-viewer-stage')), findsOneWidget);
+    // Resize handle appears at the bottom of the expanded screen share section.
+    expect(
+      find.byKey(const ValueKey('stream-viewer-resize-handle')),
+      findsOneWidget,
+    );
+
+    // Drag handle downwards to resize video area towards the bottom.
+    await tester.drag(
+      find.byKey(const ValueKey('stream-viewer-resize-handle')),
+      const Offset(0, 300),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(container.read(preferencesProvider).streamViewerHeight, isNotNull);
+    expect(
+      container.read(preferencesProvider).streamViewerHeight!,
+      greaterThan(250.0),
+    );
+
+    // Verify stage card is not clipped when pulled towards the bottom:
+    // the card container's bottom edge plus bottom padding must remain above the resize handle.
+    final stageRect = tester.getRect(
+      find.byKey(const ValueKey('stream-viewer-stage')),
+    );
+    final handleRect = tester.getRect(
+      find.byKey(const ValueKey('stream-viewer-resize-handle')),
+    );
+    expect(handleRect.top, greaterThanOrEqualTo(stageRect.bottom + 6.0));
+
+    // Double-tap handle to reset height to default adaptive calculation.
+    await tester.tap(find.byKey(const ValueKey('stream-viewer-resize-handle')));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.byKey(const ValueKey('stream-viewer-resize-handle')));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(container.read(preferencesProvider).streamViewerHeight, isNull);
 
     // Receive Offer and attach remote stream -> renders RTCVideoView.
     await container
@@ -435,11 +483,76 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('stream-close-button')));
     await tester.pump();
 
+    expect(
+      find.byKey(const ValueKey('stream-viewer-resize-handle')),
+      findsNothing,
+    );
     expect(core.left, ['stream-1']);
     expect(find.byType(RTCVideoView), findsNothing);
     expect(bindings.renderers.single.disposed, isTrue);
     expect(bindings.peers.single.closed, isTrue);
     expect(bindings.peers.single.disposed, isTrue);
+  });
+
+  testWidgets('多人同时屏幕共享时复用同一横幅组件且支持在多个屏幕共享间平滑切换', (tester) async {
+    final core = _Core();
+    final bindings = _FakeWidgetWebRtcBindings();
+    final container = await _mount(tester, core: core, bindings: bindings);
+
+    const stream1 = StreamView(
+      id: 'stream-1',
+      clientId: 2,
+      name: 'Alice Screen',
+      hasAudio: true,
+    );
+    const stream2 = StreamView(
+      id: 'stream-2',
+      clientId: 3,
+      name: 'Bob Screen',
+      hasAudio: true,
+    );
+    (container.read(sessionViewProvider.notifier) as _Session).publishStreams([
+      stream1,
+      stream2,
+    ]);
+    await tester.pump();
+
+    // Both remote screen shares are rendered as banners using compact icon buttons.
+    expect(
+      find.byKey(const ValueKey('stream-banner-stream-1')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('stream-banner-stream-2')),
+      findsOneWidget,
+    );
+    expect(find.byType(FilledButton), findsNothing);
+
+    // Watch Alice's screen.
+    await tester.tap(find.byKey(const ValueKey('stream-watch-stream-1')));
+    await tester.pump();
+    expect(core.joined, [(streamId: 'stream-1', sourceClid: 2)]);
+    expect(find.byKey(const ValueKey('stream-viewer-stage')), findsOneWidget);
+    // Bob's screen share remains available as a collapsed banner.
+    expect(
+      find.byKey(const ValueKey('stream-banner-stream-2')),
+      findsOneWidget,
+    );
+
+    // Switch to watch Bob's screen.
+    await tester.tap(find.byKey(const ValueKey('stream-watch-stream-2')));
+    await tester.pump();
+    expect(core.left, ['stream-1']);
+    expect(core.joined, [
+      (streamId: 'stream-1', sourceClid: 2),
+      (streamId: 'stream-2', sourceClid: 3),
+    ]);
+    // Alice's screen share becomes a collapsed banner while Bob's is watching.
+    expect(
+      find.byKey(const ValueKey('stream-banner-stream-1')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('stream-viewer-stage')), findsOneWidget);
   });
 
   testWidgets('推流状态栏展示当前屏幕共享源与本地预览开关，并可通过控制器停止共享', (tester) async {
@@ -475,6 +588,29 @@ void main() {
     expect(
       find.byKey(const ValueKey('stream-publisher-preview-stage')),
       findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('stream-viewer-resize-handle')),
+      findsOneWidget,
+    );
+
+    // Drag handle downwards towards the bottom of the window.
+    await tester.drag(
+      find.byKey(const ValueKey('stream-viewer-resize-handle')),
+      const Offset(0, 300),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // The publisher banner card container must not be truncated / clipped at the bottom.
+    final publisherCardRect = tester.getRect(
+      find.byKey(const ValueKey('stream-publisher-banner')),
+    );
+    final publisherHandleRect = tester.getRect(
+      find.byKey(const ValueKey('stream-viewer-resize-handle')),
+    );
+    expect(
+      publisherHandleRect.top,
+      greaterThanOrEqualTo(publisherCardRect.bottom + 6.0),
     );
 
     // Stop sharing via session controller.

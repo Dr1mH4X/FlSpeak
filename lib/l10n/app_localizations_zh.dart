@@ -206,6 +206,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get channelPaneResize => '调整频道栏宽度';
 
   @override
+  String get streamViewerResize => '调整屏幕共享高度';
+
+  @override
   String get voiceMute => '静音';
 
   @override

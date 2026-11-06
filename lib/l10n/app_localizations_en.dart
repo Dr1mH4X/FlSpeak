@@ -207,6 +207,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get channelPaneResize => 'Resize channel pane';
 
   @override
+  String get streamViewerResize => 'Resize screen share height';
+
+  @override
   String get voiceMute => 'Mute';
 
   @override

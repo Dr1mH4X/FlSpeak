@@ -108,6 +108,7 @@
   "channelPasswordProtected": "Channel password required",
   "channelJoinMenu": "Join channel",
   "channelPaneResize": "Resize channel pane",
+  "streamViewerResize": "Resize screen share height",
   "voiceMute": "Mute",
   "voiceUnmute": "Unmute",
   "voiceDeafen": "Deafen",
