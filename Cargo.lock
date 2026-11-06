@@ -133,6 +133,7 @@ dependencies = [
  "cpal",
  "crossbeam-queue",
  "thiserror 2.0.21",
+ "tracing",
 ]
 
 [[package]]
@@ -2502,6 +2503,7 @@ dependencies = [
  "sysproxy",
  "thiserror 2.0.21",
  "tokio",
+ "tracing",
  "tsclient-rs",
 ]
 

@@ -21,6 +21,18 @@ pub mod engine;
 #[cfg(feature = "audio")]
 pub mod playback;
 
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum CodecError {
+    #[error("Opus 编码缓冲不足: capacity={capacity}, max_data_bytes={max_data_bytes}")]
+    BufferTooSmall {
+        capacity: usize,
+        max_data_bytes: usize,
+    },
+
+    #[error("Opus 错误: {0}")]
+    Opus(String),
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum AudioError {
     #[error("音频设备不可用: {0}")]
@@ -30,7 +42,7 @@ pub enum AudioError {
     Engine(String),
 
     #[error("Opus 编解码失败: {0}")]
-    Codec(String),
+    Codec(#[from] CodecError),
 
     #[error("不支持的采样格式: {0}")]
     UnsupportedSampleFormat(String),

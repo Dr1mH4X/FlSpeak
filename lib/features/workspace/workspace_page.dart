@@ -17,6 +17,7 @@ import 'widgets/channel_details_pane.dart';
 import 'widgets/media_grid.dart';
 import 'widgets/media_viewer.dart';
 import 'widgets/members_pane.dart';
+import 'widgets/member_avatar.dart';
 import 'widgets/stream_viewer_pane.dart';
 import 'workspace_state.dart';
 
@@ -201,6 +202,8 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
         );
       case _MainTab.chat:
         return ChatPane(
+          avatarBuilder: (message) =>
+              SessionMemberAvatar(uid: message.fromUid, nickname: message.from),
           key: ValueKey(channel.id),
           channelName: channelDisplayName(channel),
           messages: view.visibleMessages(channelId: channel.id),

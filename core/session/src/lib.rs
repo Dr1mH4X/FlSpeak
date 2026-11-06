@@ -12,6 +12,8 @@ mod downloads;
 mod events;
 mod image_upload;
 mod images;
+mod network;
+pub use network::NetworkTelemetry;
 pub mod settings;
 mod store;
 mod streams;
@@ -135,6 +137,7 @@ pub enum TransferDirection {
 
 #[derive(Debug, Clone)]
 pub enum SessionEvent {
+    Network(NetworkTelemetry),
     State {
         state: SessionState,
         connection_epoch: u64,
@@ -272,6 +275,12 @@ pub enum SessionCommand {
         id: String,
         reply: oneshot::Sender<Result<(), SessionError>>,
     },
+    UpdateServer {
+        id: String,
+        label: String,
+        address: String,
+        reply: oneshot::Sender<Result<ServerProfile, SessionError>>,
+    },
     ListServers {
         reply: oneshot::Sender<Vec<ServerProfile>>,
     },
@@ -376,6 +385,10 @@ pub enum SessionCommand {
     },
     FetchIcon {
         icon_id: u32,
+        reply: oneshot::Sender<Result<Vec<u8>, SessionError>>,
+    },
+    FetchAvatar {
+        uid: String,
         reply: oneshot::Sender<Result<Vec<u8>, SessionError>>,
     },
     Access {
@@ -641,6 +654,22 @@ impl SessionHandle {
     pub async fn remove_server(&self, id: String) -> Result<(), SessionError> {
         let (reply, rx) = oneshot::channel();
         self.send(SessionCommand::RemoveServer { id, reply })?;
+        rx.await.map_err(|_| SessionError::Closed)?
+    }
+
+    pub async fn update_server(
+        &self,
+        id: String,
+        label: String,
+        address: String,
+    ) -> Result<ServerProfile, SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::UpdateServer {
+            id,
+            label,
+            address,
+            reply,
+        })?;
         rx.await.map_err(|_| SessionError::Closed)?
     }
 
@@ -1038,6 +1067,12 @@ impl SessionHandle {
     pub async fn kick_stream_viewer(&self, viewer_clid: i32) -> Result<(), SessionError> {
         let (reply, rx) = oneshot::channel();
         self.send(SessionCommand::KickStreamViewer { viewer_clid, reply })?;
+        rx.await.map_err(|_| SessionError::Closed)?
+    }
+
+    pub async fn fetch_avatar(&self, uid: String) -> Result<Vec<u8>, SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::FetchAvatar { uid, reply })?;
         rx.await.map_err(|_| SessionError::Closed)?
     }
 

@@ -9,7 +9,7 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'session.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `runtime`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 /// 抓取第三方图片 URL。myTS 的 `ts.file.myts` 附件不经过这里。
 Future<Uint8List> fetchImage({required String url}) =>
@@ -75,6 +75,8 @@ abstract class CoreSession implements RustOpaqueInterface {
   /// 取消订阅放在 `shutdown()` 之后：会话和音频线程收尾后，订阅结束并释放转发任务。
   /// 先取消时要等下一次 `add` 失败或会话退出才能收尾。
   Stream<CoreEvent> events();
+
+  Future<Uint8List> fetchAvatar({required String uid});
 
   Future<Uint8List> fetchIcon({required int iconId});
 
@@ -205,6 +207,12 @@ abstract class CoreSession implements RustOpaqueInterface {
   Future<CoreSessionState> state();
 
   Future<void> stopScreenShare();
+
+  Future<ServerProfileView> updateServer({
+    required String id,
+    required String label,
+    required String address,
+  });
 
   Future<int> uploadFile({
     required String localPath,
@@ -453,6 +461,8 @@ sealed class CoreError with _$CoreError implements FrbException {
 sealed class CoreEvent with _$CoreEvent {
   const CoreEvent._();
 
+  const factory CoreEvent.network({required NetworkTelemetry telemetry}) =
+      CoreEvent_Network;
   const factory CoreEvent.accessChanged() = CoreEvent_AccessChanged;
   const factory CoreEvent.state({required CoreSessionState state}) =
       CoreEvent_State;
@@ -726,6 +736,49 @@ class MemberGroupView {
           member == other.member &&
           canAdd == other.canAdd &&
           canRemove == other.canRemove;
+}
+
+class NetworkTelemetry {
+  final double? roundTripMs;
+  final double? jitterMs;
+  final double recentFailurePercent;
+  final int probesSent;
+  final int probesFailed;
+  final int connectedSeconds;
+  final int sampledAt;
+
+  const NetworkTelemetry({
+    this.roundTripMs,
+    this.jitterMs,
+    required this.recentFailurePercent,
+    required this.probesSent,
+    required this.probesFailed,
+    required this.connectedSeconds,
+    required this.sampledAt,
+  });
+
+  @override
+  int get hashCode =>
+      roundTripMs.hashCode ^
+      jitterMs.hashCode ^
+      recentFailurePercent.hashCode ^
+      probesSent.hashCode ^
+      probesFailed.hashCode ^
+      connectedSeconds.hashCode ^
+      sampledAt.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is NetworkTelemetry &&
+          runtimeType == other.runtimeType &&
+          roundTripMs == other.roundTripMs &&
+          jitterMs == other.jitterMs &&
+          recentFailurePercent == other.recentFailurePercent &&
+          probesSent == other.probesSent &&
+          probesFailed == other.probesFailed &&
+          connectedSeconds == other.connectedSeconds &&
+          sampledAt == other.sampledAt;
 }
 
 @freezed

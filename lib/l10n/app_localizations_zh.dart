@@ -430,6 +430,78 @@ class AppLocalizationsZh extends AppLocalizations {
   String get membersTitle => '频道成员';
 
   @override
+  String get memberDetails => '用户详情';
+
+  @override
+  String get memberNickname => '昵称';
+
+  @override
+  String get memberUid => '唯一标识（UID）';
+
+  @override
+  String get memberChannel => '所在频道';
+
+  @override
+  String get memberUnavailable => '该用户已离线';
+
+  @override
+  String get serverEdit => '编辑服务器';
+
+  @override
+  String get commonSave => '保存';
+
+  @override
+  String get serverSaving => '正在保存…';
+
+  @override
+  String get serverAddressDisconnect => '断开连接后可以修改地址';
+
+  @override
+  String get networkDetails => '网络遥测';
+
+  @override
+  String get networkMeasuring => '正在检测网络';
+
+  @override
+  String get networkDegraded => '网络不稳定';
+
+  @override
+  String get networkPoor => '网络质量差';
+
+  @override
+  String get networkLatency => '目录请求延迟';
+
+  @override
+  String get networkJitter => '延迟波动';
+
+  @override
+  String get networkFailureRate => '最近响应失败率';
+
+  @override
+  String get networkProbesSent => '已采样请求';
+
+  @override
+  String get networkProbesFailed => '未收到有效响应的请求';
+
+  @override
+  String get networkConnectedTime => '本次连接时长';
+
+  @override
+  String get networkUpdatedAt => '更新时间';
+
+  @override
+  String get networkUnavailable => '暂无数据';
+
+  @override
+  String networkMilliseconds(String value) {
+    return '$value 毫秒';
+  }
+
+  @override
+  String get networkProbeExplanation =>
+      '随现有的 30 秒目录刷新采样，不额外发送探测指令。延迟包含服务器处理和命令限流等待；失败率统计最近 10 次请求中未收到有效响应的比例，并非 UDP 丢包率。当前协议库未提供本机丢包和流量计数。';
+
+  @override
   String get voiceConnected => '语音已连接';
 
   @override

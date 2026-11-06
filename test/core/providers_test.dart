@@ -191,6 +191,40 @@ class _LateServersCore extends _Core {
 }
 
 void main() {
+  test('network telemetry clears on reconnect and ignores samples while disconnected', () async {
+    final events = StreamController<CoreEvent>.broadcast(sync: true);
+    final container = ProviderContainer(
+      overrides: [coreSessionProvider.overrideWithValue(_Core(events))],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await events.close();
+    });
+    container.read(sessionViewProvider);
+    const telemetry = NetworkTelemetry(
+      roundTripMs: 25,
+      recentFailurePercent: 0,
+      probesSent: 1,
+      probesFailed: 0,
+      connectedSeconds: 5,
+      sampledAt: 100,
+    );
+    events.add(
+      const CoreEvent.state(
+        state: CoreSessionState.connected(clientId: 1, channelId: 1),
+      ),
+    );
+    events.add(const CoreEvent.network(telemetry: telemetry));
+    expect(container.read(sessionViewProvider).network, telemetry);
+    events.add(
+      const CoreEvent.state(
+        state: CoreSessionState.reconnecting(attempt: 1, delayMs: 1000),
+      ),
+    );
+    expect(container.read(sessionViewProvider).network, isNull);
+    events.add(const CoreEvent.network(telemetry: telemetry));
+    expect(container.read(sessionViewProvider).network, isNull);
+  });
   test(
     'events queued before the reset cannot adopt the pending server profile',
     () async {

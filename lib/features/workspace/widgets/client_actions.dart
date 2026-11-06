@@ -5,7 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../router.dart';
+import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
+import '../../../widgets/press_feedback.dart';
+import 'member_details_dialog.dart';
 import 'member_permissions_dialog.dart';
 import 'kick_client_dialog.dart';
 
@@ -22,8 +25,18 @@ class ClientActionsButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final view = ref.watch(sessionViewProvider);
+    final details = Material(
+      type: MaterialType.transparency,
+      borderRadius: Radii.mediumAll,
+      clipBehavior: Clip.antiAlias,
+      child: AnimatedInkWell(
+        onTap: () => showMemberDetails(context, client),
+        borderRadius: Radii.mediumAll,
+        child: child,
+      ),
+    );
     if (client.id == view.selfClientId || client.uid.isEmpty) {
-      return child;
+      return details;
     }
     final l10n = AppLocalizations.of(context);
     final access = ref.watch(sessionAccessProvider).asData?.value;
@@ -113,7 +126,7 @@ class ClientActionsButton extends ConsumerWidget {
             ),
           ),
       ],
-      builder: (_, _) => child,
+      builder: (_, _) => details,
     );
   }
 }

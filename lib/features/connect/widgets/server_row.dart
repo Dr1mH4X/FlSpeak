@@ -11,6 +11,7 @@ import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
 import '../../../widgets/monogram.dart';
 import 'relative_time.dart';
+import 'add_server_dialog.dart';
 import '../../../widgets/press_feedback.dart';
 
 /// 连接页的一行服务器：整行是主落点，右键弹统一的二级菜单放「从列表移除」。
@@ -78,6 +79,12 @@ class _ServerRowState extends ConsumerState<ServerRow> {
               : MaterialLocalizations.of(context).showMenuTooltip,
           morePadding: const EdgeInsets.only(right: 8),
           items: [
+            MenuItemButton(
+              leadingIcon: const Icon(Icons.edit_outlined),
+              onPressed: () =>
+                  showAddServerDialog(context, server: widget.profile),
+              child: Text(l10n.serverEdit),
+            ),
             MenuItemButton(
               leadingIcon: const Icon(Icons.palette_outlined),
               onPressed: () async {

@@ -5,8 +5,8 @@ import '../../../core/models.dart';
 import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
-import '../../../widgets/monogram.dart';
 import 'client_actions.dart';
+import 'member_avatar.dart';
 
 class MembersPane extends ConsumerWidget {
   const MembersPane({required this.view, required this.channelId, super.key});
@@ -53,8 +53,9 @@ class MembersPane extends ConsumerWidget {
                 client: member,
                 child: Row(
                   children: [
-                    MemberAvatar(
-                      label: initialsOf(member.nickname),
+                    SessionMemberAvatar(
+                      uid: member.uid,
+                      nickname: member.nickname,
                       size: 36,
                       speaking:
                           view.speaking.contains(member.id) ||

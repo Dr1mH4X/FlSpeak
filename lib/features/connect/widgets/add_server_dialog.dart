@@ -15,14 +15,20 @@ import '../../../widgets/common.dart';
 /// 添加服务器：只收 IP/域名与备注名；官方基础设施的最终边界由 Rust 决定。
 ///
 /// 校验失败时错误写在地址字段下方，不弹第二个对话框——用户正在这一行输入。
-Future<ServerProfileView?> showAddServerDialog(BuildContext context) {
+Future<ServerProfileView?> showAddServerDialog(
+  BuildContext context, {
+  ServerProfileView? server,
+}) {
   final formKey = GlobalKey<_AddServerFormState>();
   final submitting = ValueNotifier<bool>(false);
 
   return showAppModal<ServerProfileView>(
     context,
-    title: AppLocalizations.of(context).serverAdd,
-    builder: (context) => _AddServerForm(key: formKey, submitting: submitting),
+    title: server == null
+        ? AppLocalizations.of(context).serverAdd
+        : AppLocalizations.of(context).serverEdit,
+    builder: (context) =>
+        _AddServerForm(key: formKey, submitting: submitting, server: server),
     footer: (context) => ValueListenableBuilder<bool>(
       valueListenable: submitting,
       builder: (context, busy, _) {
@@ -61,17 +67,27 @@ Future<ServerProfileView?> showAddServerDialog(BuildContext context) {
                               ),
                             ),
                             const SizedBox(width: 8),
-                            Text(l10n.serverAddAndConnecting),
+                            Text(
+                              server == null
+                                  ? l10n.serverAddAndConnecting
+                                  : l10n.serverSaving,
+                            ),
                           ],
                         )
                       : Row(
                           key: const ValueKey('idle'),
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(l10n.serverAddAndConnect),
+                            Text(
+                              server == null
+                                  ? l10n.serverAddAndConnect
+                                  : l10n.commonSave,
+                            ),
                             const SizedBox(width: 8),
-                            const Icon(
-                              Icons.arrow_forward_rounded,
+                            Icon(
+                              server == null
+                                  ? Icons.arrow_forward_rounded
+                                  : Icons.check_rounded,
                               size: IconSizes.small,
                             ),
                           ],
@@ -87,9 +103,10 @@ Future<ServerProfileView?> showAddServerDialog(BuildContext context) {
 }
 
 class _AddServerForm extends ConsumerStatefulWidget {
-  const _AddServerForm({required this.submitting, super.key});
+  const _AddServerForm({required this.submitting, this.server, super.key});
 
   final ValueNotifier<bool> submitting;
+  final ServerProfileView? server;
 
   @override
   ConsumerState<_AddServerForm> createState() => _AddServerFormState();
@@ -103,6 +120,21 @@ class _AddServerFormState extends ConsumerState<_AddServerForm> {
 
   String? _error;
   bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final server = widget.server;
+    if (server != null) {
+      _address.text = server.host.contains(':')
+          ? '[${server.host}]:${server.port}'
+          : '${server.host}:${server.port}';
+      _label.text = server.label;
+      _icon =
+          ref.read(preferencesProvider).serverIcons[server.id] ??
+          ServerIcon.community;
+    }
+  }
 
   @override
   void dispose() {
@@ -136,12 +168,17 @@ class _AddServerFormState extends ConsumerState<_AddServerForm> {
     final label = _label.text.trim();
     final ServerProfileView profile;
     try {
-      profile = await ref
-          .read(sessionViewProvider.notifier)
-          .addServer(
-            label: label.isEmpty ? _hostOf(address) : label,
-            address: address,
-          );
+      final controller = ref.read(sessionViewProvider.notifier);
+      profile = widget.server == null
+          ? await controller.addServer(
+              label: label.isEmpty ? _hostOf(address) : label,
+              address: address,
+            )
+          : await controller.updateServer(
+              id: widget.server!.id,
+              label: label.isEmpty ? _hostOf(address) : label,
+              address: address,
+            );
     } on CoreError catch (error) {
       widget.submitting.value = false;
       if (!mounted) {
@@ -154,11 +191,11 @@ class _AddServerFormState extends ConsumerState<_AddServerForm> {
       _addressFocus.requestFocus();
       return;
     }
-    ref.read(preferencesProvider.notifier).setServerIcon(profile.id, _icon);
     widget.submitting.value = false;
     if (!mounted) {
       return;
     }
+    ref.read(preferencesProvider.notifier).setServerIcon(profile.id, _icon);
     Navigator.of(context).pop(profile);
   }
 
@@ -166,6 +203,11 @@ class _AddServerFormState extends ConsumerState<_AddServerForm> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
+    final view = ref.watch(sessionViewProvider);
+    final addressLocked =
+        widget.server != null &&
+        view.activeServerId == widget.server!.id &&
+        (view.connected || view.connecting || view.reconnecting);
     final labelStyle = context.texts.bodyMedium?.copyWith(
       fontSize: 13,
       fontWeight: FontWeight.w500,
@@ -184,6 +226,7 @@ class _AddServerFormState extends ConsumerState<_AddServerForm> {
         const SizedBox(height: 6),
         TextField(
           controller: _address,
+          enabled: !_submitting && !addressLocked,
           focusNode: _addressFocus,
           autofocus: true,
           autocorrect: false,
@@ -201,6 +244,7 @@ class _AddServerFormState extends ConsumerState<_AddServerForm> {
           decoration: InputDecoration(
             hintText: l10n.connectAddressHint,
             errorText: _error,
+            helperText: addressLocked ? l10n.serverAddressDisconnect : null,
           ),
         ),
         const SizedBox(height: 16),
@@ -208,6 +252,7 @@ class _AddServerFormState extends ConsumerState<_AddServerForm> {
         const SizedBox(height: 6),
         TextField(
           controller: _label,
+          enabled: !_submitting,
           autocorrect: false,
           textInputAction: TextInputAction.done,
           onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
@@ -245,6 +290,9 @@ class _AddServerFormState extends ConsumerState<_AddServerForm> {
 
 /// 没填备注名时用地址的主机名兜底，列表里不会出现一长串 `host:port`。
 String _hostOf(String address) {
+  if (address.startsWith('[')) {
+    return address.substring(1, address.indexOf(']'));
+  }
   final withoutScheme = address.contains('://')
       ? address.split('://').last
       : address;

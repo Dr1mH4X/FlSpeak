@@ -176,6 +176,25 @@ class SessionController extends Notifier<SessionView> {
     await _run(() => ref.read(coreSessionProvider).removeServer(id: id));
   }
 
+  Future<ServerProfileView> updateServer({
+    required String id,
+    required String label,
+    required String address,
+  }) async {
+    final profile = await ref
+        .read(coreSessionProvider)
+        .updateServer(id: id, label: label, address: address);
+    if (ref.mounted && profile.id != id) {
+      if (state.activeServerId == id) {
+        state = state.copyWith(activeServerId: profile.id);
+      }
+      ref
+          .read(preferencesProvider.notifier)
+          .moveServerPreferences(id, profile.id);
+    }
+    return profile;
+  }
+
   Future<bool> connect({required String id, required String nickname}) async {
     if (!ref.mounted || state.busy || state.connecting) return false;
     if (state.connected && state.activeServerId == id) return true;
@@ -768,6 +787,8 @@ class SessionController extends Notifier<SessionView> {
   void _onEvent(CoreEvent event) {
     final current = state;
     switch (event) {
+      case CoreEvent_Network(:final telemetry):
+        if (current.connected) state = current.copyWith(network: telemetry);
       case CoreEvent_AccessChanged():
         state = current.copyWith(accessRevision: current.accessRevision + 1);
       case CoreEvent_State(state: final next):
@@ -792,6 +813,7 @@ class SessionController extends Notifier<SessionView> {
         }
         state = switch (next) {
           CoreSessionState_Disconnected() => current.copyWith(
+            network: null,
             state: next,
             activeServerId: null,
             channels: const [],
@@ -808,6 +830,7 @@ class SessionController extends Notifier<SessionView> {
             busy: _pendingActions != 0,
           ),
           CoreSessionState_Connecting() => current.copyWith(
+            network: null,
             state: next,
             activeServerId: _awaitingDisconnect
                 ? current.activeServerId
@@ -824,6 +847,7 @@ class SessionController extends Notifier<SessionView> {
             selfSpeaking: false,
           ),
           CoreSessionState_Reconnecting() => current.copyWith(
+            network: null,
             state: next,
             activeServerId:
                 current.activeServerId ??
@@ -1285,6 +1309,16 @@ class PreferencesController extends Notifier<SessionPreferences> {
         serverIcons: Map.unmodifiable({...state.serverIcons, serverId: icon}),
       ),
     );
+  }
+
+  void moveServerPreferences(String oldId, String newId) {
+    final icons = {...state.serverIcons};
+    final icon = icons.remove(oldId);
+    if (icon != null) icons[newId] = icon;
+    final connected = {...state.lastConnected};
+    final at = connected.remove(oldId);
+    if (at != null) connected[newId] = at;
+    _update(state.copyWith(serverIcons: icons, lastConnected: connected));
   }
 
   void markConnected(String serverId, DateTime at) {

@@ -85,6 +85,7 @@ class SessionView {
     this.activeFileDownloads = const {},
     this.streams = const <StreamView>[],
     this.watchingStreamId,
+    this.network,
   });
 
   final Map<int, FileTransfer> transfers;
@@ -92,6 +93,7 @@ class SessionView {
   final List<StreamView> streams;
   final String? watchingStreamId;
   final CoreSessionState state;
+  final NetworkTelemetry? network;
   final List<ServerProfileView> servers;
   final List<ChannelView> channels;
   final List<ClientView> clients;
@@ -308,6 +310,7 @@ class SessionView {
   }
 
   SessionView copyWith({
+    Object? network = _unset,
     Map<int, FileTransfer>? transfers,
     Map<(int, int), int?>? activeFileDownloads,
     List<StreamView>? streams,
@@ -335,6 +338,9 @@ class SessionView {
     bool? pttMode,
     Object? identityUpgradeTarget = _unset,
   }) => SessionView(
+    network: identical(network, _unset)
+        ? this.network
+        : network as NetworkTelemetry?,
     transfers: transfers ?? this.transfers,
     activeFileDownloads: activeFileDownloads ?? this.activeFileDownloads,
     streams: streams ?? this.streams,

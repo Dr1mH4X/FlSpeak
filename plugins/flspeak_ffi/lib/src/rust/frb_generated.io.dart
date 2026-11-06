@@ -74,7 +74,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   CoreVoiceState dco_decode_box_autoadd_core_voice_state(dynamic raw);
 
   @protected
+  double dco_decode_box_autoadd_f_64(dynamic raw);
+
+  @protected
   int dco_decode_box_autoadd_i_32(dynamic raw);
+
+  @protected
+  NetworkTelemetry dco_decode_box_autoadd_network_telemetry(dynamic raw);
 
   @protected
   PublisherSignal dco_decode_box_autoadd_publisher_signal(dynamic raw);
@@ -161,6 +167,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   MemberGroupView dco_decode_member_group_view(dynamic raw);
 
   @protected
+  NetworkTelemetry dco_decode_network_telemetry(dynamic raw);
+
+  @protected
   int? dco_decode_opt_CastedPrimitive_u_64(dynamic raw);
 
   @protected
@@ -168,6 +177,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   bool? dco_decode_opt_box_autoadd_bool(dynamic raw);
+
+  @protected
+  double? dco_decode_opt_box_autoadd_f_64(dynamic raw);
 
   @protected
   int? dco_decode_opt_box_autoadd_i_32(dynamic raw);
@@ -266,7 +278,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  double sse_decode_box_autoadd_f_64(SseDeserializer deserializer);
+
+  @protected
   int sse_decode_box_autoadd_i_32(SseDeserializer deserializer);
+
+  @protected
+  NetworkTelemetry sse_decode_box_autoadd_network_telemetry(
+    SseDeserializer deserializer,
+  );
 
   @protected
   PublisherSignal sse_decode_box_autoadd_publisher_signal(
@@ -365,6 +385,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   MemberGroupView sse_decode_member_group_view(SseDeserializer deserializer);
 
   @protected
+  NetworkTelemetry sse_decode_network_telemetry(SseDeserializer deserializer);
+
+  @protected
   int? sse_decode_opt_CastedPrimitive_u_64(SseDeserializer deserializer);
 
   @protected
@@ -372,6 +395,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   bool? sse_decode_opt_box_autoadd_bool(SseDeserializer deserializer);
+
+  @protected
+  double? sse_decode_opt_box_autoadd_f_64(SseDeserializer deserializer);
 
   @protected
   int? sse_decode_opt_box_autoadd_i_32(SseDeserializer deserializer);
@@ -487,7 +513,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_f_64(double self, SseSerializer serializer);
+
+  @protected
   void sse_encode_box_autoadd_i_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_network_telemetry(
+    NetworkTelemetry self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_box_autoadd_publisher_signal(
@@ -622,6 +657,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_network_telemetry(
+    NetworkTelemetry self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_CastedPrimitive_u_64(int? self, SseSerializer serializer);
 
   @protected
@@ -629,6 +670,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_opt_box_autoadd_bool(bool? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_f_64(double? self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_box_autoadd_i_32(int? self, SseSerializer serializer);

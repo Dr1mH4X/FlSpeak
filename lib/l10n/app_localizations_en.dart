@@ -435,6 +435,78 @@ class AppLocalizationsEn extends AppLocalizations {
   String get membersTitle => 'Channel members';
 
   @override
+  String get memberDetails => 'User details';
+
+  @override
+  String get memberNickname => 'Nickname';
+
+  @override
+  String get memberUid => 'Unique ID (UID)';
+
+  @override
+  String get memberChannel => 'Channel';
+
+  @override
+  String get memberUnavailable => 'This user is offline';
+
+  @override
+  String get serverEdit => 'Edit server';
+
+  @override
+  String get commonSave => 'Save';
+
+  @override
+  String get serverSaving => 'Saving…';
+
+  @override
+  String get serverAddressDisconnect => 'Disconnect to change the address';
+
+  @override
+  String get networkDetails => 'Network telemetry';
+
+  @override
+  String get networkMeasuring => 'Checking network';
+
+  @override
+  String get networkDegraded => 'Unstable network';
+
+  @override
+  String get networkPoor => 'Poor network quality';
+
+  @override
+  String get networkLatency => 'Directory request latency';
+
+  @override
+  String get networkJitter => 'Latency variation';
+
+  @override
+  String get networkFailureRate => 'Recent response failure rate';
+
+  @override
+  String get networkProbesSent => 'Sampled requests';
+
+  @override
+  String get networkProbesFailed => 'Requests without a valid response';
+
+  @override
+  String get networkConnectedTime => 'Connection duration';
+
+  @override
+  String get networkUpdatedAt => 'Updated at';
+
+  @override
+  String get networkUnavailable => 'Unavailable';
+
+  @override
+  String networkMilliseconds(String value) {
+    return '$value ms';
+  }
+
+  @override
+  String get networkProbeExplanation =>
+      'Samples reuse the existing 30-second directory refresh without extra probes. Latency includes server processing and command throttling. The failure rate covers requests without a valid response among the last 10 samples, not UDP packet loss. The protocol library does not expose local packet loss or traffic counters.';
+
+  @override
   String get voiceConnected => 'Voice connected';
 
   @override
