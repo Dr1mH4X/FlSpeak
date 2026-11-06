@@ -43,14 +43,18 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "版本：$version，Tag：$tag"
 
-  # tag 与手动发版都先过同一套检查；任一检查失败，打包矩阵不会启动。
+  # tag 与手动发版都先过检查与测试；任一失败，打包矩阵不会启动。
   checks:
     name: Checks
     uses: ./.github/workflows/checks.yml
 
+  tests:
+    name: Tests
+    uses: ./.github/workflows/tests.yml
+
   build:
     name: ${{ matrix.platform }} ${{ matrix.arch || 'all' }}
-    needs: [ meta, checks ]
+    needs: [ meta, checks, tests ]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
