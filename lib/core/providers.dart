@@ -1158,8 +1158,11 @@ class SessionController extends Notifier<SessionView> {
               .read(streamPublisherProvider.notifier)
               .handleViewerLeft(streamId: streamId, viewerClid: viewerClid),
         );
-      case CoreEvent_Log():
-        // 协议日志不进界面，避免刷屏。
+      case CoreEvent_Log(:final level, :final message):
+        // 协议日志不进界面，避免刷屏；调试模式输出以便排查。
+        if (kDebugMode) {
+          debugPrint('[Rust/$level] $message');
+        }
         break;
       case CoreEvent_Denied(:final message):
         _notifyFailure(message);

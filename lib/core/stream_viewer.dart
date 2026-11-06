@@ -10,9 +10,25 @@ import 'providers.dart';
 import 'window_chrome.dart';
 
 /// Default STUN server configuration for TS6 screen-share viewer connections.
+/// Prioritizes fast, widely reachable STUN servers (Cloudflare, QQ, MiWiFi,
+/// Syncthing) before Google STUN to avoid lengthy timeouts in restricted networks.
+/// Default STUN server configuration for TS6 screen-share viewer and publisher connections.
+/// Combines TeamSpeak official STUN servers with high-speed domestic and global STUN candidates
+/// for fast, reliable ICE candidate gathering across NATs.
 const List<Map<String, dynamic>> defaultStreamIceServers = [
   {
-    'urls': ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'],
+    'urls': [
+      'stun:turn.teamspeak.com:3478',
+      'stun:turn2.teamspeak.com:3478',
+      'stun:stun.miwifi.com:3478',
+      'stun:stun.chat.bilibili.com:3478',
+      'stun:stun.qq.com:3478',
+      'stun:stun.aliyun.com:3478',
+      'stun:stun.cloudflare.com:3478',
+      'stun:stun.bige0.com:3478',
+      'stun:stun.hitv.com:3478',
+      'stun:stun.syncthing.net:3478',
+    ],
   },
 ];
 
@@ -185,25 +201,321 @@ SdpMediaLayout inspectSdpMediaLayout(String sdp) {
   );
 }
 
+/// Ensures that the `m=audio` section in [sdp] has `a=$targetDirection`
+/// (e.g. `a=sendonly` for screen publisher offers or `a=recvonly` for viewer offers).
+///
+/// In WebRTC unified-plan, creating an offer for an audio transceiver without an
+/// attached audio track (e.g. screen sharing without system audio) causes
+/// native `libwebrtc` to emit `a=inactive` (RFC 8829 Section 5.2.1). However,
+/// official TeamSpeak 5/6 clients strictly require `slot=1 media=audio dir=kSendOnly`
+/// in publisher offers, ignoring or hanging indefinitely on `a=inactive` offers.
+///
+/// If a direction attribute (`a=sendrecv`, `a=sendonly`, `a=recvonly`, `a=inactive`)
+/// is present in `m=audio`, replaces it with `a=$targetDirection`.
+/// If no direction attribute is present, inserts `a=$targetDirection`.
+String ensureAudioDirectionInSdp(String sdp, String targetDirection) {
+  if (sdp.isEmpty) return sdp;
+  final lineSeparator = sdp.contains('\r\n') ? '\r\n' : '\n';
+  final lines = sdp.split(RegExp(r'\r?\n'));
+
+  var audioStart = -1;
+  var audioEnd = lines.length;
+
+  for (var i = 0; i < lines.length; i++) {
+    final line = lines[i];
+    if (audioStart == -1) {
+      if (line.startsWith('m=audio ')) {
+        audioStart = i;
+      }
+    } else if (line.startsWith('m=')) {
+      audioEnd = i;
+      break;
+    }
+  }
+
+  if (audioStart == -1) return sdp;
+
+  final directionRegex = RegExp(r'^a=(sendrecv|sendonly|recvonly|inactive)$');
+  var foundDirection = false;
+  final updatedLines = <String>[];
+
+  for (var i = 0; i < lines.length; i++) {
+    final line = lines[i];
+    if (i > audioStart && i < audioEnd) {
+      if (directionRegex.hasMatch(line.trim())) {
+        updatedLines.add('a=$targetDirection');
+        foundDirection = true;
+        continue;
+      }
+    }
+    updatedLines.add(line);
+  }
+
+  if (!foundDirection) {
+    // Insert a=$targetDirection after a=mid: or right after m=audio
+    var insertIdx = audioStart + 1;
+    for (var i = audioStart + 1; i < audioEnd && i < updatedLines.length; i++) {
+      if (updatedLines[i].trim().startsWith('a=mid:')) {
+        insertIdx = i + 1;
+        break;
+      }
+    }
+    updatedLines.insert(insertIdx, 'a=$targetDirection');
+  }
+
+  return updatedLines.join(lineSeparator);
+}
+
+/// Prunes unused codecs from [sdp] to keep the SDP offer compact and prevent
+/// TeamSpeak command buffer overflow (>9,150 bytes escaped on wire).
+///
+/// In native `libwebrtc`, an offer often lists 10+ video codecs and 14+ audio codecs,
+/// producing a raw SDP of 5-6 KB that swells to over 10 KB when escaped with TeamSpeak
+/// protocol syntax (`\s`, `\/`, `\r\n`), causing TeamSpeak server to silently drop
+/// `respondjoinstreamrequest`.
+///
+/// This function:
+/// - In `m=video`: retains only payload types matching [targetVideoCodec] (e.g. `VP8`)
+///   and [fallbackVideoCodec] (e.g. `H264`), along with their associated RTX payload types.
+///   Removes all other video payload types and their `a=rtpmap`, `a=rtcp-fb`, and `a=fmtp` lines.
+/// - In `m=audio`: retains only the `opus` payload type (and its RTX if any), removing
+///   extraneous audio codecs (G722, PCMU, PCMA, ISAC, telephone-event, red, etc.).
+String pruneSdpCodecsForTs6(
+  String sdp, {
+  String targetVideoCodec = 'VP8',
+  String? fallbackVideoCodec = 'H264',
+}) {
+  if (sdp.isEmpty) return sdp;
+  final lineSeparator = sdp.contains('\r\n') ? '\r\n' : '\n';
+  final lines = sdp.split(RegExp(r'\r?\n'));
+
+  var videoStart = -1;
+  var audioStart = -1;
+  var videoEnd = lines.length;
+  var audioEnd = lines.length;
+
+  for (var i = 0; i < lines.length; i++) {
+    final line = lines[i];
+    if (line.startsWith('m=video ')) {
+      videoStart = i;
+    } else if (line.startsWith('m=audio ')) {
+      audioStart = i;
+    }
+  }
+
+  if (videoStart != -1 && audioStart != -1) {
+    if (videoStart < audioStart) {
+      videoEnd = audioStart;
+      audioEnd = lines.length;
+    } else {
+      audioEnd = videoStart;
+      videoEnd = lines.length;
+    }
+  } else if (videoStart != -1) {
+    videoEnd = lines.length;
+  } else if (audioStart != -1) {
+    audioEnd = lines.length;
+  }
+
+  final targetUpper = targetVideoCodec.trim().toUpperCase();
+  final fallbackUpper = fallbackVideoCodec?.trim().toUpperCase();
+
+  final rtpmapRegex = RegExp(
+    r'^a=rtpmap:(\d+)\s+([^/\s]+)/',
+    caseSensitive: false,
+  );
+  final fmtpAptRegex = RegExp(
+    r'^a=fmtp:(\d+)\s+.*\bapt=(\d+)\b',
+    caseSensitive: false,
+  );
+  final codecAttrRegex = RegExp(
+    r'^a=(rtpmap|rtcp-fb|fmtp):(\d+)\b',
+    caseSensitive: false,
+  );
+
+  // 1. Process video section
+  Set<String>? keptVideoPts;
+  List<String>? orderedVideoPts;
+  if (videoStart != -1) {
+    final videoHeaderParts = lines[videoStart].trim().split(RegExp(r'\s+'));
+    if (videoHeaderParts.length > 3) {
+      final originalPts = videoHeaderParts.sublist(3);
+      final targetPts = <String>{};
+      final fallbackPts = <String>{};
+      final rtxAptMap = <String, String>{};
+
+      for (var i = videoStart + 1; i < videoEnd; i++) {
+        final line = lines[i].trim();
+        final rtpmapMatch = rtpmapRegex.firstMatch(line);
+        if (rtpmapMatch != null) {
+          final pt = rtpmapMatch.group(1)!;
+          final codec = rtpmapMatch.group(2)!.toUpperCase();
+          if (codec == targetUpper) {
+            targetPts.add(pt);
+          } else if (fallbackUpper != null && codec == fallbackUpper) {
+            fallbackPts.add(pt);
+          }
+          continue;
+        }
+        final fmtpMatch = fmtpAptRegex.firstMatch(line);
+        if (fmtpMatch != null) {
+          rtxAptMap[fmtpMatch.group(1)!] = fmtpMatch.group(2)!;
+        }
+      }
+
+      final prioritizedTargetPts = <String>[
+        for (final pt in originalPts)
+          if (targetPts.contains(pt)) pt,
+        for (final entry in rtxAptMap.entries)
+          if (targetPts.contains(entry.value) &&
+              originalPts.contains(entry.key))
+            entry.key,
+      ];
+
+      final prioritizedFallbackPts = <String>[
+        for (final pt in originalPts)
+          if (fallbackPts.contains(pt) && !prioritizedTargetPts.contains(pt))
+            pt,
+        for (final entry in rtxAptMap.entries)
+          if (fallbackPts.contains(entry.value) &&
+              originalPts.contains(entry.key) &&
+              !prioritizedTargetPts.contains(entry.key))
+            entry.key,
+      ];
+
+      if (prioritizedTargetPts.isNotEmpty ||
+          prioritizedFallbackPts.isNotEmpty) {
+        orderedVideoPts = [...prioritizedTargetPts, ...prioritizedFallbackPts];
+        keptVideoPts = orderedVideoPts.toSet();
+      }
+    }
+  }
+
+  // 2. Process audio section
+  Set<String>? keptAudioPts;
+  List<String>? orderedAudioPts;
+  if (audioStart != -1) {
+    final audioHeaderParts = lines[audioStart].trim().split(RegExp(r'\s+'));
+    if (audioHeaderParts.length > 3) {
+      final originalAudioPts = audioHeaderParts.sublist(3);
+      final opusPts = <String>{};
+      final audioRtxMap = <String, String>{};
+
+      for (var i = audioStart + 1; i < audioEnd; i++) {
+        final line = lines[i].trim();
+        final rtpmapMatch = rtpmapRegex.firstMatch(line);
+        if (rtpmapMatch != null) {
+          final pt = rtpmapMatch.group(1)!;
+          final codec = rtpmapMatch.group(2)!.toUpperCase();
+          if (codec == 'OPUS') {
+            opusPts.add(pt);
+          }
+          continue;
+        }
+        final fmtpMatch = fmtpAptRegex.firstMatch(line);
+        if (fmtpMatch != null) {
+          audioRtxMap[fmtpMatch.group(1)!] = fmtpMatch.group(2)!;
+        }
+      }
+
+      if (opusPts.isNotEmpty) {
+        orderedAudioPts = [
+          for (final pt in originalAudioPts)
+            if (opusPts.contains(pt)) pt,
+          for (final entry in audioRtxMap.entries)
+            if (opusPts.contains(entry.value) &&
+                originalAudioPts.contains(entry.key))
+              entry.key,
+        ];
+        keptAudioPts = orderedAudioPts.toSet();
+      }
+    }
+  }
+
+  // 3. Assemble filtered lines
+  final updatedLines = <String>[];
+  for (var i = 0; i < lines.length; i++) {
+    final line = lines[i];
+    if (i == videoStart && orderedVideoPts != null) {
+      final headerPrefix = line.trim().split(RegExp(r'\s+')).sublist(0, 3);
+      updatedLines.add(
+        '${headerPrefix.join(' ')} ${orderedVideoPts.join(' ')}',
+      );
+      continue;
+    }
+    if (i == audioStart && orderedAudioPts != null) {
+      final headerPrefix = line.trim().split(RegExp(r'\s+')).sublist(0, 3);
+      updatedLines.add(
+        '${headerPrefix.join(' ')} ${orderedAudioPts.join(' ')}',
+      );
+      continue;
+    }
+
+    if (videoStart != -1 &&
+        i > videoStart &&
+        i < videoEnd &&
+        keptVideoPts != null) {
+      final match = codecAttrRegex.firstMatch(line.trim());
+      if (match != null) {
+        final pt = match.group(2)!;
+        if (!keptVideoPts.contains(pt)) {
+          continue; // Strip discarded video codec attributes
+        }
+      }
+    } else if (audioStart != -1 &&
+        i > audioStart &&
+        i < audioEnd &&
+        keptAudioPts != null) {
+      final match = codecAttrRegex.firstMatch(line.trim());
+      if (match != null) {
+        final pt = match.group(2)!;
+        if (!keptAudioPts.contains(pt)) {
+          continue; // Strip discarded audio codec attributes
+        }
+      }
+    }
+
+    updatedLines.add(line);
+  }
+
+  return updatedLines.join(lineSeparator);
+}
+
 /// Normalizes an Offer or Answer SDP for TS6 native compatibility:
-/// prioritizes [preferredVideoCodec] (`VP8` by default, or `H264`) in `m=video`
-/// and preserves `m=audio` (appending a minimal `m=audio` section with
-/// `a=mid:1` and `a=$fallbackAudioDirection` only if a malformed SDP omitted it).
+/// - Prunes unused codecs to stay safely under TeamSpeak's 9,150 byte line limit.
+/// - Prioritizes [preferredVideoCodec] (`VP8` by default, or `H264`) in `m=video`.
+/// - Guarantees `m=audio` has `a=$fallbackAudioDirection` (`sendonly` for publisher,
+///   `recvonly` for viewer) even when native `libwebrtc` generated `a=inactive` due
+///   to lack of an audio track.
+/// - Appends a minimal `m=audio` section with `a=mid:1` and `a=$fallbackAudioDirection`
+///   only if the input SDP omitted `m=audio` completely.
 String normalizeSdpForTs6(
   String sdp, {
   String preferredVideoCodec = 'VP8',
   String fallbackAudioDirection = 'recvonly',
+  bool pruneUnusedCodecs = true,
 }) {
   if (sdp.isEmpty) return sdp;
-  final codecPrioritized = preferCodecInSdp(sdp, preferredVideoCodec);
-  final layout = inspectSdpMediaLayout(codecPrioritized);
-  if (layout.hasAudio || !layout.hasVideo) {
-    return codecPrioritized;
+  final codecNormalized = pruneUnusedCodecs
+      ? pruneSdpCodecsForTs6(
+          sdp,
+          targetVideoCodec: preferredVideoCodec,
+          fallbackVideoCodec: preferredVideoCodec.toUpperCase() == 'VP8'
+              ? 'H264'
+              : 'VP8',
+        )
+      : preferCodecInSdp(sdp, preferredVideoCodec);
+  final layout = inspectSdpMediaLayout(codecNormalized);
+  if (!layout.hasVideo) {
+    return codecNormalized;
   }
-  final lineSeparator = codecPrioritized.contains('\r\n') ? '\r\n' : '\n';
-  final trimmed = codecPrioritized.endsWith(lineSeparator)
-      ? codecPrioritized
-      : '$codecPrioritized$lineSeparator';
+  if (layout.hasAudio) {
+    return ensureAudioDirectionInSdp(codecNormalized, fallbackAudioDirection);
+  }
+  final lineSeparator = codecNormalized.contains('\r\n') ? '\r\n' : '\n';
+  final trimmed = codecNormalized.endsWith(lineSeparator)
+      ? codecNormalized
+      : '$codecNormalized$lineSeparator';
   final fallbackAudioSection = [
     'm=audio 9 UDP/TLS/RTP/SAVPF 111',
     'c=IN IP4 0.0.0.0',
@@ -218,6 +530,11 @@ String normalizeSdpForTs6(
 
 /// Applies codec preference ordering on a video [transceiver] so codecs
 /// matching [preferredMimeType] (e.g. `video/vp8` or `video/h264`) appear first.
+///
+/// Preserves `video/rtx` retransmission payloads paired with their parent codec
+/// and retains auxiliary resilience payloads (`video/red`, `video/ulpfec`)
+/// so native `libwebrtc` does not reject `setCodecPreferences` with
+/// `INVALID_MODIFICATION`.
 Future<void> preferVideoCodecOnTransceiver({
   required RTCRtpCapabilities? capabilities,
   required RTCRtpTransceiver transceiver,
@@ -227,23 +544,67 @@ Future<void> preferVideoCodecOnTransceiver({
   if (codecs == null || codecs.isEmpty) return;
 
   final targetMime = preferredMimeType.trim().toLowerCase();
-  final preferredCodecs = <RTCRtpCodecCapability>[];
-  final otherCodecs = <RTCRtpCodecCapability>[];
+  final secondaryMime = targetMime == 'video/vp8' ? 'video/h264' : 'video/vp8';
+
+  final preferredBlocks = <List<RTCRtpCodecCapability>>[];
+  final secondaryBlocks = <List<RTCRtpCodecCapability>>[];
+  final auxiliaryCodecs = <RTCRtpCodecCapability>[];
+
+  List<RTCRtpCodecCapability>? currentBlock;
+  int currentBlockCategory = 0; // 1 = preferred, 2 = secondary, 0 = other
+
   for (final codec in codecs) {
     final mime = codec.mimeType.toLowerCase();
-    if (mime == targetMime) {
-      preferredCodecs.add(codec);
+    if (mime == 'video/rtx') {
+      if (currentBlock != null) {
+        currentBlock.add(codec);
+      } else {
+        auxiliaryCodecs.add(codec);
+      }
+    } else if (mime == 'video/red' ||
+        mime == 'video/ulpfec' ||
+        mime == 'video/flexfec-03') {
+      auxiliaryCodecs.add(codec);
     } else {
-      otherCodecs.add(codec);
+      if (currentBlock != null) {
+        if (currentBlockCategory == 1) {
+          preferredBlocks.add(currentBlock);
+        } else if (currentBlockCategory == 2) {
+          secondaryBlocks.add(currentBlock);
+        }
+      }
+      currentBlock = [codec];
+      if (mime == targetMime) {
+        currentBlockCategory = 1;
+      } else if (mime == secondaryMime) {
+        currentBlockCategory = 2;
+      } else {
+        currentBlockCategory = 0;
+      }
     }
   }
-  if (preferredCodecs.isEmpty) return;
+
+  if (currentBlock != null) {
+    if (currentBlockCategory == 1) {
+      preferredBlocks.add(currentBlock);
+    } else if (currentBlockCategory == 2) {
+      secondaryBlocks.add(currentBlock);
+    }
+  }
+
+  if (preferredBlocks.isEmpty && secondaryBlocks.isEmpty) return;
+
+  final orderedCodecs = <RTCRtpCodecCapability>[
+    for (final block in preferredBlocks) ...block,
+    ...auxiliaryCodecs,
+    for (final block in secondaryBlocks) ...block,
+  ];
 
   try {
-    await transceiver.setCodecPreferences([...preferredCodecs, ...otherCodecs]);
+    await transceiver.setCodecPreferences(orderedCodecs);
   } catch (_) {
     // Ignore platforms that do not support setCodecPreferences; SDP
-    // normalization (`preferCodecInSdp`) still reorders the preferred codec first.
+    // normalization (`pruneSdpCodecsForTs6`) still reorders and prunes codecs.
   }
 }
 

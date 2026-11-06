@@ -1694,6 +1694,21 @@ impl Actor {
                 let last_snapshot = self.last_snapshot.as_ref();
                 let mut out = Vec::new();
                 for params in &items {
+                    if name == "notifystreamsignaling" {
+                        self.emit(SessionEvent::Log {
+                            level: "debug".into(),
+                            message: format!(
+                                "收到 notifystreamsignaling: id={}, clid={}, json={}",
+                                params.get("id").map(String::as_str).unwrap_or("-"),
+                                params.get("clid").map(String::as_str).unwrap_or("-"),
+                                params
+                                    .get("json")
+                                    .or_else(|| params.get("data"))
+                                    .map(|raw| truncate_log(raw, 160))
+                                    .unwrap_or_else(|| "-".into()),
+                            ),
+                        });
+                    }
                     let events =
                         self.streams
                             .notification(&name, params, self.self_client_id, |clid| {
@@ -2078,6 +2093,13 @@ impl Actor {
         let params = self
             .streams
             .respond_viewer_join(viewer_clid, accept, &offer_sdp)?;
+        self.emit(SessionEvent::Log {
+            level: "debug".into(),
+            message: format!(
+                "发送 respondjoinstreamrequest: 观众={viewer_clid}, accept={accept}, offer_sdp_len={}",
+                offer_sdp.len()
+            ),
+        });
         let result = self
             .stream_command("respondjoinstreamrequest", &params)
             .await;
@@ -2594,6 +2616,17 @@ pub(crate) fn unescape_text(raw: &str) -> String {
 fn emit(events: &broadcast::Sender<SessionEvent>, event: SessionEvent) {
     // 没有订阅者时事件直接丢弃，actor 不因此停下。
     let _ = events.send(event);
+}
+
+/// 日志里只保留前 `max_chars` 个字符，避免整段 JSON 刷屏。
+fn truncate_log(raw: &str, max_chars: usize) -> String {
+    let mut chars = raw.chars();
+    let head: String = chars.by_ref().take(max_chars).collect();
+    if chars.next().is_some() {
+        format!("{head}…")
+    } else {
+        head
+    }
 }
 
 fn client_channel(

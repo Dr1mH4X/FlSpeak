@@ -12,6 +12,14 @@ import 'stream_viewer.dart';
 /// Default maximum concurrent viewers for 1-to-N WebRTC screen share publishing.
 const int defaultMaxStreamViewers = 5;
 
+/// A TeamSpeak command line longer than this is dropped without an answer, which
+/// used to surface as a 10 s `respondjoinstreamrequest` timeout.
+const int _maxCommandLineBytes = 9150;
+
+/// Bytes a `respondjoinstreamrequest` line spends on everything except the offer:
+/// command name, `id`, `clid`, `msg`, `decision` and the appended `return_code`.
+const int _commandOverheadBytes = 160;
+
 /// Lightweight, testable representation of a desktop screen or window source.
 class DesktopSourceEntry extends DesktopCapturerSource {
   DesktopSourceEntry({
@@ -38,6 +46,28 @@ class DesktopSourceEntry extends DesktopCapturerSource {
   final ThumbnailSize thumbnailSize;
 }
 
+/// Why a viewer's screen-share negotiation ended without a connected peer.
+enum StreamViewerFailureReason {
+  /// No Answer (or no usable Answer) arrived before `defaultStreamNegotiationTimeout`.
+  answerTimeout,
+
+  /// Applying the viewer's Answer or its ICE candidates failed.
+  answerRejected,
+
+  /// The peer connection reported `failed`/`closed` before media flowed.
+  connectionFailed,
+}
+
+/// Explicit failure of one viewer session, surfaced in the publisher banner so a
+/// stopped negotiation never looks like a silently working (but black) stream.
+@immutable
+class StreamViewerFailure {
+  const StreamViewerFailure({required this.viewerClid, required this.reason});
+
+  final int viewerClid;
+  final StreamViewerFailureReason reason;
+}
+
 /// Immutable state for the screen-share publisher (`StreamPublisherController`).
 @immutable
 class StreamPublisherState {
@@ -54,6 +84,7 @@ class StreamPublisherState {
     this.viewerIds = const <int>{},
     this.maxViewers = defaultMaxStreamViewers,
     this.renderer,
+    this.viewerFailure,
   });
 
   final String? streamId;
@@ -68,6 +99,10 @@ class StreamPublisherState {
   final Set<int> viewerIds;
   final int maxViewers;
   final RTCVideoRenderer? renderer;
+
+  /// Set when a viewer session ends without a connected peer; cleared on the next
+  /// join request or when sharing stops.
+  final StreamViewerFailure? viewerFailure;
 
   bool get isActive => isSharing || isStarting;
 
@@ -90,6 +125,8 @@ class StreamPublisherState {
     int? maxViewers,
     RTCVideoRenderer? renderer,
     bool clearRenderer = false,
+    StreamViewerFailure? viewerFailure,
+    bool clearViewerFailure = false,
   }) {
     return StreamPublisherState(
       streamId: clearStreamId ? null : (streamId ?? this.streamId),
@@ -104,6 +141,9 @@ class StreamPublisherState {
       viewerIds: viewerIds ?? this.viewerIds,
       maxViewers: maxViewers ?? this.maxViewers,
       renderer: clearRenderer ? null : (renderer ?? this.renderer),
+      viewerFailure: clearViewerFailure
+          ? null
+          : (viewerFailure ?? this.viewerFailure),
     );
   }
 }
@@ -119,10 +159,14 @@ class _ViewerPeerSession {
   final int viewerClid;
   final int peerGeneration;
   RTCPeerConnection? peer;
-  bool offerSent = false;
   bool remoteDescriptionSet = false;
+  bool failureReported = false;
   final List<RTCIceCandidate> pendingLocalCandidates = [];
   final List<RTCIceCandidate> pendingRemoteCandidates = [];
+
+  /// Serializes Answer/ICE handling so a candidate can never be added before the
+  /// Answer that established the remote description.
+  Future<void> signalingTail = Future<void>.value();
   Timer? negotiationTimer;
 }
 
@@ -202,13 +246,7 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
       final mediaConstraints = <String, dynamic>{
         'video': <String, dynamic>{
           'deviceId': <String, dynamic>{'exact': sourceId},
-          'mandatory': <String, dynamic>{
-            'frameRate': selectedFrameRate.fps,
-            'minWidth': selectedResolution.width,
-            'minHeight': selectedResolution.height,
-            'maxWidth': selectedResolution.width,
-            'maxHeight': selectedResolution.height,
-          },
+          'mandatory': <String, dynamic>{'frameRate': selectedFrameRate.fps},
         },
         'audio': audio,
       };
@@ -232,8 +270,6 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
       // Apply ideal capture constraints if the platform supports it.
       try {
         await videoTrack.applyConstraints(<String, dynamic>{
-          'width': selectedResolution.width,
-          'height': selectedResolution.height,
           'frameRate': selectedFrameRate.fps,
         });
       } catch (_) {
@@ -348,6 +384,9 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
     if (_viewerSessions.containsKey(viewerClid)) {
       await _closeViewerSession(viewerClid);
     }
+    if (state.viewerFailure != null) {
+      state = state.copyWith(clearViewerFailure: true);
+    }
 
     if (_viewerSessions.length >= state.maxViewers) {
       try {
@@ -371,14 +410,10 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
 
     final bindings = ref.read(webRtcBindingsProvider);
     final prefs = ref.read(preferencesProvider);
-    final preferredCodec =
-        prefs.screenShareCodec == ScreenShareCodecPreference.h264
-        ? 'H264'
-        : 'VP8';
-    final preferredMime =
-        prefs.screenShareCodec == ScreenShareCodecPreference.h264
-        ? 'video/h264'
-        : 'video/vp8';
+    // TS6 official native client rejects certain platform-default H.264
+    // profiles (e.g. Constrained Baseline); force VP8 as the preferred
+    // video codec when creating offers for viewers.
+    const preferredCodec = 'VP8';
 
     try {
       final peer = await bindings.createPeer({
@@ -426,11 +461,7 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
       }
 
       // Configure transceiver directions and preferred video codec.
-      await _configurePublisherTransceivers(
-        bindings: bindings,
-        peer: peer,
-        preferredMimeType: preferredMime,
-      );
+      await _configurePublisherTransceivers(bindings: bindings, peer: peer);
       if (!_isViewerSessionValid(
         currentGeneration,
         viewerClid,
@@ -464,7 +495,10 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
         }
         final candidateSdp = candidate.candidate;
         if (candidateSdp == null || candidateSdp.isEmpty) return;
-        if (!viewerSession.offerSent) {
+        // Trickle candidates only after the viewer's Answer established the remote
+        // description; the official client otherwise receives a burst of signals
+        // before it has a peer to apply them to.
+        if (!viewerSession.remoteDescriptionSet) {
           viewerSession.pendingLocalCandidates.add(candidate);
           return;
         }
@@ -485,14 +519,27 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
         )) {
           return;
         }
+        if (kDebugMode) {
+          debugPrint(
+            '[StreamPublisher] viewer $viewerClid connection state: $connectionState',
+          );
+        }
         if (connectionState ==
             RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
           _clearViewerNegotiationTimer(viewerSession);
+          if (ref.mounted && state.viewerFailure != null) {
+            state = state.copyWith(clearViewerFailure: true);
+          }
         } else if (connectionState ==
                 RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
             connectionState ==
                 RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
-          unawaited(_closeViewerSession(viewerClid));
+          unawaited(
+            _failViewerSession(
+              viewerClid,
+              reason: StreamViewerFailureReason.connectionFailed,
+            ),
+          );
         }
       };
 
@@ -504,13 +551,23 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
         )) {
           return;
         }
+        if (kDebugMode) {
+          debugPrint(
+            '[StreamPublisher] viewer $viewerClid ICE state: $iceState',
+          );
+        }
         if (iceState == RTCIceConnectionState.RTCIceConnectionStateConnected ||
             iceState == RTCIceConnectionState.RTCIceConnectionStateCompleted) {
           _clearViewerNegotiationTimer(viewerSession);
         } else if (iceState ==
                 RTCIceConnectionState.RTCIceConnectionStateFailed ||
             iceState == RTCIceConnectionState.RTCIceConnectionStateClosed) {
-          unawaited(_closeViewerSession(viewerClid));
+          unawaited(
+            _failViewerSession(
+              viewerClid,
+              reason: StreamViewerFailureReason.connectionFailed,
+            ),
+          );
         }
       };
 
@@ -519,7 +576,15 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
         viewerSession: viewerSession,
       );
 
-      final rawOffer = await peer.createOffer();
+      // Never ask libwebrtc to "receive" audio/video implicitly: flutter_webrtc's
+      // default SDP constraints add a recvonly audio and a recvonly video section,
+      // so the offer would carry four m-lines. The TS6 client expects exactly the
+      // two transceivers the publisher created (video, then audio) and does not
+      // answer the four-section offer.
+      final rawOffer = await peer.createOffer(<String, dynamic>{
+        'mandatory': <String, dynamic>{},
+        'optional': <dynamic>[],
+      });
       if (!_isViewerSessionValid(
         currentGeneration,
         viewerClid,
@@ -528,28 +593,48 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
         return;
       }
 
-      final offerSdp = normalizeSdpForTs6(
-        rawOffer.sdp ?? '',
-        preferredVideoCodec: preferredCodec,
-        fallbackAudioDirection: 'sendonly',
-      );
-      final offerDescription = RTCSessionDescription(
-        offerSdp,
-        rawOffer.type ?? 'offer',
-      );
-      await peer.setLocalDescription(offerDescription);
+      final rawSdp = rawOffer.sdp ?? '';
+      // Both known-working TS6 implementations hand libwebrtc's own offer to the
+      // viewer unchanged and only narrow codecs through `setCodecPreferences`.
+      // Rewriting the SDP is a last resort for the server's command-line limit.
+      var appliedSdp = _offerFitsOneCommand(rawSdp)
+          ? rawSdp
+          : normalizeSdpForTs6(
+              rawSdp,
+              preferredVideoCodec: preferredCodec,
+              fallbackAudioDirection: 'sendonly',
+            );
+      try {
+        await peer.setLocalDescription(
+          RTCSessionDescription(appliedSdp, rawOffer.type ?? 'offer'),
+        );
+      } catch (e) {
+        debugPrint(
+          '[StreamPublisher] setLocalDescription with the rewritten offer failed ($e), falling back to raw offer',
+        );
+        await peer.setLocalDescription(rawOffer);
+        appliedSdp = rawSdp;
+      }
       if (!_isViewerSessionValid(
         currentGeneration,
         viewerClid,
         peerGeneration,
       )) {
         return;
+      }
+
+      debugPrint(
+        '[StreamPublisher] Sending respondStreamJoinRequest for viewer $viewerClid '
+        '(offer SDP: ${appliedSdp.length} chars, raw: ${rawSdp.length} chars)',
+      );
+      if (kDebugMode) {
+        debugPrint('[StreamPublisher] offer for $viewerClid:\n$appliedSdp');
       }
 
       await coreSession.respondStreamJoinRequest(
         viewerClid: viewerClid,
         accept: true,
-        offerSdp: offerSdp,
+        offerSdp: appliedSdp,
       );
       if (!_isViewerSessionValid(
         currentGeneration,
@@ -558,25 +643,19 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
       )) {
         return;
       }
-      viewerSession.offerSent = true;
-      await _flushPendingLocalViewerCandidates(
-        currentGeneration: currentGeneration,
-        viewerSession: viewerSession,
+    } catch (e, st) {
+      debugPrint(
+        '[StreamPublisher] Error negotiating stream with viewer $viewerClid: $e\n$st',
       );
-    } catch (_) {
       if (_isViewerSessionValid(
         currentGeneration,
         viewerClid,
         peerGeneration,
       )) {
-        await _closeViewerSession(viewerClid);
-        try {
-          await coreSession.respondStreamJoinRequest(
-            viewerClid: viewerClid,
-            accept: false,
-            offerSdp: '',
-          );
-        } catch (_) {}
+        await _failViewerSession(
+          viewerClid,
+          reason: StreamViewerFailureReason.answerRejected,
+        );
       }
     }
   }
@@ -593,27 +672,60 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
     final viewerSession = _viewerSessions[viewerClid];
     if (viewerSession == null) return;
 
+    // Signals arrive from the actor as separate unawaited calls. Chain them per
+    // viewer so the Answer always establishes the remote description before its
+    // ICE candidates are added, regardless of event ordering.
+    final previous = viewerSession.signalingTail;
+    final done = Completer<void>();
+    viewerSession.signalingTail = done.future;
+    try {
+      await previous;
+      if (!_isViewerSessionValid(
+        _generation,
+        viewerClid,
+        viewerSession.peerGeneration,
+      )) {
+        return;
+      }
+      try {
+        await _applyPublisherSignal(
+          viewerSession: viewerSession,
+          signal: signal,
+        );
+      } catch (e, st) {
+        // Signaling is delivered fire-and-forget; never let one bad payload
+        // surface as an unhandled async error.
+        debugPrint(
+          '[StreamPublisher] Failed to apply signal for viewer $viewerClid: $e\n$st',
+        );
+      }
+    } finally {
+      done.complete();
+    }
+  }
+
+  Future<void> _applyPublisherSignal({
+    required _ViewerPeerSession viewerSession,
+    required PublisherSignal signal,
+  }) async {
+    final viewerClid = viewerSession.viewerClid;
     final currentGeneration = _generation;
     final peerGeneration = viewerSession.peerGeneration;
 
     switch (signal) {
       case PublisherSignal_Answer(:final sdp):
         if (sdp.trim().isEmpty) return;
+        if (viewerSession.remoteDescriptionSet) return;
         final peer = viewerSession.peer;
         if (peer == null) return;
-        final prefs = ref.read(preferencesProvider);
-        final preferredCodec =
-            prefs.screenShareCodec == ScreenShareCodecPreference.h264
-            ? 'H264'
-            : 'VP8';
-        final normalizedAnswer = normalizeSdpForTs6(
-          sdp,
-          preferredVideoCodec: preferredCodec,
+        debugPrint(
+          '[StreamPublisher] viewer $viewerClid Answer: ${sdp.length} chars',
         );
         try {
-          await peer.setRemoteDescription(
-            RTCSessionDescription(normalizedAnswer, 'answer'),
-          );
+          // Pass the answer SDP directly without normalization; normalizing or
+          // altering an answer SDP violates RFC 3264 / JSEP and corrupts payload
+          // type mappings.
+          await peer.setRemoteDescription(RTCSessionDescription(sdp, 'answer'));
           if (!_isViewerSessionValid(
             currentGeneration,
             viewerClid,
@@ -626,17 +738,73 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
             currentGeneration: currentGeneration,
             viewerSession: viewerSession,
           );
-        } catch (_) {
+          if (!_isViewerSessionValid(
+            currentGeneration,
+            viewerClid,
+            peerGeneration,
+          )) {
+            return;
+          }
+          // Now that the Answer exists, trickle out the candidates gathered
+          // while the offer was in flight.
+          await _flushPendingLocalViewerCandidates(
+            currentGeneration: currentGeneration,
+            viewerSession: viewerSession,
+          );
+          if (!_isViewerSessionValid(
+            currentGeneration,
+            viewerClid,
+            peerGeneration,
+          )) {
+            return;
+          }
+          // Safely reapply video sender parameters after answer negotiation.
+          try {
+            final senders = await peer.getSenders();
+            final videoSender = senders
+                .where((s) => s.track?.kind == 'video')
+                .firstOrNull;
+            if (videoSender != null &&
+                _isViewerSessionValid(
+                  currentGeneration,
+                  viewerClid,
+                  peerGeneration,
+                )) {
+              final prefs = ref.read(preferencesProvider);
+              await _configureVideoSenderParameters(
+                videoSender: videoSender,
+                resolution: state.resolution,
+                frameRate: state.frameRate,
+                degradationPreference: prefs.screenShareDegradation,
+              );
+            }
+          } catch (_) {
+            // Reapplying sender parameters is best-effort and must never
+            // trigger viewer session teardown.
+          }
+        } catch (e, st) {
+          debugPrint(
+            '[StreamPublisher] Failed to set remote answer for viewer $viewerClid: $e\n$st',
+          );
           if (_isViewerSessionValid(
             currentGeneration,
             viewerClid,
             peerGeneration,
           )) {
-            await _closeViewerSession(viewerClid);
+            await _failViewerSession(
+              viewerClid,
+              reason: StreamViewerFailureReason.answerRejected,
+            );
           }
         }
       case PublisherSignal_IceCandidate(:final sdp, :final mid, :final mLine):
         if (sdp.trim().isEmpty) return;
+        if (kDebugMode) {
+          debugPrint(
+            '[StreamPublisher] viewer $viewerClid ICE candidate '
+            'mid=${mid ?? '-'} mLine=${mLine ?? '-'}',
+          );
+        }
         final candidate = RTCIceCandidate(sdp, mid, mLine);
         final peer = viewerSession.peer;
         if (peer == null || !viewerSession.remoteDescriptionSet) {
@@ -675,7 +843,6 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
   Future<void> _configurePublisherTransceivers({
     required WebRtcBindings bindings,
     required RTCPeerConnection peer,
-    required String preferredMimeType,
   }) async {
     List<RTCRtpTransceiver> transceivers;
     try {
@@ -693,12 +860,38 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
       } catch (_) {}
       // Video transceiver is always added first (index 0 / MID 0).
       if (i == 0) {
-        await preferVideoCodecOnTransceiver(
+        await _preferPrimaryVideoCodecs(
           capabilities: capabilities,
           transceiver: transceiver,
-          preferredMimeType: preferredMimeType,
         );
       }
+    }
+  }
+
+  /// Restricts the publisher's offer to VP8 and H.264, the codec set the
+  /// reference TS6 implementations hand to native viewers. libwebrtc then writes
+  /// the offer itself, so no SDP rewriting is needed to stay inside the command
+  /// line limit.
+  Future<void> _preferPrimaryVideoCodecs({
+    required RTCRtpCapabilities? capabilities,
+    required RTCRtpTransceiver transceiver,
+  }) async {
+    final codecs = capabilities?.codecs;
+    if (codecs == null || codecs.isEmpty) return;
+    String mimeOf(RTCRtpCodecCapability codec) => codec.mimeType.toLowerCase();
+    final preferred = [
+      for (final codec in codecs)
+        if (mimeOf(codec) == 'video/vp8') codec,
+      for (final codec in codecs)
+        if (mimeOf(codec) == 'video/h264') codec,
+    ];
+    if (preferred.isEmpty) return;
+    try {
+      await transceiver.setCodecPreferences(preferred);
+    } catch (e) {
+      // Older native builds reject preference changes; the offer then keeps every
+      // codec and the size check prunes it before sending.
+      debugPrint('[StreamPublisher] setCodecPreferences failed: $e');
     }
   }
 
@@ -830,8 +1023,44 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
       )) {
         return;
       }
-      unawaited(_closeViewerSession(viewerSession.viewerClid));
+      unawaited(
+        _failViewerSession(
+          viewerSession.viewerClid,
+          reason: StreamViewerFailureReason.answerTimeout,
+        ),
+      );
     });
+  }
+
+  /// Ends a viewer session that never reached `connected`, records an explicit
+  /// failure for the banner, and releases the viewer on the server so the official
+  /// client stops waiting on a stream that will not arrive.
+  Future<void> _failViewerSession(
+    int viewerClid, {
+    required StreamViewerFailureReason reason,
+  }) async {
+    final session = _viewerSessions[viewerClid];
+    if (session == null || session.failureReported) return;
+    session.failureReported = true;
+    debugPrint(
+      '[StreamPublisher] viewer $viewerClid negotiation failed: ${reason.name}',
+    );
+    if (ref.mounted && state.isActive) {
+      state = state.copyWith(
+        viewerFailure: StreamViewerFailure(
+          viewerClid: viewerClid,
+          reason: reason,
+        ),
+      );
+    }
+    await _closeViewerSession(viewerClid);
+    try {
+      await ref
+          .read(coreSessionProvider)
+          .kickStreamViewer(viewerClid: viewerClid);
+    } catch (_) {
+      // The viewer may already have left or the stream may be stopping.
+    }
   }
 
   void _clearViewerNegotiationTimer(_ViewerPeerSession viewerSession) {
@@ -930,3 +1159,23 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
     }
   }
 }
+
+/// Length of [value] after the TeamSpeak wire escaping, in bytes.
+int _escapedLength(String value) {
+  var length = 0;
+  for (final rune in value.runes) {
+    length += switch (rune) {
+      0x5C || 0x2F || 0x20 || 0x7C => 2,
+      0x07 || 0x08 || 0x0C || 0x0A || 0x0D || 0x09 || 0x0B => 2,
+      _ when rune < 0x80 => 1,
+      _ when rune < 0x800 => 2,
+      _ when rune < 0x10000 => 3,
+      _ => 4,
+    };
+  }
+  return length;
+}
+
+/// Whether [offerSdp] still fits one `respondjoinstreamrequest` line once escaped.
+bool _offerFitsOneCommand(String offerSdp) =>
+    _escapedLength(offerSdp) + _commandOverheadBytes <= _maxCommandLineBytes;

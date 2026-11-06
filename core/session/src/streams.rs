@@ -98,6 +98,23 @@ pub(crate) struct StreamCoordinator {
 
 pub(crate) type StreamParams<const N: usize> = [(&'static str, String); N];
 
+/// Maximum wire line size for a TeamSpeak command (including return_code parameter).
+/// Commands exceeding this limit are silently dropped by TeamSpeak server without
+/// an answer, resulting in 10s command timeouts. Matches teamspeak-js / WebSpeak `MAX_COMMAND_LINE_BYTES`.
+pub const MAX_COMMAND_LINE_BYTES: usize = 9_150;
+
+/// `exec_command` 会在命令末尾追加 ` return_code=<i32>`；最长的十进制 i32 占 11 字节。
+const RETURN_CODE_RESERVE: usize = 1 + "return_code=".len() + 11;
+
+/// 命令真正上线时的字节数：转义后的命令名与参数，加上客户端追加的 `return_code`。
+pub(crate) fn command_wire_len(command: &str, params: &[(&str, String)]) -> usize {
+    let mut len = command.len() + RETURN_CODE_RESERVE;
+    for (key, value) in params {
+        len += 1 + key.len() + 1 + tsclient_rs::escape(value).0.len();
+    }
+    len
+}
+
 /// 只有这些通知会被 actor 转进来。
 pub(crate) fn is_stream_notification(name: &str) -> bool {
     matches!(
@@ -324,8 +341,7 @@ impl StreamCoordinator {
                 } = &self.publish
                     && active_id == &stream_id
                 {
-                    let Some(viewer_clid) =
-                        parse_clid(params).filter(|clid| viewers.contains_key(clid))
+                    let Some(viewer_clid) = publisher_viewer_clid(params, viewers, self_clid)
                     else {
                         return out;
                     };
@@ -439,13 +455,15 @@ impl StreamCoordinator {
                     "接受观看请求必须提供 SDP Offer".into(),
                 ));
             }
+            let req = respond_join_request(stream_id, viewer_clid, true, offer_sdp);
+            let wire_len = command_wire_len("respondjoinstreamrequest", &req);
+            if wire_len > MAX_COMMAND_LINE_BYTES {
+                return Err(SessionError::Stream(format!(
+                    "SDP Offer 超出 TeamSpeak 命令长度上限 (编码后 {wire_len} 字节 > {MAX_COMMAND_LINE_BYTES} 字节)，已拒绝观众 {viewer_clid}"
+                )));
+            }
             viewers.insert(viewer_clid, ViewerPeerState::Accepted);
-            Ok(respond_join_request(
-                stream_id,
-                viewer_clid,
-                true,
-                offer_sdp,
-            ))
+            Ok(req)
         } else {
             viewers.remove(&viewer_clid);
             Ok(respond_join_request(stream_id, viewer_clid, false, ""))
@@ -740,6 +758,24 @@ fn parse_clid(params: &HashMap<String, String>) -> Option<i32> {
         .filter(|clid| *clid > 0)
 }
 
+/// 判断一条 `notifystreamsignaling` 来自哪个观众。
+///
+/// 正常情况下 `clid` 就是发送者；但服务端也可能回显收件人（本端）或直接省略该字段。
+/// 只有一个已接受观众时不存在歧义，退回到它；多观众时只认精确的 `clid`，避免把
+/// 别人的 Answer/ICE 应用到错误的会话上。
+fn publisher_viewer_clid(
+    params: &HashMap<String, String>,
+    viewers: &HashMap<i32, ViewerPeerState>,
+    self_clid: Option<i32>,
+) -> Option<i32> {
+    match parse_clid(params) {
+        Some(clid) if viewers.contains_key(&clid) => Some(clid),
+        Some(clid) if Some(clid) != self_clid => None,
+        _ if viewers.len() == 1 => viewers.keys().next().copied(),
+        _ => None,
+    }
+}
+
 fn parse_signal(raw: &str) -> Option<(String, Map<String, Value>)> {
     let Value::Object(mut root) = serde_json::from_str::<Value>(raw).ok()? else {
         return None;
@@ -760,6 +796,24 @@ fn string_arg(args: &Map<String, Value>, keys: &[&str]) -> Option<String> {
         .map(str::to_string)
 }
 
+fn parse_mid_arg(args: &Map<String, Value>) -> Option<String> {
+    let val = args.get("mid").or_else(|| args.get("sdpMid"))?;
+    match val {
+        Value::String(s) if !s.is_empty() => Some(s.clone()),
+        Value::Number(n) => Some(n.to_string()),
+        _ => None,
+    }
+}
+
+fn parse_mline_arg(args: &Map<String, Value>) -> Option<i32> {
+    let val = args.get("mLine").or_else(|| args.get("sdpMLineIndex"))?;
+    match val {
+        Value::Number(n) => n.as_i64().and_then(|x| i32::try_from(x).ok()),
+        Value::String(s) => s.parse::<i32>().ok(),
+        _ => None,
+    }
+}
+
 fn signal_kind(cmd: &str, args: &Map<String, Value>) -> Option<Signal> {
     match cmd {
         // 推流端接受加入请求后，首个 SDP 包在 joinResponse 里。
@@ -775,11 +829,8 @@ fn signal_kind(cmd: &str, args: &Map<String, Value>) -> Option<Signal> {
         "offer" | "reconnectOffer" => string_arg(args, &["offer", "sdp"]).map(Signal::Offer),
         "iceCandidate" => Some(Signal::Ice {
             sdp: string_arg(args, &["sdp", "candidate"])?,
-            mid: args.get("mid").and_then(Value::as_str).map(str::to_string),
-            m_line: args
-                .get("mLine")
-                .and_then(Value::as_i64)
-                .and_then(|value| i32::try_from(value).ok()),
+            mid: parse_mid_arg(args),
+            m_line: parse_mline_arg(args),
         }),
         _ => None,
     }
@@ -790,11 +841,8 @@ fn publisher_signal_kind(cmd: &str, args: &Map<String, Value>) -> Option<Publish
         "answer" => string_arg(args, &["answer", "sdp"]).map(|sdp| PublisherSignal::Answer { sdp }),
         "iceCandidate" => Some(PublisherSignal::IceCandidate {
             sdp: string_arg(args, &["sdp", "candidate"])?,
-            mid: args.get("mid").and_then(Value::as_str).map(str::to_string),
-            m_line: args
-                .get("mLine")
-                .and_then(Value::as_i64)
-                .and_then(|value| i32::try_from(value).ok()),
+            mid: parse_mid_arg(args),
+            m_line: parse_mline_arg(args),
         }),
         _ => None,
     }
@@ -1216,6 +1264,11 @@ mod tests {
         );
         assert!(coordinator.check_publisher_signal_target(99).is_err());
 
+        // 4b. 超出 MAX_COMMAND_LINE_BYTES 的超大 SDP Offer 应被提前拦截以防服务端静默超时
+        let oversized_sdp = "a".repeat(MAX_COMMAND_LINE_BYTES);
+        let oversized_err = coordinator.respond_viewer_join(77, true, &oversized_sdp);
+        assert!(oversized_err.is_err());
+
         // 5. 收到观众发来的 Answer 与 ICE Candidate
         let answer_events = coordinator.notification(
             "notifystreamsignaling",
@@ -1482,5 +1535,286 @@ mod tests {
             [SessionEvent::ScreenShareStopped]
         ));
         assert_eq!(coordinator.publish_state(), &LocalPublishState::Idle);
+    }
+
+    #[test]
+    fn ice_candidate_parsing_tolerates_numeric_mid_string_mline_and_field_aliases() {
+        // 1. 观看端信号解析 (signal_kind)：测试数字型 mid 与字符串型 mLine
+        let (_, args1) = parse_signal(
+            r#"{"cmd":"iceCandidate","args":{"sdp":"candidate:1","mid":0,"mLine":"0"}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            signal_kind("iceCandidate", &args1).map(|s| match s {
+                Signal::Ice { sdp, mid, m_line } => (sdp, mid, m_line),
+                _ => unreachable!(),
+            }),
+            Some(("candidate:1".to_string(), Some("0".to_string()), Some(0)))
+        );
+
+        // 2. 观看端信号解析：测试 sdpMid 与 sdpMLineIndex 别名字段
+        let (_, args2) = parse_signal(
+            r#"{"cmd":"iceCandidate","args":{"candidate":"candidate:2","sdpMid":"video","sdpMLineIndex":1}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            signal_kind("iceCandidate", &args2).map(|s| match s {
+                Signal::Ice { sdp, mid, m_line } => (sdp, mid, m_line),
+                _ => unreachable!(),
+            }),
+            Some((
+                "candidate:2".to_string(),
+                Some("video".to_string()),
+                Some(1)
+            ))
+        );
+
+        // 3. 推流端信号解析 (publisher_signal_kind)：测试数字型 mid 与字符串型 mLine
+        let (_, args3) = parse_signal(
+            r#"{"cmd":"iceCandidate","args":{"sdp":"candidate:pub1","mid":1,"mLine":"2"}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            publisher_signal_kind("iceCandidate", &args3),
+            Some(PublisherSignal::IceCandidate {
+                sdp: "candidate:pub1".to_string(),
+                mid: Some("1".to_string()),
+                m_line: Some(2),
+            })
+        );
+
+        // 4. 推流端信号解析：测试 sdpMid 与 sdpMLineIndex 别名及数字型 sdpMid / 字符串型 sdpMLineIndex
+        let (_, args4) = parse_signal(
+            r#"{"cmd":"iceCandidate","args":{"candidate":"candidate:pub2","sdpMid":0,"sdpMLineIndex":"0"}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            publisher_signal_kind("iceCandidate", &args4),
+            Some(PublisherSignal::IceCandidate {
+                sdp: "candidate:pub2".to_string(),
+                mid: Some("0".to_string()),
+                m_line: Some(0),
+            })
+        );
+    }
+
+    /// 与真实 libwebrtc Offer 同规模（含 CRLF、空格、斜杠）的载荷，用于验证
+    /// `respondjoinstreamrequest` 的线上长度而不是只看字符数。
+    fn realistic_offer_sdp(min_len: usize) -> String {
+        let mut sdp = String::from(
+            "v=0\r\n\
+             o=- 4619364200509039907 2 IN IP4 127.0.0.1\r\n\
+             s=-\r\n\
+             t=0 0\r\n\
+             a=group:BUNDLE 0 1\r\n\
+             a=extmap-allow-mixed\r\n\
+             a=msid-semantic: WMS 5fab3177-825a-4f8e-a970-ad92889d3546\r\n\
+             m=video 9 UDP/TLS/RTP/SAVPF 96 97 102 103\r\n\
+             c=IN IP4 0.0.0.0\r\n\
+             a=rtcp:9 IN IP4 0.0.0.0\r\n\
+             a=ice-ufrag:HMHZ\r\n\
+             a=ice-pwd:VrAsNfLk/l06iEK3KQN2E1YO\r\n\
+             a=ice-options:trickle\r\n\
+             a=fingerprint:sha-256 6F:13:B0:DA:23:7F:CA:9C:D3:09:84:1D:64:68:F1:36:67:D3:E0:E1:B7:FB:42:1E:E1:20:04:B5:CB:A3:21:34\r\n\
+             a=setup:actpass\r\n\
+             a=mid:0\r\n\
+             a=sendonly\r\n\
+             a=rtcp-mux\r\n\
+             a=rtpmap:96 VP8/90000\r\n\
+             a=rtcp-fb:96 goog-remb\r\n\
+             a=rtcp-fb:96 transport-cc\r\n\
+             a=rtcp-fb:96 nack\r\n\
+             a=rtcp-fb:96 nack pli\r\n\
+             a=rtpmap:97 rtx/90000\r\n\
+             a=fmtp:97 apt=96\r\n\
+             a=rtpmap:102 H264/90000\r\n\
+             a=fmtp:102 level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f\r\n\
+             a=rtpmap:103 rtx/90000\r\n\
+             a=fmtp:103 apt=102\r\n\
+             a=ssrc-group:FID 3136882303 3864071805\r\n\
+             a=ssrc:3136882303 cname:VoL4iR4DCKjPjOS4\r\n\
+             a=ssrc:3136882303 msid:5fab3177-825a-4f8e-a970-ad92889d3546 d7108372-0001-46fd-b5e5-b3c8d2c028a7\r\n",
+        );
+        let mut index = 12;
+        while sdp.len() < min_len {
+            sdp.push_str(&format!(
+                "a=extmap:{index} urn:ietf:params:rtp-hdrext:sdes:mid\r\n"
+            ));
+            index += 1;
+        }
+        sdp.push_str(
+            "m=audio 9 UDP/TLS/RTP/SAVPF 111\r\n\
+             c=IN IP4 0.0.0.0\r\n\
+             a=mid:1\r\n\
+             a=sendonly\r\n\
+             a=rtcp-mux\r\n\
+             a=rtpmap:111 opus/48000/2\r\n\
+             a=fmtp:111 minptime=10;useinbandfec=1\r\n",
+        );
+        sdp
+    }
+
+    fn publishing_with_viewer(coordinator: &mut StreamCoordinator, viewers: &[i32]) {
+        coordinator.reset(CHANNEL, StreamEndReason::SelfMoved);
+        coordinator.start_publish("Desk", false, 4_000, 0).unwrap();
+        coordinator.notification(
+            "notifystreamstarted",
+            &params(&[
+                ("id", "pub-1"),
+                ("clid", "1"),
+                ("name", "Desk"),
+                ("audio", "0"),
+            ]),
+            Some(SELF),
+            in_channel,
+        );
+        for viewer in viewers {
+            coordinator.notification(
+                "notifyjoinstreamrequest",
+                &params(&[("id", "pub-1"), ("clid", &viewer.to_string())]),
+                Some(SELF),
+                in_channel,
+            );
+        }
+    }
+
+    #[test]
+    fn six_kilobyte_offer_is_accepted_and_fits_in_one_command() {
+        let mut coordinator = StreamCoordinator::default();
+        publishing_with_viewer(&mut coordinator, &[77]);
+
+        let offer = realistic_offer_sdp(6_000);
+        assert!(offer.len() >= 6_000, "offer len {}", offer.len());
+
+        let respond = coordinator.respond_viewer_join(77, true, &offer).unwrap();
+        assert_eq!(respond[3], ("offer", offer.clone()));
+        assert_eq!(respond[4], ("decision", "1".to_string()));
+
+        let wire = command_wire_len("respondjoinstreamrequest", &respond);
+        assert!(
+            wire <= MAX_COMMAND_LINE_BYTES,
+            "编码后 {wire} 字节应在上限 {MAX_COMMAND_LINE_BYTES} 内"
+        );
+        // 转义会膨胀 CRLF/空格，长度检查必须按转义后计算而不是字符数。
+        assert!(wire > offer.len());
+        assert_eq!(
+            coordinator.check_publisher_signal_target(77).unwrap(),
+            "pub-1"
+        );
+    }
+
+    #[test]
+    fn oversized_offer_is_rejected_with_viewer_and_measured_length() {
+        let mut coordinator = StreamCoordinator::default();
+        publishing_with_viewer(&mut coordinator, &[77]);
+
+        let offer = realistic_offer_sdp(MAX_COMMAND_LINE_BYTES);
+        let err = coordinator
+            .respond_viewer_join(77, true, &offer)
+            .expect_err("超大 Offer 必须提前拒绝");
+        let message = match err {
+            SessionError::Stream(message) => message,
+            other => panic!("unexpected error: {other:?}"),
+        };
+        assert!(message.contains("77"), "{message}");
+        assert!(
+            message.contains(&MAX_COMMAND_LINE_BYTES.to_string()),
+            "{message}"
+        );
+        // 拒绝后观众不再是已接受状态，不能继续发信令。
+        assert!(coordinator.check_publisher_signal_target(77).is_err());
+    }
+
+    #[test]
+    fn publisher_signaling_falls_back_to_the_sole_viewer_when_clid_is_echoed() {
+        let mut coordinator = StreamCoordinator::default();
+        publishing_with_viewer(&mut coordinator, &[77]);
+        coordinator
+            .respond_viewer_join(77, true, "v=0 offer")
+            .unwrap();
+
+        // 服务端把 clid 回显成本端 clid 时，单观众场景应仍然路由到 77。
+        let echoed = coordinator.notification(
+            "notifystreamsignaling",
+            &params(&[
+                ("id", "pub-1"),
+                ("clid", "1"),
+                ("json", r#"{"cmd":"answer","args":{"answer":"v=0 answer"}}"#),
+            ]),
+            Some(SELF),
+            in_channel,
+        );
+        assert!(matches!(
+            echoed.as_slice(),
+            [SessionEvent::PublisherSignalReceived {
+                viewer_clid: 77,
+                signal: PublisherSignal::Answer { .. },
+                ..
+            }]
+        ));
+
+        // 缺少 clid 时同样退回唯一观众。
+        let missing = coordinator.notification(
+            "notifystreamsignaling",
+            &params(&[
+                ("id", "pub-1"),
+                (
+                    "json",
+                    r#"{"cmd":"iceCandidate","args":{"candidate":"candidate:1","mid":0,"mLine":"0"}}"#,
+                ),
+            ]),
+            Some(SELF),
+            in_channel,
+        );
+        assert!(matches!(
+            missing.as_slice(),
+            [SessionEvent::PublisherSignalReceived {
+                viewer_clid: 77,
+                signal: PublisherSignal::IceCandidate { .. },
+                ..
+            }]
+        ));
+    }
+
+    #[test]
+    fn publisher_signaling_with_unknown_viewer_is_dropped_when_several_watch() {
+        let mut coordinator = StreamCoordinator::default();
+        publishing_with_viewer(&mut coordinator, &[77, 88]);
+        coordinator
+            .respond_viewer_join(77, true, "v=0 offer")
+            .unwrap();
+        coordinator
+            .respond_viewer_join(88, true, "v=0 offer")
+            .unwrap();
+
+        let unknown = coordinator.notification(
+            "notifystreamsignaling",
+            &params(&[
+                ("id", "pub-1"),
+                ("clid", "99"),
+                ("json", r#"{"cmd":"answer","args":{"answer":"v=0 answer"}}"#),
+            ]),
+            Some(SELF),
+            in_channel,
+        );
+        assert!(unknown.is_empty(), "不能把信令猜给某个观众");
+
+        let known = coordinator.notification(
+            "notifystreamsignaling",
+            &params(&[
+                ("id", "pub-1"),
+                ("clid", "88"),
+                ("json", r#"{"cmd":"answer","args":{"answer":"v=0 answer"}}"#),
+            ]),
+            Some(SELF),
+            in_channel,
+        );
+        assert!(matches!(
+            known.as_slice(),
+            [SessionEvent::PublisherSignalReceived {
+                viewer_clid: 88,
+                ..
+            }]
+        ));
     }
 }

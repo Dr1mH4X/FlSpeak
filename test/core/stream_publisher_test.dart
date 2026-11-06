@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flspeak/core/preferences.dart';
 import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/core/stream_publisher.dart';
@@ -21,6 +22,7 @@ class _FakeCoreSession extends Fake implements CoreSession {
       <({int viewerClid, String sdp, String? mid, int? mLine})>[];
   Completer<void>? respondJoinRequestGate;
   Exception? sendPublisherCandidateError;
+  final List<int> kickedViewers = [];
 
   @override
   Stream<CoreEvent> events() => eventsController.stream;
@@ -80,6 +82,11 @@ class _FakeCoreSession extends Fake implements CoreSession {
       mid: mid,
       mLine: mLine,
     ));
+  }
+
+  @override
+  Future<void> kickStreamViewer({required int viewerClid}) async {
+    kickedViewers.add(viewerClid);
   }
 }
 
@@ -248,7 +255,7 @@ class _FakePeerConnection extends Fake implements RTCPeerConnection {
   final Map<String, dynamic> configuration;
   final String offerSdp;
   final Completer<void>? remoteDescriptionGate;
-
+  bool throwOnModifiedSetLocalDescription = false;
   final List<String> mediaSetupOrder = [];
   final List<_FakeTransceiver> transceiversList = [];
   final List<_FakeRtpSender> sendersList = [];
@@ -320,15 +327,24 @@ class _FakePeerConnection extends Fake implements RTCPeerConnection {
   Future<List<RTCRtpTransceiver>> getTransceivers() async => transceiversList;
 
   @override
+  Future<List<RTCRtpSender>> getSenders() async => sendersList;
+
+  Map<String, dynamic>? createOfferConstraints;
+
+  @override
   Future<RTCSessionDescription> createOffer([
     Map<String, dynamic>? constraints,
   ]) async {
+    createOfferConstraints = constraints;
     mediaSetupOrder.add('createOffer');
     return RTCSessionDescription(offerSdp, 'offer');
   }
 
   @override
   Future<void> setLocalDescription(RTCSessionDescription description) async {
+    if (throwOnModifiedSetLocalDescription && description.sdp != offerSdp) {
+      throw Exception('INVALID_MODIFICATION: modified local description');
+    }
     localDescription = description;
     mediaSetupOrder.add('setLocalDescription');
   }
@@ -366,6 +382,7 @@ class _FakePublisherWebRtcBindings extends WebRtcBindings {
     List<DesktopCapturerSource>? sources,
     _FakeMediaStream? displayStream,
     this.remoteDescriptionGate,
+    this.offerSdp,
   }) : sources =
            sources ??
            [
@@ -392,6 +409,8 @@ class _FakePublisherWebRtcBindings extends WebRtcBindings {
   final List<DesktopCapturerSource> sources;
   final _FakeMediaStream displayStream;
   final Completer<void>? remoteDescriptionGate;
+  final String? offerSdp;
+  bool throwOnModifiedSetLocalDescription = false;
   final List<_FakePeerConnection> createdPeers = [];
   final List<_FakeVideoRenderer> createdRenderers = [];
   Map<String, dynamic>? lastDisplayMediaConstraints;
@@ -419,9 +438,9 @@ class _FakePublisherWebRtcBindings extends WebRtcBindings {
   ]) async {
     final peer = _FakePeerConnection(
       configuration: configuration,
-      offerSdp: _samplePublisherRawOfferSdp,
+      offerSdp: offerSdp ?? _samplePublisherRawOfferSdp,
       remoteDescriptionGate: remoteDescriptionGate,
-    );
+    )..throwOnModifiedSetLocalDescription = throwOnModifiedSetLocalDescription;
     createdPeers.add(peer);
     return peer;
   }
@@ -461,22 +480,26 @@ class _FakePublisherWebRtcBindings extends WebRtcBindings {
   Future<void> setTrackVolume(double volume, MediaStreamTrack track) async {}
 }
 
+/// The offer libwebrtc writes for a publisher: VP8 first (codec preferences),
+/// then H.264, video MID 0 and a send-only audio section at MID 1.
 const _samplePublisherRawOfferSdp =
     'v=0\r\n'
     'o=- 10 2 IN IP4 127.0.0.1\r\n'
     's=-\r\n'
     't=0 0\r\n'
     'a=group:BUNDLE 0 1\r\n'
-    'm=video 9 UDP/TLS/RTP/SAVPF 102 103 96 97\r\n'
+    'm=video 9 UDP/TLS/RTP/SAVPF 96 97 102 103\r\n'
     'c=IN IP4 0.0.0.0\r\n'
     'a=mid:0\r\n'
     'a=sendonly\r\n'
-    'a=rtpmap:102 H264/90000\r\n'
-    'a=rtpmap:103 rtx/90000\r\n'
-    'a=fmtp:103 apt=102\r\n'
     'a=rtpmap:96 VP8/90000\r\n'
+    'a=rtcp-fb:96 nack\r\n'
     'a=rtpmap:97 rtx/90000\r\n'
     'a=fmtp:97 apt=96\r\n'
+    'a=rtpmap:102 H264/90000\r\n'
+    'a=fmtp:102 profile-level-id=42e01f\r\n'
+    'a=rtpmap:103 rtx/90000\r\n'
+    'a=fmtp:103 apt=102\r\n'
     'm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n'
     'c=IN IP4 0.0.0.0\r\n'
     'a=mid:1\r\n'
@@ -644,6 +667,12 @@ void main() {
         'setLocalDescription',
       ]);
 
+      // flutter_webrtc's default SDP constraints add recvonly audio/video
+      // sections; the TS6 client does not answer such a four-section offer.
+      final offerConstraints = peer101.createOfferConstraints;
+      expect(offerConstraints?['mandatory'], isEmpty);
+      expect(offerConstraints?['optional'], isEmpty);
+
       // Verify video RtpSender parameters: degradationPreference = MAINTAIN_RESOLUTION.
       final sender101 = peer101.sendersList.single;
       expect(
@@ -660,15 +689,13 @@ void main() {
         1.0,
       );
 
-      // Verify Offer SDP has VP8 first and TS6-compatible MID 0=video, MID 1=audio layout.
+      // The offer is libwebrtc's own, sent unchanged; codec preferences already
+      // kept it to VP8/H.264 so no rewriting is needed.
       expect(core.joinResponses, hasLength(1));
       final response101 = core.joinResponses.single;
       expect(response101.viewerClid, 101);
       expect(response101.accept, isTrue);
-      expect(
-        response101.offerSdp,
-        contains('m=video 9 UDP/TLS/RTP/SAVPF 96 97 102 103\r\n'),
-      );
+      expect(response101.offerSdp, _samplePublisherRawOfferSdp);
       expect(
         inspectSdpMediaLayout(response101.offerSdp).isTs6Compatible,
         isTrue,
@@ -699,6 +726,7 @@ void main() {
       remoteGate.complete();
       await _pumpEventQueue();
       expect(peer101.remoteDescription?.type, 'answer');
+      expect(peer101.remoteDescription?.sdp, _sampleViewerAnswerSdp);
       expect(peer101.addedCandidates, hasLength(1));
       expect(
         peer101.addedCandidates.single.candidate,
@@ -778,7 +806,7 @@ void main() {
       expect(bindings.displayStream.disposed, isTrue);
     });
 
-    test('buffers local ICE candidates until respondStreamJoinRequest completes and swallows server error id=5636', () async {
+    test('holds local ICE candidates until the viewer Answer is applied and swallows server error id=5636', () async {
       final events = StreamController<CoreEvent>.broadcast();
       final core = _FakeCoreSession(events)
         ..respondJoinRequestGate = Completer<void>();
@@ -832,15 +860,28 @@ void main() {
       );
       await _pumpEventQueue();
 
-      // Must NOT be sent before respondStreamJoinRequest completes!
+      // Must NOT be sent before the viewer's Answer establishes the remote description!
       expect(core.joinResponses, isEmpty);
       expect(core.sentPublisherCandidates, isEmpty);
 
-      // Now complete respondStreamJoinRequest -> buffered candidate flushes in order.
+      // Completing respondStreamJoinRequest sends the offer but still keeps the
+      // candidate buffered: the viewer has no peer for it yet.
       core.respondJoinRequestGate!.complete();
       await _pumpEventQueue();
 
       expect(core.joinResponses, hasLength(1));
+      expect(core.sentPublisherCandidates, isEmpty);
+
+      // The Answer arrives -> buffered candidate flushes in order.
+      events.add(
+        const CoreEvent.publisherSignalReceived(
+          streamId: 'pub-stream-ice',
+          viewerClid: 201,
+          signal: PublisherSignal.answer(sdp: _sampleViewerAnswerSdp),
+        ),
+      );
+      await _pumpEventQueue();
+
       expect(core.sentPublisherCandidates, [
         (
           viewerClid: 201,
@@ -863,6 +904,337 @@ void main() {
         ),
       );
       await _pumpEventQueue();
+    });
+
+    test('passes raw Answer SDP to setRemoteDescription without normalization or audio injection and reapplies video sender parameters', () async {
+      final events = StreamController<CoreEvent>.broadcast();
+      final coreSession = _FakeCoreSession(events);
+      final bindings = _FakePublisherWebRtcBindings();
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(coreSession),
+          webRtcBindingsProvider.overrideWithValue(bindings),
+        ],
+      );
+      addTearDown(() async {
+        await events.close();
+        container.dispose();
+      });
+
+      container.read(sessionViewProvider);
+      events.add(
+        const CoreEvent.state(
+          state: CoreSessionState.connected(clientId: 1, channelId: 5),
+        ),
+      );
+      await _pumpEventQueue();
+
+      // 1. Start sharing and become active
+      await container
+          .read(sessionViewProvider.notifier)
+          .startScreenShare(
+            sourceId: 'screen:0',
+            sourceName: 'Entire Screen',
+            resolution: ScreenShareResolutionPreset.p1080,
+            frameRate: ScreenShareFrameRatePreset.fps30,
+          );
+      events.add(
+        const CoreEvent.screenSharePublished(streamId: 'pub-stream-4'),
+      );
+      await _pumpEventQueue();
+
+      // 2. Viewer 301 requests join
+      events.add(
+        const CoreEvent.streamViewerJoinRequested(
+          streamId: 'pub-stream-4',
+          viewerClid: 301,
+        ),
+      );
+      await _pumpEventQueue();
+
+      expect(coreSession.joinResponses, hasLength(1));
+      final joinResponse = coreSession.joinResponses.single;
+      expect(joinResponse.viewerClid, 301);
+      expect(joinResponse.accept, isTrue);
+
+      // The offer is libwebrtc's own, with the TS6 media layout (MID 0 video, MID 1 audio).
+      expect(joinResponse.offerSdp, _samplePublisherRawOfferSdp);
+      final layout = inspectSdpMediaLayout(joinResponse.offerSdp);
+      expect(layout.isTs6Compatible, isTrue);
+      expect(layout.videoMid, '0');
+      expect(layout.audioMid, '1');
+
+      final peer301 = bindings.createdPeers.single;
+
+      // 3. Raw Answer SDP without m=audio and non-VP8 payload order
+      const rawVideoOnlyAnswerSdp =
+          'v=0\r\n'
+          'o=- 300 2 IN IP4 127.0.0.1\r\n'
+          's=-\r\n'
+          't=0 0\r\n'
+          'm=video 9 UDP/TLS/RTP/SAVPF 102 103 96 97\r\n'
+          'c=IN IP4 0.0.0.0\r\n'
+          'a=mid:0\r\n'
+          'a=recvonly\r\n'
+          'a=rtpmap:102 H264/90000\r\n'
+          'a=rtpmap:103 rtx/90000\r\n'
+          'a=fmtp:103 apt=102\r\n'
+          'a=rtpmap:96 VP8/90000\r\n'
+          'a=rtpmap:97 rtx/90000\r\n'
+          'a=fmtp:97 apt=96\r\n';
+
+      events.add(
+        const CoreEvent.publisherSignalReceived(
+          streamId: 'pub-stream-4',
+          viewerClid: 301,
+          signal: PublisherSignal.answer(sdp: rawVideoOnlyAnswerSdp),
+        ),
+      );
+      await _pumpEventQueue();
+
+      // Must match raw Answer SDP byte-for-byte; MUST NOT inject m=audio or reorder codecs
+      expect(peer301.remoteDescription?.type, 'answer');
+      expect(peer301.remoteDescription?.sdp, rawVideoOnlyAnswerSdp);
+      expect(peer301.remoteDescription?.sdp?.contains('m=audio'), isFalse);
+
+      // Verify video sender parameters were reapplied after negotiation
+      final videoSender = peer301.sendersList.first;
+      expect(
+        videoSender.updatedParameters?.degradationPreference,
+        RTCDegradationPreference.MAINTAIN_RESOLUTION,
+      );
+      expect(
+        videoSender.updatedParameters?.encodings?.single.maxBitrate,
+        8000 * 1000,
+      );
+      expect(videoSender.updatedParameters?.encodings?.single.maxFramerate, 30);
+    });
+
+    test('prunes an over-long offer, and sends exactly the SDP that was applied locally', () async {
+      final events = StreamController<CoreEvent>.broadcast();
+      final core = _FakeCoreSession(events);
+      // A raw offer far over the command line limit: the controller must rewrite
+      // it first, and when the rewrite is rejected it must send the raw offer it
+      // actually applied instead of a description the viewer never saw.
+      final oversized = StringBuffer(_samplePublisherRawOfferSdp);
+      for (var pt = 200; pt < 700; pt++) {
+        oversized.write('a=rtpmap:$pt VP9/90000\r\n');
+      }
+      final bindings = _FakePublisherWebRtcBindings(
+        offerSdp: oversized.toString(),
+      )..throwOnModifiedSetLocalDescription = true;
+
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(core),
+          webRtcBindingsProvider.overrideWithValue(bindings),
+        ],
+      );
+      addTearDown(() async {
+        await events.close();
+        container.dispose();
+      });
+
+      container.read(sessionViewProvider);
+      events.add(
+        const CoreEvent.state(
+          state: CoreSessionState.connected(clientId: 1, channelId: 5),
+        ),
+      );
+      await _pumpEventQueue();
+
+      await container
+          .read(sessionViewProvider.notifier)
+          .startScreenShare(sourceId: 'screen:0', sourceName: 'Entire Screen');
+      events.add(
+        const CoreEvent.screenSharePublished(streamId: 'pub-stream-fallback'),
+      );
+      await _pumpEventQueue();
+
+      events.add(
+        const CoreEvent.streamViewerJoinRequested(
+          streamId: 'pub-stream-fallback',
+          viewerClid: 202,
+        ),
+      );
+      await _pumpEventQueue();
+
+      final peer202 = bindings.createdPeers.single;
+      expect(core.joinResponses, hasLength(1));
+      expect(core.joinResponses.single.accept, isTrue);
+      // The viewer must receive the SDP that is actually applied locally; sending
+      // the rejected pruned offer would make its Answer describe another session.
+      expect(peer202.localDescription?.sdp, oversized.toString());
+      expect(core.joinResponses.single.offerSdp, oversized.toString());
+      expect(peer202.localDescription?.sdp, core.joinResponses.single.offerSdp);
+    });
+
+    test('applies the Answer before adding ICE candidates, keeps their order, and clears a stale failure on connect', () async {
+      final events = StreamController<CoreEvent>.broadcast();
+      final core = _FakeCoreSession(events);
+      final bindings = _FakePublisherWebRtcBindings();
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(core),
+          webRtcBindingsProvider.overrideWithValue(bindings),
+        ],
+      );
+      addTearDown(() async {
+        await events.close();
+        container.dispose();
+      });
+
+      container.read(sessionViewProvider);
+      events.add(
+        const CoreEvent.state(
+          state: CoreSessionState.connected(clientId: 1, channelId: 5),
+        ),
+      );
+      await _pumpEventQueue();
+      await container
+          .read(sessionViewProvider.notifier)
+          .startScreenShare(sourceId: 'screen:0', sourceName: 'Entire Screen');
+      events.add(
+        const CoreEvent.screenSharePublished(streamId: 'pub-stream-order'),
+      );
+      await _pumpEventQueue();
+      events.add(
+        const CoreEvent.streamViewerJoinRequested(
+          streamId: 'pub-stream-order',
+          viewerClid: 404,
+        ),
+      );
+      await _pumpEventQueue();
+
+      const firstCandidate =
+          'candidate:1 1 udp 2122260223 192.168.1.10 51000 typ host';
+      const secondCandidate =
+          'candidate:2 1 udp 2122260223 192.168.1.10 51001 typ host';
+
+      // The official client's candidates may arrive before its Answer.
+      events.add(
+        const CoreEvent.publisherSignalReceived(
+          streamId: 'pub-stream-order',
+          viewerClid: 404,
+          signal: PublisherSignal.iceCandidate(
+            sdp: firstCandidate,
+            mid: '0',
+            mLine: 0,
+          ),
+        ),
+      );
+      events.add(
+        const CoreEvent.publisherSignalReceived(
+          streamId: 'pub-stream-order',
+          viewerClid: 404,
+          signal: PublisherSignal.iceCandidate(
+            sdp: secondCandidate,
+            mid: '1',
+            mLine: 1,
+          ),
+        ),
+      );
+      await _pumpEventQueue();
+
+      final peer = bindings.createdPeers.single;
+      expect(peer.addedCandidates, isEmpty, reason: 'Answer 尚未应用');
+
+      events.add(
+        const CoreEvent.publisherSignalReceived(
+          streamId: 'pub-stream-order',
+          viewerClid: 404,
+          signal: PublisherSignal.answer(sdp: _sampleViewerAnswerSdp),
+        ),
+      );
+      await _pumpEventQueue();
+
+      expect(peer.remoteDescription?.sdp, _sampleViewerAnswerSdp);
+      expect(peer.addedCandidates.map((candidate) => candidate.candidate), [
+        firstCandidate,
+        secondCandidate,
+      ]);
+      expect(
+        peer.mediaSetupOrder.indexOf('setRemoteDescription'),
+        lessThan(peer.mediaSetupOrder.indexOf('addCandidate:$firstCandidate')),
+      );
+
+      peer.onConnectionState?.call(
+        RTCPeerConnectionState.RTCPeerConnectionStateConnected,
+      );
+      await _pumpEventQueue();
+
+      final state = container.read(streamPublisherProvider);
+      expect(state.viewerFailure, isNull);
+      expect(state.viewerIds, contains(404));
+    });
+
+    test('reports an explicit failure and releases the viewer when the Answer never arrives', () {
+      fakeAsync((async) {
+        final events = StreamController<CoreEvent>.broadcast();
+        final core = _FakeCoreSession(events);
+        final bindings = _FakePublisherWebRtcBindings();
+        final container = ProviderContainer(
+          overrides: [
+            coreSessionProvider.overrideWithValue(core),
+            webRtcBindingsProvider.overrideWithValue(bindings),
+          ],
+        );
+        addTearDown(() async {
+          await events.close();
+          container.dispose();
+        });
+
+        void pump() {
+          for (var i = 0; i < 6; i++) {
+            async.elapse(const Duration(milliseconds: 1));
+          }
+        }
+
+        container.read(sessionViewProvider);
+        events.add(
+          const CoreEvent.state(
+            state: CoreSessionState.connected(clientId: 1, channelId: 5),
+          ),
+        );
+        pump();
+        container
+            .read(sessionViewProvider.notifier)
+            .startScreenShare(
+              sourceId: 'screen:0',
+              sourceName: 'Entire Screen',
+            );
+        pump();
+        events.add(
+          const CoreEvent.screenSharePublished(streamId: 'pub-stream-timeout'),
+        );
+        pump();
+        events.add(
+          const CoreEvent.streamViewerJoinRequested(
+            streamId: 'pub-stream-timeout',
+            viewerClid: 505,
+          ),
+        );
+        pump();
+
+        expect(
+          container.read(streamPublisherProvider).viewerIds,
+          contains(505),
+        );
+
+        async.elapse(defaultStreamNegotiationTimeout);
+        pump();
+
+        final state = container.read(streamPublisherProvider);
+        expect(state.viewerFailure?.viewerClid, 505);
+        expect(
+          state.viewerFailure?.reason,
+          StreamViewerFailureReason.answerTimeout,
+        );
+        expect(state.viewerIds, isEmpty);
+        expect(bindings.createdPeers.single.closed, isTrue);
+        expect(bindings.createdPeers.single.disposed, isTrue);
+        expect(core.kickedViewers, [505]);
+      });
     });
   });
 }

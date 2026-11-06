@@ -242,6 +242,31 @@ class _StreamPublisherBanner extends ConsumerWidget {
                 ],
               ),
             ),
+            if (publisher.viewerFailure != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+                child: Row(
+                  key: const ValueKey('stream-publisher-viewer-failure'),
+                  children: [
+                    Icon(
+                      Icons.error_outline_rounded,
+                      size: IconSizes.state,
+                      color: scheme.error,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        l10n.streamNegotiationFailed,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: context.texts.bodySmall?.copyWith(
+                          color: scheme.error,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             if (publisher.isPreviewExpanded && renderer != null)
               Padding(
                 padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
