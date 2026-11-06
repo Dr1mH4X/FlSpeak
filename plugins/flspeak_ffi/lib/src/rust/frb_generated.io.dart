@@ -77,6 +77,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int dco_decode_box_autoadd_i_32(dynamic raw);
 
   @protected
+  PublisherSignal dco_decode_box_autoadd_publisher_signal(dynamic raw);
+
+  @protected
   int dco_decode_box_autoadd_u_16(dynamic raw);
 
   @protected
@@ -176,6 +179,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int? dco_decode_opt_box_autoadd_u_32(dynamic raw);
 
   @protected
+  PublisherSignal dco_decode_publisher_signal(dynamic raw);
+
+  @protected
   ServerProfileView dco_decode_server_profile_view(dynamic raw);
 
   @protected
@@ -261,6 +267,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   int sse_decode_box_autoadd_i_32(SseDeserializer deserializer);
+
+  @protected
+  PublisherSignal sse_decode_box_autoadd_publisher_signal(
+    SseDeserializer deserializer,
+  );
 
   @protected
   int sse_decode_box_autoadd_u_16(SseDeserializer deserializer);
@@ -372,6 +383,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer);
 
   @protected
+  PublisherSignal sse_decode_publisher_signal(SseDeserializer deserializer);
+
+  @protected
   ServerProfileView sse_decode_server_profile_view(
     SseDeserializer deserializer,
   );
@@ -474,6 +488,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_box_autoadd_i_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_publisher_signal(
+    PublisherSignal self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_box_autoadd_u_16(int self, SseSerializer serializer);
@@ -618,6 +638,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_publisher_signal(
+    PublisherSignal self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_server_profile_view(

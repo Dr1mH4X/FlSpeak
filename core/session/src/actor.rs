@@ -593,6 +593,47 @@ impl Actor {
                 };
                 let _ = reply.send(result);
             }
+            SessionCommand::StartScreenShare {
+                name,
+                audio,
+                bitrate,
+                viewer_limit,
+                reply,
+            } => {
+                let _ = reply.send(
+                    self.start_screen_share(name, audio, bitrate, viewer_limit)
+                        .await,
+                );
+            }
+            SessionCommand::StopScreenShare { reply } => {
+                let _ = reply.send(self.stop_screen_share().await);
+            }
+            SessionCommand::RespondStreamJoinRequest {
+                viewer_clid,
+                accept,
+                offer_sdp,
+                reply,
+            } => {
+                let _ = reply.send(
+                    self.respond_stream_join_request(viewer_clid, accept, offer_sdp)
+                        .await,
+                );
+            }
+            SessionCommand::SendPublisherIceCandidate {
+                viewer_clid,
+                sdp,
+                mid,
+                m_line,
+                reply,
+            } => {
+                let _ = reply.send(
+                    self.send_publisher_ice_candidate(viewer_clid, sdp, mid, m_line)
+                        .await,
+                );
+            }
+            SessionCommand::KickStreamViewer { viewer_clid, reply } => {
+                let _ = reply.send(self.kick_stream_viewer(viewer_clid).await);
+            }
         }
         true
     }
@@ -1661,6 +1702,9 @@ impl Actor {
                     out.extend(events);
                 }
                 self.emit_all(out);
+                for stream_id in self.streams.take_orphan_streams() {
+                    self.stop_stream_best_effort(&stream_id).await;
+                }
             }
             SessionSignal::StreamResync { epoch } => {
                 if epoch == self.connection_epoch {
@@ -1845,17 +1889,21 @@ impl Actor {
         self.apply_self_channel(channel_id, codec);
     }
 
-    /// 流目录跟随自己所在的频道。频道变了就作废旧目录、退出旧流，再在新频道里发现。
+    /// 流目录与本地推流都跟随自己所在的频道。频道变了就作废旧目录、退出观看流并停止推流，再在新频道里发现。
     async fn sync_stream_channel(&mut self) {
         let channel = self.self_channel_id;
         if self.streams.channel() == channel {
             return;
         }
         let watched = self.streams.watching().map(|(id, _)| id.to_string());
+        let published = self.streams.published_stream_id().map(str::to_string);
         let events = self.streams.reset(channel, StreamEndReason::SelfMoved);
         self.emit_all(events);
         if let Some(stream_id) = watched {
             self.leave_stream_best_effort(&stream_id).await;
+        }
+        if let Some(stream_id) = published {
+            self.stop_stream_best_effort(&stream_id).await;
         }
         if channel != 0 {
             self.discover_streams().await;
@@ -1973,6 +2021,89 @@ impl Actor {
             &streams::leave_request(stream_id, self_clid),
         )
         .await
+    }
+
+    async fn start_screen_share(
+        &mut self,
+        name: String,
+        audio: bool,
+        bitrate: u32,
+        viewer_limit: u32,
+    ) -> Result<(), SessionError> {
+        self.connected()?;
+        if self.self_channel_id == 0 {
+            return Err(SessionError::NotInChannel);
+        }
+        let params = self
+            .streams
+            .start_publish(&name, audio, bitrate, viewer_limit)?;
+        let result = self.stream_command("setupstream", &params).await;
+        if result.is_err() {
+            self.streams.rollback_publish();
+        }
+        result
+    }
+
+    async fn stop_screen_share(&mut self) -> Result<(), SessionError> {
+        let (active_stream_id, events) = self.streams.stop_publish();
+        self.emit_all(events);
+        if let Some(stream_id) = active_stream_id
+            && self.client.is_some()
+        {
+            self.stream_command("stopstream", &streams::stop_stream_request(&stream_id))
+                .await?;
+        }
+        Ok(())
+    }
+
+    async fn stop_stream_best_effort(&self, stream_id: &str) {
+        if let Err(err) = self
+            .stream_command("stopstream", &streams::stop_stream_request(stream_id))
+            .await
+        {
+            self.emit(SessionEvent::Log {
+                level: "warn".into(),
+                message: format!("停止屏幕共享 {stream_id} 失败: {err}"),
+            });
+        }
+    }
+
+    async fn respond_stream_join_request(
+        &mut self,
+        viewer_clid: i32,
+        accept: bool,
+        offer_sdp: String,
+    ) -> Result<(), SessionError> {
+        self.connected()?;
+        let params = self
+            .streams
+            .respond_viewer_join(viewer_clid, accept, &offer_sdp)?;
+        self.stream_command("respondjoinstreamrequest", &params)
+            .await
+    }
+
+    async fn send_publisher_ice_candidate(
+        &self,
+        viewer_clid: i32,
+        sdp: String,
+        mid: Option<String>,
+        m_line: Option<i32>,
+    ) -> Result<(), SessionError> {
+        self.connected()?;
+        let stream_id = self
+            .streams
+            .check_publisher_signal_target(viewer_clid)?
+            .to_string();
+        let payload = streams::ice_payload(&sdp, mid.as_deref(), m_line);
+        self.stream_signaling(&stream_id, viewer_clid, payload)
+            .await
+    }
+
+    async fn kick_stream_viewer(&mut self, viewer_clid: i32) -> Result<(), SessionError> {
+        self.connected()?;
+        let (params, event) = self.streams.kick_viewer(viewer_clid)?;
+        self.emit(event);
+        self.stream_command("removeclientfromstream", &params).await
     }
 
     async fn stream_signaling(

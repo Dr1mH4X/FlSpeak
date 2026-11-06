@@ -1,11 +1,11 @@
-//! TS6 屏幕共享观看端：当前频道的流目录与观看状态机。
+//! TS6 屏幕共享观看端与推流端：当前频道的流目录、观看状态机与本地推流状态机。
 //!
 //! TeamSpeak 服务器只转交信令，媒体由 Flutter 侧的 WebRTC 点对点收发。这里不碰
 //! 网络：actor 把原始通知喂进来，拿回要广播的 [`SessionEvent`]；下行命令发出前
-//! 先经这里校验，Dart 不能对未加入的流或非来源客户端发信令。
+//! 先经这里校验，Dart 不能对未加入的流、非来源客户端或未登记的观众发信令。
 //!
-//! 流目录只属于一个频道（[`StreamCoordinator::channel`]）。自己换频道或断线时整张
-//! 目录作废，由 actor 在新频道里重新发现。
+//! 流目录与本地推流都只属于一个频道（[`StreamCoordinator::channel`]）。自己换频道
+//! 或断线时整张目录与本地推流一并作废，由 actor 在新频道里重新发现。
 
 use std::collections::{BTreeMap, HashMap};
 
@@ -44,6 +44,43 @@ pub enum StreamEndReason {
     Left,
 }
 
+/// 本地推流中单个观看者的协商状态。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ViewerPeerState {
+    Requested,
+    Accepted,
+}
+
+/// 本地屏幕共享推流三态状态机。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum LocalPublishState {
+    #[default]
+    Idle,
+    Starting {
+        name: String,
+        has_audio: bool,
+    },
+    Active {
+        stream_id: String,
+        name: String,
+        has_audio: bool,
+        viewers: HashMap<i32, ViewerPeerState>,
+    },
+}
+
+/// 观看端发给本地推流端的 WebRTC 信令。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PublisherSignal {
+    Answer {
+        sdp: String,
+    },
+    IceCandidate {
+        sdp: String,
+        mid: Option<String>,
+        m_line: Option<i32>,
+    },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Watching {
     stream_id: String,
@@ -55,7 +92,11 @@ pub(crate) struct StreamCoordinator {
     channel_id: u64,
     streams: BTreeMap<String, StreamView>,
     watching: Option<Watching>,
+    publish: LocalPublishState,
+    orphan_streams: Vec<String>,
 }
+
+pub(crate) type StreamParams<const N: usize> = [(&'static str, String); N];
 
 /// 只有这些通知会被 actor 转进来。
 pub(crate) fn is_stream_notification(name: &str) -> bool {
@@ -65,6 +106,7 @@ pub(crate) fn is_stream_notification(name: &str) -> bool {
             | "notifystreaminfo"
             | "notifystreamstopped"
             | "notifystreamclientleft"
+            | "notifyjoinstreamrequest"
             | "notifyrespondjoinstreamrequest"
             | "notifystreamsignaling"
     )
@@ -83,7 +125,26 @@ impl StreamCoordinator {
             .map(|w| (w.stream_id.as_str(), w.source_clid))
     }
 
-    /// 作废整张目录并切到 `channel_id`。正在观看的流以 `reason` 结束。
+    /// 本地推流状态。
+    #[cfg(test)]
+    pub(crate) fn publish_state(&self) -> &LocalPublishState {
+        &self.publish
+    }
+
+    /// 正在推流的服务器 `stream_id`（仅 `Active` 态有值）。
+    pub(crate) fn published_stream_id(&self) -> Option<&str> {
+        match &self.publish {
+            LocalPublishState::Active { stream_id, .. } => Some(stream_id.as_str()),
+            LocalPublishState::Idle | LocalPublishState::Starting { .. } => None,
+        }
+    }
+
+    /// 取出需要自动执行 `stopstream` 清理的孤儿流 id 列表。
+    pub(crate) fn take_orphan_streams(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.orphan_streams)
+    }
+
+    /// 作废整张目录并切到 `channel_id`。正在观看的流以 `reason` 结束，本地推流一并重置。
     pub(crate) fn reset(&mut self, channel_id: u64, reason: StreamEndReason) -> Vec<SessionEvent> {
         self.channel_id = channel_id;
         let mut out = Vec::new();
@@ -93,15 +154,20 @@ impl StreamCoordinator {
         if ended || had_streams {
             out.push(self.list_event());
         }
+        if !matches!(self.publish, LocalPublishState::Idle) {
+            self.publish = LocalPublishState::Idle;
+            out.push(SessionEvent::ScreenShareStopped);
+        }
+        self.orphan_streams.clear();
         out
     }
 
-    /// 推流者离开服务器。
+    /// 远端客户端离开服务器。
     pub(crate) fn client_left(&mut self, clid: i32) -> Vec<SessionEvent> {
         self.drop_source(clid, StreamEndReason::SourceLeft)
     }
 
-    /// 其他客户端换了频道；推流者离开本频道时它的流作废。
+    /// 其他客户端换了频道；推流者离开本频道时它的流作废，观众离开本频道时从推流观众表移除。
     pub(crate) fn client_moved(&mut self, clid: i32, channel_id: u64) -> Vec<SessionEvent> {
         if channel_id == self.channel_id {
             return Vec::new();
@@ -127,8 +193,30 @@ impl StreamCoordinator {
                 let Some(clid) = parse_clid(params) else {
                     return out;
                 };
-                // 自己推的流不进观看目录。
-                if Some(clid) == self_clid || self.channel_id == 0 {
+                if Some(clid) == self_clid {
+                    match &mut self.publish {
+                        LocalPublishState::Starting { name, has_audio } => {
+                            let name = std::mem::take(name);
+                            let has_audio = *has_audio;
+                            self.publish = LocalPublishState::Active {
+                                stream_id: stream_id.clone(),
+                                name,
+                                has_audio,
+                                viewers: HashMap::new(),
+                            };
+                            out.push(SessionEvent::ScreenSharePublished { stream_id });
+                        }
+                        LocalPublishState::Active {
+                            stream_id: active_id,
+                            ..
+                        } if active_id == &stream_id => {}
+                        LocalPublishState::Idle | LocalPublishState::Active { .. } => {
+                            self.orphan_streams.push(stream_id);
+                        }
+                    }
+                    return out;
+                }
+                if self.channel_id == 0 {
                     return out;
                 }
                 if source_channel(clid).is_some_and(|channel| channel != self.channel_id) {
@@ -145,7 +233,39 @@ impl StreamCoordinator {
                     out.push(self.list_event());
                 }
             }
+            "notifyjoinstreamrequest" => {
+                let Some(viewer_clid) = parse_clid(params) else {
+                    return out;
+                };
+                if Some(viewer_clid) == self_clid {
+                    return out;
+                }
+                if let LocalPublishState::Active {
+                    stream_id: active_id,
+                    viewers,
+                    ..
+                } = &mut self.publish
+                    && active_id == &stream_id
+                {
+                    viewers.insert(viewer_clid, ViewerPeerState::Requested);
+                    out.push(SessionEvent::StreamViewerJoinRequested {
+                        stream_id,
+                        viewer_clid,
+                    });
+                }
+            }
             "notifystreamstopped" => {
+                if matches!(
+                    &self.publish,
+                    LocalPublishState::Active {
+                        stream_id: active_id,
+                        ..
+                    } if active_id == &stream_id
+                ) {
+                    self.publish = LocalPublishState::Idle;
+                    out.push(SessionEvent::ScreenShareStopped);
+                    return out;
+                }
                 let removed = self.streams.remove(&stream_id).is_some();
                 let ended =
                     self.end_watching_if(&stream_id, StreamEndReason::SourceStopped, &mut out);
@@ -154,6 +274,23 @@ impl StreamCoordinator {
                 }
             }
             "notifystreamclientleft" => {
+                if let LocalPublishState::Active {
+                    stream_id: active_id,
+                    viewers,
+                    ..
+                } = &mut self.publish
+                    && active_id == &stream_id
+                {
+                    if let Some(viewer_clid) = parse_clid(params)
+                        && viewers.remove(&viewer_clid).is_some()
+                    {
+                        out.push(SessionEvent::StreamViewerLeft {
+                            stream_id,
+                            viewer_clid,
+                        });
+                    }
+                    return out;
+                }
                 if self_clid.is_some()
                     && parse_clid(params) == self_clid
                     && self.end_watching_if(&stream_id, StreamEndReason::Removed, &mut out)
@@ -180,6 +317,31 @@ impl StreamCoordinator {
                 }
             }
             "notifystreamsignaling" => {
+                if let LocalPublishState::Active {
+                    stream_id: active_id,
+                    viewers,
+                    ..
+                } = &self.publish
+                    && active_id == &stream_id
+                {
+                    let Some(viewer_clid) =
+                        parse_clid(params).filter(|clid| viewers.contains_key(clid))
+                    else {
+                        return out;
+                    };
+                    let raw = param(params, "json").or_else(|| param(params, "data"));
+                    let Some((cmd, args)) = raw.and_then(parse_signal) else {
+                        return out;
+                    };
+                    if let Some(signal) = publisher_signal_kind(&cmd, &args) {
+                        out.push(SessionEvent::PublisherSignalReceived {
+                            stream_id,
+                            viewer_clid,
+                            signal,
+                        });
+                    }
+                    return out;
+                }
                 let Some(source_clid) = self.watched_source(&stream_id) else {
                     return out;
                 };
@@ -217,6 +379,117 @@ impl StreamCoordinator {
             _ => {}
         }
         out
+    }
+
+    /// 登记本地推流意图并生成 `setupstream` 参数；非 `Idle` 时拒绝。
+    pub(crate) fn start_publish(
+        &mut self,
+        name: &str,
+        has_audio: bool,
+        bitrate: u32,
+        viewer_limit: u32,
+    ) -> Result<StreamParams<7>, SessionError> {
+        if !matches!(self.publish, LocalPublishState::Idle) {
+            return Err(SessionError::Stream("当前已在推流或正在启动推流".into()));
+        }
+        self.publish = LocalPublishState::Starting {
+            name: name.to_string(),
+            has_audio,
+        };
+        Ok(setup_stream_request(name, has_audio, bitrate, viewer_limit))
+    }
+
+    /// `setupstream` 命令发送失败时将状态从 `Starting` 回滚为 `Idle`。
+    pub(crate) fn rollback_publish(&mut self) {
+        if matches!(self.publish, LocalPublishState::Starting { .. }) {
+            self.publish = LocalPublishState::Idle;
+        }
+    }
+
+    /// 停止本地推流。返回需要发送 `stopstream` 的 `stream_id`（仅原状态为 `Active` 时有值）与待广播事件。
+    pub(crate) fn stop_publish(&mut self) -> (Option<String>, Vec<SessionEvent>) {
+        match std::mem::replace(&mut self.publish, LocalPublishState::Idle) {
+            LocalPublishState::Idle => (None, Vec::new()),
+            LocalPublishState::Starting { .. } => (None, vec![SessionEvent::ScreenShareStopped]),
+            LocalPublishState::Active { stream_id, .. } => {
+                (Some(stream_id), vec![SessionEvent::ScreenShareStopped])
+            }
+        }
+    }
+
+    /// 接受或拒绝观众的加入请求，并生成 `respondjoinstreamrequest` 参数。
+    pub(crate) fn respond_viewer_join(
+        &mut self,
+        viewer_clid: i32,
+        accept: bool,
+        offer_sdp: &str,
+    ) -> Result<StreamParams<5>, SessionError> {
+        let LocalPublishState::Active {
+            stream_id, viewers, ..
+        } = &mut self.publish
+        else {
+            return Err(SessionError::Stream("当前没有活动的屏幕共享推流".into()));
+        };
+        if !viewers.contains_key(&viewer_clid) {
+            return Err(SessionError::Stream("该客户端未请求观看屏幕共享".into()));
+        }
+        if accept {
+            if offer_sdp.is_empty() {
+                return Err(SessionError::Stream(
+                    "接受观看请求必须提供 SDP Offer".into(),
+                ));
+            }
+            viewers.insert(viewer_clid, ViewerPeerState::Accepted);
+            Ok(respond_join_request(
+                stream_id,
+                viewer_clid,
+                true,
+                offer_sdp,
+            ))
+        } else {
+            viewers.remove(&viewer_clid);
+            Ok(respond_join_request(stream_id, viewer_clid, false, ""))
+        }
+    }
+
+    /// 校验推流端向观众发送 ICE 候选的目标，返回当前活动推流的 `stream_id`。
+    pub(crate) fn check_publisher_signal_target(
+        &self,
+        viewer_clid: i32,
+    ) -> Result<&str, SessionError> {
+        match &self.publish {
+            LocalPublishState::Active {
+                stream_id, viewers, ..
+            } if viewers.contains_key(&viewer_clid) => Ok(stream_id.as_str()),
+            LocalPublishState::Active { .. } => {
+                Err(SessionError::Stream("信令目标不是当前推流的观众".into()))
+            }
+            LocalPublishState::Idle | LocalPublishState::Starting { .. } => {
+                Err(SessionError::Stream("当前没有活动的屏幕共享推流".into()))
+            }
+        }
+    }
+
+    /// 将指定观众移出当前推流，返回 `removeclientfromstream` 参数与 `StreamViewerLeft` 事件。
+    pub(crate) fn kick_viewer(
+        &mut self,
+        viewer_clid: i32,
+    ) -> Result<(StreamParams<3>, SessionEvent), SessionError> {
+        let LocalPublishState::Active {
+            stream_id, viewers, ..
+        } = &mut self.publish
+        else {
+            return Err(SessionError::Stream("当前没有活动的屏幕共享推流".into()));
+        };
+        if viewers.remove(&viewer_clid).is_none() {
+            return Err(SessionError::Stream("目标客户端不是当前推流的观众".into()));
+        }
+        let params = remove_client_request(stream_id, viewer_clid);
+        let event = SessionEvent::StreamViewerLeft {
+            stream_id: stream_id.clone(),
+            viewer_clid,
+        };
+        Ok((params, event))
     }
 
     /// 校验并登记观看意图。返回需要先离开的旧流 id（不同于本次目标时）。
@@ -291,6 +564,16 @@ impl StreamCoordinator {
         if ended || self.streams.len() != before {
             out.push(self.list_event());
         }
+        if let LocalPublishState::Active {
+            stream_id, viewers, ..
+        } = &mut self.publish
+            && viewers.remove(&clid).is_some()
+        {
+            out.push(SessionEvent::StreamViewerLeft {
+                stream_id: stream_id.clone(),
+                viewer_clid: clid,
+            });
+        }
         out
     }
 
@@ -329,6 +612,61 @@ impl StreamCoordinator {
     }
 }
 
+/// `setupstream`：向服务器注册本地屏幕共享流。
+pub(crate) fn setup_stream_request(
+    name: &str,
+    audio: bool,
+    bitrate: u32,
+    viewer_limit: u32,
+) -> [(&'static str, String); 7] {
+    [
+        ("name", name.to_string()),
+        ("type", "3".into()),
+        ("bitrate", bitrate.to_string()),
+        ("accessibility", "1".into()),
+        ("mode", "1".into()),
+        ("viewer_limit", viewer_limit.to_string()),
+        ("audio", if audio { "1" } else { "0" }.into()),
+    ]
+}
+
+/// `stopstream`：停止服务器上的本地屏幕共享流。
+pub(crate) fn stop_stream_request(stream_id: &str) -> [(&'static str, String); 2] {
+    [("id", stream_id.to_string()), ("reason", "1".into())]
+}
+
+/// `respondjoinstreamrequest`：推流端回复观众的加入请求（附带 SDP Offer 或拒绝）。
+pub(crate) fn respond_join_request(
+    stream_id: &str,
+    viewer_clid: i32,
+    accept: bool,
+    offer_sdp: &str,
+) -> [(&'static str, String); 5] {
+    [
+        ("id", stream_id.to_string()),
+        ("clid", viewer_clid.to_string()),
+        ("msg", String::new()),
+        (
+            "offer",
+            if accept {
+                offer_sdp.to_string()
+            } else {
+                String::new()
+            },
+        ),
+        ("decision", if accept { "1" } else { "0" }.into()),
+    ]
+}
+
+/// `removeclientfromstream`：把指定客户端从流里移除（观众自己离开或推流端踢出观众）。
+pub(crate) fn remove_client_request(stream_id: &str, clid: i32) -> [(&'static str, String); 3] {
+    [
+        ("id", stream_id.to_string()),
+        ("clid", clid.to_string()),
+        ("reason", "1".into()),
+    ]
+}
+
 /// `joinstreamrequest`：向推流者申请观看。
 pub(crate) fn join_request(stream_id: &str, source_clid: i32) -> [(&'static str, String); 7] {
     [
@@ -344,11 +682,7 @@ pub(crate) fn join_request(stream_id: &str, source_clid: i32) -> [(&'static str,
 
 /// `removeclientfromstream`：把自己从流里移除。
 pub(crate) fn leave_request(stream_id: &str, self_clid: i32) -> [(&'static str, String); 3] {
-    [
-        ("id", stream_id.to_string()),
-        ("clid", self_clid.to_string()),
-        ("reason", "1".into()),
-    ]
+    remove_client_request(stream_id, self_clid)
 }
 
 /// `streamsignaling` 的 SDP Answer 载荷。
@@ -427,6 +761,21 @@ fn signal_kind(cmd: &str, args: &Map<String, Value>) -> Option<Signal> {
         }
         "offer" | "reconnectOffer" => string_arg(args, &["offer", "sdp"]).map(Signal::Offer),
         "iceCandidate" => Some(Signal::Ice {
+            sdp: string_arg(args, &["sdp", "candidate"])?,
+            mid: args.get("mid").and_then(Value::as_str).map(str::to_string),
+            m_line: args
+                .get("mLine")
+                .and_then(Value::as_i64)
+                .and_then(|value| i32::try_from(value).ok()),
+        }),
+        _ => None,
+    }
+}
+
+fn publisher_signal_kind(cmd: &str, args: &Map<String, Value>) -> Option<PublisherSignal> {
+    match cmd {
+        "answer" => string_arg(args, &["answer", "sdp"]).map(|sdp| PublisherSignal::Answer { sdp }),
+        "iceCandidate" => Some(PublisherSignal::IceCandidate {
             sdp: string_arg(args, &["sdp", "candidate"])?,
             mid: args.get("mid").and_then(Value::as_str).map(str::to_string),
             m_line: args
@@ -737,5 +1086,386 @@ mod tests {
             bare,
             serde_json::json!({"cmd":"iceCandidate","args":{"sdp":"c"}})
         );
+    }
+
+    fn build_escaped_command(cmd: &str, params: &[(&str, String)]) -> String {
+        let mut parts = vec![tsclient_rs::escape(cmd).0];
+        for (k, v) in params {
+            parts.push(format!("{k}={}", tsclient_rs::escape(v).0));
+        }
+        parts.join(" ")
+    }
+
+    #[test]
+    fn publisher_commands_escape_special_characters_properly() {
+        let setup = setup_stream_request("My Screen | \"Dev\"\nLine2", true, 4608, 0);
+        assert_eq!(
+            build_escaped_command("setupstream", &setup),
+            "setupstream name=My\\sScreen\\s\\p\\s\"Dev\"\\nLine2 type=3 bitrate=4608 accessibility=1 mode=1 viewer_limit=0 audio=1"
+        );
+
+        let stop = stop_stream_request("pub-1");
+        assert_eq!(
+            build_escaped_command("stopstream", &stop),
+            "stopstream id=pub-1 reason=1"
+        );
+
+        let respond_accept =
+            respond_join_request("pub-1", 88, true, "v=0\r\no=- 1 1 IN IP4 127.0.0.1");
+        assert_eq!(
+            build_escaped_command("respondjoinstreamrequest", &respond_accept),
+            "respondjoinstreamrequest id=pub-1 clid=88 msg= offer=v=0\\r\\no=-\\s1\\s1\\sIN\\sIP4\\s127.0.0.1 decision=1"
+        );
+
+        let respond_reject = respond_join_request("pub-1", 88, false, "ignored");
+        assert_eq!(
+            build_escaped_command("respondjoinstreamrequest", &respond_reject),
+            "respondjoinstreamrequest id=pub-1 clid=88 msg= offer= decision=0"
+        );
+
+        let remove = remove_client_request("pub-1", 88);
+        assert_eq!(
+            build_escaped_command("removeclientfromstream", &remove),
+            "removeclientfromstream id=pub-1 clid=88 reason=1"
+        );
+    }
+
+    #[test]
+    fn publisher_full_lifecycle_from_starting_to_viewer_negotiation_and_stop() {
+        let mut coordinator = StreamCoordinator::default();
+        coordinator.reset(CHANNEL, StreamEndReason::SelfMoved);
+
+        // 1. Idle -> Starting
+        let setup_params = coordinator
+            .start_publish("IDE Share", true, 4608, 0)
+            .unwrap();
+        assert_eq!(setup_params[0], ("name", "IDE Share".to_string()));
+        assert_eq!(setup_params[6], ("audio", "1".to_string()));
+        assert_eq!(
+            coordinator.publish_state(),
+            &LocalPublishState::Starting {
+                name: "IDE Share".into(),
+                has_audio: true,
+            }
+        );
+        // 非 Idle 时重复调用 start_publish 拒绝
+        assert!(
+            coordinator
+                .start_publish("Another", false, 2000, 0)
+                .is_err()
+        );
+
+        // 2. 收到属于自己的 notifystreamstarted -> Active
+        let events = coordinator.notification(
+            "notifystreamstarted",
+            &params(&[
+                ("id", "pub-stream-1"),
+                ("clid", "1"),
+                ("name", "IDE Share"),
+                ("audio", "1"),
+            ]),
+            Some(SELF),
+            in_channel,
+        );
+        assert!(matches!(
+            events.as_slice(),
+            [SessionEvent::ScreenSharePublished { stream_id }] if stream_id == "pub-stream-1"
+        ));
+        assert!(coordinator.take_orphan_streams().is_empty());
+        assert_eq!(coordinator.published_stream_id(), Some("pub-stream-1"));
+
+        // 3. 观众 (clid=77) 请求加入
+        let events = coordinator.notification(
+            "notifyjoinstreamrequest",
+            &params(&[("id", "pub-stream-1"), ("clid", "77")]),
+            Some(SELF),
+            in_channel,
+        );
+        assert!(matches!(
+            events.as_slice(),
+            [SessionEvent::StreamViewerJoinRequested { stream_id, viewer_clid: 77 }]
+                if stream_id == "pub-stream-1"
+        ));
+
+        // 4. 回复 Offer 接受观众
+        let respond = coordinator
+            .respond_viewer_join(77, true, "v=0 offer-sdp")
+            .unwrap();
+        assert_eq!(respond[0], ("id", "pub-stream-1".to_string()));
+        assert_eq!(respond[1], ("clid", "77".to_string()));
+        assert_eq!(respond[3], ("offer", "v=0 offer-sdp".to_string()));
+        assert_eq!(respond[4], ("decision", "1".to_string()));
+        assert_eq!(
+            coordinator.check_publisher_signal_target(77).unwrap(),
+            "pub-stream-1"
+        );
+        assert!(coordinator.check_publisher_signal_target(99).is_err());
+
+        // 5. 收到观众发来的 Answer 与 ICE Candidate
+        let answer_events = coordinator.notification(
+            "notifystreamsignaling",
+            &params(&[
+                ("id", "pub-stream-1"),
+                ("clid", "77"),
+                (
+                    "json",
+                    r#"{"cmd":"answer","args":{"answer":"v=0 answer-sdp"}}"#,
+                ),
+            ]),
+            Some(SELF),
+            in_channel,
+        );
+        assert!(matches!(
+            answer_events.as_slice(),
+            [SessionEvent::PublisherSignalReceived {
+                stream_id,
+                viewer_clid: 77,
+                signal: PublisherSignal::Answer { sdp },
+            }] if stream_id == "pub-stream-1" && sdp == "v=0 answer-sdp"
+        ));
+
+        let ice_events = coordinator.notification(
+            "notifystreamsignaling",
+            &params(&[
+                ("id", "pub-stream-1"),
+                ("clid", "77"),
+                (
+                    "json",
+                    r#"{"cmd":"iceCandidate","args":{"sdp":"candidate:pub 1","mid":"0","mLine":0}}"#,
+                ),
+            ]),
+            Some(SELF),
+            in_channel,
+        );
+        assert!(matches!(
+            ice_events.as_slice(),
+            [SessionEvent::PublisherSignalReceived {
+                stream_id,
+                viewer_clid: 77,
+                signal: PublisherSignal::IceCandidate {
+                    sdp,
+                    mid: Some(mid),
+                    m_line: Some(0),
+                },
+            }] if stream_id == "pub-stream-1" && sdp == "candidate:pub 1" && mid == "0"
+        ));
+
+        // 6. 观众离开通知或主动踢出观众
+        let left_events = coordinator.notification(
+            "notifystreamclientleft",
+            &params(&[("id", "pub-stream-1"), ("clid", "77")]),
+            Some(SELF),
+            in_channel,
+        );
+        assert!(matches!(
+            left_events.as_slice(),
+            [SessionEvent::StreamViewerLeft { stream_id, viewer_clid: 77 }]
+                if stream_id == "pub-stream-1"
+        ));
+        assert!(coordinator.check_publisher_signal_target(77).is_err());
+
+        // 7. 停止推流
+        let (stop_id, stop_events) = coordinator.stop_publish();
+        assert_eq!(stop_id.as_deref(), Some("pub-stream-1"));
+        assert!(matches!(
+            stop_events.as_slice(),
+            [SessionEvent::ScreenShareStopped]
+        ));
+        assert_eq!(coordinator.publish_state(), &LocalPublishState::Idle);
+    }
+
+    #[test]
+    fn stopping_during_starting_cleans_up_delayed_orphan_stream() {
+        let mut coordinator = StreamCoordinator::default();
+        coordinator.reset(CHANNEL, StreamEndReason::SelfMoved);
+
+        coordinator
+            .start_publish("Quick Share", false, 3000, 0)
+            .unwrap();
+        assert!(matches!(
+            coordinator.publish_state(),
+            LocalPublishState::Starting { .. }
+        ));
+
+        // 用户在等待 notifystreamstarted 期间提前停止推流
+        let (stop_id, stop_events) = coordinator.stop_publish();
+        assert!(stop_id.is_none());
+        assert!(matches!(
+            stop_events.as_slice(),
+            [SessionEvent::ScreenShareStopped]
+        ));
+        assert_eq!(coordinator.publish_state(), &LocalPublishState::Idle);
+
+        // 随后服务器的 notifystreamstarted 迟到下发 -> 触发孤儿流 stopstream 清理
+        let events = coordinator.notification(
+            "notifystreamstarted",
+            &params(&[("id", "orphan-99"), ("clid", "1"), ("name", "Quick Share")]),
+            Some(SELF),
+            in_channel,
+        );
+        assert!(events.is_empty());
+        assert_eq!(coordinator.publish_state(), &LocalPublishState::Idle);
+        let orphans = coordinator.take_orphan_streams();
+        assert_eq!(orphans, vec!["orphan-99".to_string()]);
+        let stop_req = stop_stream_request(&orphans[0]);
+        assert_eq!(
+            stop_req,
+            [("id", "orphan-99".to_string()), ("reason", "1".to_string())]
+        );
+    }
+
+    #[test]
+    fn simultaneous_publishing_and_watching_routes_signaling_by_stream_id() {
+        let mut coordinator = watching_stream();
+        // 同时启动本地推流并激活为 pub-self，且登记观众 88
+        coordinator.start_publish("My Desk", true, 4608, 0).unwrap();
+        let pub_events = coordinator.notification(
+            "notifystreamstarted",
+            &params(&[("id", "pub-self"), ("clid", "1"), ("name", "My Desk")]),
+            Some(SELF),
+            in_channel,
+        );
+        assert!(matches!(
+            pub_events.as_slice(),
+            [SessionEvent::ScreenSharePublished { stream_id }] if stream_id == "pub-self"
+        ));
+        coordinator.notification(
+            "notifyjoinstreamrequest",
+            &params(&[("id", "pub-self"), ("clid", "88")]),
+            Some(SELF),
+            in_channel,
+        );
+        coordinator
+            .respond_viewer_join(88, true, "v=0 pub-offer")
+            .unwrap();
+
+        // 1. 收到来自观看流 s1 (clid=42) 的 ICE 候选 -> 路由至 Viewer 事件 StreamIceCandidate
+        let viewer_ice = coordinator.notification(
+            "notifystreamsignaling",
+            &params(&[
+                ("id", "s1"),
+                ("clid", "42"),
+                (
+                    "json",
+                    r#"{"cmd":"iceCandidate","args":{"sdp":"candidate:from-source","mid":"0","mLine":0}}"#,
+                ),
+            ]),
+            Some(SELF),
+            in_channel,
+        );
+        assert!(matches!(
+            viewer_ice.as_slice(),
+            [SessionEvent::StreamIceCandidate {
+                stream_id,
+                source_client_id: SOURCE,
+                sdp,
+                ..
+            }] if stream_id == "s1" && sdp == "candidate:from-source"
+        ));
+
+        // 2. 收到来自推流观众 pub-self (clid=88) 的 Answer -> 路由至 Publisher 事件 PublisherSignalReceived
+        let pub_answer = coordinator.notification(
+            "notifystreamsignaling",
+            &params(&[
+                ("id", "pub-self"),
+                ("clid", "88"),
+                (
+                    "json",
+                    r#"{"cmd":"answer","args":{"answer":"v=0 viewer-answer"}}"#,
+                ),
+            ]),
+            Some(SELF),
+            in_channel,
+        );
+        assert!(matches!(
+            pub_answer.as_slice(),
+            [SessionEvent::PublisherSignalReceived {
+                stream_id,
+                viewer_clid: 88,
+                signal: PublisherSignal::Answer { sdp },
+            }] if stream_id == "pub-self" && sdp == "v=0 viewer-answer"
+        ));
+
+        // 3. 收到来自推流观众 pub-self (clid=88) 的 ICE -> 路由至 Publisher 事件 PublisherSignalReceived
+        let pub_ice = coordinator.notification(
+            "notifystreamsignaling",
+            &params(&[
+                ("id", "pub-self"),
+                ("clid", "88"),
+                (
+                    "json",
+                    r#"{"cmd":"iceCandidate","args":{"sdp":"candidate:from-viewer","mid":"1","mLine":1}}"#,
+                ),
+            ]),
+            Some(SELF),
+            in_channel,
+        );
+        assert!(matches!(
+            pub_ice.as_slice(),
+            [SessionEvent::PublisherSignalReceived {
+                stream_id,
+                viewer_clid: 88,
+                signal: PublisherSignal::IceCandidate { sdp, .. },
+            }] if stream_id == "pub-self" && sdp == "candidate:from-viewer"
+        ));
+
+        // Both watching and publishing remain intact
+        assert_eq!(coordinator.watching(), Some(("s1", SOURCE)));
+        assert_eq!(coordinator.published_stream_id(), Some("pub-self"));
+    }
+
+    #[test]
+    fn publisher_guards_kick_remote_stop_and_channel_or_disconnect_reset() {
+        let mut coordinator = StreamCoordinator::default();
+        coordinator.reset(CHANNEL, StreamEndReason::SelfMoved);
+
+        // Starting 状态下切换频道或断线会清理状态并发出 ScreenShareStopped
+        coordinator.start_publish("Share", false, 2000, 0).unwrap();
+        let reset_events = coordinator.reset(CHANNEL + 1, StreamEndReason::SelfMoved);
+        assert!(matches!(
+            reset_events.as_slice(),
+            [SessionEvent::ScreenShareStopped]
+        ));
+        assert_eq!(coordinator.publish_state(), &LocalPublishState::Idle);
+
+        // Active 状态下踢出观众与收到服务器 notifystreamstopped
+        coordinator.start_publish("Share", true, 4608, 0).unwrap();
+        coordinator.notification(
+            "notifystreamstarted",
+            &params(&[("id", "pub-2"), ("clid", "1")]),
+            Some(SELF),
+            |_| Some(CHANNEL + 1),
+        );
+        coordinator.notification(
+            "notifyjoinstreamrequest",
+            &params(&[("id", "pub-2"), ("clid", "55")]),
+            Some(SELF),
+            |_| Some(CHANNEL + 1),
+        );
+        let (kick_params, kick_event) = coordinator.kick_viewer(55).unwrap();
+        assert_eq!(
+            kick_params,
+            [
+                ("id", "pub-2".to_string()),
+                ("clid", "55".to_string()),
+                ("reason", "1".to_string()),
+            ]
+        );
+        assert!(matches!(
+            kick_event,
+            SessionEvent::StreamViewerLeft { stream_id, viewer_clid: 55 } if stream_id == "pub-2"
+        ));
+
+        let stopped = coordinator.notification(
+            "notifystreamstopped",
+            &params(&[("id", "pub-2")]),
+            Some(SELF),
+            |_| Some(CHANNEL + 1),
+        );
+        assert!(matches!(
+            stopped.as_slice(),
+            [SessionEvent::ScreenShareStopped]
+        ));
+        assert_eq!(coordinator.publish_state(), &LocalPublishState::Idle);
     }
 }

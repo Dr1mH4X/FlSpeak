@@ -1067,6 +1067,12 @@ class SessionController extends Notifier<SessionView> {
           case StreamEndReason.left:
             break;
         }
+      case CoreEvent_ScreenSharePublished():
+      case CoreEvent_ScreenShareStopped():
+      case CoreEvent_StreamViewerJoinRequested():
+      case CoreEvent_PublisherSignalReceived():
+      case CoreEvent_StreamViewerLeft():
+        break;
       case CoreEvent_Log():
         // 协议日志不进界面，避免刷屏。
         break;

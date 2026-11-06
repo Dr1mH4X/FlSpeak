@@ -9,7 +9,7 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'session.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `runtime`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 /// 抓取第三方图片 URL。myTS 的 `ts.file.myts` 附件不经过这里。
 Future<Uint8List> fetchImage({required String url}) =>
@@ -89,6 +89,8 @@ abstract class CoreSession implements RustOpaqueInterface {
     required int connectionEpoch,
   });
 
+  Future<void> kickStreamViewer({required int viewerClid});
+
   Future<void> leaveStream({required String streamId});
 
   Future<AudioDevicesView> listAudioDevices();
@@ -135,6 +137,19 @@ abstract class CoreSession implements RustOpaqueInterface {
   /// 主动拉一次频道/成员快照。连接期间 actor 也会每 30 秒自动刷新。
   Future<void> requestSnapshot();
 
+  Future<void> respondStreamJoinRequest({
+    required int viewerClid,
+    required bool accept,
+    required String offerSdp,
+  });
+
+  Future<void> sendPublisherIceCandidate({
+    required int viewerClid,
+    required String sdp,
+    String? mid,
+    int? mLine,
+  });
+
   Future<void> sendStreamAnswer({
     required String streamId,
     required int targetClid,
@@ -180,7 +195,16 @@ abstract class CoreSession implements RustOpaqueInterface {
 
   Future<void> shutdown();
 
+  Future<void> startScreenShare({
+    required String name,
+    required bool audio,
+    required int bitrate,
+    required int viewerLimit,
+  });
+
   Future<CoreSessionState> state();
+
+  Future<void> stopScreenShare();
 
   Future<int> uploadFile({
     required String localPath,
@@ -525,6 +549,22 @@ sealed class CoreEvent with _$CoreEvent {
     required String streamId,
     required StreamEndReason reason,
   }) = CoreEvent_StreamEnded;
+  const factory CoreEvent.screenSharePublished({required String streamId}) =
+      CoreEvent_ScreenSharePublished;
+  const factory CoreEvent.screenShareStopped() = CoreEvent_ScreenShareStopped;
+  const factory CoreEvent.streamViewerJoinRequested({
+    required String streamId,
+    required int viewerClid,
+  }) = CoreEvent_StreamViewerJoinRequested;
+  const factory CoreEvent.publisherSignalReceived({
+    required String streamId,
+    required int viewerClid,
+    required PublisherSignal signal,
+  }) = CoreEvent_PublisherSignalReceived;
+  const factory CoreEvent.streamViewerLeft({
+    required String streamId,
+    required int viewerClid,
+  }) = CoreEvent_StreamViewerLeft;
   const factory CoreEvent.log({
     required String level,
     required String message,
@@ -686,6 +726,19 @@ class MemberGroupView {
           member == other.member &&
           canAdd == other.canAdd &&
           canRemove == other.canRemove;
+}
+
+@freezed
+sealed class PublisherSignal with _$PublisherSignal {
+  const PublisherSignal._();
+
+  const factory PublisherSignal.answer({required String sdp}) =
+      PublisherSignal_Answer;
+  const factory PublisherSignal.iceCandidate({
+    required String sdp,
+    String? mid,
+    int? mLine,
+  }) = PublisherSignal_IceCandidate;
 }
 
 class ServerProfileView {
