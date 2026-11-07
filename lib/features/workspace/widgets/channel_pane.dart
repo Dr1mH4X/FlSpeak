@@ -657,7 +657,8 @@ class _UserFooterState extends ConsumerState<_UserFooter> {
   @override
   void didUpdateWidget(covariant _UserFooter oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!widget.view.connected && oldWidget.view.connected) {
+    if (widget.view.connectionEpoch != oldWidget.view.connectionEpoch ||
+        (!widget.view.connected && oldWidget.view.connected)) {
       _expanded = false;
     }
     if (widget.view.networkPanelPinned &&

@@ -98,9 +98,9 @@ class _NetworkTelemetryPanelState extends ConsumerState<NetworkTelemetryPanel> {
   static const _historyLength = 24;
   static const _sampleInterval = Duration(seconds: 1);
 
-  List<double> _pingHistory = List.filled(_historyLength, 0);
-  List<double> _lossInHistory = List.filled(_historyLength, 0);
-  List<double> _lossOutHistory = List.filled(_historyLength, 0);
+  List<double?> _pingHistory = List<double?>.filled(_historyLength, null);
+  List<double?> _lossInHistory = List<double?>.filled(_historyLength, null);
+  List<double?> _lossOutHistory = List<double?>.filled(_historyLength, null);
   Timer? _timer;
   NetworkTelemetry? _lastTelemetry;
 
@@ -110,12 +110,15 @@ class _NetworkTelemetryPanelState extends ConsumerState<NetworkTelemetryPanel> {
     final telemetry = ref.read(sessionViewProvider).network;
     if (telemetry != null) {
       _lastTelemetry = telemetry;
-      _pingHistory = List.filled(_historyLength, _pingLevel(telemetry));
-      _lossInHistory = List.filled(
+      _pingHistory = List<double?>.filled(
+        _historyLength,
+        _pingLevel(telemetry),
+      );
+      _lossInHistory = List<double?>.filled(
         _historyLength,
         _lossLevel(telemetry.lossInPercent),
       );
-      _lossOutHistory = List.filled(
+      _lossOutHistory = List<double?>.filled(
         _historyLength,
         _lossLevel(telemetry.lossOutPercent),
       );
@@ -148,17 +151,17 @@ class _NetworkTelemetryPanelState extends ConsumerState<NetworkTelemetryPanel> {
     ];
   }
 
-  static double _pingLevel(NetworkTelemetry telemetry) {
+  static double? _pingLevel(NetworkTelemetry telemetry) {
     final latency = telemetry.roundTripMs;
     if (latency == null) {
-      return telemetry.recentFailurePercent > 0 ? 1 : 0;
+      return telemetry.recentFailurePercent > 0 ? 1 : null;
     }
     return math.sqrt((latency / 200).clamp(0.0, 1.0));
   }
 
-  static double _lossLevel(double? percent) {
+  static double? _lossLevel(double? percent) {
     if (percent == null) {
-      return 0;
+      return null;
     }
     return math.sqrt((percent / 5).clamp(0.0, 1.0));
   }
@@ -285,9 +288,6 @@ class _NetworkTelemetryPanelState extends ConsumerState<NetworkTelemetryPanel> {
                   label: l10n.networkPing,
                   value: _formatPing(l10n, telemetry),
                   history: _pingHistory,
-                  hasData:
-                      telemetry?.roundTripMs != null ||
-                      (telemetry?.recentFailurePercent ?? 0) > 0,
                   color: color,
                   traceWidth: traceWidth,
                   valueWidth: valueWidth,
@@ -298,7 +298,6 @@ class _NetworkTelemetryPanelState extends ConsumerState<NetworkTelemetryPanel> {
                   label: l10n.networkLossIn,
                   value: _formatPercent(l10n, telemetry?.lossInPercent),
                   history: _lossInHistory,
-                  hasData: telemetry?.lossInPercent != null,
                   color: color,
                   traceWidth: traceWidth,
                   valueWidth: valueWidth,
@@ -309,7 +308,6 @@ class _NetworkTelemetryPanelState extends ConsumerState<NetworkTelemetryPanel> {
                   label: l10n.networkLossOut,
                   value: _formatPercent(l10n, telemetry?.lossOutPercent),
                   history: _lossOutHistory,
-                  hasData: telemetry?.lossOutPercent != null,
                   color: color,
                   traceWidth: traceWidth,
                   valueWidth: valueWidth,
@@ -336,7 +334,6 @@ class _MetricTraceRow extends StatelessWidget {
     required this.label,
     required this.value,
     required this.history,
-    required this.hasData,
     required this.color,
     required this.traceWidth,
     required this.valueWidth,
@@ -346,8 +343,7 @@ class _MetricTraceRow extends StatelessWidget {
 
   final String label;
   final String value;
-  final List<double> history;
-  final bool hasData;
+  final List<double?> history;
   final Color color;
   final double traceWidth;
   final double valueWidth;
@@ -385,7 +381,7 @@ class _MetricTraceRow extends StatelessWidget {
                 child: SizedBox(
                   width: traceWidth,
                   height: 24,
-                  child: hasData
+                  child: history.any((value) => value != null)
                       ? SignalRibbon(
                           values: history,
                           color: color,

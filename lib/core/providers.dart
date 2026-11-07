@@ -135,6 +135,7 @@ class SessionController extends Notifier<SessionView> {
   int _serversRevision = 0;
   String? _connectingServerId;
   bool _awaitingDisconnect = false;
+  bool _samplingNetwork = false;
 
   /// 最近一次已提示的语音错误；Voice 事件重复带同一句时不再刷新提示。
   String? _lastVoiceNotice;
@@ -756,11 +757,14 @@ class SessionController extends Notifier<SessionView> {
 
   /// 遥测面板打开期间的按需采样。失败时保留现有探测数据，不打断连接。
   Future<void> sampleNetwork() async {
-    if (!state.connected) return;
+    if (!state.connected || _samplingNetwork) return;
+    _samplingNetwork = true;
     try {
       await ref.read(coreSessionProvider).sampleNetwork();
     } on CoreError {
       // 服务器不允许查询连接信息时，面板继续显示已有的探测统计。
+    } finally {
+      _samplingNetwork = false;
     }
   }
 

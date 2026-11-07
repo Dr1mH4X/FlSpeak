@@ -47,6 +47,9 @@ class _Controller extends SessionController {
 
   void setNetwork(NetworkTelemetry? value) =>
       state = state.copyWith(network: value);
+
+  void bumpEpoch() =>
+      state = state.copyWith(connectionEpoch: state.connectionEpoch + 1);
 }
 
 Future<void> _pumpStatus(
@@ -141,6 +144,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 250));
 
       expect(controller.samples, greaterThan(0));
+      final samplesBeforeTick = controller.samples;
+      await tester.pump(const Duration(seconds: 1));
+      expect(controller.samples, samplesBeforeTick + 1);
       expect(find.text('网络状态'), findsOneWidget);
       expect(find.text('Ping'), findsOneWidget);
       expect(find.text('丢包（入）'), findsOneWidget);
@@ -197,6 +203,109 @@ void main() {
       expect(controller.samples, samplesAtClose);
     },
   );
+
+  testWidgets('new connection epoch collapses the expanded panel', (
+    tester,
+  ) async {
+    final container = ProviderContainer(
+      overrides: [sessionViewProvider.overrideWith(_Controller.new)],
+    );
+    addTearDown(container.dispose);
+    await _pumpStatus(tester, container);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.wifi_rounded));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.text('网络状态'), findsOneWidget);
+
+    final controller =
+        container.read(sessionViewProvider.notifier) as _Controller;
+    controller.bumpEpoch();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.text('网络状态'), findsNothing);
+  });
+
+  testWidgets('unknown packet loss is rendered as a gap, not zero', (
+    tester,
+  ) async {
+    final container = ProviderContainer(
+      overrides: [sessionViewProvider.overrideWith(_Controller.new)],
+    );
+    addTearDown(container.dispose);
+    await _pumpStatus(tester, container);
+    await tester.pumpAndSettle();
+
+    final controller =
+        container.read(sessionViewProvider.notifier) as _Controller;
+    controller.setNetwork(_sample(lossIn: null, lossOut: null));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.wifi_rounded));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+
+    final panel = find.byKey(const ValueKey('network-telemetry-panel'));
+    expect(
+      find.descendant(of: panel, matching: find.byType(SignalRibbon)),
+      findsOneWidget,
+    );
+
+    controller.setNetwork(_sample(lossIn: 0.5, lossOut: 1));
+    await tester.pump();
+
+    final ribbons = tester
+        .widgetList<SignalRibbon>(
+          find.descendant(of: panel, matching: find.byType(SignalRibbon)),
+        )
+        .toList();
+    expect(ribbons, hasLength(3));
+    expect(ribbons[1].values.whereType<double>(), hasLength(1));
+    expect(ribbons[2].values.whereType<double>(), hasLength(1));
+    expect(ribbons[1].values.last, closeTo(0.316, 0.001));
+  });
+
+  testWidgets('closing the compact drawer disposes the panel timer', (
+    tester,
+  ) async {
+    final container = ProviderContainer(
+      overrides: [sessionViewProvider.overrideWith(_Controller.new)],
+    );
+    addTearDown(container.dispose);
+    final scaffoldKey = GlobalKey<ScaffoldState>();
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            key: scaffoldKey,
+            drawer: const Drawer(child: ChannelPanel()),
+            body: const SizedBox.expand(),
+          ),
+        ),
+      ),
+    );
+    scaffoldKey.currentState!.openDrawer();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.wifi_rounded));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.text('网络状态'), findsOneWidget);
+
+    scaffoldKey.currentState!.closeDrawer();
+    await tester.pumpAndSettle();
+    expect(find.text('网络状态'), findsNothing);
+
+    final controller =
+        container.read(sessionViewProvider.notifier) as _Controller;
+    final samplesAtClose = controller.samples;
+    await tester.pump(const Duration(seconds: 6));
+    expect(controller.samples, samplesAtClose);
+  });
 
   testWidgets('reduced motion omits the signal ribbon', (tester) async {
     final container = ProviderContainer(

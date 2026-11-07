@@ -97,7 +97,7 @@ impl NetworkMonitor {
         if self.recent.len() > 10 {
             self.recent.pop_front();
         }
-        self.snapshot_with(sampled_at, round_trip_ms.or(self.connection.ping_ms))
+        self.snapshot_with(sampled_at, round_trip_ms)
     }
 
     /// 不新增探测，只读取当前已知的连接统计。
@@ -105,10 +105,11 @@ impl NetworkMonitor {
         self.snapshot_with(sampled_at, self.connection_ping())
     }
 
-    fn snapshot_with(&self, sampled_at: u64, round_trip_ms: Option<f64>) -> NetworkTelemetry {
+    fn snapshot_with(&self, sampled_at: u64, probe_ms: Option<f64>) -> NetworkTelemetry {
         let failures = self.recent.iter().filter(|sample| sample.is_none()).count();
         NetworkTelemetry {
-            round_trip_ms,
+            // 协议层 ping 是权威值；目录探测只在前者缺失时兜底。
+            round_trip_ms: self.connection.ping_ms.or(probe_ms),
             jitter_ms: self.connection_jitter(),
             recent_failure_percent: if self.recent.is_empty() {
                 0.0
@@ -130,7 +131,11 @@ impl NetworkMonitor {
 }
 
 fn parse_f64(params: &HashMap<String, String>, key: &str) -> Option<f64> {
-    params.get(key)?.parse().ok()
+    params
+        .get(key)?
+        .parse::<f64>()
+        .ok()
+        .filter(|value| value.is_finite())
 }
 
 /// 服务器把连接时长和空闲时长都按毫秒返回。
@@ -206,6 +211,48 @@ mod tests {
         assert_eq!(telemetry.connected_seconds, 65);
         assert_eq!(telemetry.probes_sent, 1);
         assert_eq!(telemetry.probes_failed, 0);
+    }
+
+    #[test]
+    fn non_finite_connection_info_is_rejected() {
+        for value in ["NaN", "inf", "-inf"] {
+            let mut monitor = NetworkMonitor::new();
+            monitor.apply_connection_info(&HashMap::from([
+                ("connection_ping".into(), value.into()),
+                ("connection_ping_deviation".into(), value.into()),
+                ("connection_connected_time".into(), value.into()),
+                ("connection_idle_time".into(), value.into()),
+                (
+                    "connection_server2client_packetloss_total".into(),
+                    value.into(),
+                ),
+                (
+                    "connection_client2server_packetloss_total".into(),
+                    value.into(),
+                ),
+            ]));
+
+            let telemetry = monitor.snapshot(1);
+            assert_eq!(telemetry.round_trip_ms, None);
+            assert_eq!(telemetry.jitter_ms, None);
+            assert_eq!(telemetry.idle_seconds, None);
+            assert_eq!(telemetry.loss_in_percent, None);
+            assert_eq!(telemetry.loss_out_percent, None);
+        }
+    }
+
+    #[test]
+    fn protocol_ping_wins_over_the_directory_probe() {
+        let mut monitor = NetworkMonitor::new();
+        monitor.apply_connection_info(&HashMap::from([("connection_ping".into(), "44.5".into())]));
+
+        let telemetry = monitor.record(Some(80.0), 1);
+        assert_eq!(telemetry.round_trip_ms, Some(44.5));
+        assert_eq!(telemetry.recent_failure_percent, 0.0);
+
+        let mut fallback = NetworkMonitor::new();
+        let telemetry = fallback.record(Some(80.0), 1);
+        assert_eq!(telemetry.round_trip_ms, Some(80.0));
     }
 
     #[test]

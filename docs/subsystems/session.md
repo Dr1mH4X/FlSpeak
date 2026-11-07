@@ -22,7 +22,7 @@
 4. **事件派发与降采样**：
    底库事件回调统一推入广播信道 `broadcast::Sender<CoreEvent>`（容量 256）派发给 UI；快照定时器周期性触发全量结构同步。
 5. **按需网络遥测**：
-   UI 在遥测面板可见期间发送 `SampleNetwork` → Actor 在后台任务里调用 `getconnectioninfo clid=<self>` → 原始 `notifyconnectioninfo` 回到 Actor 后合并 ping、双向丢包与 idle 到 `NetworkMonitor`；面板关闭后停止采样。目录请求的探测延迟继续作为质量评估与字段缺失时的兜底。服务器查询本端连接信息时，Actor 用已知的探测延迟回答 `setconnectioninfo`。
+   UI 在遥测面板可见期间发送 `SampleNetwork` → Actor 在命令循环里串行发送 `getconnectioninfo clid=<self>`（只等写入，不等回包）→ 原始 `notifyconnectioninfo` 回到 Actor 后合并 ping、双向丢包与 idle 到 `NetworkMonitor`；面板关闭后停止采样。协议 ping 是延迟的权威值，目录探测延迟用于失败率、抖动兜底与协议字段缺失时的延迟。服务器查询本端连接信息时，Actor 用已知协议 ping（缺失时用探测延迟）回答 `setconnectioninfo`，并合并短时间内的重复请求。
 6. **日志管道初始化与生命周期**：
    外部通过 `core/session::logging::init` 注入日志目录 → 互斥锁串行化防重入 → 启动 non-blocking worker 并安装 `tracing` 全局订阅器 → 成功后保留 `WorkerGuard`；应用退出时通过 `core/session::logging::shutdown` 释放 worker。
 

@@ -18,8 +18,8 @@ class SignalRibbon extends StatelessWidget {
     super.key,
   });
 
-  /// 从旧到新排列的采样值，超出范围会被钳到 0–1。
-  final List<double> values;
+  /// 从旧到新排列的采样值；`null` 表示该时刻没有观测，绘制时留空。
+  final List<double?> values;
   final Color color;
   final double idleHeight;
   final double barWidth;
@@ -56,7 +56,7 @@ class _SignalRibbonPainter extends CustomPainter {
     required this.verticalInset,
   });
 
-  final List<double> values;
+  final List<double?> values;
   final Color color;
   final double idleHeight;
   final double barWidth;
@@ -90,9 +90,16 @@ class _SignalRibbonPainter extends CustomPainter {
           : index / (count - 1) * (values.length - 1);
       final left = position.floor();
       final right = position.ceil();
+      final leftValue = values[left];
+      final rightValue = values[right];
+      if (leftValue == null || rightValue == null) {
+        continue;
+      }
       final fraction = position - left;
-      final level = (values[left] * (1 - fraction) + values[right] * fraction)
-          .clamp(0.0, 1.0);
+      final level = (leftValue * (1 - fraction) + rightValue * fraction).clamp(
+        0.0,
+        1.0,
+      );
       final height = idleHeight + level * (maxHeight - idleHeight);
       paint.color = color.withValues(alpha: 0.24 + level * 0.66);
       final rect = Rect.fromLTWH(
