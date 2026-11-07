@@ -29,6 +29,7 @@ dependencies:
   package_info_plus: ^10.2.2
   path: ^1.9.1
   path_provider: ^2.1.6
+  talker: ^4.6.0
   flspeak_ffi:
     path: plugins/flspeak_ffi
   flutter_webrtc: ^1.6.3

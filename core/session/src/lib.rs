@@ -25,6 +25,7 @@ pub use streams::{
 
 mod channel_tools;
 pub mod text_format;
+pub use audio::{log_debug, log_error, log_info, log_warn};
 pub use channel_tools::{AccessView, ChannelFileView, GroupKind, KickTarget, MemberGroupView};
 pub use events::SessionSubscription;
 

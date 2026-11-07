@@ -2,6 +2,7 @@ library;
 
 import 'src/rust/frb_generated.dart';
 
+export 'src/rust/api/logging.dart';
 export 'src/rust/api/session.dart';
 export 'src/rust/frb_generated.dart' show RustLib, RustLibApi;
 

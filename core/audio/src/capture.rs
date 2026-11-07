@@ -276,7 +276,9 @@ impl CapturePipeline {
                 written
             }
             Err(AudioError::Codec(CodecError::BufferTooSmall { capacity: 0, .. })) => {
-                tracing::error!("编码输出缓冲容量为 0，检查 capture 初始化");
+                crate::log_error!(
+                    "encode output buffer capacity is 0, verify capture initialization"
+                );
                 return Err(AudioError::Codec(CodecError::BufferTooSmall {
                     capacity: 0,
                     max_data_bytes: MAX_PACKET_BYTES,
@@ -286,7 +288,7 @@ impl CapturePipeline {
                 capacity,
                 max_data_bytes,
             })) => {
-                tracing::warn!(capacity, max_data_bytes, "Opus 帧超 484 预算，降级");
+                crate::log_warn!(capacity = capacity, max_data_bytes = max_data_bytes; "opus frame exceeded budget, degrading");
                 self.too_small_streak += 1;
                 if self.too_small_streak >= 50 {
                     return Err(AudioError::Codec(CodecError::BufferTooSmall {

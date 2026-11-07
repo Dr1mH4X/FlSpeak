@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import 'app.dart';
+import 'core/logging/logger.dart';
 import 'core/preferences.dart';
 import 'core/providers.dart';
 import 'core/store_path.dart';
@@ -19,6 +20,7 @@ Future<void> main() async {
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   }
   await RustLib.init();
+  await initLoggingPipeline();
 
   final storePath = await resolveStorePath();
   final session = CoreSession(storePath: storePath);
