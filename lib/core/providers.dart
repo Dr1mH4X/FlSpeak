@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../l10n/app_localizations.dart';
+import 'logging/logger.dart';
 import 'models.dart';
 import 'global_hotkey.dart';
 import 'file_export.dart';
@@ -39,14 +40,12 @@ final storePathProvider = Provider<String>(
 );
 
 /// 日志存储目录的绝对路径，设置页展示与管理用。
-final logPathProvider = Provider<String>((ref) {
-  try {
-    final store = ref.watch(storePathProvider);
-    return p.join(p.dirname(store), 'logs');
-  } catch (_) {
-    return '/tmp/flspeak/logs';
-  }
-});
+final logPathProvider = Provider<String>(
+  (ref) => p.join(p.dirname(ref.watch(storePathProvider)), 'logs'),
+);
+
+/// 日志初始化失败的原因；null 表示文件日志可用。启动后提示一次。
+final loggingFailureProvider = Provider<Object?>((ref) => null);
 
 /// 提供当前应用的包信息（版本号、构建号等）。
 final packageInfoProvider = FutureProvider<PackageInfo>((ref) {
@@ -1348,7 +1347,7 @@ class PreferencesController extends Notifier<SessionPreferences> {
       final normalized = await ref.read(preferencesStoreProvider).save(next);
       state = state.copyWith(nickname: normalized.nickname);
     } on Object catch (error) {
-      debugPrint('保存 preferences 失败：$error');
+      logError('保存 preferences 失败', error: error);
     }
   }
 }

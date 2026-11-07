@@ -14,6 +14,7 @@
   "commonCopy": "复制",
   "commonCopied": "已复制",
   "commonOpenDirectory": "打开目录",
+  "loggingUnavailable": "文件日志不可用，应用将继续以控制台日志运行。",
   "commonRetry": "重试",
   "connectAddressLabel": "服务器地址",
   "connectAddressHint": "ts.example.com 或 ts.example.com:9987",

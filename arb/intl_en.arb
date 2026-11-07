@@ -14,6 +14,7 @@
   "commonCopy": "Copy",
   "commonCopied": "Copied",
   "commonOpenDirectory": "Open directory",
+  "loggingUnavailable": "File logging is unavailable; the app keeps running with console logs.",
   "commonRetry": "Retry",
   "connectAddressLabel": "Server address",
   "connectAddressHint": "ts.example.com or ts.example.com:9987",

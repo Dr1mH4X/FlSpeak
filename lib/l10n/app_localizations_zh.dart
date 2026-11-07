@@ -52,6 +52,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get commonOpenDirectory => '打开目录';
 
   @override
+  String get loggingUnavailable => '文件日志不可用，应用将继续以控制台日志运行。';
+
+  @override
   String get commonRetry => '重试';
 
   @override

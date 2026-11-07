@@ -52,6 +52,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get commonOpenDirectory => 'Open directory';
 
   @override
+  String get loggingUnavailable =>
+      'File logging is unavailable; the app keeps running with console logs.';
+
+  @override
   String get commonRetry => 'Retry';
 
   @override

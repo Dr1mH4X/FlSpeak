@@ -182,6 +182,12 @@ abstract class AppLocalizations {
   /// **'Open directory'**
   String get commonOpenDirectory;
 
+  /// No description provided for @loggingUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'File logging is unavailable; the app keeps running with console logs.'**
+  String get loggingUnavailable;
+
   /// No description provided for @commonRetry.
   ///
   /// In en, this message translates to:

@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart' as ffi;
 import 'package:path/path.dart' as p;
 
+import 'logging/logger.dart';
 import 'server_icon.dart';
 
 /// 外观偏好的三档。存进 JSON 的是稳定字符串，改枚举名不会毁掉已有文件。
@@ -388,7 +389,7 @@ class PreferencesStore {
           );
         }
       } on Object catch (error) {
-        debugPrint('通过 FFI 读取设置失败，尝试回退磁盘读取：$error');
+        logWarn('通过 FFI 读取设置失败，尝试回退磁盘读取', error: error);
       }
     }
     try {
@@ -439,7 +440,7 @@ class PreferencesStore {
             return _preferences;
           }
         } on Object catch (e) {
-          debugPrint('通过 FFI 保存设置失败，尝试直接落盘 fallback: $e');
+          logWarn('通过 FFI 保存设置失败，尝试直接落盘 fallback', error: e);
         }
       }
 

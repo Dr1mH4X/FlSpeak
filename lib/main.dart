@@ -20,9 +20,11 @@ Future<void> main() async {
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   }
   await RustLib.init();
-  final logDir = await initLoggingPipeline();
 
   final storePath = await resolveStorePath();
+  final logDir = logDirectoryFor(storePath);
+  final logging = await initLoggingPipeline(overrideLogDir: logDir);
+
   final session = CoreSession(storePath: storePath);
   final preferences = await PreferencesStore.load(
     PreferencesStore.pathFor(storePath),
@@ -35,6 +37,7 @@ Future<void> main() async {
         preferencesStoreProvider.overrideWithValue(preferences),
         storePathProvider.overrideWithValue(storePath),
         logPathProvider.overrideWithValue(logDir.path),
+        loggingFailureProvider.overrideWithValue(logging.error),
       ],
       child: const TsClientApp(),
     ),
