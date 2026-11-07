@@ -49,6 +49,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get commonCopied => 'Copied';
 
   @override
+  String get commonOpenDirectory => 'Open directory';
+
+  @override
+  String get loggingUnavailable =>
+      'File logging is unavailable; the app keeps running with console logs.';
+
+  @override
   String get commonRetry => 'Retry';
 
   @override
@@ -413,7 +420,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAudioLoading => 'Reading audio devices…';
 
   @override
-  String get settingsStorePath => 'Storage directory';
+  String get settingsStorePath => 'Data directory';
+
+  @override
+  String get settingsDataPath => 'Data directory';
+
+  @override
+  String get settingsLogPath => 'Log directory';
 
   @override
   String get connectTitle => 'Find your people';

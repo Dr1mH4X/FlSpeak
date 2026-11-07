@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
+import 'logging/logger.dart';
 import 'preferences.dart';
 import 'providers.dart';
 import 'stream_viewer.dart';
@@ -520,8 +521,9 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
           return;
         }
         if (kDebugMode) {
-          debugPrint(
-            '[StreamPublisher] viewer $viewerClid connection state: $connectionState',
+          logDebug(
+            'viewer $viewerClid connection state: $connectionState',
+            target: 'stream',
           );
         }
         if (connectionState ==
@@ -552,9 +554,7 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
           return;
         }
         if (kDebugMode) {
-          debugPrint(
-            '[StreamPublisher] viewer $viewerClid ICE state: $iceState',
-          );
+          logDebug('viewer $viewerClid ICE state: $iceState', target: 'stream');
         }
         if (iceState == RTCIceConnectionState.RTCIceConnectionStateConnected ||
             iceState == RTCIceConnectionState.RTCIceConnectionStateCompleted) {
@@ -609,8 +609,10 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
           RTCSessionDescription(appliedSdp, rawOffer.type ?? 'offer'),
         );
       } catch (e) {
-        debugPrint(
-          '[StreamPublisher] setLocalDescription with the rewritten offer failed ($e), falling back to raw offer',
+        logWarn(
+          'setLocalDescription with the rewritten offer failed, falling back to raw offer',
+          target: 'stream',
+          error: e,
         );
         await peer.setLocalDescription(rawOffer);
         appliedSdp = rawSdp;
@@ -623,12 +625,13 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
         return;
       }
 
-      debugPrint(
-        '[StreamPublisher] Sending respondStreamJoinRequest for viewer $viewerClid '
+      logDebug(
+        'Sending respondStreamJoinRequest for viewer $viewerClid '
         '(offer SDP: ${appliedSdp.length} chars, raw: ${rawSdp.length} chars)',
+        target: 'stream',
       );
       if (kDebugMode) {
-        debugPrint('[StreamPublisher] offer for $viewerClid:\n$appliedSdp');
+        logDebug('offer for $viewerClid:\n$appliedSdp', target: 'stream');
       }
 
       await coreSession.respondStreamJoinRequest(
@@ -644,8 +647,11 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
         return;
       }
     } catch (e, st) {
-      debugPrint(
-        '[StreamPublisher] Error negotiating stream with viewer $viewerClid: $e\n$st',
+      logError(
+        'Error negotiating stream with viewer $viewerClid',
+        target: 'stream',
+        error: e,
+        stackTrace: st,
       );
       if (_isViewerSessionValid(
         currentGeneration,
@@ -695,8 +701,11 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
       } catch (e, st) {
         // Signaling is delivered fire-and-forget; never let one bad payload
         // surface as an unhandled async error.
-        debugPrint(
-          '[StreamPublisher] Failed to apply signal for viewer $viewerClid: $e\n$st',
+        logWarn(
+          'Failed to apply signal for viewer $viewerClid',
+          target: 'stream',
+          error: e,
+          stackTrace: st,
         );
       }
     } finally {
@@ -718,8 +727,9 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
         if (viewerSession.remoteDescriptionSet) return;
         final peer = viewerSession.peer;
         if (peer == null) return;
-        debugPrint(
-          '[StreamPublisher] viewer $viewerClid Answer: ${sdp.length} chars',
+        logDebug(
+          'viewer $viewerClid Answer: ${sdp.length} chars',
+          target: 'stream',
         );
         try {
           // Pass the answer SDP directly without normalization; normalizing or
@@ -783,8 +793,11 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
             // trigger viewer session teardown.
           }
         } catch (e, st) {
-          debugPrint(
-            '[StreamPublisher] Failed to set remote answer for viewer $viewerClid: $e\n$st',
+          logError(
+            'Failed to set remote answer for viewer $viewerClid',
+            target: 'stream',
+            error: e,
+            stackTrace: st,
           );
           if (_isViewerSessionValid(
             currentGeneration,
@@ -800,9 +813,10 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
       case PublisherSignal_IceCandidate(:final sdp, :final mid, :final mLine):
         if (sdp.trim().isEmpty) return;
         if (kDebugMode) {
-          debugPrint(
-            '[StreamPublisher] viewer $viewerClid ICE candidate '
+          logDebug(
+            'viewer $viewerClid ICE candidate '
             'mid=${mid ?? '-'} mLine=${mLine ?? '-'}',
+            target: 'stream',
           );
         }
         final candidate = RTCIceCandidate(sdp, mid, mLine);
@@ -891,7 +905,7 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
     } catch (e) {
       // Older native builds reject preference changes; the offer then keeps every
       // codec and the size check prunes it before sending.
-      debugPrint('[StreamPublisher] setCodecPreferences failed: $e');
+      logWarn('setCodecPreferences failed', target: 'stream', error: e);
     }
   }
 
@@ -1042,8 +1056,9 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
     final session = _viewerSessions[viewerClid];
     if (session == null || session.failureReported) return;
     session.failureReported = true;
-    debugPrint(
-      '[StreamPublisher] viewer $viewerClid negotiation failed: ${reason.name}',
+    logWarn(
+      'viewer $viewerClid negotiation failed: ${reason.name}',
+      target: 'stream',
     );
     if (ref.mounted && state.isActive) {
       state = state.copyWith(

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -6,6 +7,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/global_hotkey.dart';
+import 'core/logging/logger.dart';
+import 'core/notices.dart';
 import 'core/preferences.dart';
 import 'core/providers.dart';
 import 'core/window_chrome.dart';
@@ -67,7 +70,17 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
   }
 
   @override
+  Future<AppExitResponse> didRequestAppExit() async {
+    await shutdownLoggingPipeline();
+    return AppExitResponse.exit;
+  }
+
+  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.detached) {
+      unawaited(shutdownLoggingPipeline());
+      return;
+    }
     if (_nativeRegistered) {
       return;
     }
@@ -126,7 +139,7 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
     if (!mounted || revision != _registrationRevision) return;
     _nativeRegistered = registered;
     if (keyId != null && !_nativeRegistered) {
-      debugPrint('全局热键注册失败，按住说话退回应用内按键');
+      logWarn('全局热键注册失败，按住说话退回应用内按键', target: 'hotkey');
     }
   }
 
@@ -162,7 +175,9 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
             child: AnnotatedRegion<SystemUiOverlayStyle>(
               value: appSystemUiOverlayStyle(Theme.of(context)),
               child: _WindowBackgroundSync(
-                child: _WindowFrame(child: child ?? const SizedBox.shrink()),
+                child: _StartupLoggingNotice(
+                  child: _WindowFrame(child: child ?? const SizedBox.shrink()),
+                ),
               ),
             ),
           ),
@@ -217,6 +232,34 @@ class _WindowBackgroundSyncState extends State<_WindowBackgroundSync> {
     // 平台通道不在 build 里发；首帧与主题切换各报一次就够。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_chrome.setBackground(color.toARGB32()));
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
+/// 日志初始化失败只提示一次；页面与日志写入继续以无文件模式运行。
+class _StartupLoggingNotice extends ConsumerStatefulWidget {
+  const _StartupLoggingNotice({required this.child});
+
+  final Widget child;
+
+  @override
+  ConsumerState<_StartupLoggingNotice> createState() =>
+      _StartupLoggingNoticeState();
+}
+
+class _StartupLoggingNoticeState extends ConsumerState<_StartupLoggingNotice> {
+  @override
+  void initState() {
+    super.initState();
+    if (ref.read(loggingFailureProvider) == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref
+          .read(noticeCenterProvider.notifier)
+          .show(AppLocalizations.of(context).loggingUnavailable);
     });
   }
 

@@ -11,3 +11,8 @@
 
 - 错误做法：在音频回调中使用标准互斥锁（如 `std::sync::Mutex`）或阻塞等待；在实时音频线程中执行堆内存动态分配或 IO 操作。
 - 正确做法：使用实时安全的无锁环形缓冲区传递 PCM 数据；音频采集线程与播放线程独立运作；编码后的语音包送入会话 Actor，由 Actor 串行调用 `send_voice`。
+
+## 音频实时线程日志无阻塞与禁分配
+
+- 错误做法：在音频回调中调用动态格式化日志宏（如 `format!`）、同步写盘或使用可能阻塞的信道传递日志。
+- 正确做法：必须使用 `core/audio` 提供的编译期静态 ASCII 宏（`log_error!`, `log_warn!`, `log_info!`, `log_debug!`）；底层通过 tracing-appender 的 lossy non-blocking worker 异步落盘，队列堆积时直接丢弃，严禁阻塞实时音频采集与播放线程。

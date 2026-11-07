@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path/path.dart' as p;
 
+import '../../core/directory_launcher.dart';
 import '../../core/global_hotkey.dart';
 import '../../core/hotkey_codes.dart';
 import '../../core/models.dart';
@@ -198,13 +200,21 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     }
   }
 
-  Future<void> _copyStorePath(String path) async {
+  Future<void> _copyPath(String path) async {
     final l10n = AppLocalizations.of(context);
     await Clipboard.setData(ClipboardData(text: path));
     if (!mounted) return;
     ref
         .read(noticeCenterProvider.notifier)
         .show(l10n.commonCopied, tone: NoticeTone.info);
+  }
+
+  Future<void> _openOrCopyDirectory(String path) async {
+    final launcher = ref.read(directoryLauncherProvider);
+    final opened = await launcher(path);
+    if (!opened && mounted) {
+      await _copyPath(path);
+    }
   }
 
   Future<void> _pickPttHotkey() async {
@@ -219,6 +229,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final view = ref.watch(sessionViewProvider);
     final audioSelection = ref.watch(audioSelectionProvider);
     final storePath = ref.watch(storePathProvider);
+    final logPath = ref.watch(logPathProvider);
     final compact = context.isCompact;
 
     final pttHotkeyKey = preferences.pttHotkey == null
@@ -492,6 +503,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           }
         }
       case SettingsCategory.data:
+        final dataDirPath = p.dirname(storePath);
         subPageContent = Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -499,14 +511,28 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               items: [
                 SettingsTile(
                   icon: Icons.folder_rounded,
-                  title: l10n.settingsStorePath,
-                  subtitle: storePath,
+                  title: l10n.settingsDataPath,
+                  onTap: () => unawaited(_copyPath(dataDirPath)),
                   trailing: IconButton(
-                    onPressed: () => unawaited(_copyStorePath(storePath)),
+                    onPressed: () =>
+                        unawaited(_openOrCopyDirectory(dataDirPath)),
                     icon: Icon(
-                      Icons.copy_rounded,
+                      Icons.folder_open_rounded,
                       size: IconSizes.medium,
-                      semanticLabel: l10n.commonCopy,
+                      semanticLabel: l10n.commonOpenDirectory,
+                    ),
+                  ),
+                ),
+                SettingsTile(
+                  icon: Icons.article_rounded,
+                  title: l10n.settingsLogPath,
+                  onTap: () => unawaited(_copyPath(logPath)),
+                  trailing: IconButton(
+                    onPressed: () => unawaited(_openOrCopyDirectory(logPath)),
+                    icon: Icon(
+                      Icons.folder_open_rounded,
+                      size: IconSizes.medium,
+                      semanticLabel: l10n.commonOpenDirectory,
                     ),
                   ),
                 ),

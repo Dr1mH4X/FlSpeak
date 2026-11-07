@@ -278,4 +278,38 @@ void main() {
       );
     }
   });
+
+  testWidgets('logging initialization failure shows a startup notice', (
+    tester,
+  ) async {
+    final container = ProviderContainer(
+      overrides: [
+        coreSessionProvider.overrideWithValue(_PttCore()),
+        storePathProvider.overrideWithValue(
+          '/tmp/flspeak-test/preferences.json',
+        ),
+        sessionViewProvider.overrideWith(_PttSession.new),
+        preferencesStoreProvider.overrideWithValue(
+          PreferencesStore.inMemory(
+            preferences: const SessionPreferences(
+              nickname: 'Test',
+              locale: 'zh',
+            ),
+          ),
+        ),
+        loggingFailureProvider.overrideWithValue(StateError('no log dir')),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const TsClientApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('文件日志不可用，应用将继续以控制台日志运行。'), findsOneWidget);
+  });
 }

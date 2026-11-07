@@ -176,6 +176,18 @@ abstract class AppLocalizations {
   /// **'Copied'**
   String get commonCopied;
 
+  /// No description provided for @commonOpenDirectory.
+  ///
+  /// In en, this message translates to:
+  /// **'Open directory'**
+  String get commonOpenDirectory;
+
+  /// No description provided for @loggingUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'File logging is unavailable; the app keeps running with console logs.'**
+  String get loggingUnavailable;
+
   /// No description provided for @commonRetry.
   ///
   /// In en, this message translates to:
@@ -845,8 +857,20 @@ abstract class AppLocalizations {
   /// No description provided for @settingsStorePath.
   ///
   /// In en, this message translates to:
-  /// **'Storage directory'**
+  /// **'Data directory'**
   String get settingsStorePath;
+
+  /// No description provided for @settingsDataPath.
+  ///
+  /// In en, this message translates to:
+  /// **'Data directory'**
+  String get settingsDataPath;
+
+  /// No description provided for @settingsLogPath.
+  ///
+  /// In en, this message translates to:
+  /// **'Log directory'**
+  String get settingsLogPath;
 
   /// No description provided for @connectTitle.
   ///

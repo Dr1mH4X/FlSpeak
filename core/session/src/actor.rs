@@ -2379,10 +2379,10 @@ impl Actor {
                     return;
                 }
                 if data.len() > MAX_PACKET_BYTES {
-                    tracing::error!(
-                        "编码层约束失效：{} 字节 > {} 字节，这是 bug 或 whisper 未动态下发上限",
-                        data.len(),
-                        MAX_PACKET_BYTES
+                    crate::log_error!(
+                        size = data.len(),
+                        max = MAX_PACKET_BYTES;
+                        "encoding layer constraint violated: packet exceeds budget"
                     );
                     return;
                 }
@@ -3076,6 +3076,12 @@ struct EventLogger {
 
 impl EventLogger {
     fn log(&self, level: &str, message: &str) {
+        match level {
+            "error" => tracing::error!(target: "tsclient", message = message),
+            "warn" => tracing::warn!(target: "tsclient", message = message),
+            "debug" => tracing::debug!(target: "tsclient", message = message),
+            _ => tracing::info!(target: "tsclient", message = message),
+        }
         emit(
             &self.events,
             SessionEvent::Log {

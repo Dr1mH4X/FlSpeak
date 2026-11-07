@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import 'app.dart';
+import 'core/logging/logger.dart';
 import 'core/preferences.dart';
 import 'core/providers.dart';
 import 'core/store_path.dart';
@@ -21,6 +22,9 @@ Future<void> main() async {
   await RustLib.init();
 
   final storePath = await resolveStorePath();
+  final logDir = logDirectoryFor(storePath);
+  final logging = await initLoggingPipeline(overrideLogDir: logDir);
+
   final session = CoreSession(storePath: storePath);
   final preferences = await PreferencesStore.load(
     PreferencesStore.pathFor(storePath),
@@ -32,6 +36,8 @@ Future<void> main() async {
         coreSessionProvider.overrideWithValue(session),
         preferencesStoreProvider.overrideWithValue(preferences),
         storePathProvider.overrideWithValue(storePath),
+        logPathProvider.overrideWithValue(logDir.path),
+        loggingFailureProvider.overrideWithValue(logging.error),
       ],
       child: const TsClientApp(),
     ),

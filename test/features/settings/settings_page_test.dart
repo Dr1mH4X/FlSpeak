@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:flspeak/core/directory_launcher.dart';
 import 'package:flspeak/core/models.dart';
 import 'package:flspeak/core/preferences.dart';
 import 'package:flspeak/core/providers.dart';
@@ -348,9 +349,103 @@ void main() {
       await tester.tap(dataCategory);
       await tester.pumpAndSettle();
 
-      // 二级页面已呈现并包含返回按钮
+      // 二级页面已呈现并包含返回按钮与数据目录/日志目录
       expect(find.byIcon(Icons.arrow_back_rounded), findsOneWidget);
-      expect(find.widgetWithText(SettingsTile, '存储目录'), findsOneWidget);
+      expect(find.widgetWithText(SettingsTile, '数据目录'), findsOneWidget);
+      expect(find.widgetWithText(SettingsTile, '日志目录'), findsOneWidget);
+      expect(find.text('/tmp/flspeak-test/preferences.json'), findsNothing);
+      expect(find.text('/tmp/flspeak-test'), findsNothing);
+      expect(find.text('/tmp/flspeak-test/logs'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'data settings category copies directory path on tile tap and opens directory on trailing button tap',
+    (tester) async {
+      final openedDirectories = <String>[];
+      final copiedTexts = <String>[];
+
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (call) async {
+          if (call.method == 'Clipboard.setData') {
+            final text = (call.arguments as Map)['text'] as String?;
+            if (text != null) copiedTexts.add(text);
+          }
+          return null;
+        },
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_Core()),
+          sessionViewProvider.overrideWith(_Session.new),
+          storePathProvider.overrideWithValue(
+            '/tmp/flspeak-test/preferences.json',
+          ),
+          logPathProvider.overrideWithValue('/tmp/flspeak-test/custom-logs'),
+          directoryLauncherProvider.overrideWithValue((path) async {
+            openedDirectories.add(path);
+            return true;
+          }),
+          preferencesStoreProvider.overrideWithValue(
+            PreferencesStore.inMemory(
+              preferences: const SessionPreferences(nickname: 'Test'),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      addTearDown(() {
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        );
+      });
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            locale: const Locale('zh'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const SettingsPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 点击进入数据页
+      final dataCategory = find.widgetWithText(SettingsTile, '数据');
+      await tester.tap(dataCategory);
+      await tester.pumpAndSettle();
+
+      // 1. 点击数据目录卡片 -> 复制数据目录路径
+      final dataTile = find.widgetWithText(SettingsTile, '数据目录');
+      await tester.tap(dataTile);
+      await tester.pumpAndSettle();
+      expect(copiedTexts, contains('/tmp/flspeak-test'));
+
+      // 2. 点击日志目录卡片 -> 复制日志目录路径
+      final logTile = find.widgetWithText(SettingsTile, '日志目录');
+      await tester.tap(logTile);
+      await tester.pumpAndSettle();
+      expect(copiedTexts, contains('/tmp/flspeak-test/custom-logs'));
+
+      // 3. 点击数据目录右侧打开按钮 -> 调用 directoryLauncher
+      final openButtons = find.byIcon(Icons.folder_open_rounded);
+      expect(openButtons, findsNWidgets(2));
+
+      await tester.tap(openButtons.first);
+      await tester.pumpAndSettle();
+      expect(openedDirectories, contains('/tmp/flspeak-test'));
+
+      // 4. 点击日志目录右侧打开按钮 -> 调用 directoryLauncher
+      await tester.tap(openButtons.last);
+      await tester.pumpAndSettle();
+      expect(openedDirectories, contains('/tmp/flspeak-test/custom-logs'));
     },
   );
 
