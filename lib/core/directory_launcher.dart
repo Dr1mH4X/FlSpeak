@@ -40,11 +40,13 @@ Future<bool> openSystemDirectory(
   String path, {
   ProcessRunner? processRunner,
   bool? isTest,
+  bool? guiAvailable,
+  Duration timeout = const Duration(seconds: 2),
 }) async {
   if (kIsWeb) return false;
 
   // 无 GUI 环境（如无头 Linux、非桌面平台）直接返回 false，走复制降级
-  if (!hasGuiEnvironment()) {
+  if (!(guiAvailable ?? hasGuiEnvironment())) {
     return false;
   }
 
@@ -68,13 +70,13 @@ Future<bool> openSystemDirectory(
 
     final runner = processRunner ?? Process.run;
     if (Platform.isMacOS) {
-      final res = await runner('open', [dirPath]);
+      final res = await runner('open', [dirPath]).timeout(timeout);
       return res.exitCode == 0;
     } else if (Platform.isWindows) {
-      final res = await runner('explorer.exe', [dirPath]);
+      final res = await runner('explorer.exe', [dirPath]).timeout(timeout);
       return res.exitCode == 0;
     } else if (Platform.isLinux) {
-      final res = await runner('xdg-open', [dirPath]);
+      final res = await runner('xdg-open', [dirPath]).timeout(timeout);
       return res.exitCode == 0;
     }
   } catch (_) {

@@ -65,6 +65,17 @@ Poked / AccessChanged / Transfer* / Log / Denied / Failed
 - `Log` 事件目前不入界面，保留给调试面板。
 - 语音帧不在这条链路上。
 
+## 日志
+
+Flutter 启动时把 `<应用支持目录>/logs` 同时交给 Dart 与 Rust，两边按 UTC 日期写
+NDJSON：`dart.YYYY-MM-DD.log` 与 `rust.YYYY-MM-DD.log`。目录与档案、身份文件同级；
+`lib/core/logging/logger.dart` 负责路径与启动失败时的降级，`core/session` 的
+`logging` 模块安装 Rust 全局订阅器与滚动文件 worker。Dart 观察器按 UTC 日期清理两类
+文件；Rust 的 `max_log_files` 只是数量兜底。
+
+记录字段、启动降级和保留策略见
+[跨平台结构化日志](../.agents/notes/implemented/architecture/2026-11-07-cross-platform-logging.md)。
+
 ## 线程与并发模型
 
 | 线程 | 职责 |
@@ -84,10 +95,10 @@ tsclient-rs 的建连 future 不是 `Send`。
 | --- | --- |
 | `core/server` | `ServerProfile`、`ServerRegistry`、地址解析；无网络、无协议依赖 |
 | `core/proto` | `resolve_target`、`DenyResolver`、最终连接边界、`client()`、`check_transfer_host()` |
-| `core/session` | `SessionHandle` / actor / 档案与身份持久化 / 第三方图片抓取与图床上传 |
+| `core/session` | `SessionHandle` / actor / 档案与身份持久化 / 全局日志订阅器 / 第三方图片抓取与图床上传 |
 | `core/audio` | 设备枚举、双线程采集/播放、Opus、VAD、jitter/PLC、软削波 |
 | `plugins/flspeak_ffi` | Dart 侧类型、转发、事件桥、生成物 |
-| `lib/` | UI、状态收敛、本地化 |
+| `lib/` | UI、状态收敛、本地化、Dart 日志观察器 |
 
 ## 尚未接线
 
