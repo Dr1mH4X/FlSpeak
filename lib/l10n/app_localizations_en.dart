@@ -516,10 +516,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get networkProbeExplanation =>
-      'Samples reuse the existing 30-second directory refresh without extra probes. Latency includes server processing and command throttling. The failure rate covers requests without a valid response among the last 10 samples, not UDP packet loss. The protocol library does not expose local packet loss or traffic counters.';
-
-  @override
   String get voiceConnected => 'Voice connected';
 
   @override

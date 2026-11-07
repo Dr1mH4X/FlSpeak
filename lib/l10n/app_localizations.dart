@@ -1040,12 +1040,6 @@ abstract class AppLocalizations {
   /// **'{value} ms'**
   String networkMilliseconds(String value);
 
-  /// No description provided for @networkProbeExplanation.
-  ///
-  /// In en, this message translates to:
-  /// **'Samples reuse the existing 30-second directory refresh without extra probes. Latency includes server processing and command throttling. The failure rate covers requests without a valid response among the last 10 samples, not UDP packet loss. The protocol library does not expose local packet loss or traffic counters.'**
-  String get networkProbeExplanation;
-
   /// No description provided for @voiceConnected.
   ///
   /// In en, this message translates to:

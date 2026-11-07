@@ -510,10 +510,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get networkProbeExplanation =>
-      '随现有的 30 秒目录刷新采样，不额外发送探测指令。延迟包含服务器处理和命令限流等待；失败率统计最近 10 次请求中未收到有效响应的比例，并非 UDP 丢包率。当前协议库未提供本机丢包和流量计数。';
-
-  @override
   String get voiceConnected => '语音已连接';
 
   @override

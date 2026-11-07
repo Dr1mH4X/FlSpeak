@@ -139,8 +139,6 @@ class _NetworkDetails extends ConsumerWidget {
             title: Text(label),
             subtitle: SelectableText(value),
           ),
-        const SizedBox(height: 8),
-        Text(l10n.networkProbeExplanation, style: context.texts.bodySmall),
       ],
     );
   }
