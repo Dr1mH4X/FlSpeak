@@ -1,6 +1,6 @@
 //! 命令循环：所有协议操作在这里串行执行。
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -15,7 +15,7 @@ use base64::Engine;
 use proto::ConnectError;
 use server::{ServerError, ServerProfile, ServerRegistry, ServerTarget};
 use tokio::io::{AsyncRead, ReadBuf};
-use tokio::sync::{broadcast, mpsc, oneshot};
+use tokio::sync::{broadcast, mpsc, oneshot, watch};
 use tsclient_rs::{
     AbortSignal, ChannelInfo, Client, ClientInfo, Event as ProtocolEvent, FileDownloadInfo, Logger,
 };
@@ -121,6 +121,19 @@ pub(crate) struct SessionAudio {
     pub enabled: bool,
 }
 
+type ImageNegotiation =
+    Pin<Box<dyn std::future::Future<Output = Result<(String, FileDownloadInfo), SessionError>>>>;
+
+struct PendingImage {
+    remote_path: String,
+    reply: oneshot::Sender<Result<Vec<u8>, SessionError>>,
+}
+
+struct ActiveImage {
+    negotiation: ImageNegotiation,
+    reply: oneshot::Sender<Result<Vec<u8>, SessionError>>,
+}
+
 pub(crate) struct Actor {
     registry: ServerRegistry,
     store_path: PathBuf,
@@ -163,6 +176,10 @@ pub(crate) struct Actor {
     /// 当前连接的服务器是否认识 TS6 流命令；首次探测返回 command not found 后关闭。
     streams_supported: bool,
     network_monitor: Option<crate::network::NetworkMonitor>,
+    pending_images: VecDeque<PendingImage>,
+    active_image: Option<ActiveImage>,
+    disconnect_tx: watch::Sender<u64>,
+    disconnect_rx: watch::Receiver<u64>,
 }
 
 impl Actor {
@@ -180,6 +197,7 @@ impl Actor {
             enabled: audio_enabled,
         } = audio;
         let (signals, signal_rx) = mpsc::unbounded_channel();
+        let (disconnect_tx, disconnect_rx) = watch::channel(0);
         let logger: Arc<dyn Logger> = Arc::new(EventLogger {
             events: events.clone(),
         });
@@ -224,6 +242,10 @@ impl Actor {
             streams: StreamCoordinator::default(),
             streams_supported: true,
             network_monitor: None,
+            pending_images: VecDeque::new(),
+            active_image: None,
+            disconnect_tx,
+            disconnect_rx,
         }
     }
 
@@ -234,16 +256,38 @@ impl Actor {
         snapshots.tick().await;
 
         loop {
+            // 排空音频事件，保证语音帧零延迟分发
+            while let Ok(event) = self.audio_events.try_recv() {
+                self.handle_audio(event);
+            }
+
+            if self.active_image.is_none() && !self.pending_images.is_empty() {
+                self.start_next_image();
+            }
+
             tokio::select! {
-                biased;
                 command = commands.recv() => {
                     match command {
+                        Some(SessionCommand::Shutdown) => {
+                            self.cancel_active_image();
+                            break;
+                        }
                         Some(command) => {
+                            let is_image_request = matches!(
+                                command,
+                                SessionCommand::FetchAvatar { .. } | SessionCommand::FetchIcon { .. }
+                            );
+                            if !is_image_request {
+                                self.interrupt_active_image();
+                            }
                             if !self.handle(command).await {
                                 break;
                             }
                         }
-                        None => break,
+                        None => {
+                            self.cancel_active_image();
+                            break;
+                        }
                     }
                 }
                 signal = self.signal_rx.recv() => {
@@ -256,7 +300,17 @@ impl Actor {
                         self.handle_audio(event);
                     }
                 }
+                result = async {
+                    match &mut self.active_image {
+                        Some(active) => active.negotiation.as_mut().await,
+                        None => std::future::pending().await,
+                    }
+                } => {
+                    let active = self.active_image.take().expect("polled image request");
+                    self.finish_server_image(result, active.reply);
+                }
                 _ = snapshots.tick() => {
+                    self.interrupt_active_image();
                     self.poll_snapshot().await;
                 }
             }
@@ -540,10 +594,10 @@ impl Actor {
                 );
             }
             SessionCommand::FetchIcon { icon_id, reply } => {
-                self.fetch_icon(icon_id, reply).await;
+                self.fetch_icon(icon_id, reply);
             }
             SessionCommand::FetchAvatar { uid, reply } => match avatar_file_name(&uid) {
-                Ok(path) => self.fetch_server_image(&path, reply).await,
+                Ok(path) => self.fetch_server_image(&path, reply),
                 Err(error) => {
                     let _ = reply.send(Err(error));
                 }
@@ -780,6 +834,7 @@ impl Actor {
 
         self.connection_epoch = self.connection_epoch.wrapping_add(1);
         self.epoch.store(self.connection_epoch, Ordering::SeqCst);
+        let _ = self.disconnect_tx.send(self.connection_epoch);
         register_handlers(
             &client,
             self.events.clone(),
@@ -1512,46 +1567,97 @@ impl Actor {
         self.emit_voice_state();
     }
 
-    async fn fetch_icon(
-        &self,
-        icon_id: u32,
-        reply: oneshot::Sender<Result<Vec<u8>, SessionError>>,
-    ) {
+    fn fetch_icon(&mut self, icon_id: u32, reply: oneshot::Sender<Result<Vec<u8>, SessionError>>) {
         if icon_id == 0 {
             let _ = reply.send(Err(SessionError::Transfer(
                 "icon id must be nonzero".into(),
             )));
             return;
         }
-        self.fetch_server_image(&tsclient_rs::icon_file_name(icon_id), reply)
-            .await;
+        self.fetch_server_image(&tsclient_rs::icon_file_name(icon_id), reply);
     }
 
-    async fn fetch_server_image(
-        &self,
+    fn fetch_server_image(
+        &mut self,
         remote_path: &str,
         reply: oneshot::Sender<Result<Vec<u8>, SessionError>>,
     ) {
-        let negotiated = async {
+        if self.pending_images.len() >= 32 {
+            let _ = reply.send(Err(SessionError::Transfer(
+                "image request queue is full".into(),
+            )));
+            return;
+        }
+        self.pending_images.push_back(PendingImage {
+            remote_path: remote_path.to_owned(),
+            reply,
+        });
+    }
+
+    fn start_next_image(&mut self) {
+        if self.active_image.is_some() {
+            return;
+        }
+        let Some(pending) = self.pending_images.pop_front() else {
+            return;
+        };
+        let target = (|| {
             let client = self.connected()?;
             let target = self
                 .transfer_target
                 .as_ref()
                 .ok_or(SessionError::NotConnected)?;
             proto::check_transfer_host(target, &target.host)?;
-            let info = client
-                .file_transfer_init_download(0, remote_path, "")
-                .await
-                .map_err(protocol_error)?;
-            validate_port(info.port)?;
-            if info.size == 0 || info.size > 1024 * 1024 {
-                return Err(SessionError::Transfer(
-                    "image size must be between 1 byte and 1 MiB".into(),
-                ));
+            Ok::<_, SessionError>((client, target.host.clone()))
+        })();
+        let (client, host) = match target {
+            Ok(target) => target,
+            Err(error) => {
+                let _ = pending.reply.send(Err(error));
+                return;
             }
-            Ok((target.host.clone(), info))
+        };
+        let path = pending.remote_path;
+        self.active_image = Some(ActiveImage {
+            reply: pending.reply,
+            negotiation: Box::pin(async move {
+                let info = tokio::time::timeout(
+                    Duration::from_secs(5),
+                    client.file_transfer_init_download(0, &path, ""),
+                )
+                .await
+                .map_err(|_| SessionError::Timeout)?
+                .map_err(protocol_error)?;
+                validate_port(info.port)?;
+                if info.size == 0 || info.size > 1024 * 1024 {
+                    return Err(SessionError::Transfer(
+                        "image size must be between 1 byte and 1 MiB".into(),
+                    ));
+                }
+                Ok((host, info))
+            }),
+        });
+    }
+
+    fn interrupt_active_image(&mut self) {
+        if let Some(active) = self.active_image.take() {
+            let _ = active.reply.send(Err(SessionError::Transfer(
+                "image negotiation interrupted".into(),
+            )));
         }
-        .await;
+    }
+
+    fn cancel_active_image(&mut self) {
+        if let Some(active) = self.active_image.take() {
+            let _ = active.reply.send(Err(SessionError::NotConnected));
+        }
+    }
+
+    fn finish_server_image(
+        &self,
+        negotiated: Result<(String, FileDownloadInfo), SessionError>,
+        reply: oneshot::Sender<Result<Vec<u8>, SessionError>>,
+    ) {
         let (host, info) = match negotiated {
             Ok(value) => value,
             Err(error) => {
@@ -1560,22 +1666,29 @@ impl Actor {
             }
         };
         let epoch = self.connection_epoch;
-        let current_epoch = Arc::clone(&self.epoch);
+        let mut disconnect_rx = self.disconnect_rx.clone();
         // 仅 TCP 字节传输离开 actor；Client 的协商仍在命令队列中串行执行。
         tokio::task::spawn_local(async move {
-            let outcome = tokio::time::timeout(Duration::from_secs(20), async {
+            let download = async {
                 let mut bytes = Vec::with_capacity(info.size as usize);
                 tsclient_rs::downloadFileData(&host, &info, &mut bytes)
                     .await
                     .map_err(protocol_error)?;
                 Ok(bytes)
-            })
-            .await
-            .unwrap_or(Err(SessionError::Timeout));
-            let outcome = if current_epoch.load(Ordering::SeqCst) == epoch {
-                outcome
-            } else {
-                Err(SessionError::NotConnected)
+            };
+            let outcome = tokio::select! {
+                res = tokio::time::timeout(Duration::from_secs(20), download) => {
+                    res.unwrap_or(Err(SessionError::Timeout))
+                }
+                _ = async {
+                    while disconnect_rx.changed().await.is_ok() {
+                        if *disconnect_rx.borrow() != epoch {
+                            break;
+                        }
+                    }
+                } => {
+                    Err(SessionError::NotConnected)
+                }
             };
             let _ = reply.send(outcome);
         });
@@ -2380,6 +2493,10 @@ impl Actor {
     }
 
     fn invalidate_handlers(&mut self) {
+        self.cancel_active_image();
+        for request in self.pending_images.drain(..) {
+            let _ = request.reply.send(Err(SessionError::NotConnected));
+        }
         self.audio_since = Instant::now();
         self.voice.set_meter_epoch(None);
         self.levels.set_epoch(None);
@@ -2387,6 +2504,7 @@ impl Actor {
         self.transfer_target = None;
         self.connection_epoch = self.connection_epoch.wrapping_add(1);
         self.epoch.store(self.connection_epoch, Ordering::SeqCst);
+        let _ = self.disconnect_tx.send(self.connection_epoch);
     }
 
     fn set_state(&mut self, state: SessionState) {
@@ -3052,6 +3170,183 @@ impl AsyncRead for ProgressReader {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct SlowImage(Arc<tokio::sync::Notify>);
+
+    impl tsclient_rs::CommandMiddleware for SlowImage {
+        fn wrap(&self, _: TestCommandHandler) -> TestCommandHandler {
+            let started = Arc::clone(&self.0);
+            Arc::new(move |command| {
+                let started = Arc::clone(&started);
+                Box::pin(async move {
+                    if command.starts_with("ftinitdownload ") {
+                        started.notify_one();
+                        tokio::time::sleep(Duration::from_millis(300)).await;
+                    }
+                    Err(tsclient_rs::Error::ServerError {
+                        id: "2568".into(),
+                        server_message: "denied".into(),
+                        extra_message: None,
+                    })
+                })
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn avatar_negotiation_keeps_audio_and_controls_responsive() {
+        tokio::task::LocalSet::new()
+            .run_until(async {
+                let started = Arc::new(tokio::sync::Notify::new());
+                let client = Client::new(
+                    tsclient_rs::generateIdentity(0),
+                    "127.0.0.1:9987".into(),
+                    "test".into(),
+                    tsclient_rs::ClientOptions {
+                        command_middleware: vec![Box::new(SlowImage(Arc::clone(&started)))],
+                        ..Default::default()
+                    },
+                );
+                client.mark_connected();
+                let mut actor = audio_actor();
+                actor.client = Some(Arc::new(client));
+                actor.transfer_target = Some(ServerTarget {
+                    host: "127.0.0.1".into(),
+                    port: 9987,
+                });
+                let (audio, audio_rx) = mpsc::channel(16);
+                actor.audio_events = audio_rx;
+                let mut events = actor.events.subscribe();
+                let (commands, rx) = mpsc::unbounded_channel();
+                let task = tokio::task::spawn_local(async move {
+                    actor.run(rx).await;
+                });
+                let (reply, result) = oneshot::channel();
+                commands
+                    .send(SessionCommand::FetchAvatar {
+                        uid: base64::engine::general_purpose::STANDARD.encode([0u8; 20]),
+                        reply,
+                    })
+                    .unwrap();
+                started.notified().await;
+                audio
+                    .send(AudioEvent::SelfSpeaking { speaking: true })
+                    .await
+                    .unwrap();
+                assert!(matches!(
+                    tokio::time::timeout(Duration::from_millis(100), events.recv())
+                        .await
+                        .unwrap()
+                        .unwrap(),
+                    SessionEvent::SelfSpeaking { speaking: true }
+                ));
+                let (reply, control) = oneshot::channel();
+                commands
+                    .send(SessionCommand::SetPttMode {
+                        enabled: true,
+                        reply,
+                    })
+                    .unwrap();
+                tokio::time::timeout(Duration::from_millis(100), control)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .unwrap();
+                // 控制命令优先抢占，正在进行的图片协商立即被打断
+                assert!(matches!(
+                    result.await.unwrap(),
+                    Err(SessionError::Transfer(msg)) if msg.contains("interrupted")
+                ));
+                let (reply, muted) = oneshot::channel();
+                commands
+                    .send(SessionCommand::SetMuted { muted: true, reply })
+                    .unwrap();
+                tokio::time::timeout(Duration::from_secs(1), muted)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .unwrap();
+                let (reply, result) = oneshot::channel();
+                commands
+                    .send(SessionCommand::FetchAvatar {
+                        uid: base64::engine::general_purpose::STANDARD.encode([1u8; 20]),
+                        reply,
+                    })
+                    .unwrap();
+                started.notified().await;
+                commands.send(SessionCommand::Shutdown).unwrap();
+                assert!(matches!(
+                    tokio::time::timeout(Duration::from_millis(100), result)
+                        .await
+                        .unwrap()
+                        .unwrap(),
+                    Err(SessionError::NotConnected)
+                ));
+                task.await.unwrap();
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn active_download_is_cancelled_promptly_on_disconnect() {
+        tokio::task::LocalSet::new()
+            .run_until(async {
+                let mut actor = audio_actor();
+                let (reply, rx) = oneshot::channel();
+                let info = FileDownloadInfo {
+                    client_file_transfer_id: 1,
+                    server_file_transfer_id: 1,
+                    file_transfer_key: "key".into(),
+                    port: 30033,
+                    size: 100,
+                };
+                actor.finish_server_image(Ok(("127.0.0.1".into(), info)), reply);
+                // 立即失效
+                actor.invalidate_handlers();
+                let outcome = tokio::time::timeout(Duration::from_millis(200), rx)
+                    .await
+                    .expect("should not hang for 20 seconds")
+                    .expect("channel not dropped");
+                assert!(matches!(outcome, Err(SessionError::NotConnected)));
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn image_queue_is_bounded_and_invalidated_with_the_connection() {
+        let mut actor = audio_actor();
+        let client = Client::new(
+            tsclient_rs::generateIdentity(0),
+            "127.0.0.1:9987".into(),
+            "test".into(),
+            Default::default(),
+        );
+        actor.client = Some(Arc::new(client));
+        actor.transfer_target = Some(ServerTarget {
+            host: "127.0.0.1".into(),
+            port: 9987,
+        });
+        let mut replies = Vec::new();
+        for _ in 0..32 {
+            let (reply, result) = oneshot::channel();
+            actor.fetch_server_image("/avatar_test", reply);
+            replies.push(result);
+        }
+        let (reply, result) = oneshot::channel();
+        actor.fetch_server_image("/avatar_test", reply);
+        assert!(matches!(
+            result.await.unwrap(),
+            Err(SessionError::Transfer(_))
+        ));
+        actor.invalidate_handlers();
+        assert!(actor.pending_images.is_empty());
+        for result in replies {
+            assert!(matches!(
+                result.await.unwrap(),
+                Err(SessionError::NotConnected)
+            ));
+        }
+    }
 
     struct RefusedDirectory {
         calls: Arc<std::sync::Mutex<Vec<String>>>,

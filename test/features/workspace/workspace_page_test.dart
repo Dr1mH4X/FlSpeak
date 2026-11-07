@@ -1,5 +1,7 @@
 // ignore_for_file: depend_on_referenced_packages
 
+import 'dart:typed_data';
+
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -73,6 +75,9 @@ class _Core extends Fake implements CoreSession {
     required bool accept,
     required String offerSdp,
   }) async {}
+
+  @override
+  Future<Uint8List> fetchAvatar({required String uid}) async => Uint8List(0);
 }
 
 class _FakeWidgetRenderer extends RTCVideoRenderer {
