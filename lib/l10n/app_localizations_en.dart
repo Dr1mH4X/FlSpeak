@@ -207,6 +207,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get channelPaneResize => 'Resize channel pane';
 
   @override
+  String get streamViewerResize => 'Resize screen share height';
+
+  @override
   String get voiceMute => 'Mute';
 
   @override
@@ -776,4 +779,157 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aboutCopySuccess => 'Link copied to clipboard';
+
+  @override
+  String get streamSharing => 'Sharing screen';
+
+  @override
+  String get streamWatch => 'Watch';
+
+  @override
+  String get streamWatchScreen => 'Watch screen share';
+
+  @override
+  String get streamWatching => 'Watching';
+
+  @override
+  String get streamStopWatching => 'Close stream';
+
+  @override
+  String get streamConnecting => 'Connecting to stream…';
+
+  @override
+  String get streamMute => 'Mute stream';
+
+  @override
+  String get streamUnmute => 'Unmute stream';
+
+  @override
+  String get streamExpand => 'Expand stream';
+
+  @override
+  String get streamCollapse => 'Collapse stream';
+
+  @override
+  String get streamFullscreen => 'Enter fullscreen';
+
+  @override
+  String get streamExitFullscreen => 'Exit fullscreen';
+
+  @override
+  String get streamEndedStopped => 'Screen share has ended';
+
+  @override
+  String get streamEndedRejected => 'Watch request was declined';
+
+  @override
+  String get streamEndedRemoved => 'Removed from screen share';
+
+  @override
+  String get streamNegotiationFailed =>
+      'Screen share connection failed. Try again.';
+
+  @override
+  String get streamStartShare => 'Share screen';
+
+  @override
+  String get streamStopShare => 'Stop sharing';
+
+  @override
+  String get streamPublishing => 'Sharing';
+
+  @override
+  String streamViewerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count viewers',
+      one: '1 viewer',
+      zero: '0 viewers',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get streamPreviewShow => 'Show local preview';
+
+  @override
+  String get streamPreviewHide => 'Hide local preview';
+
+  @override
+  String get streamPublishFailed =>
+      'Could not start screen share. Check screen recording permissions and try again.';
+
+  @override
+  String get streamPickerTitle => 'Share your screen';
+
+  @override
+  String get streamPickerScreens => 'Screens';
+
+  @override
+  String get streamPickerWindows => 'Windows';
+
+  @override
+  String get streamPickerRefresh => 'Refresh sources';
+
+  @override
+  String get streamPickerEmpty => 'No shareable screens or windows found';
+
+  @override
+  String get streamPickerResolution => 'Resolution';
+
+  @override
+  String get streamPickerFrameRate => 'Frame rate';
+
+  @override
+  String get streamPickerStart => 'Start sharing';
+
+  @override
+  String get settingsScreenShare => 'Screen share';
+
+  @override
+  String get settingsScreenShareCapture => 'Default capture quality';
+
+  @override
+  String get settingsScreenShareResolution => 'Default resolution';
+
+  @override
+  String get settingsScreenShareResolution720p => '720p (1280×720)';
+
+  @override
+  String get settingsScreenShareResolution1080p => '1080p (1920×1080)';
+
+  @override
+  String get settingsScreenShareFrameRate => 'Default frame rate';
+
+  @override
+  String get settingsScreenShareFrameRate30 => '30 FPS';
+
+  @override
+  String get settingsScreenShareFrameRate60 => '60 FPS';
+
+  @override
+  String get settingsScreenShareEncoding => 'Encoding & network';
+
+  @override
+  String get settingsScreenShareCodec => 'Video codec & hardware acceleration';
+
+  @override
+  String get settingsScreenShareCodecVp8 => 'VP8 first (Recommended for TS6)';
+
+  @override
+  String get settingsScreenShareCodecH264 =>
+      'H.264 first (Hardware encode/decode)';
+
+  @override
+  String get settingsScreenShareDegradation =>
+      'Bandwidth degradation preference';
+
+  @override
+  String get settingsScreenShareDegradationResolution =>
+      'Maintain resolution (Drop frame rate first)';
+
+  @override
+  String get settingsScreenShareDegradationFramerate =>
+      'Maintain frame rate (Drop resolution first)';
 }

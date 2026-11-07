@@ -64,7 +64,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => -1324118188;
+  int get rustContentHash => -533073836;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -121,6 +121,12 @@ abstract class RustLibApi extends BaseApi {
     required int iconId,
   });
 
+  Future<void> crateApiSessionCoreSessionJoinStream({
+    required CoreSession that,
+    required String streamId,
+    required int sourceClid,
+  });
+
   Future<void> crateApiSessionCoreSessionKick({
     required CoreSession that,
     required String uid,
@@ -129,6 +135,16 @@ abstract class RustLibApi extends BaseApi {
     required KickTarget target,
     required String reason,
     required int connectionEpoch,
+  });
+
+  Future<void> crateApiSessionCoreSessionKickStreamViewer({
+    required CoreSession that,
+    required int viewerClid,
+  });
+
+  Future<void> crateApiSessionCoreSessionLeaveStream({
+    required CoreSession that,
+    required String streamId,
   });
 
   Future<AudioDevicesView> crateApiSessionCoreSessionListAudioDevices({
@@ -193,6 +209,37 @@ abstract class RustLibApi extends BaseApi {
     required CoreSession that,
   });
 
+  Future<void> crateApiSessionCoreSessionRespondStreamJoinRequest({
+    required CoreSession that,
+    required int viewerClid,
+    required bool accept,
+    required String offerSdp,
+  });
+
+  Future<void> crateApiSessionCoreSessionSendPublisherIceCandidate({
+    required CoreSession that,
+    required int viewerClid,
+    required String sdp,
+    String? mid,
+    int? mLine,
+  });
+
+  Future<void> crateApiSessionCoreSessionSendStreamAnswer({
+    required CoreSession that,
+    required String streamId,
+    required int targetClid,
+    required String sdp,
+  });
+
+  Future<void> crateApiSessionCoreSessionSendStreamIceCandidate({
+    required CoreSession that,
+    required String streamId,
+    required int targetClid,
+    required String sdp,
+    String? mid,
+    int? mLine,
+  });
+
   Future<void> crateApiSessionCoreSessionSendText({
     required CoreSession that,
     required int targetMode,
@@ -248,7 +295,19 @@ abstract class RustLibApi extends BaseApi {
 
   Future<void> crateApiSessionCoreSessionShutdown({required CoreSession that});
 
+  Future<void> crateApiSessionCoreSessionStartScreenShare({
+    required CoreSession that,
+    required String name,
+    required bool audio,
+    required int bitrate,
+    required int viewerLimit,
+  });
+
   Future<CoreSessionState> crateApiSessionCoreSessionState({
+    required CoreSession that,
+  });
+
+  Future<void> crateApiSessionCoreSessionStopScreenShare({
     required CoreSession that,
   });
 
@@ -652,6 +711,46 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<void> crateApiSessionCoreSessionJoinStream({
+    required CoreSession that,
+    required String streamId,
+    required int sourceClid,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCoreSession(
+            that,
+            serializer,
+          );
+          sse_encode_String(streamId, serializer);
+          sse_encode_i_32(sourceClid, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 10,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_core_error,
+        ),
+        constMeta: kCrateApiSessionCoreSessionJoinStreamConstMeta,
+        argValues: [that, streamId, sourceClid],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSessionCoreSessionJoinStreamConstMeta =>
+      const TaskConstMeta(
+        debugName: "CoreSession_join_stream",
+        argNames: ["that", "streamId", "sourceClid"],
+      );
+
+  @override
   Future<void> crateApiSessionCoreSessionKick({
     required CoreSession that,
     required String uid,
@@ -678,7 +777,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 10,
+            funcId: 11,
             port: port_,
           );
         },
@@ -716,6 +815,82 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<void> crateApiSessionCoreSessionKickStreamViewer({
+    required CoreSession that,
+    required int viewerClid,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCoreSession(
+            that,
+            serializer,
+          );
+          sse_encode_i_32(viewerClid, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 12,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_core_error,
+        ),
+        constMeta: kCrateApiSessionCoreSessionKickStreamViewerConstMeta,
+        argValues: [that, viewerClid],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSessionCoreSessionKickStreamViewerConstMeta =>
+      const TaskConstMeta(
+        debugName: "CoreSession_kick_stream_viewer",
+        argNames: ["that", "viewerClid"],
+      );
+
+  @override
+  Future<void> crateApiSessionCoreSessionLeaveStream({
+    required CoreSession that,
+    required String streamId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCoreSession(
+            that,
+            serializer,
+          );
+          sse_encode_String(streamId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 13,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_core_error,
+        ),
+        constMeta: kCrateApiSessionCoreSessionLeaveStreamConstMeta,
+        argValues: [that, streamId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSessionCoreSessionLeaveStreamConstMeta =>
+      const TaskConstMeta(
+        debugName: "CoreSession_leave_stream",
+        argNames: ["that", "streamId"],
+      );
+
+  @override
   Future<AudioDevicesView> crateApiSessionCoreSessionListAudioDevices({
     required CoreSession that,
   }) {
@@ -730,7 +905,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 11,
+            funcId: 14,
             port: port_,
           );
         },
@@ -766,7 +941,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 12,
+            funcId: 15,
             port: port_,
           );
         },
@@ -802,7 +977,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 13,
+            funcId: 16,
             port: port_,
           );
         },
@@ -844,7 +1019,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 14,
+            funcId: 17,
             port: port_,
           );
         },
@@ -880,7 +1055,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 15,
+            funcId: 18,
             port: port_,
           );
         },
@@ -920,7 +1095,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 16,
+            funcId: 19,
             port: port_,
           );
         },
@@ -962,7 +1137,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 17,
+            funcId: 20,
             port: port_,
           );
         },
@@ -994,7 +1169,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(storePath, serializer);
           sse_encode_opt_box_autoadd_bool(audioEnabled, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 18)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 21)!;
         },
         codec: SseCodec(
           decodeSuccessData:
@@ -1033,7 +1208,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 19,
+            funcId: 22,
             port: port_,
           );
         },
@@ -1073,7 +1248,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 20,
+            funcId: 23,
             port: port_,
           );
         },
@@ -1111,7 +1286,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 21,
+            funcId: 24,
             port: port_,
           );
         },
@@ -1147,7 +1322,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 22,
+            funcId: 25,
             port: port_,
           );
         },
@@ -1166,6 +1341,184 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(
         debugName: "CoreSession_request_snapshot",
         argNames: ["that"],
+      );
+
+  @override
+  Future<void> crateApiSessionCoreSessionRespondStreamJoinRequest({
+    required CoreSession that,
+    required int viewerClid,
+    required bool accept,
+    required String offerSdp,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCoreSession(
+            that,
+            serializer,
+          );
+          sse_encode_i_32(viewerClid, serializer);
+          sse_encode_bool(accept, serializer);
+          sse_encode_String(offerSdp, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 26,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_core_error,
+        ),
+        constMeta: kCrateApiSessionCoreSessionRespondStreamJoinRequestConstMeta,
+        argValues: [that, viewerClid, accept, offerSdp],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta
+  get kCrateApiSessionCoreSessionRespondStreamJoinRequestConstMeta =>
+      const TaskConstMeta(
+        debugName: "CoreSession_respond_stream_join_request",
+        argNames: ["that", "viewerClid", "accept", "offerSdp"],
+      );
+
+  @override
+  Future<void> crateApiSessionCoreSessionSendPublisherIceCandidate({
+    required CoreSession that,
+    required int viewerClid,
+    required String sdp,
+    String? mid,
+    int? mLine,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCoreSession(
+            that,
+            serializer,
+          );
+          sse_encode_i_32(viewerClid, serializer);
+          sse_encode_String(sdp, serializer);
+          sse_encode_opt_String(mid, serializer);
+          sse_encode_opt_box_autoadd_i_32(mLine, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 27,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_core_error,
+        ),
+        constMeta:
+            kCrateApiSessionCoreSessionSendPublisherIceCandidateConstMeta,
+        argValues: [that, viewerClid, sdp, mid, mLine],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta
+  get kCrateApiSessionCoreSessionSendPublisherIceCandidateConstMeta =>
+      const TaskConstMeta(
+        debugName: "CoreSession_send_publisher_ice_candidate",
+        argNames: ["that", "viewerClid", "sdp", "mid", "mLine"],
+      );
+
+  @override
+  Future<void> crateApiSessionCoreSessionSendStreamAnswer({
+    required CoreSession that,
+    required String streamId,
+    required int targetClid,
+    required String sdp,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCoreSession(
+            that,
+            serializer,
+          );
+          sse_encode_String(streamId, serializer);
+          sse_encode_i_32(targetClid, serializer);
+          sse_encode_String(sdp, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 28,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_core_error,
+        ),
+        constMeta: kCrateApiSessionCoreSessionSendStreamAnswerConstMeta,
+        argValues: [that, streamId, targetClid, sdp],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSessionCoreSessionSendStreamAnswerConstMeta =>
+      const TaskConstMeta(
+        debugName: "CoreSession_send_stream_answer",
+        argNames: ["that", "streamId", "targetClid", "sdp"],
+      );
+
+  @override
+  Future<void> crateApiSessionCoreSessionSendStreamIceCandidate({
+    required CoreSession that,
+    required String streamId,
+    required int targetClid,
+    required String sdp,
+    String? mid,
+    int? mLine,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCoreSession(
+            that,
+            serializer,
+          );
+          sse_encode_String(streamId, serializer);
+          sse_encode_i_32(targetClid, serializer);
+          sse_encode_String(sdp, serializer);
+          sse_encode_opt_String(mid, serializer);
+          sse_encode_opt_box_autoadd_i_32(mLine, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 29,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_core_error,
+        ),
+        constMeta: kCrateApiSessionCoreSessionSendStreamIceCandidateConstMeta,
+        argValues: [that, streamId, targetClid, sdp, mid, mLine],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta
+  get kCrateApiSessionCoreSessionSendStreamIceCandidateConstMeta =>
+      const TaskConstMeta(
+        debugName: "CoreSession_send_stream_ice_candidate",
+        argNames: ["that", "streamId", "targetClid", "sdp", "mid", "mLine"],
       );
 
   @override
@@ -1189,7 +1542,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 23,
+            funcId: 30,
             port: port_,
           );
         },
@@ -1229,7 +1582,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 24,
+            funcId: 31,
             port: port_,
           );
         },
@@ -1267,7 +1620,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 25,
+            funcId: 32,
             port: port_,
           );
         },
@@ -1305,7 +1658,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 26,
+            funcId: 33,
             port: port_,
           );
         },
@@ -1343,7 +1696,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 27,
+            funcId: 34,
             port: port_,
           );
         },
@@ -1391,7 +1744,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 28,
+            funcId: 35,
             port: port_,
           );
         },
@@ -1437,7 +1790,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 29,
+            funcId: 36,
             port: port_,
           );
         },
@@ -1475,7 +1828,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 30,
+            funcId: 37,
             port: port_,
           );
         },
@@ -1513,7 +1866,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 31,
+            funcId: 38,
             port: port_,
           );
         },
@@ -1547,7 +1900,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 32,
+            funcId: 39,
             port: port_,
           );
         },
@@ -1569,6 +1922,50 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<void> crateApiSessionCoreSessionStartScreenShare({
+    required CoreSession that,
+    required String name,
+    required bool audio,
+    required int bitrate,
+    required int viewerLimit,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCoreSession(
+            that,
+            serializer,
+          );
+          sse_encode_String(name, serializer);
+          sse_encode_bool(audio, serializer);
+          sse_encode_u_32(bitrate, serializer);
+          sse_encode_u_32(viewerLimit, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 40,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_core_error,
+        ),
+        constMeta: kCrateApiSessionCoreSessionStartScreenShareConstMeta,
+        argValues: [that, name, audio, bitrate, viewerLimit],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSessionCoreSessionStartScreenShareConstMeta =>
+      const TaskConstMeta(
+        debugName: "CoreSession_start_screen_share",
+        argNames: ["that", "name", "audio", "bitrate", "viewerLimit"],
+      );
+
+  @override
   Future<CoreSessionState> crateApiSessionCoreSessionState({
     required CoreSession that,
   }) {
@@ -1583,7 +1980,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 33,
+            funcId: 41,
             port: port_,
           );
         },
@@ -1600,6 +1997,42 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   TaskConstMeta get kCrateApiSessionCoreSessionStateConstMeta =>
       const TaskConstMeta(debugName: "CoreSession_state", argNames: ["that"]);
+
+  @override
+  Future<void> crateApiSessionCoreSessionStopScreenShare({
+    required CoreSession that,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerCoreSession(
+            that,
+            serializer,
+          );
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 42,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_core_error,
+        ),
+        constMeta: kCrateApiSessionCoreSessionStopScreenShareConstMeta,
+        argValues: [that],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSessionCoreSessionStopScreenShareConstMeta =>
+      const TaskConstMeta(
+        debugName: "CoreSession_stop_screen_share",
+        argNames: ["that"],
+      );
 
   @override
   Future<ServerProfileView> crateApiSessionCoreSessionUpdateServer({
@@ -1622,7 +2055,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 34,
+            funcId: 43,
             port: port_,
           );
         },
@@ -1668,7 +2101,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 35,
+            funcId: 44,
             port: port_,
           );
         },
@@ -1713,7 +2146,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 36,
+            funcId: 45,
             port: port_,
           );
         },
@@ -1737,7 +2170,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 37)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 46)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -1760,7 +2193,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(storePath, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 38)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 47)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -1783,7 +2216,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(json, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 39)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 48)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -1809,7 +2242,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(json, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 40)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 49)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -1846,7 +2279,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 41,
+            funcId: 50,
             port: port_,
           );
         },
@@ -1880,7 +2313,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 42,
+            funcId: 51,
             port: port_,
           );
         },
@@ -2042,6 +2475,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   NetworkTelemetry dco_decode_box_autoadd_network_telemetry(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_network_telemetry(raw);
+  }
+
+  @protected
+  PublisherSignal dco_decode_box_autoadd_publisher_signal(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_publisher_signal(raw);
   }
 
   @protected
@@ -2233,13 +2672,59 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           error: dco_decode_opt_String(raw[2]),
         );
       case 21:
+        return CoreEvent_Streams(
+          streams: dco_decode_list_stream_view(raw[1]),
+          watching: dco_decode_opt_String(raw[2]),
+        );
+      case 22:
+        return CoreEvent_StreamOffer(
+          streamId: dco_decode_String(raw[1]),
+          sourceClientId: dco_decode_i_32(raw[2]),
+          sdp: dco_decode_String(raw[3]),
+        );
+      case 23:
+        return CoreEvent_StreamIceCandidate(
+          streamId: dco_decode_String(raw[1]),
+          sourceClientId: dco_decode_i_32(raw[2]),
+          sdp: dco_decode_String(raw[3]),
+          mid: dco_decode_opt_String(raw[4]),
+          mLine: dco_decode_opt_box_autoadd_i_32(raw[5]),
+        );
+      case 24:
+        return CoreEvent_StreamEnded(
+          streamId: dco_decode_String(raw[1]),
+          reason: dco_decode_stream_end_reason(raw[2]),
+        );
+      case 25:
+        return CoreEvent_ScreenSharePublished(
+          streamId: dco_decode_String(raw[1]),
+        );
+      case 26:
+        return CoreEvent_ScreenShareStopped();
+      case 27:
+        return CoreEvent_StreamViewerJoinRequested(
+          streamId: dco_decode_String(raw[1]),
+          viewerClid: dco_decode_i_32(raw[2]),
+        );
+      case 28:
+        return CoreEvent_PublisherSignalReceived(
+          streamId: dco_decode_String(raw[1]),
+          viewerClid: dco_decode_i_32(raw[2]),
+          signal: dco_decode_box_autoadd_publisher_signal(raw[3]),
+        );
+      case 29:
+        return CoreEvent_StreamViewerLeft(
+          streamId: dco_decode_String(raw[1]),
+          viewerClid: dco_decode_i_32(raw[2]),
+        );
+      case 30:
         return CoreEvent_Log(
           level: dco_decode_String(raw[1]),
           message: dco_decode_String(raw[2]),
         );
-      case 22:
+      case 31:
         return CoreEvent_Denied(message: dco_decode_String(raw[1]));
-      case 23:
+      case 32:
         return CoreEvent_Failed(message: dco_decode_String(raw[1]));
       default:
         throw Exception("unreachable");
@@ -2395,6 +2880,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<StreamView> dco_decode_list_stream_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_stream_view).toList();
+  }
+
+  @protected
   MemberGroupView dco_decode_member_group_view(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -2471,6 +2962,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  PublisherSignal dco_decode_publisher_signal(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return PublisherSignal_Answer(sdp: dco_decode_String(raw[1]));
+      case 1:
+        return PublisherSignal_IceCandidate(
+          sdp: dco_decode_String(raw[1]),
+          mid: dco_decode_opt_String(raw[2]),
+          mLine: dco_decode_opt_box_autoadd_i_32(raw[3]),
+        );
+      default:
+        throw Exception("unreachable");
+    }
+  }
+
+  @protected
   ServerProfileView dco_decode_server_profile_view(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -2481,6 +2989,26 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       label: dco_decode_String(arr[1]),
       host: dco_decode_String(arr[2]),
       port: dco_decode_u_16(arr[3]),
+    );
+  }
+
+  @protected
+  StreamEndReason dco_decode_stream_end_reason(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return StreamEndReason.values[raw as int];
+  }
+
+  @protected
+  StreamView dco_decode_stream_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return StreamView(
+      id: dco_decode_String(arr[0]),
+      clientId: dco_decode_i_32(arr[1]),
+      name: dco_decode_String(arr[2]),
+      hasAudio: dco_decode_bool(arr[3]),
     );
   }
 
@@ -2669,6 +3197,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_network_telemetry(deserializer));
+  }
+
+  @protected
+  PublisherSignal sse_decode_box_autoadd_publisher_signal(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_publisher_signal(deserializer));
   }
 
   @protected
@@ -2895,13 +3431,74 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         var var_error = sse_decode_opt_String(deserializer);
         return CoreEvent_TransferFinished(id: var_id, error: var_error);
       case 21:
+        var var_streams = sse_decode_list_stream_view(deserializer);
+        var var_watching = sse_decode_opt_String(deserializer);
+        return CoreEvent_Streams(streams: var_streams, watching: var_watching);
+      case 22:
+        var var_streamId = sse_decode_String(deserializer);
+        var var_sourceClientId = sse_decode_i_32(deserializer);
+        var var_sdp = sse_decode_String(deserializer);
+        return CoreEvent_StreamOffer(
+          streamId: var_streamId,
+          sourceClientId: var_sourceClientId,
+          sdp: var_sdp,
+        );
+      case 23:
+        var var_streamId = sse_decode_String(deserializer);
+        var var_sourceClientId = sse_decode_i_32(deserializer);
+        var var_sdp = sse_decode_String(deserializer);
+        var var_mid = sse_decode_opt_String(deserializer);
+        var var_mLine = sse_decode_opt_box_autoadd_i_32(deserializer);
+        return CoreEvent_StreamIceCandidate(
+          streamId: var_streamId,
+          sourceClientId: var_sourceClientId,
+          sdp: var_sdp,
+          mid: var_mid,
+          mLine: var_mLine,
+        );
+      case 24:
+        var var_streamId = sse_decode_String(deserializer);
+        var var_reason = sse_decode_stream_end_reason(deserializer);
+        return CoreEvent_StreamEnded(
+          streamId: var_streamId,
+          reason: var_reason,
+        );
+      case 25:
+        var var_streamId = sse_decode_String(deserializer);
+        return CoreEvent_ScreenSharePublished(streamId: var_streamId);
+      case 26:
+        return CoreEvent_ScreenShareStopped();
+      case 27:
+        var var_streamId = sse_decode_String(deserializer);
+        var var_viewerClid = sse_decode_i_32(deserializer);
+        return CoreEvent_StreamViewerJoinRequested(
+          streamId: var_streamId,
+          viewerClid: var_viewerClid,
+        );
+      case 28:
+        var var_streamId = sse_decode_String(deserializer);
+        var var_viewerClid = sse_decode_i_32(deserializer);
+        var var_signal = sse_decode_box_autoadd_publisher_signal(deserializer);
+        return CoreEvent_PublisherSignalReceived(
+          streamId: var_streamId,
+          viewerClid: var_viewerClid,
+          signal: var_signal,
+        );
+      case 29:
+        var var_streamId = sse_decode_String(deserializer);
+        var var_viewerClid = sse_decode_i_32(deserializer);
+        return CoreEvent_StreamViewerLeft(
+          streamId: var_streamId,
+          viewerClid: var_viewerClid,
+        );
+      case 30:
         var var_level = sse_decode_String(deserializer);
         var var_message = sse_decode_String(deserializer);
         return CoreEvent_Log(level: var_level, message: var_message);
-      case 22:
+      case 31:
         var var_message = sse_decode_String(deserializer);
         return CoreEvent_Denied(message: var_message);
-      case 23:
+      case 32:
         var var_message = sse_decode_String(deserializer);
         return CoreEvent_Failed(message: var_message);
       default:
@@ -3131,6 +3728,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<StreamView> sse_decode_list_stream_view(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <StreamView>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_stream_view(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   MemberGroupView sse_decode_member_group_view(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_channelId = sse_decode_CastedPrimitive_u_64(deserializer);
@@ -3250,6 +3859,29 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  PublisherSignal sse_decode_publisher_signal(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        var var_sdp = sse_decode_String(deserializer);
+        return PublisherSignal_Answer(sdp: var_sdp);
+      case 1:
+        var var_sdp = sse_decode_String(deserializer);
+        var var_mid = sse_decode_opt_String(deserializer);
+        var var_mLine = sse_decode_opt_box_autoadd_i_32(deserializer);
+        return PublisherSignal_IceCandidate(
+          sdp: var_sdp,
+          mid: var_mid,
+          mLine: var_mLine,
+        );
+      default:
+        throw UnimplementedError('');
+    }
+  }
+
+  @protected
   ServerProfileView sse_decode_server_profile_view(
     SseDeserializer deserializer,
   ) {
@@ -3263,6 +3895,28 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       label: var_label,
       host: var_host,
       port: var_port,
+    );
+  }
+
+  @protected
+  StreamEndReason sse_decode_stream_end_reason(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return StreamEndReason.values[inner];
+  }
+
+  @protected
+  StreamView sse_decode_stream_view(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_clientId = sse_decode_i_32(deserializer);
+    var var_name = sse_decode_String(deserializer);
+    var var_hasAudio = sse_decode_bool(deserializer);
+    return StreamView(
+      id: var_id,
+      clientId: var_clientId,
+      name: var_name,
+      hasAudio: var_hasAudio,
     );
   }
 
@@ -3461,6 +4115,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_publisher_signal(
+    PublisherSignal self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_publisher_signal(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_u_16(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_u_16(self, serializer);
@@ -3651,15 +4314,76 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_i_32(20, serializer);
         sse_encode_CastedPrimitive_u_64(id, serializer);
         sse_encode_opt_String(error, serializer);
-      case CoreEvent_Log(level: final level, message: final message):
+      case CoreEvent_Streams(streams: final streams, watching: final watching):
         sse_encode_i_32(21, serializer);
+        sse_encode_list_stream_view(streams, serializer);
+        sse_encode_opt_String(watching, serializer);
+      case CoreEvent_StreamOffer(
+        streamId: final streamId,
+        sourceClientId: final sourceClientId,
+        sdp: final sdp,
+      ):
+        sse_encode_i_32(22, serializer);
+        sse_encode_String(streamId, serializer);
+        sse_encode_i_32(sourceClientId, serializer);
+        sse_encode_String(sdp, serializer);
+      case CoreEvent_StreamIceCandidate(
+        streamId: final streamId,
+        sourceClientId: final sourceClientId,
+        sdp: final sdp,
+        mid: final mid,
+        mLine: final mLine,
+      ):
+        sse_encode_i_32(23, serializer);
+        sse_encode_String(streamId, serializer);
+        sse_encode_i_32(sourceClientId, serializer);
+        sse_encode_String(sdp, serializer);
+        sse_encode_opt_String(mid, serializer);
+        sse_encode_opt_box_autoadd_i_32(mLine, serializer);
+      case CoreEvent_StreamEnded(
+        streamId: final streamId,
+        reason: final reason,
+      ):
+        sse_encode_i_32(24, serializer);
+        sse_encode_String(streamId, serializer);
+        sse_encode_stream_end_reason(reason, serializer);
+      case CoreEvent_ScreenSharePublished(streamId: final streamId):
+        sse_encode_i_32(25, serializer);
+        sse_encode_String(streamId, serializer);
+      case CoreEvent_ScreenShareStopped():
+        sse_encode_i_32(26, serializer);
+      case CoreEvent_StreamViewerJoinRequested(
+        streamId: final streamId,
+        viewerClid: final viewerClid,
+      ):
+        sse_encode_i_32(27, serializer);
+        sse_encode_String(streamId, serializer);
+        sse_encode_i_32(viewerClid, serializer);
+      case CoreEvent_PublisherSignalReceived(
+        streamId: final streamId,
+        viewerClid: final viewerClid,
+        signal: final signal,
+      ):
+        sse_encode_i_32(28, serializer);
+        sse_encode_String(streamId, serializer);
+        sse_encode_i_32(viewerClid, serializer);
+        sse_encode_box_autoadd_publisher_signal(signal, serializer);
+      case CoreEvent_StreamViewerLeft(
+        streamId: final streamId,
+        viewerClid: final viewerClid,
+      ):
+        sse_encode_i_32(29, serializer);
+        sse_encode_String(streamId, serializer);
+        sse_encode_i_32(viewerClid, serializer);
+      case CoreEvent_Log(level: final level, message: final message):
+        sse_encode_i_32(30, serializer);
         sse_encode_String(level, serializer);
         sse_encode_String(message, serializer);
       case CoreEvent_Denied(message: final message):
-        sse_encode_i_32(22, serializer);
+        sse_encode_i_32(31, serializer);
         sse_encode_String(message, serializer);
       case CoreEvent_Failed(message: final message):
-        sse_encode_i_32(23, serializer);
+        sse_encode_i_32(32, serializer);
         sse_encode_String(message, serializer);
     }
   }
@@ -3870,6 +4594,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_stream_view(
+    List<StreamView> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_stream_view(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_member_group_view(
     MemberGroupView self,
     SseSerializer serializer,
@@ -3973,6 +4709,28 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_publisher_signal(
+    PublisherSignal self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case PublisherSignal_Answer(sdp: final sdp):
+        sse_encode_i_32(0, serializer);
+        sse_encode_String(sdp, serializer);
+      case PublisherSignal_IceCandidate(
+        sdp: final sdp,
+        mid: final mid,
+        mLine: final mLine,
+      ):
+        sse_encode_i_32(1, serializer);
+        sse_encode_String(sdp, serializer);
+        sse_encode_opt_String(mid, serializer);
+        sse_encode_opt_box_autoadd_i_32(mLine, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_server_profile_view(
     ServerProfileView self,
     SseSerializer serializer,
@@ -3982,6 +4740,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.label, serializer);
     sse_encode_String(self.host, serializer);
     sse_encode_u_16(self.port, serializer);
+  }
+
+  @protected
+  void sse_encode_stream_end_reason(
+    StreamEndReason self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_stream_view(StreamView self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_i_32(self.clientId, serializer);
+    sse_encode_String(self.name, serializer);
+    sse_encode_bool(self.hasAudio, serializer);
   }
 
   @protected
@@ -4087,6 +4863,15 @@ class CoreSessionImpl extends RustOpaque implements CoreSession {
   Future<Uint8List> fetchIcon({required int iconId}) => RustLib.instance.api
       .crateApiSessionCoreSessionFetchIcon(that: this, iconId: iconId);
 
+  Future<void> joinStream({
+    required String streamId,
+    required int sourceClid,
+  }) => RustLib.instance.api.crateApiSessionCoreSessionJoinStream(
+    that: this,
+    streamId: streamId,
+    sourceClid: sourceClid,
+  );
+
   Future<void> kick({
     required String uid,
     required int clientId,
@@ -4103,6 +4888,15 @@ class CoreSessionImpl extends RustOpaque implements CoreSession {
     reason: reason,
     connectionEpoch: connectionEpoch,
   );
+
+  Future<void> kickStreamViewer({required int viewerClid}) =>
+      RustLib.instance.api.crateApiSessionCoreSessionKickStreamViewer(
+        that: this,
+        viewerClid: viewerClid,
+      );
+
+  Future<void> leaveStream({required String streamId}) => RustLib.instance.api
+      .crateApiSessionCoreSessionLeaveStream(that: this, streamId: streamId);
 
   Future<AudioDevicesView> listAudioDevices() => RustLib.instance.api
       .crateApiSessionCoreSessionListAudioDevices(that: this);
@@ -4171,6 +4965,57 @@ class CoreSessionImpl extends RustOpaque implements CoreSession {
   Future<void> requestSnapshot() => RustLib.instance.api
       .crateApiSessionCoreSessionRequestSnapshot(that: this);
 
+  Future<void> respondStreamJoinRequest({
+    required int viewerClid,
+    required bool accept,
+    required String offerSdp,
+  }) => RustLib.instance.api.crateApiSessionCoreSessionRespondStreamJoinRequest(
+    that: this,
+    viewerClid: viewerClid,
+    accept: accept,
+    offerSdp: offerSdp,
+  );
+
+  Future<void> sendPublisherIceCandidate({
+    required int viewerClid,
+    required String sdp,
+    String? mid,
+    int? mLine,
+  }) =>
+      RustLib.instance.api.crateApiSessionCoreSessionSendPublisherIceCandidate(
+        that: this,
+        viewerClid: viewerClid,
+        sdp: sdp,
+        mid: mid,
+        mLine: mLine,
+      );
+
+  Future<void> sendStreamAnswer({
+    required String streamId,
+    required int targetClid,
+    required String sdp,
+  }) => RustLib.instance.api.crateApiSessionCoreSessionSendStreamAnswer(
+    that: this,
+    streamId: streamId,
+    targetClid: targetClid,
+    sdp: sdp,
+  );
+
+  Future<void> sendStreamIceCandidate({
+    required String streamId,
+    required int targetClid,
+    required String sdp,
+    String? mid,
+    int? mLine,
+  }) => RustLib.instance.api.crateApiSessionCoreSessionSendStreamIceCandidate(
+    that: this,
+    streamId: streamId,
+    targetClid: targetClid,
+    sdp: sdp,
+    mid: mid,
+    mLine: mLine,
+  );
+
   Future<void> sendText({
     required int targetMode,
     required int targetId,
@@ -4227,8 +5072,24 @@ class CoreSessionImpl extends RustOpaque implements CoreSession {
   Future<void> shutdown() =>
       RustLib.instance.api.crateApiSessionCoreSessionShutdown(that: this);
 
+  Future<void> startScreenShare({
+    required String name,
+    required bool audio,
+    required int bitrate,
+    required int viewerLimit,
+  }) => RustLib.instance.api.crateApiSessionCoreSessionStartScreenShare(
+    that: this,
+    name: name,
+    audio: audio,
+    bitrate: bitrate,
+    viewerLimit: viewerLimit,
+  );
+
   Future<CoreSessionState> state() =>
       RustLib.instance.api.crateApiSessionCoreSessionState(that: this);
+
+  Future<void> stopScreenShare() => RustLib.instance.api
+      .crateApiSessionCoreSessionStopScreenShare(that: this);
 
   Future<ServerProfileView> updateServer({
     required String id,

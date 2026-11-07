@@ -43,11 +43,36 @@ class ClientActionsButton extends ConsumerWidget {
     final canManage =
         (access?.memberAddPower ?? 0) > 0 ||
         (access?.memberRemovePower ?? 0) > 0;
+    final stream = view.streamForClient(client.id);
+    final isWatchingStream =
+        stream != null && view.watchingStreamId == stream.id;
     return SecondaryMenu(
       openOnSecondaryTap: true,
       enabled: view.connected && !view.busy,
       moreSemanticLabel: l10n.memberActions(client.nickname),
       items: [
+        if (stream != null)
+          MenuItemButton(
+            leadingIcon: Icon(
+              isWatchingStream
+                  ? Icons.stop_screen_share_rounded
+                  : Icons.screen_share_rounded,
+            ),
+            onPressed: () {
+              final controller = ref.read(sessionViewProvider.notifier);
+              if (isWatchingStream) {
+                controller.leaveStream(stream.id);
+              } else {
+                controller.watchStream(stream);
+              }
+              ref.read(routerProvider).go(AppRoutes.workspace);
+            },
+            child: Text(
+              isWatchingStream
+                  ? l10n.streamStopWatching
+                  : l10n.streamWatchScreen,
+            ),
+          ),
         MenuItemButton(
           leadingIcon: const Icon(Icons.chat_bubble_outline_rounded),
           onPressed: () {

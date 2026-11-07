@@ -18,6 +18,7 @@ import 'widgets/media_grid.dart';
 import 'widgets/media_viewer.dart';
 import 'widgets/members_pane.dart';
 import 'widgets/member_avatar.dart';
+import 'widgets/stream_viewer_pane.dart';
 import 'workspace_state.dart';
 
 /// 主区域：频道标题 + 消息 / 媒体两个视图，以及掉线后的空状态。
@@ -92,6 +93,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
                 .cancelIdentityUpgrade,
           ),
         _VoiceAlerts(view: view),
+        StreamViewerSection(view: view),
         Expanded(
           // 视图替换走 crossfade（M3 effects default）：同一容器内换内容
           // 不做位移，避免整块内容跳来跳去。

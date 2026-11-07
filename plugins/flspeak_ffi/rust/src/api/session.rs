@@ -12,9 +12,10 @@ use proto::ConnectError;
 use server::ServerProfile as ServerProfileCore;
 use session::{
     AudioDeviceView as CoreAudioDeviceView, ChannelView as CoreChannelView,
-    ClientView as CoreClientView, SessionError, SessionEvent, SessionHandle,
-    SessionState as SessionStateCore, TextMessageView as CoreTextMessage,
-    TransferDirection as SessionTransferDirection,
+    ClientView as CoreClientView, PublisherSignal as CorePublisherSignal, SessionError,
+    SessionEvent, SessionHandle, SessionState as SessionStateCore,
+    StreamEndReason as CoreStreamEndReason, StreamView as CoreStreamView,
+    TextMessageView as CoreTextMessage, TransferDirection as SessionTransferDirection,
 };
 use tokio::runtime::{Builder, Runtime};
 
@@ -108,6 +109,38 @@ pub struct AudioDevicesView {
 pub enum CoreTransferDirection {
     Upload,
     Download,
+}
+
+#[derive(Debug, Clone)]
+pub struct StreamView {
+    pub id: String,
+    pub client_id: i32,
+    pub name: String,
+    pub has_audio: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum StreamEndReason {
+    SourceStopped,
+    SourceLeft,
+    SourceMoved,
+    SelfMoved,
+    Disconnected,
+    Removed,
+    Rejected,
+    Left,
+}
+
+#[derive(Debug, Clone)]
+pub enum PublisherSignal {
+    Answer {
+        sdp: String,
+    },
+    IceCandidate {
+        sdp: String,
+        mid: Option<String>,
+        m_line: Option<i32>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -208,6 +241,43 @@ pub enum CoreEvent {
     TransferFinished {
         id: u64,
         error: Option<String>,
+    },
+    Streams {
+        streams: Vec<StreamView>,
+        watching: Option<String>,
+    },
+    StreamOffer {
+        stream_id: String,
+        source_client_id: i32,
+        sdp: String,
+    },
+    StreamIceCandidate {
+        stream_id: String,
+        source_client_id: i32,
+        sdp: String,
+        mid: Option<String>,
+        m_line: Option<i32>,
+    },
+    StreamEnded {
+        stream_id: String,
+        reason: StreamEndReason,
+    },
+    ScreenSharePublished {
+        stream_id: String,
+    },
+    ScreenShareStopped,
+    StreamViewerJoinRequested {
+        stream_id: String,
+        viewer_clid: i32,
+    },
+    PublisherSignalReceived {
+        stream_id: String,
+        viewer_clid: i32,
+        signal: PublisherSignal,
+    },
+    StreamViewerLeft {
+        stream_id: String,
+        viewer_clid: i32,
     },
     Log {
         level: String,
@@ -585,6 +655,86 @@ impl CoreSession {
             .await?)
     }
 
+    pub async fn join_stream(&self, stream_id: String, source_clid: i32) -> Result<(), CoreError> {
+        Ok(self.handle.join_stream(stream_id, source_clid).await?)
+    }
+
+    pub async fn leave_stream(&self, stream_id: String) -> Result<(), CoreError> {
+        Ok(self.handle.leave_stream(stream_id).await?)
+    }
+
+    pub async fn send_stream_answer(
+        &self,
+        stream_id: String,
+        target_clid: i32,
+        sdp: String,
+    ) -> Result<(), CoreError> {
+        Ok(self
+            .handle
+            .send_stream_answer(stream_id, target_clid, sdp)
+            .await?)
+    }
+
+    pub async fn send_stream_ice_candidate(
+        &self,
+        stream_id: String,
+        target_clid: i32,
+        sdp: String,
+        mid: Option<String>,
+        m_line: Option<i32>,
+    ) -> Result<(), CoreError> {
+        Ok(self
+            .handle
+            .send_stream_ice_candidate(stream_id, target_clid, sdp, mid, m_line)
+            .await?)
+    }
+
+    pub async fn start_screen_share(
+        &self,
+        name: String,
+        audio: bool,
+        bitrate: u32,
+        viewer_limit: u32,
+    ) -> Result<(), CoreError> {
+        Ok(self
+            .handle
+            .start_screen_share(name, audio, bitrate, viewer_limit)
+            .await?)
+    }
+
+    pub async fn stop_screen_share(&self) -> Result<(), CoreError> {
+        Ok(self.handle.stop_screen_share().await?)
+    }
+
+    pub async fn respond_stream_join_request(
+        &self,
+        viewer_clid: i32,
+        accept: bool,
+        offer_sdp: String,
+    ) -> Result<(), CoreError> {
+        Ok(self
+            .handle
+            .respond_stream_join_request(viewer_clid, accept, offer_sdp)
+            .await?)
+    }
+
+    pub async fn send_publisher_ice_candidate(
+        &self,
+        viewer_clid: i32,
+        sdp: String,
+        mid: Option<String>,
+        m_line: Option<i32>,
+    ) -> Result<(), CoreError> {
+        Ok(self
+            .handle
+            .send_publisher_ice_candidate(viewer_clid, sdp, mid, m_line)
+            .await?)
+    }
+
+    pub async fn kick_stream_viewer(&self, viewer_clid: i32) -> Result<(), CoreError> {
+        Ok(self.handle.kick_stream_viewer(viewer_clid).await?)
+    }
+
     pub async fn shutdown(&self) -> Result<(), CoreError> {
         Ok(self.handle.shutdown().await?)
     }
@@ -729,6 +879,43 @@ impl From<SessionTransferDirection> for CoreTransferDirection {
     }
 }
 
+impl From<CoreStreamView> for StreamView {
+    fn from(view: CoreStreamView) -> Self {
+        Self {
+            id: view.id,
+            client_id: view.client_id,
+            name: view.name,
+            has_audio: view.has_audio,
+        }
+    }
+}
+
+impl From<CoreStreamEndReason> for StreamEndReason {
+    fn from(reason: CoreStreamEndReason) -> Self {
+        match reason {
+            CoreStreamEndReason::SourceStopped => StreamEndReason::SourceStopped,
+            CoreStreamEndReason::SourceLeft => StreamEndReason::SourceLeft,
+            CoreStreamEndReason::SourceMoved => StreamEndReason::SourceMoved,
+            CoreStreamEndReason::SelfMoved => StreamEndReason::SelfMoved,
+            CoreStreamEndReason::Disconnected => StreamEndReason::Disconnected,
+            CoreStreamEndReason::Removed => StreamEndReason::Removed,
+            CoreStreamEndReason::Rejected => StreamEndReason::Rejected,
+            CoreStreamEndReason::Left => StreamEndReason::Left,
+        }
+    }
+}
+
+impl From<CorePublisherSignal> for PublisherSignal {
+    fn from(signal: CorePublisherSignal) -> Self {
+        match signal {
+            CorePublisherSignal::Answer { sdp } => PublisherSignal::Answer { sdp },
+            CorePublisherSignal::IceCandidate { sdp, mid, m_line } => {
+                PublisherSignal::IceCandidate { sdp, mid, m_line }
+            }
+        }
+    }
+}
+
 impl From<session::VoiceStateView> for CoreVoiceState {
     fn from(state: session::VoiceStateView) -> Self {
         Self {
@@ -858,6 +1045,63 @@ impl From<SessionEvent> for CoreEvent {
             SessionEvent::TransferFinished { id, error } => {
                 CoreEvent::TransferFinished { id, error }
             }
+            SessionEvent::Streams { streams, watching } => CoreEvent::Streams {
+                streams: streams.into_iter().map(StreamView::from).collect(),
+                watching,
+            },
+            SessionEvent::StreamOffer {
+                stream_id,
+                source_client_id,
+                sdp,
+            } => CoreEvent::StreamOffer {
+                stream_id,
+                source_client_id,
+                sdp,
+            },
+            SessionEvent::StreamIceCandidate {
+                stream_id,
+                source_client_id,
+                sdp,
+                mid,
+                m_line,
+            } => CoreEvent::StreamIceCandidate {
+                stream_id,
+                source_client_id,
+                sdp,
+                mid,
+                m_line,
+            },
+            SessionEvent::StreamEnded { stream_id, reason } => CoreEvent::StreamEnded {
+                stream_id,
+                reason: reason.into(),
+            },
+            SessionEvent::ScreenSharePublished { stream_id } => {
+                CoreEvent::ScreenSharePublished { stream_id }
+            }
+            SessionEvent::ScreenShareStopped => CoreEvent::ScreenShareStopped,
+            SessionEvent::StreamViewerJoinRequested {
+                stream_id,
+                viewer_clid,
+            } => CoreEvent::StreamViewerJoinRequested {
+                stream_id,
+                viewer_clid,
+            },
+            SessionEvent::PublisherSignalReceived {
+                stream_id,
+                viewer_clid,
+                signal,
+            } => CoreEvent::PublisherSignalReceived {
+                stream_id,
+                viewer_clid,
+                signal: signal.into(),
+            },
+            SessionEvent::StreamViewerLeft {
+                stream_id,
+                viewer_clid,
+            } => CoreEvent::StreamViewerLeft {
+                stream_id,
+                viewer_clid,
+            },
             SessionEvent::Log { level, message } => CoreEvent::Log { level, message },
             SessionEvent::Denied { message } => CoreEvent::Denied { message },
             SessionEvent::Failed { message } => CoreEvent::Failed { message },

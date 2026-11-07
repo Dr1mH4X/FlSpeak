@@ -610,7 +610,7 @@ extension CoreEventPatterns on CoreEvent {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( CoreEvent_Network value)?  network,TResult Function( CoreEvent_AccessChanged value)?  accessChanged,TResult Function( CoreEvent_State value)?  state,TResult Function( CoreEvent_Servers value)?  servers,TResult Function( CoreEvent_Snapshot value)?  snapshot,TResult Function( CoreEvent_History value)?  history,TResult Function( CoreEvent_TextMessage value)?  textMessage,TResult Function( CoreEvent_Poked value)?  poked,TResult Function( CoreEvent_ClientJoined value)?  clientJoined,TResult Function( CoreEvent_ClientLeft value)?  clientLeft,TResult Function( CoreEvent_ClientMoved value)?  clientMoved,TResult Function( CoreEvent_ClientUpdated value)?  clientUpdated,TResult Function( CoreEvent_Voice value)?  voice,TResult Function( CoreEvent_Speaking value)?  speaking,TResult Function( CoreEvent_SelfSpeaking value)?  selfSpeaking,TResult Function( CoreEvent_Levels value)?  levels,TResult Function( CoreEvent_IdentityUpgrade value)?  identityUpgrade,TResult Function( CoreEvent_IdentityUpgraded value)?  identityUpgraded,TResult Function( CoreEvent_TransferStarted value)?  transferStarted,TResult Function( CoreEvent_TransferProgress value)?  transferProgress,TResult Function( CoreEvent_TransferFinished value)?  transferFinished,TResult Function( CoreEvent_Log value)?  log,TResult Function( CoreEvent_Denied value)?  denied,TResult Function( CoreEvent_Failed value)?  failed,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( CoreEvent_Network value)?  network,TResult Function( CoreEvent_AccessChanged value)?  accessChanged,TResult Function( CoreEvent_State value)?  state,TResult Function( CoreEvent_Servers value)?  servers,TResult Function( CoreEvent_Snapshot value)?  snapshot,TResult Function( CoreEvent_History value)?  history,TResult Function( CoreEvent_TextMessage value)?  textMessage,TResult Function( CoreEvent_Poked value)?  poked,TResult Function( CoreEvent_ClientJoined value)?  clientJoined,TResult Function( CoreEvent_ClientLeft value)?  clientLeft,TResult Function( CoreEvent_ClientMoved value)?  clientMoved,TResult Function( CoreEvent_ClientUpdated value)?  clientUpdated,TResult Function( CoreEvent_Voice value)?  voice,TResult Function( CoreEvent_Speaking value)?  speaking,TResult Function( CoreEvent_SelfSpeaking value)?  selfSpeaking,TResult Function( CoreEvent_Levels value)?  levels,TResult Function( CoreEvent_IdentityUpgrade value)?  identityUpgrade,TResult Function( CoreEvent_IdentityUpgraded value)?  identityUpgraded,TResult Function( CoreEvent_TransferStarted value)?  transferStarted,TResult Function( CoreEvent_TransferProgress value)?  transferProgress,TResult Function( CoreEvent_TransferFinished value)?  transferFinished,TResult Function( CoreEvent_Streams value)?  streams,TResult Function( CoreEvent_StreamOffer value)?  streamOffer,TResult Function( CoreEvent_StreamIceCandidate value)?  streamIceCandidate,TResult Function( CoreEvent_StreamEnded value)?  streamEnded,TResult Function( CoreEvent_ScreenSharePublished value)?  screenSharePublished,TResult Function( CoreEvent_ScreenShareStopped value)?  screenShareStopped,TResult Function( CoreEvent_StreamViewerJoinRequested value)?  streamViewerJoinRequested,TResult Function( CoreEvent_PublisherSignalReceived value)?  publisherSignalReceived,TResult Function( CoreEvent_StreamViewerLeft value)?  streamViewerLeft,TResult Function( CoreEvent_Log value)?  log,TResult Function( CoreEvent_Denied value)?  denied,TResult Function( CoreEvent_Failed value)?  failed,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case CoreEvent_Network() when network != null:
@@ -634,7 +634,16 @@ return identityUpgrade(_that);case CoreEvent_IdentityUpgraded() when identityUpg
 return identityUpgraded(_that);case CoreEvent_TransferStarted() when transferStarted != null:
 return transferStarted(_that);case CoreEvent_TransferProgress() when transferProgress != null:
 return transferProgress(_that);case CoreEvent_TransferFinished() when transferFinished != null:
-return transferFinished(_that);case CoreEvent_Log() when log != null:
+return transferFinished(_that);case CoreEvent_Streams() when streams != null:
+return streams(_that);case CoreEvent_StreamOffer() when streamOffer != null:
+return streamOffer(_that);case CoreEvent_StreamIceCandidate() when streamIceCandidate != null:
+return streamIceCandidate(_that);case CoreEvent_StreamEnded() when streamEnded != null:
+return streamEnded(_that);case CoreEvent_ScreenSharePublished() when screenSharePublished != null:
+return screenSharePublished(_that);case CoreEvent_ScreenShareStopped() when screenShareStopped != null:
+return screenShareStopped(_that);case CoreEvent_StreamViewerJoinRequested() when streamViewerJoinRequested != null:
+return streamViewerJoinRequested(_that);case CoreEvent_PublisherSignalReceived() when publisherSignalReceived != null:
+return publisherSignalReceived(_that);case CoreEvent_StreamViewerLeft() when streamViewerLeft != null:
+return streamViewerLeft(_that);case CoreEvent_Log() when log != null:
 return log(_that);case CoreEvent_Denied() when denied != null:
 return denied(_that);case CoreEvent_Failed() when failed != null:
 return failed(_that);case _:
@@ -655,7 +664,7 @@ return failed(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( CoreEvent_Network value)  network,required TResult Function( CoreEvent_AccessChanged value)  accessChanged,required TResult Function( CoreEvent_State value)  state,required TResult Function( CoreEvent_Servers value)  servers,required TResult Function( CoreEvent_Snapshot value)  snapshot,required TResult Function( CoreEvent_History value)  history,required TResult Function( CoreEvent_TextMessage value)  textMessage,required TResult Function( CoreEvent_Poked value)  poked,required TResult Function( CoreEvent_ClientJoined value)  clientJoined,required TResult Function( CoreEvent_ClientLeft value)  clientLeft,required TResult Function( CoreEvent_ClientMoved value)  clientMoved,required TResult Function( CoreEvent_ClientUpdated value)  clientUpdated,required TResult Function( CoreEvent_Voice value)  voice,required TResult Function( CoreEvent_Speaking value)  speaking,required TResult Function( CoreEvent_SelfSpeaking value)  selfSpeaking,required TResult Function( CoreEvent_Levels value)  levels,required TResult Function( CoreEvent_IdentityUpgrade value)  identityUpgrade,required TResult Function( CoreEvent_IdentityUpgraded value)  identityUpgraded,required TResult Function( CoreEvent_TransferStarted value)  transferStarted,required TResult Function( CoreEvent_TransferProgress value)  transferProgress,required TResult Function( CoreEvent_TransferFinished value)  transferFinished,required TResult Function( CoreEvent_Log value)  log,required TResult Function( CoreEvent_Denied value)  denied,required TResult Function( CoreEvent_Failed value)  failed,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( CoreEvent_Network value)  network,required TResult Function( CoreEvent_AccessChanged value)  accessChanged,required TResult Function( CoreEvent_State value)  state,required TResult Function( CoreEvent_Servers value)  servers,required TResult Function( CoreEvent_Snapshot value)  snapshot,required TResult Function( CoreEvent_History value)  history,required TResult Function( CoreEvent_TextMessage value)  textMessage,required TResult Function( CoreEvent_Poked value)  poked,required TResult Function( CoreEvent_ClientJoined value)  clientJoined,required TResult Function( CoreEvent_ClientLeft value)  clientLeft,required TResult Function( CoreEvent_ClientMoved value)  clientMoved,required TResult Function( CoreEvent_ClientUpdated value)  clientUpdated,required TResult Function( CoreEvent_Voice value)  voice,required TResult Function( CoreEvent_Speaking value)  speaking,required TResult Function( CoreEvent_SelfSpeaking value)  selfSpeaking,required TResult Function( CoreEvent_Levels value)  levels,required TResult Function( CoreEvent_IdentityUpgrade value)  identityUpgrade,required TResult Function( CoreEvent_IdentityUpgraded value)  identityUpgraded,required TResult Function( CoreEvent_TransferStarted value)  transferStarted,required TResult Function( CoreEvent_TransferProgress value)  transferProgress,required TResult Function( CoreEvent_TransferFinished value)  transferFinished,required TResult Function( CoreEvent_Streams value)  streams,required TResult Function( CoreEvent_StreamOffer value)  streamOffer,required TResult Function( CoreEvent_StreamIceCandidate value)  streamIceCandidate,required TResult Function( CoreEvent_StreamEnded value)  streamEnded,required TResult Function( CoreEvent_ScreenSharePublished value)  screenSharePublished,required TResult Function( CoreEvent_ScreenShareStopped value)  screenShareStopped,required TResult Function( CoreEvent_StreamViewerJoinRequested value)  streamViewerJoinRequested,required TResult Function( CoreEvent_PublisherSignalReceived value)  publisherSignalReceived,required TResult Function( CoreEvent_StreamViewerLeft value)  streamViewerLeft,required TResult Function( CoreEvent_Log value)  log,required TResult Function( CoreEvent_Denied value)  denied,required TResult Function( CoreEvent_Failed value)  failed,}){
 final _that = this;
 switch (_that) {
 case CoreEvent_Network():
@@ -679,7 +688,16 @@ return identityUpgrade(_that);case CoreEvent_IdentityUpgraded():
 return identityUpgraded(_that);case CoreEvent_TransferStarted():
 return transferStarted(_that);case CoreEvent_TransferProgress():
 return transferProgress(_that);case CoreEvent_TransferFinished():
-return transferFinished(_that);case CoreEvent_Log():
+return transferFinished(_that);case CoreEvent_Streams():
+return streams(_that);case CoreEvent_StreamOffer():
+return streamOffer(_that);case CoreEvent_StreamIceCandidate():
+return streamIceCandidate(_that);case CoreEvent_StreamEnded():
+return streamEnded(_that);case CoreEvent_ScreenSharePublished():
+return screenSharePublished(_that);case CoreEvent_ScreenShareStopped():
+return screenShareStopped(_that);case CoreEvent_StreamViewerJoinRequested():
+return streamViewerJoinRequested(_that);case CoreEvent_PublisherSignalReceived():
+return publisherSignalReceived(_that);case CoreEvent_StreamViewerLeft():
+return streamViewerLeft(_that);case CoreEvent_Log():
 return log(_that);case CoreEvent_Denied():
 return denied(_that);case CoreEvent_Failed():
 return failed(_that);}
@@ -696,7 +714,7 @@ return failed(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( CoreEvent_Network value)?  network,TResult? Function( CoreEvent_AccessChanged value)?  accessChanged,TResult? Function( CoreEvent_State value)?  state,TResult? Function( CoreEvent_Servers value)?  servers,TResult? Function( CoreEvent_Snapshot value)?  snapshot,TResult? Function( CoreEvent_History value)?  history,TResult? Function( CoreEvent_TextMessage value)?  textMessage,TResult? Function( CoreEvent_Poked value)?  poked,TResult? Function( CoreEvent_ClientJoined value)?  clientJoined,TResult? Function( CoreEvent_ClientLeft value)?  clientLeft,TResult? Function( CoreEvent_ClientMoved value)?  clientMoved,TResult? Function( CoreEvent_ClientUpdated value)?  clientUpdated,TResult? Function( CoreEvent_Voice value)?  voice,TResult? Function( CoreEvent_Speaking value)?  speaking,TResult? Function( CoreEvent_SelfSpeaking value)?  selfSpeaking,TResult? Function( CoreEvent_Levels value)?  levels,TResult? Function( CoreEvent_IdentityUpgrade value)?  identityUpgrade,TResult? Function( CoreEvent_IdentityUpgraded value)?  identityUpgraded,TResult? Function( CoreEvent_TransferStarted value)?  transferStarted,TResult? Function( CoreEvent_TransferProgress value)?  transferProgress,TResult? Function( CoreEvent_TransferFinished value)?  transferFinished,TResult? Function( CoreEvent_Log value)?  log,TResult? Function( CoreEvent_Denied value)?  denied,TResult? Function( CoreEvent_Failed value)?  failed,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( CoreEvent_Network value)?  network,TResult? Function( CoreEvent_AccessChanged value)?  accessChanged,TResult? Function( CoreEvent_State value)?  state,TResult? Function( CoreEvent_Servers value)?  servers,TResult? Function( CoreEvent_Snapshot value)?  snapshot,TResult? Function( CoreEvent_History value)?  history,TResult? Function( CoreEvent_TextMessage value)?  textMessage,TResult? Function( CoreEvent_Poked value)?  poked,TResult? Function( CoreEvent_ClientJoined value)?  clientJoined,TResult? Function( CoreEvent_ClientLeft value)?  clientLeft,TResult? Function( CoreEvent_ClientMoved value)?  clientMoved,TResult? Function( CoreEvent_ClientUpdated value)?  clientUpdated,TResult? Function( CoreEvent_Voice value)?  voice,TResult? Function( CoreEvent_Speaking value)?  speaking,TResult? Function( CoreEvent_SelfSpeaking value)?  selfSpeaking,TResult? Function( CoreEvent_Levels value)?  levels,TResult? Function( CoreEvent_IdentityUpgrade value)?  identityUpgrade,TResult? Function( CoreEvent_IdentityUpgraded value)?  identityUpgraded,TResult? Function( CoreEvent_TransferStarted value)?  transferStarted,TResult? Function( CoreEvent_TransferProgress value)?  transferProgress,TResult? Function( CoreEvent_TransferFinished value)?  transferFinished,TResult? Function( CoreEvent_Streams value)?  streams,TResult? Function( CoreEvent_StreamOffer value)?  streamOffer,TResult? Function( CoreEvent_StreamIceCandidate value)?  streamIceCandidate,TResult? Function( CoreEvent_StreamEnded value)?  streamEnded,TResult? Function( CoreEvent_ScreenSharePublished value)?  screenSharePublished,TResult? Function( CoreEvent_ScreenShareStopped value)?  screenShareStopped,TResult? Function( CoreEvent_StreamViewerJoinRequested value)?  streamViewerJoinRequested,TResult? Function( CoreEvent_PublisherSignalReceived value)?  publisherSignalReceived,TResult? Function( CoreEvent_StreamViewerLeft value)?  streamViewerLeft,TResult? Function( CoreEvent_Log value)?  log,TResult? Function( CoreEvent_Denied value)?  denied,TResult? Function( CoreEvent_Failed value)?  failed,}){
 final _that = this;
 switch (_that) {
 case CoreEvent_Network() when network != null:
@@ -720,7 +738,16 @@ return identityUpgrade(_that);case CoreEvent_IdentityUpgraded() when identityUpg
 return identityUpgraded(_that);case CoreEvent_TransferStarted() when transferStarted != null:
 return transferStarted(_that);case CoreEvent_TransferProgress() when transferProgress != null:
 return transferProgress(_that);case CoreEvent_TransferFinished() when transferFinished != null:
-return transferFinished(_that);case CoreEvent_Log() when log != null:
+return transferFinished(_that);case CoreEvent_Streams() when streams != null:
+return streams(_that);case CoreEvent_StreamOffer() when streamOffer != null:
+return streamOffer(_that);case CoreEvent_StreamIceCandidate() when streamIceCandidate != null:
+return streamIceCandidate(_that);case CoreEvent_StreamEnded() when streamEnded != null:
+return streamEnded(_that);case CoreEvent_ScreenSharePublished() when screenSharePublished != null:
+return screenSharePublished(_that);case CoreEvent_ScreenShareStopped() when screenShareStopped != null:
+return screenShareStopped(_that);case CoreEvent_StreamViewerJoinRequested() when streamViewerJoinRequested != null:
+return streamViewerJoinRequested(_that);case CoreEvent_PublisherSignalReceived() when publisherSignalReceived != null:
+return publisherSignalReceived(_that);case CoreEvent_StreamViewerLeft() when streamViewerLeft != null:
+return streamViewerLeft(_that);case CoreEvent_Log() when log != null:
 return log(_that);case CoreEvent_Denied() when denied != null:
 return denied(_that);case CoreEvent_Failed() when failed != null:
 return failed(_that);case _:
@@ -740,7 +767,7 @@ return failed(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( NetworkTelemetry telemetry)?  network,TResult Function()?  accessChanged,TResult Function( CoreSessionState state)?  state,TResult Function( List<ServerProfileView> profiles)?  servers,TResult Function( List<ChannelView> channels,  List<ClientView> clients)?  snapshot,TResult Function( List<CoreMessage> messages)?  history,TResult Function( String from,  String fromUid,  int fromId,  String message,  int targetMode,  int targetId,  int at)?  textMessage,TResult Function( String from,  String message)?  poked,TResult Function( int id,  String nickname,  String uid,  int channelId)?  clientJoined,TResult Function( int id)?  clientLeft,TResult Function( int id,  int channelId)?  clientMoved,TResult Function( int id,  bool? inputMuted,  bool? outputMuted,  bool? away,  String? awayMessage)?  clientUpdated,TResult Function( CoreVoiceState state)?  voice,TResult Function( Int32List clientIds)?  speaking,TResult Function( bool speaking)?  selfSpeaking,TResult Function( double mic,  double received)?  levels,TResult Function( int from,  int to)?  identityUpgrade,TResult Function( int level)?  identityUpgraded,TResult Function( int id,  CoreTransferDirection direction,  String remotePath,  int total)?  transferStarted,TResult Function( int id,  int transferred,  int total)?  transferProgress,TResult Function( int id,  String? error)?  transferFinished,TResult Function( String level,  String message)?  log,TResult Function( String message)?  denied,TResult Function( String message)?  failed,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( NetworkTelemetry telemetry)?  network,TResult Function()?  accessChanged,TResult Function( CoreSessionState state)?  state,TResult Function( List<ServerProfileView> profiles)?  servers,TResult Function( List<ChannelView> channels,  List<ClientView> clients)?  snapshot,TResult Function( List<CoreMessage> messages)?  history,TResult Function( String from,  String fromUid,  int fromId,  String message,  int targetMode,  int targetId,  int at)?  textMessage,TResult Function( String from,  String message)?  poked,TResult Function( int id,  String nickname,  String uid,  int channelId)?  clientJoined,TResult Function( int id)?  clientLeft,TResult Function( int id,  int channelId)?  clientMoved,TResult Function( int id,  bool? inputMuted,  bool? outputMuted,  bool? away,  String? awayMessage)?  clientUpdated,TResult Function( CoreVoiceState state)?  voice,TResult Function( Int32List clientIds)?  speaking,TResult Function( bool speaking)?  selfSpeaking,TResult Function( double mic,  double received)?  levels,TResult Function( int from,  int to)?  identityUpgrade,TResult Function( int level)?  identityUpgraded,TResult Function( int id,  CoreTransferDirection direction,  String remotePath,  int total)?  transferStarted,TResult Function( int id,  int transferred,  int total)?  transferProgress,TResult Function( int id,  String? error)?  transferFinished,TResult Function( List<StreamView> streams,  String? watching)?  streams,TResult Function( String streamId,  int sourceClientId,  String sdp)?  streamOffer,TResult Function( String streamId,  int sourceClientId,  String sdp,  String? mid,  int? mLine)?  streamIceCandidate,TResult Function( String streamId,  StreamEndReason reason)?  streamEnded,TResult Function( String streamId)?  screenSharePublished,TResult Function()?  screenShareStopped,TResult Function( String streamId,  int viewerClid)?  streamViewerJoinRequested,TResult Function( String streamId,  int viewerClid,  PublisherSignal signal)?  publisherSignalReceived,TResult Function( String streamId,  int viewerClid)?  streamViewerLeft,TResult Function( String level,  String message)?  log,TResult Function( String message)?  denied,TResult Function( String message)?  failed,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case CoreEvent_Network() when network != null:
 return network(_that.telemetry);case CoreEvent_AccessChanged() when accessChanged != null:
@@ -763,7 +790,16 @@ return identityUpgrade(_that.from,_that.to);case CoreEvent_IdentityUpgraded() wh
 return identityUpgraded(_that.level);case CoreEvent_TransferStarted() when transferStarted != null:
 return transferStarted(_that.id,_that.direction,_that.remotePath,_that.total);case CoreEvent_TransferProgress() when transferProgress != null:
 return transferProgress(_that.id,_that.transferred,_that.total);case CoreEvent_TransferFinished() when transferFinished != null:
-return transferFinished(_that.id,_that.error);case CoreEvent_Log() when log != null:
+return transferFinished(_that.id,_that.error);case CoreEvent_Streams() when streams != null:
+return streams(_that.streams,_that.watching);case CoreEvent_StreamOffer() when streamOffer != null:
+return streamOffer(_that.streamId,_that.sourceClientId,_that.sdp);case CoreEvent_StreamIceCandidate() when streamIceCandidate != null:
+return streamIceCandidate(_that.streamId,_that.sourceClientId,_that.sdp,_that.mid,_that.mLine);case CoreEvent_StreamEnded() when streamEnded != null:
+return streamEnded(_that.streamId,_that.reason);case CoreEvent_ScreenSharePublished() when screenSharePublished != null:
+return screenSharePublished(_that.streamId);case CoreEvent_ScreenShareStopped() when screenShareStopped != null:
+return screenShareStopped();case CoreEvent_StreamViewerJoinRequested() when streamViewerJoinRequested != null:
+return streamViewerJoinRequested(_that.streamId,_that.viewerClid);case CoreEvent_PublisherSignalReceived() when publisherSignalReceived != null:
+return publisherSignalReceived(_that.streamId,_that.viewerClid,_that.signal);case CoreEvent_StreamViewerLeft() when streamViewerLeft != null:
+return streamViewerLeft(_that.streamId,_that.viewerClid);case CoreEvent_Log() when log != null:
 return log(_that.level,_that.message);case CoreEvent_Denied() when denied != null:
 return denied(_that.message);case CoreEvent_Failed() when failed != null:
 return failed(_that.message);case _:
@@ -784,7 +820,7 @@ return failed(_that.message);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( NetworkTelemetry telemetry)  network,required TResult Function()  accessChanged,required TResult Function( CoreSessionState state)  state,required TResult Function( List<ServerProfileView> profiles)  servers,required TResult Function( List<ChannelView> channels,  List<ClientView> clients)  snapshot,required TResult Function( List<CoreMessage> messages)  history,required TResult Function( String from,  String fromUid,  int fromId,  String message,  int targetMode,  int targetId,  int at)  textMessage,required TResult Function( String from,  String message)  poked,required TResult Function( int id,  String nickname,  String uid,  int channelId)  clientJoined,required TResult Function( int id)  clientLeft,required TResult Function( int id,  int channelId)  clientMoved,required TResult Function( int id,  bool? inputMuted,  bool? outputMuted,  bool? away,  String? awayMessage)  clientUpdated,required TResult Function( CoreVoiceState state)  voice,required TResult Function( Int32List clientIds)  speaking,required TResult Function( bool speaking)  selfSpeaking,required TResult Function( double mic,  double received)  levels,required TResult Function( int from,  int to)  identityUpgrade,required TResult Function( int level)  identityUpgraded,required TResult Function( int id,  CoreTransferDirection direction,  String remotePath,  int total)  transferStarted,required TResult Function( int id,  int transferred,  int total)  transferProgress,required TResult Function( int id,  String? error)  transferFinished,required TResult Function( String level,  String message)  log,required TResult Function( String message)  denied,required TResult Function( String message)  failed,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( NetworkTelemetry telemetry)  network,required TResult Function()  accessChanged,required TResult Function( CoreSessionState state)  state,required TResult Function( List<ServerProfileView> profiles)  servers,required TResult Function( List<ChannelView> channels,  List<ClientView> clients)  snapshot,required TResult Function( List<CoreMessage> messages)  history,required TResult Function( String from,  String fromUid,  int fromId,  String message,  int targetMode,  int targetId,  int at)  textMessage,required TResult Function( String from,  String message)  poked,required TResult Function( int id,  String nickname,  String uid,  int channelId)  clientJoined,required TResult Function( int id)  clientLeft,required TResult Function( int id,  int channelId)  clientMoved,required TResult Function( int id,  bool? inputMuted,  bool? outputMuted,  bool? away,  String? awayMessage)  clientUpdated,required TResult Function( CoreVoiceState state)  voice,required TResult Function( Int32List clientIds)  speaking,required TResult Function( bool speaking)  selfSpeaking,required TResult Function( double mic,  double received)  levels,required TResult Function( int from,  int to)  identityUpgrade,required TResult Function( int level)  identityUpgraded,required TResult Function( int id,  CoreTransferDirection direction,  String remotePath,  int total)  transferStarted,required TResult Function( int id,  int transferred,  int total)  transferProgress,required TResult Function( int id,  String? error)  transferFinished,required TResult Function( List<StreamView> streams,  String? watching)  streams,required TResult Function( String streamId,  int sourceClientId,  String sdp)  streamOffer,required TResult Function( String streamId,  int sourceClientId,  String sdp,  String? mid,  int? mLine)  streamIceCandidate,required TResult Function( String streamId,  StreamEndReason reason)  streamEnded,required TResult Function( String streamId)  screenSharePublished,required TResult Function()  screenShareStopped,required TResult Function( String streamId,  int viewerClid)  streamViewerJoinRequested,required TResult Function( String streamId,  int viewerClid,  PublisherSignal signal)  publisherSignalReceived,required TResult Function( String streamId,  int viewerClid)  streamViewerLeft,required TResult Function( String level,  String message)  log,required TResult Function( String message)  denied,required TResult Function( String message)  failed,}) {final _that = this;
 switch (_that) {
 case CoreEvent_Network():
 return network(_that.telemetry);case CoreEvent_AccessChanged():
@@ -807,7 +843,16 @@ return identityUpgrade(_that.from,_that.to);case CoreEvent_IdentityUpgraded():
 return identityUpgraded(_that.level);case CoreEvent_TransferStarted():
 return transferStarted(_that.id,_that.direction,_that.remotePath,_that.total);case CoreEvent_TransferProgress():
 return transferProgress(_that.id,_that.transferred,_that.total);case CoreEvent_TransferFinished():
-return transferFinished(_that.id,_that.error);case CoreEvent_Log():
+return transferFinished(_that.id,_that.error);case CoreEvent_Streams():
+return streams(_that.streams,_that.watching);case CoreEvent_StreamOffer():
+return streamOffer(_that.streamId,_that.sourceClientId,_that.sdp);case CoreEvent_StreamIceCandidate():
+return streamIceCandidate(_that.streamId,_that.sourceClientId,_that.sdp,_that.mid,_that.mLine);case CoreEvent_StreamEnded():
+return streamEnded(_that.streamId,_that.reason);case CoreEvent_ScreenSharePublished():
+return screenSharePublished(_that.streamId);case CoreEvent_ScreenShareStopped():
+return screenShareStopped();case CoreEvent_StreamViewerJoinRequested():
+return streamViewerJoinRequested(_that.streamId,_that.viewerClid);case CoreEvent_PublisherSignalReceived():
+return publisherSignalReceived(_that.streamId,_that.viewerClid,_that.signal);case CoreEvent_StreamViewerLeft():
+return streamViewerLeft(_that.streamId,_that.viewerClid);case CoreEvent_Log():
 return log(_that.level,_that.message);case CoreEvent_Denied():
 return denied(_that.message);case CoreEvent_Failed():
 return failed(_that.message);}
@@ -824,7 +869,7 @@ return failed(_that.message);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( NetworkTelemetry telemetry)?  network,TResult? Function()?  accessChanged,TResult? Function( CoreSessionState state)?  state,TResult? Function( List<ServerProfileView> profiles)?  servers,TResult? Function( List<ChannelView> channels,  List<ClientView> clients)?  snapshot,TResult? Function( List<CoreMessage> messages)?  history,TResult? Function( String from,  String fromUid,  int fromId,  String message,  int targetMode,  int targetId,  int at)?  textMessage,TResult? Function( String from,  String message)?  poked,TResult? Function( int id,  String nickname,  String uid,  int channelId)?  clientJoined,TResult? Function( int id)?  clientLeft,TResult? Function( int id,  int channelId)?  clientMoved,TResult? Function( int id,  bool? inputMuted,  bool? outputMuted,  bool? away,  String? awayMessage)?  clientUpdated,TResult? Function( CoreVoiceState state)?  voice,TResult? Function( Int32List clientIds)?  speaking,TResult? Function( bool speaking)?  selfSpeaking,TResult? Function( double mic,  double received)?  levels,TResult? Function( int from,  int to)?  identityUpgrade,TResult? Function( int level)?  identityUpgraded,TResult? Function( int id,  CoreTransferDirection direction,  String remotePath,  int total)?  transferStarted,TResult? Function( int id,  int transferred,  int total)?  transferProgress,TResult? Function( int id,  String? error)?  transferFinished,TResult? Function( String level,  String message)?  log,TResult? Function( String message)?  denied,TResult? Function( String message)?  failed,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( NetworkTelemetry telemetry)?  network,TResult? Function()?  accessChanged,TResult? Function( CoreSessionState state)?  state,TResult? Function( List<ServerProfileView> profiles)?  servers,TResult? Function( List<ChannelView> channels,  List<ClientView> clients)?  snapshot,TResult? Function( List<CoreMessage> messages)?  history,TResult? Function( String from,  String fromUid,  int fromId,  String message,  int targetMode,  int targetId,  int at)?  textMessage,TResult? Function( String from,  String message)?  poked,TResult? Function( int id,  String nickname,  String uid,  int channelId)?  clientJoined,TResult? Function( int id)?  clientLeft,TResult? Function( int id,  int channelId)?  clientMoved,TResult? Function( int id,  bool? inputMuted,  bool? outputMuted,  bool? away,  String? awayMessage)?  clientUpdated,TResult? Function( CoreVoiceState state)?  voice,TResult? Function( Int32List clientIds)?  speaking,TResult? Function( bool speaking)?  selfSpeaking,TResult? Function( double mic,  double received)?  levels,TResult? Function( int from,  int to)?  identityUpgrade,TResult? Function( int level)?  identityUpgraded,TResult? Function( int id,  CoreTransferDirection direction,  String remotePath,  int total)?  transferStarted,TResult? Function( int id,  int transferred,  int total)?  transferProgress,TResult? Function( int id,  String? error)?  transferFinished,TResult? Function( List<StreamView> streams,  String? watching)?  streams,TResult? Function( String streamId,  int sourceClientId,  String sdp)?  streamOffer,TResult? Function( String streamId,  int sourceClientId,  String sdp,  String? mid,  int? mLine)?  streamIceCandidate,TResult? Function( String streamId,  StreamEndReason reason)?  streamEnded,TResult? Function( String streamId)?  screenSharePublished,TResult? Function()?  screenShareStopped,TResult? Function( String streamId,  int viewerClid)?  streamViewerJoinRequested,TResult? Function( String streamId,  int viewerClid,  PublisherSignal signal)?  publisherSignalReceived,TResult? Function( String streamId,  int viewerClid)?  streamViewerLeft,TResult? Function( String level,  String message)?  log,TResult? Function( String message)?  denied,TResult? Function( String message)?  failed,}) {final _that = this;
 switch (_that) {
 case CoreEvent_Network() when network != null:
 return network(_that.telemetry);case CoreEvent_AccessChanged() when accessChanged != null:
@@ -847,7 +892,16 @@ return identityUpgrade(_that.from,_that.to);case CoreEvent_IdentityUpgraded() wh
 return identityUpgraded(_that.level);case CoreEvent_TransferStarted() when transferStarted != null:
 return transferStarted(_that.id,_that.direction,_that.remotePath,_that.total);case CoreEvent_TransferProgress() when transferProgress != null:
 return transferProgress(_that.id,_that.transferred,_that.total);case CoreEvent_TransferFinished() when transferFinished != null:
-return transferFinished(_that.id,_that.error);case CoreEvent_Log() when log != null:
+return transferFinished(_that.id,_that.error);case CoreEvent_Streams() when streams != null:
+return streams(_that.streams,_that.watching);case CoreEvent_StreamOffer() when streamOffer != null:
+return streamOffer(_that.streamId,_that.sourceClientId,_that.sdp);case CoreEvent_StreamIceCandidate() when streamIceCandidate != null:
+return streamIceCandidate(_that.streamId,_that.sourceClientId,_that.sdp,_that.mid,_that.mLine);case CoreEvent_StreamEnded() when streamEnded != null:
+return streamEnded(_that.streamId,_that.reason);case CoreEvent_ScreenSharePublished() when screenSharePublished != null:
+return screenSharePublished(_that.streamId);case CoreEvent_ScreenShareStopped() when screenShareStopped != null:
+return screenShareStopped();case CoreEvent_StreamViewerJoinRequested() when streamViewerJoinRequested != null:
+return streamViewerJoinRequested(_that.streamId,_that.viewerClid);case CoreEvent_PublisherSignalReceived() when publisherSignalReceived != null:
+return publisherSignalReceived(_that.streamId,_that.viewerClid,_that.signal);case CoreEvent_StreamViewerLeft() when streamViewerLeft != null:
+return streamViewerLeft(_that.streamId,_that.viewerClid);case CoreEvent_Log() when log != null:
 return log(_that.level,_that.message);case CoreEvent_Denied() when denied != null:
 return denied(_that.message);case CoreEvent_Failed() when failed != null:
 return failed(_that.message);case _:
@@ -2334,6 +2388,621 @@ as String?,
 /// @nodoc
 
 
+class CoreEvent_Streams extends CoreEvent {
+  const CoreEvent_Streams({required  List<StreamView> streams, this.watching}): _streams = streams,super._();
+  
+
+ final  List<StreamView> _streams;
+ List<StreamView> get streams {
+  if (_streams is EqualUnmodifiableListView) return _streams;
+  // ignore: implicit_dynamic_type
+  return EqualUnmodifiableListView(_streams);
+}
+
+ final  String? watching;
+
+/// Create a copy of CoreEvent
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$CoreEvent_StreamsCopyWith<CoreEvent_Streams> get copyWith => _$CoreEvent_StreamsCopyWithImpl<CoreEvent_Streams>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is CoreEvent_Streams&&const DeepCollectionEquality().equals(other.streams, _streams)&&(identical(other.watching, watching) || other.watching == watching));
+}
+
+
+@override
+int get hashCode {
+    return Object.hash(runtimeType,const DeepCollectionEquality().hash(_streams),watching);
+}
+
+@override
+String toString() {
+    return 'CoreEvent.streams(streams: $streams, watching: $watching)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $CoreEvent_StreamsCopyWith<$Res> implements $CoreEventCopyWith<$Res> {
+  factory $CoreEvent_StreamsCopyWith(CoreEvent_Streams value, $Res Function(CoreEvent_Streams) _then) = _$CoreEvent_StreamsCopyWithImpl;
+@useResult
+$Res call({
+ List<StreamView> streams, String? watching
+});
+
+
+
+
+}
+/// @nodoc
+class _$CoreEvent_StreamsCopyWithImpl<$Res>
+    implements $CoreEvent_StreamsCopyWith<$Res> {
+  _$CoreEvent_StreamsCopyWithImpl(this._self, this._then);
+
+  final CoreEvent_Streams _self;
+  final $Res Function(CoreEvent_Streams) _then;
+
+/// Create a copy of CoreEvent
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? streams = null,Object? watching = freezed,}) {
+  return _then(CoreEvent_Streams(
+streams: null == streams ? _self._streams : streams // ignore: cast_nullable_to_non_nullable
+as List<StreamView>,watching: freezed == watching ? _self.watching : watching // ignore: cast_nullable_to_non_nullable
+as String?,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class CoreEvent_StreamOffer extends CoreEvent {
+  const CoreEvent_StreamOffer({required this.streamId, required this.sourceClientId, required this.sdp}): super._();
+  
+
+ final  String streamId;
+ final  int sourceClientId;
+ final  String sdp;
+
+/// Create a copy of CoreEvent
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$CoreEvent_StreamOfferCopyWith<CoreEvent_StreamOffer> get copyWith => _$CoreEvent_StreamOfferCopyWithImpl<CoreEvent_StreamOffer>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is CoreEvent_StreamOffer&&(identical(other.streamId, streamId) || other.streamId == streamId)&&(identical(other.sourceClientId, sourceClientId) || other.sourceClientId == sourceClientId)&&(identical(other.sdp, sdp) || other.sdp == sdp));
+}
+
+
+@override
+int get hashCode {
+    return Object.hash(runtimeType,streamId,sourceClientId,sdp);
+}
+
+@override
+String toString() {
+    return 'CoreEvent.streamOffer(streamId: $streamId, sourceClientId: $sourceClientId, sdp: $sdp)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $CoreEvent_StreamOfferCopyWith<$Res> implements $CoreEventCopyWith<$Res> {
+  factory $CoreEvent_StreamOfferCopyWith(CoreEvent_StreamOffer value, $Res Function(CoreEvent_StreamOffer) _then) = _$CoreEvent_StreamOfferCopyWithImpl;
+@useResult
+$Res call({
+ String streamId, int sourceClientId, String sdp
+});
+
+
+
+
+}
+/// @nodoc
+class _$CoreEvent_StreamOfferCopyWithImpl<$Res>
+    implements $CoreEvent_StreamOfferCopyWith<$Res> {
+  _$CoreEvent_StreamOfferCopyWithImpl(this._self, this._then);
+
+  final CoreEvent_StreamOffer _self;
+  final $Res Function(CoreEvent_StreamOffer) _then;
+
+/// Create a copy of CoreEvent
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? streamId = null,Object? sourceClientId = null,Object? sdp = null,}) {
+  return _then(CoreEvent_StreamOffer(
+streamId: null == streamId ? _self.streamId : streamId // ignore: cast_nullable_to_non_nullable
+as String,sourceClientId: null == sourceClientId ? _self.sourceClientId : sourceClientId // ignore: cast_nullable_to_non_nullable
+as int,sdp: null == sdp ? _self.sdp : sdp // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class CoreEvent_StreamIceCandidate extends CoreEvent {
+  const CoreEvent_StreamIceCandidate({required this.streamId, required this.sourceClientId, required this.sdp, this.mid, this.mLine}): super._();
+  
+
+ final  String streamId;
+ final  int sourceClientId;
+ final  String sdp;
+ final  String? mid;
+ final  int? mLine;
+
+/// Create a copy of CoreEvent
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$CoreEvent_StreamIceCandidateCopyWith<CoreEvent_StreamIceCandidate> get copyWith => _$CoreEvent_StreamIceCandidateCopyWithImpl<CoreEvent_StreamIceCandidate>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is CoreEvent_StreamIceCandidate&&(identical(other.streamId, streamId) || other.streamId == streamId)&&(identical(other.sourceClientId, sourceClientId) || other.sourceClientId == sourceClientId)&&(identical(other.sdp, sdp) || other.sdp == sdp)&&(identical(other.mid, mid) || other.mid == mid)&&(identical(other.mLine, mLine) || other.mLine == mLine));
+}
+
+
+@override
+int get hashCode {
+    return Object.hash(runtimeType,streamId,sourceClientId,sdp,mid,mLine);
+}
+
+@override
+String toString() {
+    return 'CoreEvent.streamIceCandidate(streamId: $streamId, sourceClientId: $sourceClientId, sdp: $sdp, mid: $mid, mLine: $mLine)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $CoreEvent_StreamIceCandidateCopyWith<$Res> implements $CoreEventCopyWith<$Res> {
+  factory $CoreEvent_StreamIceCandidateCopyWith(CoreEvent_StreamIceCandidate value, $Res Function(CoreEvent_StreamIceCandidate) _then) = _$CoreEvent_StreamIceCandidateCopyWithImpl;
+@useResult
+$Res call({
+ String streamId, int sourceClientId, String sdp, String? mid, int? mLine
+});
+
+
+
+
+}
+/// @nodoc
+class _$CoreEvent_StreamIceCandidateCopyWithImpl<$Res>
+    implements $CoreEvent_StreamIceCandidateCopyWith<$Res> {
+  _$CoreEvent_StreamIceCandidateCopyWithImpl(this._self, this._then);
+
+  final CoreEvent_StreamIceCandidate _self;
+  final $Res Function(CoreEvent_StreamIceCandidate) _then;
+
+/// Create a copy of CoreEvent
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? streamId = null,Object? sourceClientId = null,Object? sdp = null,Object? mid = freezed,Object? mLine = freezed,}) {
+  return _then(CoreEvent_StreamIceCandidate(
+streamId: null == streamId ? _self.streamId : streamId // ignore: cast_nullable_to_non_nullable
+as String,sourceClientId: null == sourceClientId ? _self.sourceClientId : sourceClientId // ignore: cast_nullable_to_non_nullable
+as int,sdp: null == sdp ? _self.sdp : sdp // ignore: cast_nullable_to_non_nullable
+as String,mid: freezed == mid ? _self.mid : mid // ignore: cast_nullable_to_non_nullable
+as String?,mLine: freezed == mLine ? _self.mLine : mLine // ignore: cast_nullable_to_non_nullable
+as int?,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class CoreEvent_StreamEnded extends CoreEvent {
+  const CoreEvent_StreamEnded({required this.streamId, required this.reason}): super._();
+  
+
+ final  String streamId;
+ final  StreamEndReason reason;
+
+/// Create a copy of CoreEvent
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$CoreEvent_StreamEndedCopyWith<CoreEvent_StreamEnded> get copyWith => _$CoreEvent_StreamEndedCopyWithImpl<CoreEvent_StreamEnded>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is CoreEvent_StreamEnded&&(identical(other.streamId, streamId) || other.streamId == streamId)&&(identical(other.reason, reason) || other.reason == reason));
+}
+
+
+@override
+int get hashCode {
+    return Object.hash(runtimeType,streamId,reason);
+}
+
+@override
+String toString() {
+    return 'CoreEvent.streamEnded(streamId: $streamId, reason: $reason)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $CoreEvent_StreamEndedCopyWith<$Res> implements $CoreEventCopyWith<$Res> {
+  factory $CoreEvent_StreamEndedCopyWith(CoreEvent_StreamEnded value, $Res Function(CoreEvent_StreamEnded) _then) = _$CoreEvent_StreamEndedCopyWithImpl;
+@useResult
+$Res call({
+ String streamId, StreamEndReason reason
+});
+
+
+
+
+}
+/// @nodoc
+class _$CoreEvent_StreamEndedCopyWithImpl<$Res>
+    implements $CoreEvent_StreamEndedCopyWith<$Res> {
+  _$CoreEvent_StreamEndedCopyWithImpl(this._self, this._then);
+
+  final CoreEvent_StreamEnded _self;
+  final $Res Function(CoreEvent_StreamEnded) _then;
+
+/// Create a copy of CoreEvent
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? streamId = null,Object? reason = null,}) {
+  return _then(CoreEvent_StreamEnded(
+streamId: null == streamId ? _self.streamId : streamId // ignore: cast_nullable_to_non_nullable
+as String,reason: null == reason ? _self.reason : reason // ignore: cast_nullable_to_non_nullable
+as StreamEndReason,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class CoreEvent_ScreenSharePublished extends CoreEvent {
+  const CoreEvent_ScreenSharePublished({required this.streamId}): super._();
+  
+
+ final  String streamId;
+
+/// Create a copy of CoreEvent
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$CoreEvent_ScreenSharePublishedCopyWith<CoreEvent_ScreenSharePublished> get copyWith => _$CoreEvent_ScreenSharePublishedCopyWithImpl<CoreEvent_ScreenSharePublished>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is CoreEvent_ScreenSharePublished&&(identical(other.streamId, streamId) || other.streamId == streamId));
+}
+
+
+@override
+int get hashCode {
+    return Object.hash(runtimeType,streamId);
+}
+
+@override
+String toString() {
+    return 'CoreEvent.screenSharePublished(streamId: $streamId)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $CoreEvent_ScreenSharePublishedCopyWith<$Res> implements $CoreEventCopyWith<$Res> {
+  factory $CoreEvent_ScreenSharePublishedCopyWith(CoreEvent_ScreenSharePublished value, $Res Function(CoreEvent_ScreenSharePublished) _then) = _$CoreEvent_ScreenSharePublishedCopyWithImpl;
+@useResult
+$Res call({
+ String streamId
+});
+
+
+
+
+}
+/// @nodoc
+class _$CoreEvent_ScreenSharePublishedCopyWithImpl<$Res>
+    implements $CoreEvent_ScreenSharePublishedCopyWith<$Res> {
+  _$CoreEvent_ScreenSharePublishedCopyWithImpl(this._self, this._then);
+
+  final CoreEvent_ScreenSharePublished _self;
+  final $Res Function(CoreEvent_ScreenSharePublished) _then;
+
+/// Create a copy of CoreEvent
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? streamId = null,}) {
+  return _then(CoreEvent_ScreenSharePublished(
+streamId: null == streamId ? _self.streamId : streamId // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class CoreEvent_ScreenShareStopped extends CoreEvent {
+  const CoreEvent_ScreenShareStopped(): super._();
+  
+
+
+
+
+
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is CoreEvent_ScreenShareStopped);
+}
+
+
+@override
+int get hashCode => runtimeType.hashCode;
+
+@override
+String toString() {
+    return 'CoreEvent.screenShareStopped()';
+}
+
+
+}
+
+
+
+
+/// @nodoc
+
+
+class CoreEvent_StreamViewerJoinRequested extends CoreEvent {
+  const CoreEvent_StreamViewerJoinRequested({required this.streamId, required this.viewerClid}): super._();
+  
+
+ final  String streamId;
+ final  int viewerClid;
+
+/// Create a copy of CoreEvent
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$CoreEvent_StreamViewerJoinRequestedCopyWith<CoreEvent_StreamViewerJoinRequested> get copyWith => _$CoreEvent_StreamViewerJoinRequestedCopyWithImpl<CoreEvent_StreamViewerJoinRequested>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is CoreEvent_StreamViewerJoinRequested&&(identical(other.streamId, streamId) || other.streamId == streamId)&&(identical(other.viewerClid, viewerClid) || other.viewerClid == viewerClid));
+}
+
+
+@override
+int get hashCode {
+    return Object.hash(runtimeType,streamId,viewerClid);
+}
+
+@override
+String toString() {
+    return 'CoreEvent.streamViewerJoinRequested(streamId: $streamId, viewerClid: $viewerClid)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $CoreEvent_StreamViewerJoinRequestedCopyWith<$Res> implements $CoreEventCopyWith<$Res> {
+  factory $CoreEvent_StreamViewerJoinRequestedCopyWith(CoreEvent_StreamViewerJoinRequested value, $Res Function(CoreEvent_StreamViewerJoinRequested) _then) = _$CoreEvent_StreamViewerJoinRequestedCopyWithImpl;
+@useResult
+$Res call({
+ String streamId, int viewerClid
+});
+
+
+
+
+}
+/// @nodoc
+class _$CoreEvent_StreamViewerJoinRequestedCopyWithImpl<$Res>
+    implements $CoreEvent_StreamViewerJoinRequestedCopyWith<$Res> {
+  _$CoreEvent_StreamViewerJoinRequestedCopyWithImpl(this._self, this._then);
+
+  final CoreEvent_StreamViewerJoinRequested _self;
+  final $Res Function(CoreEvent_StreamViewerJoinRequested) _then;
+
+/// Create a copy of CoreEvent
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? streamId = null,Object? viewerClid = null,}) {
+  return _then(CoreEvent_StreamViewerJoinRequested(
+streamId: null == streamId ? _self.streamId : streamId // ignore: cast_nullable_to_non_nullable
+as String,viewerClid: null == viewerClid ? _self.viewerClid : viewerClid // ignore: cast_nullable_to_non_nullable
+as int,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class CoreEvent_PublisherSignalReceived extends CoreEvent {
+  const CoreEvent_PublisherSignalReceived({required this.streamId, required this.viewerClid, required this.signal}): super._();
+  
+
+ final  String streamId;
+ final  int viewerClid;
+ final  PublisherSignal signal;
+
+/// Create a copy of CoreEvent
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$CoreEvent_PublisherSignalReceivedCopyWith<CoreEvent_PublisherSignalReceived> get copyWith => _$CoreEvent_PublisherSignalReceivedCopyWithImpl<CoreEvent_PublisherSignalReceived>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is CoreEvent_PublisherSignalReceived&&(identical(other.streamId, streamId) || other.streamId == streamId)&&(identical(other.viewerClid, viewerClid) || other.viewerClid == viewerClid)&&(identical(other.signal, signal) || other.signal == signal));
+}
+
+
+@override
+int get hashCode {
+    return Object.hash(runtimeType,streamId,viewerClid,signal);
+}
+
+@override
+String toString() {
+    return 'CoreEvent.publisherSignalReceived(streamId: $streamId, viewerClid: $viewerClid, signal: $signal)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $CoreEvent_PublisherSignalReceivedCopyWith<$Res> implements $CoreEventCopyWith<$Res> {
+  factory $CoreEvent_PublisherSignalReceivedCopyWith(CoreEvent_PublisherSignalReceived value, $Res Function(CoreEvent_PublisherSignalReceived) _then) = _$CoreEvent_PublisherSignalReceivedCopyWithImpl;
+@useResult
+$Res call({
+ String streamId, int viewerClid, PublisherSignal signal
+});
+
+
+$PublisherSignalCopyWith<$Res> get signal;
+
+}
+/// @nodoc
+class _$CoreEvent_PublisherSignalReceivedCopyWithImpl<$Res>
+    implements $CoreEvent_PublisherSignalReceivedCopyWith<$Res> {
+  _$CoreEvent_PublisherSignalReceivedCopyWithImpl(this._self, this._then);
+
+  final CoreEvent_PublisherSignalReceived _self;
+  final $Res Function(CoreEvent_PublisherSignalReceived) _then;
+
+/// Create a copy of CoreEvent
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? streamId = null,Object? viewerClid = null,Object? signal = null,}) {
+  return _then(CoreEvent_PublisherSignalReceived(
+streamId: null == streamId ? _self.streamId : streamId // ignore: cast_nullable_to_non_nullable
+as String,viewerClid: null == viewerClid ? _self.viewerClid : viewerClid // ignore: cast_nullable_to_non_nullable
+as int,signal: null == signal ? _self.signal : signal // ignore: cast_nullable_to_non_nullable
+as PublisherSignal,
+  ));
+}
+
+/// Create a copy of CoreEvent
+/// with the given fields replaced by the non-null parameter values.
+@override
+@pragma('vm:prefer-inline')
+$PublisherSignalCopyWith<$Res> get signal {
+  
+  return $PublisherSignalCopyWith<$Res>(_self.signal, (value) {
+    return _then(_self.copyWith(signal: value));
+  });
+}
+}
+
+/// @nodoc
+
+
+class CoreEvent_StreamViewerLeft extends CoreEvent {
+  const CoreEvent_StreamViewerLeft({required this.streamId, required this.viewerClid}): super._();
+  
+
+ final  String streamId;
+ final  int viewerClid;
+
+/// Create a copy of CoreEvent
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$CoreEvent_StreamViewerLeftCopyWith<CoreEvent_StreamViewerLeft> get copyWith => _$CoreEvent_StreamViewerLeftCopyWithImpl<CoreEvent_StreamViewerLeft>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is CoreEvent_StreamViewerLeft&&(identical(other.streamId, streamId) || other.streamId == streamId)&&(identical(other.viewerClid, viewerClid) || other.viewerClid == viewerClid));
+}
+
+
+@override
+int get hashCode {
+    return Object.hash(runtimeType,streamId,viewerClid);
+}
+
+@override
+String toString() {
+    return 'CoreEvent.streamViewerLeft(streamId: $streamId, viewerClid: $viewerClid)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $CoreEvent_StreamViewerLeftCopyWith<$Res> implements $CoreEventCopyWith<$Res> {
+  factory $CoreEvent_StreamViewerLeftCopyWith(CoreEvent_StreamViewerLeft value, $Res Function(CoreEvent_StreamViewerLeft) _then) = _$CoreEvent_StreamViewerLeftCopyWithImpl;
+@useResult
+$Res call({
+ String streamId, int viewerClid
+});
+
+
+
+
+}
+/// @nodoc
+class _$CoreEvent_StreamViewerLeftCopyWithImpl<$Res>
+    implements $CoreEvent_StreamViewerLeftCopyWith<$Res> {
+  _$CoreEvent_StreamViewerLeftCopyWithImpl(this._self, this._then);
+
+  final CoreEvent_StreamViewerLeft _self;
+  final $Res Function(CoreEvent_StreamViewerLeft) _then;
+
+/// Create a copy of CoreEvent
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? streamId = null,Object? viewerClid = null,}) {
+  return _then(CoreEvent_StreamViewerLeft(
+streamId: null == streamId ? _self.streamId : streamId // ignore: cast_nullable_to_non_nullable
+as String,viewerClid: null == viewerClid ? _self.viewerClid : viewerClid // ignore: cast_nullable_to_non_nullable
+as int,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
 class CoreEvent_Log extends CoreEvent {
   const CoreEvent_Log({required this.level, required this.message}): super._();
   
@@ -2907,6 +3576,342 @@ class _$CoreSessionState_ReconnectingCopyWithImpl<$Res>
 attempt: null == attempt ? _self.attempt : attempt // ignore: cast_nullable_to_non_nullable
 as int,delayMs: null == delayMs ? _self.delayMs : delayMs // ignore: cast_nullable_to_non_nullable
 as int,
+  ));
+}
+
+
+}
+
+/// @nodoc
+mixin _$PublisherSignal {
+
+ String get sdp;
+/// Create a copy of PublisherSignal
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$PublisherSignalCopyWith<PublisherSignal> get copyWith => _$PublisherSignalCopyWithImpl<PublisherSignal>(this as PublisherSignal, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  final _this = this as PublisherSignal;
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is PublisherSignal&&(identical(other.sdp, _this.sdp) || other.sdp == _this.sdp));
+}
+
+
+@override
+int get hashCode {
+  final _this = this as PublisherSignal;
+  return Object.hash(runtimeType,_this.sdp);
+}
+
+@override
+String toString() {
+  final _this = this as PublisherSignal;
+  return 'PublisherSignal(sdp: ${_this.sdp})';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $PublisherSignalCopyWith<$Res>  {
+  factory $PublisherSignalCopyWith(PublisherSignal value, $Res Function(PublisherSignal) _then) = _$PublisherSignalCopyWithImpl;
+@useResult
+$Res call({
+ String sdp
+});
+
+
+
+
+}
+/// @nodoc
+class _$PublisherSignalCopyWithImpl<$Res>
+    implements $PublisherSignalCopyWith<$Res> {
+  _$PublisherSignalCopyWithImpl(this._self, this._then);
+
+  final PublisherSignal _self;
+  final $Res Function(PublisherSignal) _then;
+
+/// Create a copy of PublisherSignal
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') @override $Res call({Object? sdp = null,}) {
+  return _then(_self.copyWith(
+sdp: null == sdp ? _self.sdp : sdp // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+}
+
+
+/// Adds pattern-matching-related methods to [PublisherSignal].
+extension PublisherSignalPatterns on PublisherSignal {
+/// A variant of `map` that fallback to returning `orElse`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( PublisherSignal_Answer value)?  answer,TResult Function( PublisherSignal_IceCandidate value)?  iceCandidate,required TResult orElse(),}){
+final _that = this;
+switch (_that) {
+case PublisherSignal_Answer() when answer != null:
+return answer(_that);case PublisherSignal_IceCandidate() when iceCandidate != null:
+return iceCandidate(_that);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// Callbacks receives the raw object, upcasted.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case final Subclass2 value:
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( PublisherSignal_Answer value)  answer,required TResult Function( PublisherSignal_IceCandidate value)  iceCandidate,}){
+final _that = this;
+switch (_that) {
+case PublisherSignal_Answer():
+return answer(_that);case PublisherSignal_IceCandidate():
+return iceCandidate(_that);}
+}
+/// A variant of `map` that fallback to returning `null`.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case final Subclass value:
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( PublisherSignal_Answer value)?  answer,TResult? Function( PublisherSignal_IceCandidate value)?  iceCandidate,}){
+final _that = this;
+switch (_that) {
+case PublisherSignal_Answer() when answer != null:
+return answer(_that);case PublisherSignal_IceCandidate() when iceCandidate != null:
+return iceCandidate(_that);case _:
+  return null;
+
+}
+}
+/// A variant of `when` that fallback to an `orElse` callback.
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return orElse();
+/// }
+/// ```
+
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String sdp)?  answer,TResult Function( String sdp,  String? mid,  int? mLine)?  iceCandidate,required TResult orElse(),}) {final _that = this;
+switch (_that) {
+case PublisherSignal_Answer() when answer != null:
+return answer(_that.sdp);case PublisherSignal_IceCandidate() when iceCandidate != null:
+return iceCandidate(_that.sdp,_that.mid,_that.mLine);case _:
+  return orElse();
+
+}
+}
+/// A `switch`-like method, using callbacks.
+///
+/// As opposed to `map`, this offers destructuring.
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case Subclass2(:final field2):
+///     return ...;
+/// }
+/// ```
+
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String sdp)  answer,required TResult Function( String sdp,  String? mid,  int? mLine)  iceCandidate,}) {final _that = this;
+switch (_that) {
+case PublisherSignal_Answer():
+return answer(_that.sdp);case PublisherSignal_IceCandidate():
+return iceCandidate(_that.sdp,_that.mid,_that.mLine);}
+}
+/// A variant of `when` that fallback to returning `null`
+///
+/// It is equivalent to doing:
+/// ```dart
+/// switch (sealedClass) {
+///   case Subclass(:final field):
+///     return ...;
+///   case _:
+///     return null;
+/// }
+/// ```
+
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String sdp)?  answer,TResult? Function( String sdp,  String? mid,  int? mLine)?  iceCandidate,}) {final _that = this;
+switch (_that) {
+case PublisherSignal_Answer() when answer != null:
+return answer(_that.sdp);case PublisherSignal_IceCandidate() when iceCandidate != null:
+return iceCandidate(_that.sdp,_that.mid,_that.mLine);case _:
+  return null;
+
+}
+}
+
+}
+
+/// @nodoc
+
+
+class PublisherSignal_Answer extends PublisherSignal {
+  const PublisherSignal_Answer({required this.sdp}): super._();
+  
+
+@override final  String sdp;
+
+/// Create a copy of PublisherSignal
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$PublisherSignal_AnswerCopyWith<PublisherSignal_Answer> get copyWith => _$PublisherSignal_AnswerCopyWithImpl<PublisherSignal_Answer>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is PublisherSignal_Answer&&(identical(other.sdp, sdp) || other.sdp == sdp));
+}
+
+
+@override
+int get hashCode {
+    return Object.hash(runtimeType,sdp);
+}
+
+@override
+String toString() {
+    return 'PublisherSignal.answer(sdp: $sdp)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $PublisherSignal_AnswerCopyWith<$Res> implements $PublisherSignalCopyWith<$Res> {
+  factory $PublisherSignal_AnswerCopyWith(PublisherSignal_Answer value, $Res Function(PublisherSignal_Answer) _then) = _$PublisherSignal_AnswerCopyWithImpl;
+@override @useResult
+$Res call({
+ String sdp
+});
+
+
+
+
+}
+/// @nodoc
+class _$PublisherSignal_AnswerCopyWithImpl<$Res>
+    implements $PublisherSignal_AnswerCopyWith<$Res> {
+  _$PublisherSignal_AnswerCopyWithImpl(this._self, this._then);
+
+  final PublisherSignal_Answer _self;
+  final $Res Function(PublisherSignal_Answer) _then;
+
+/// Create a copy of PublisherSignal
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? sdp = null,}) {
+  return _then(PublisherSignal_Answer(
+sdp: null == sdp ? _self.sdp : sdp // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class PublisherSignal_IceCandidate extends PublisherSignal {
+  const PublisherSignal_IceCandidate({required this.sdp, this.mid, this.mLine}): super._();
+  
+
+@override final  String sdp;
+ final  String? mid;
+ final  int? mLine;
+
+/// Create a copy of PublisherSignal
+/// with the given fields replaced by the non-null parameter values.
+@override @JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$PublisherSignal_IceCandidateCopyWith<PublisherSignal_IceCandidate> get copyWith => _$PublisherSignal_IceCandidateCopyWithImpl<PublisherSignal_IceCandidate>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is PublisherSignal_IceCandidate&&(identical(other.sdp, sdp) || other.sdp == sdp)&&(identical(other.mid, mid) || other.mid == mid)&&(identical(other.mLine, mLine) || other.mLine == mLine));
+}
+
+
+@override
+int get hashCode {
+    return Object.hash(runtimeType,sdp,mid,mLine);
+}
+
+@override
+String toString() {
+    return 'PublisherSignal.iceCandidate(sdp: $sdp, mid: $mid, mLine: $mLine)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $PublisherSignal_IceCandidateCopyWith<$Res> implements $PublisherSignalCopyWith<$Res> {
+  factory $PublisherSignal_IceCandidateCopyWith(PublisherSignal_IceCandidate value, $Res Function(PublisherSignal_IceCandidate) _then) = _$PublisherSignal_IceCandidateCopyWithImpl;
+@override @useResult
+$Res call({
+ String sdp, String? mid, int? mLine
+});
+
+
+
+
+}
+/// @nodoc
+class _$PublisherSignal_IceCandidateCopyWithImpl<$Res>
+    implements $PublisherSignal_IceCandidateCopyWith<$Res> {
+  _$PublisherSignal_IceCandidateCopyWithImpl(this._self, this._then);
+
+  final PublisherSignal_IceCandidate _self;
+  final $Res Function(PublisherSignal_IceCandidate) _then;
+
+/// Create a copy of PublisherSignal
+/// with the given fields replaced by the non-null parameter values.
+@override @pragma('vm:prefer-inline') $Res call({Object? sdp = null,Object? mid = freezed,Object? mLine = freezed,}) {
+  return _then(PublisherSignal_IceCandidate(
+sdp: null == sdp ? _self.sdp : sdp // ignore: cast_nullable_to_non_nullable
+as String,mid: freezed == mid ? _self.mid : mid // ignore: cast_nullable_to_non_nullable
+as String?,mLine: freezed == mLine ? _self.mLine : mLine // ignore: cast_nullable_to_non_nullable
+as int?,
   ));
 }
 

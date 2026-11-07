@@ -174,4 +174,24 @@ void main() {
       expect(decoded['schema'], 3);
     },
   );
+
+  test('streamViewerHeight serializes, deserializes and ignores non-finite numbers', () {
+    final prefs = const SessionPreferences(nickname: 'TestUser')
+        .copyWith(streamViewerHeight: 320.5);
+    final json = prefs.toJson();
+    expect(json['streamViewerHeight'], 320.5);
+
+    final restored = SessionPreferences.fromJson(json);
+    expect(restored.streamViewerHeight, 320.5);
+
+    final invalid = SessionPreferences.fromJson(const {
+      'streamViewerHeight': 'invalid',
+    });
+    expect(invalid.streamViewerHeight, isNull);
+
+    final infinite = SessionPreferences.fromJson(const {
+      'streamViewerHeight': double.infinity,
+    });
+    expect(infinite.streamViewerHeight, isNull);
+  });
 }

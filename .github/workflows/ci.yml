@@ -32,8 +32,13 @@ jobs:
     name: Checks
     uses: ./.github/workflows/checks.yml
 
+  tests:
+    name: Tests
+    uses: ./.github/workflows/tests.yml
+
   desktop:
     name: Desktop ${{ matrix.platform }}
+    needs: [checks]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -119,6 +124,7 @@ jobs:
 
   android:
     name: Android
+    needs: [checks]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

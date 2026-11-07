@@ -452,6 +452,12 @@ abstract class AppLocalizations {
   /// **'Resize channel pane'**
   String get channelPaneResize;
 
+  /// No description provided for @streamViewerResize.
+  ///
+  /// In en, this message translates to:
+  /// **'Resize screen share height'**
+  String get streamViewerResize;
+
   /// No description provided for @voiceMute.
   ///
   /// In en, this message translates to:
@@ -1507,6 +1513,282 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Link copied to clipboard'**
   String get aboutCopySuccess;
+
+  /// No description provided for @streamSharing.
+  ///
+  /// In en, this message translates to:
+  /// **'Sharing screen'**
+  String get streamSharing;
+
+  /// No description provided for @streamWatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Watch'**
+  String get streamWatch;
+
+  /// No description provided for @streamWatchScreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Watch screen share'**
+  String get streamWatchScreen;
+
+  /// No description provided for @streamWatching.
+  ///
+  /// In en, this message translates to:
+  /// **'Watching'**
+  String get streamWatching;
+
+  /// No description provided for @streamStopWatching.
+  ///
+  /// In en, this message translates to:
+  /// **'Close stream'**
+  String get streamStopWatching;
+
+  /// No description provided for @streamConnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting to stream…'**
+  String get streamConnecting;
+
+  /// No description provided for @streamMute.
+  ///
+  /// In en, this message translates to:
+  /// **'Mute stream'**
+  String get streamMute;
+
+  /// No description provided for @streamUnmute.
+  ///
+  /// In en, this message translates to:
+  /// **'Unmute stream'**
+  String get streamUnmute;
+
+  /// No description provided for @streamExpand.
+  ///
+  /// In en, this message translates to:
+  /// **'Expand stream'**
+  String get streamExpand;
+
+  /// No description provided for @streamCollapse.
+  ///
+  /// In en, this message translates to:
+  /// **'Collapse stream'**
+  String get streamCollapse;
+
+  /// No description provided for @streamFullscreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter fullscreen'**
+  String get streamFullscreen;
+
+  /// No description provided for @streamExitFullscreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Exit fullscreen'**
+  String get streamExitFullscreen;
+
+  /// No description provided for @streamEndedStopped.
+  ///
+  /// In en, this message translates to:
+  /// **'Screen share has ended'**
+  String get streamEndedStopped;
+
+  /// No description provided for @streamEndedRejected.
+  ///
+  /// In en, this message translates to:
+  /// **'Watch request was declined'**
+  String get streamEndedRejected;
+
+  /// No description provided for @streamEndedRemoved.
+  ///
+  /// In en, this message translates to:
+  /// **'Removed from screen share'**
+  String get streamEndedRemoved;
+
+  /// No description provided for @streamNegotiationFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Screen share connection failed. Try again.'**
+  String get streamNegotiationFailed;
+
+  /// No description provided for @streamStartShare.
+  ///
+  /// In en, this message translates to:
+  /// **'Share screen'**
+  String get streamStartShare;
+
+  /// No description provided for @streamStopShare.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop sharing'**
+  String get streamStopShare;
+
+  /// No description provided for @streamPublishing.
+  ///
+  /// In en, this message translates to:
+  /// **'Sharing'**
+  String get streamPublishing;
+
+  /// No description provided for @streamViewerCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{0 viewers} =1{1 viewer} other{{count} viewers}}'**
+  String streamViewerCount(int count);
+
+  /// No description provided for @streamPreviewShow.
+  ///
+  /// In en, this message translates to:
+  /// **'Show local preview'**
+  String get streamPreviewShow;
+
+  /// No description provided for @streamPreviewHide.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide local preview'**
+  String get streamPreviewHide;
+
+  /// No description provided for @streamPublishFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not start screen share. Check screen recording permissions and try again.'**
+  String get streamPublishFailed;
+
+  /// No description provided for @streamPickerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Share your screen'**
+  String get streamPickerTitle;
+
+  /// No description provided for @streamPickerScreens.
+  ///
+  /// In en, this message translates to:
+  /// **'Screens'**
+  String get streamPickerScreens;
+
+  /// No description provided for @streamPickerWindows.
+  ///
+  /// In en, this message translates to:
+  /// **'Windows'**
+  String get streamPickerWindows;
+
+  /// No description provided for @streamPickerRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh sources'**
+  String get streamPickerRefresh;
+
+  /// No description provided for @streamPickerEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No shareable screens or windows found'**
+  String get streamPickerEmpty;
+
+  /// No description provided for @streamPickerResolution.
+  ///
+  /// In en, this message translates to:
+  /// **'Resolution'**
+  String get streamPickerResolution;
+
+  /// No description provided for @streamPickerFrameRate.
+  ///
+  /// In en, this message translates to:
+  /// **'Frame rate'**
+  String get streamPickerFrameRate;
+
+  /// No description provided for @streamPickerStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Start sharing'**
+  String get streamPickerStart;
+
+  /// No description provided for @settingsScreenShare.
+  ///
+  /// In en, this message translates to:
+  /// **'Screen share'**
+  String get settingsScreenShare;
+
+  /// No description provided for @settingsScreenShareCapture.
+  ///
+  /// In en, this message translates to:
+  /// **'Default capture quality'**
+  String get settingsScreenShareCapture;
+
+  /// No description provided for @settingsScreenShareResolution.
+  ///
+  /// In en, this message translates to:
+  /// **'Default resolution'**
+  String get settingsScreenShareResolution;
+
+  /// No description provided for @settingsScreenShareResolution720p.
+  ///
+  /// In en, this message translates to:
+  /// **'720p (1280×720)'**
+  String get settingsScreenShareResolution720p;
+
+  /// No description provided for @settingsScreenShareResolution1080p.
+  ///
+  /// In en, this message translates to:
+  /// **'1080p (1920×1080)'**
+  String get settingsScreenShareResolution1080p;
+
+  /// No description provided for @settingsScreenShareFrameRate.
+  ///
+  /// In en, this message translates to:
+  /// **'Default frame rate'**
+  String get settingsScreenShareFrameRate;
+
+  /// No description provided for @settingsScreenShareFrameRate30.
+  ///
+  /// In en, this message translates to:
+  /// **'30 FPS'**
+  String get settingsScreenShareFrameRate30;
+
+  /// No description provided for @settingsScreenShareFrameRate60.
+  ///
+  /// In en, this message translates to:
+  /// **'60 FPS'**
+  String get settingsScreenShareFrameRate60;
+
+  /// No description provided for @settingsScreenShareEncoding.
+  ///
+  /// In en, this message translates to:
+  /// **'Encoding & network'**
+  String get settingsScreenShareEncoding;
+
+  /// No description provided for @settingsScreenShareCodec.
+  ///
+  /// In en, this message translates to:
+  /// **'Video codec & hardware acceleration'**
+  String get settingsScreenShareCodec;
+
+  /// No description provided for @settingsScreenShareCodecVp8.
+  ///
+  /// In en, this message translates to:
+  /// **'VP8 first (Recommended for TS6)'**
+  String get settingsScreenShareCodecVp8;
+
+  /// No description provided for @settingsScreenShareCodecH264.
+  ///
+  /// In en, this message translates to:
+  /// **'H.264 first (Hardware encode/decode)'**
+  String get settingsScreenShareCodecH264;
+
+  /// No description provided for @settingsScreenShareDegradation.
+  ///
+  /// In en, this message translates to:
+  /// **'Bandwidth degradation preference'**
+  String get settingsScreenShareDegradation;
+
+  /// No description provided for @settingsScreenShareDegradationResolution.
+  ///
+  /// In en, this message translates to:
+  /// **'Maintain resolution (Drop frame rate first)'**
+  String get settingsScreenShareDegradationResolution;
+
+  /// No description provided for @settingsScreenShareDegradationFramerate.
+  ///
+  /// In en, this message translates to:
+  /// **'Maintain frame rate (Drop resolution first)'**
+  String get settingsScreenShareDegradationFramerate;
 }
 
 class _AppLocalizationsDelegate
