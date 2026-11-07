@@ -1,19 +1,10 @@
 # AGENTS.md
 
-TeamSpeak 第三方客户端：Flutter 负责界面，Rust 负责协议、连接边界与音频。
+FlSpeak 是 TeamSpeak 第三方客户端：Flutter 负责界面，Rust 负责协议、连接边界与音频。改动 `lib/` 前必读 [docs/defensive-patterns/ui.md](docs/defensive-patterns/ui.md) 与 [lib/AGENTS.md](lib/AGENTS.md)；改动 `core/` 前必读 [docs/architecture.md](docs/architecture.md) 与对应子树 `AGENTS.md`；文档遵循 [docs/AGENTS.md](docs/AGENTS.md)。
 
-## 先读什么
+## 防御模式与变更前必读
 
-| 想知道 | 读 |
-| --- | --- |
-| 仓库结构与不变量 | `.agents/project.md` |
-| 怎么编译、怎么验证 | `docs/development.md` |
-| 测试怎么写、跑哪些 | `docs/testing.md` |
-| 写代码的规矩 | `docs/defensive-patterns/AGENTS.md` |
-| 分层与数据流 | `docs/architecture.md` |
-| 连接边界为什么长这样 | `docs/connection-boundary.md` |
-| 文档放哪、怎么写 | `docs/AGENTS.md` |
-| 已经定下的技术决策 | `.agents/notes/implemented/` |
+动手修改任何界面组件或状态、音频线程、协议或连接边界、会话生命周期或 teardown 代码前，先阅读 [docs/defensive-patterns/README.md](docs/defensive-patterns/README.md) 中的「你在改什么 | 动手前必读」映射表。其审阅原则与反面模式按制品严格执行。
 
 子树规则只写该目录特有的约束，不重复本文件：
 
@@ -30,6 +21,15 @@ TeamSpeak 第三方客户端：Flutter 负责界面，Rust 负责协议、连接
 | `.agents/` | `.agents/AGENTS.md` (及其下 `notes/`, `skills/`) |
 | `android/`, `macos/`, `linux/`, `windows/` | 各平台根 `AGENTS.md` 与原生宿主层 |
 | `arb/`, `shaders/` | 对应资产与资源目录 `AGENTS.md` |
+
+## 约定与行为工作流
+
+- **UI 变更**：使用 [fls-client-ui-ux](.agents/skills/fls-client-ui-ux/SKILL.md) 作为设计与审查入口；严格遵守 [Flutter 界面文案与操作按钮约束](docs/defensive-patterns/ui.md)，全仓不引入 Tooltip，无多余说明文本。
+- **代码审查**：审查 PR 或交付前自查时，遵循 [fls-code-review](.agents/skills/fls-code-review/SKILL.md)；严格对照 [docs/defensive-patterns/README.md](docs/defensive-patterns/README.md) 映射表逐项核查，禁止凭记忆审查。
+- **运行本地检查与提推前验证**：在提交或推送前，遵循 [fls-pre-push-checks](.agents/skills/fls-pre-push-checks/SKILL.md)；按即将推出的 diff 选出覆盖它的最小检查集，不反射式地跑全量套件。
+- **Agent Notes 决策记录**：只有不可变长效决策才建笔记，遵循 [fls-archive-agent-notes](.agents/skills/fls-archive-agent-notes/SKILL.md)；归档记录冻结不改。
+- **清理思维链泄漏**：代码注释、文档或提交说明中禁止残留推理过程、评审者辩解或对冲式规划，遵循 [fls-trim-cot-leakage](.agents/skills/fls-trim-cot-leakage/SKILL.md)。
+- **发版日志**：发版前编写版本变更记录，遵循 [fls-release-log](.agents/skills/fls-release-log/SKILL.md)。
 
 ## 硬规则
 

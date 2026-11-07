@@ -21,7 +21,7 @@
 | `docs/architecture.md` | 索引与拓扑：分层、一次连接的时序、事件流、线程模型、目录职责与「尚未接线」 | 跨文件契约与序列（→ 主题文档或 `docs/subsystems/`）、决策理由 |
 | `docs/` 主题文档（`audio.md`、`backend.md`、`channels.md`、`connection-boundary.md`、`images.md`） | 按链路组织的深潜文档：一条跨 crate 的链路或边界的契约、关键序列与已知限制 | 决策理由（→ `.agents/notes/`）、逐行实现细节（→ 源码） |
 | `docs/subsystems/` | 每个子系统一篇：契约、关键路径与序列、不变量；规则见其 `AGENTS.md` | 决策理由（→ `.agents/notes/`）、逐行实现细节（→ 源码） |
-| `docs/defensive-patterns/` | 编码反面与规范替代：按领域拆分的审查强制准则（general, connection, audio, review, ui） | 子系统内部契约、常规开发流程 |
+| [docs/defensive-patterns/](defensive-patterns/README.md) | 编码反面与规范替代：[README.md](defensive-patterns/README.md) 独占承载「你在改什么 \| 动手前必读」映射表，子篇按领域承载审查强制准则（general, connection, audio, review, ui） | 子系统内部契约、常规开发流程、重复的全局声明 |
 | `docs/cookbook/` | 任务驱动式 Step-by-Step 实操指南，带带号步骤与验证命令 | 架构设计决策理由、语法级参考手册 |
 | `docs/development.md` | 开发流程与环境：常用命令、构建依赖与平台细节、FFI 绑定生成、语言约定、发版打包 | 架构图、测试约定、决策理由 |
 | `docs/testing.md` | 测试约定：单测摆放、测试范围选择、真实服务器手动测试、CI 测试门 | 测试用例代码誊写 |
@@ -29,8 +29,8 @@
 | `docs/release/` | 发版日志：每个 tag 一篇 Release 正文；格式与生命周期见其 `AGENTS.md` | 当前机制的说明（→ docs 各归属地）、下一版的计划 |
 | `docs/THIRD-PARTY.md` | 第三方代码的来源、来源提交、原始许可证与文件清单 | 决策理由（→ `.agents/notes/`） |
 | `.agents/notes/` | 决策记录：为什么这么做、放弃了什么、如何验证；路径编码生命周期与类目，规则见其 `README.md` | 迁移计划、验收清单、spec 语气 |
-| `.agents/skills/` | agent 侧复用工作流与判定标准（`SKILL.md`） | 产品与运行期契约（→ docs 或源码） |
-| 模块内 `AGENTS.md` | 目录级特有规则，如 `core/AGENTS.md`、`lib/AGENTS.md`、`website/AGENTS.md`、各子目录 | 仓库级全局规则（→ 根 AGENTS.md） |
+| `.agents/skills/` | agent 侧复用工作流与判定标准（`SKILL.md`，只放流程与命令，规则正文只链接不复述） | 产品与运行期契约（→ docs 或源码） |
+| 模块内 `AGENTS.md` | 目录级特有不变量与硬性约束，如 `core/AGENTS.md`、`lib/AGENTS.md`、`website/AGENTS.md`、各子 crate | 仓库级全局规则与全局阅读门禁（→ 根 AGENTS.md） |
 
 放置速查：standing orders → 根 `AGENTS.md`；结构与不变量 → `project.md`；命令与流程 → `development.md`；测试 → `testing.md`；编码反面 → `docs/defensive-patterns/`；实操指引 → `docs/cookbook/`；拓扑与索引 → `architecture.md`；跨 crate 链路 → 主题文档；单 crate 契约 → `docs/subsystems/`；workflow → `ci-cd.md`；发版日志 → `docs/release/`；第三方代码 → `docs/THIRD-PARTY.md`；决策理由 → `.agents/notes/`；复用流程 → `.agents/skills/`；目录规则 → 该目录的 `AGENTS.md`。
 
@@ -40,17 +40,21 @@
 - **一段一物理行。** Markdown 每段只占一行，用编辑器软换行；代码块、表格、列表结构保持原格式。
 - **相对 Markdown 链接。** 引用其他文档用仓库内相对路径，禁用绝对路径与纯文件名参引；引用代码写模块路径与符号名（如 `core/session` 的 `SessionHandle::spawn`、`core/proto` 的 `resolve_target`），不写 `file:line` 行号。
 - **命令直接复制执行。** 各文档出现的命令写明工作目录，与 `development.md` 保持完全一致。
+- **源码注释只保留不可变契约**：注释只记录代码本身无法表达的不变量、跨模块约束、生命周期所有权、安全边界与意外失败行为。严禁控制流流水账（“先做A再做B”）、复述代码字面意思、向维护者辩解“为什么安全/正确”。
+- **界面文案杜绝实现细节外溢**：终端用户界面只展示用户关心的业务事实与操作结果；严禁将采样机制、命令限流、协议库缺陷或架构妥协等技术细节写上 UI（参见 [docs/defensive-patterns/ui.md](defensive-patterns/ui.md)）。
 - **未完成显式标注「尚未接线」**，不写成已完成，不模糊处理。
 - **禁 emoji**，禁叙述历史与变更叙事。
-- **直接陈述事实**，不用「应当/可能/似乎」等含糊推测词，用明确的主谓宾结构。
+- **直接陈述事实**，不用「应当/可能/似乎」等含糊推测词，用明确的主谓宾结构；直接命名确切的检查点、类型、API、异常或操作，不使用抽象隐喻。
+- **文档与代码同提交更新**：改动公开 API、协议边界、状态流或行为时，在同一提交中同步更新对应子系统文档与注释契约。
 
 ## 精简版 slop checklist
 
 写完逐条自查：
-- **重复已有规则**：同一规则在多个文档出现。搜特征短语定位，只留一个归属地，其余放链接。
+- **重复已有规则与跨层复读**：同一规则在多个文档出现，或子树/技能复述根文件的全局规则。删掉多余复读，只留一个正家，其余放链接。
 - **叙述历史**：出现「之前/现在/不再/重命名/迁移」或时间线编排。改为陈述当前事实。
 - **手抄目录树**：源码或生成器已是事实来源时，不手工誊写详细目录树或文件列表。
 - **段落墙**：一个长段落塞进多条规则与括号补充。拆段，或把细节降级到它的归属地。
 - **强调通胀**：到处加粗、大写、「务必/关键」等于没有强调。只保留会改变行为的那处强调。
+- **实现状态伪标记**：在文档或注释中写“目前已支持”、“未来会支持”等时态标记，随时间必定腐烂；只写当前机制本身。
 - **spec 语气**：用「应当/需要实现」规划未来，而不是描述当前现实。
 - **CoT 泄漏**：残留设计讨论、推测性规划、评审表演。只留结论与归属链接（参见 [.agents/skills/fls-trim-cot-leakage/SKILL.md](../.agents/skills/fls-trim-cot-leakage/SKILL.md)）。
