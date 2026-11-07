@@ -2,19 +2,15 @@
 
 这些规则补充根 [AGENTS.md](../AGENTS.md)，只覆盖 `.github/`。
 
-- 检查作业集中在可复用的 `checks.yml`（`workflow_call`）：Rust 检查、Flutter
-  analyze、Dart 单测、FFI 生成物一致性。`ci.yml` 与 `release.yml` 都调用它，
-  改检查时只改这一处。文档检查不进 CI。
-- `ci.yml` 负责 main 与 PR：调用 `checks.yml`，再跑桌面与 Android 的 debug 构建并打包上传 debug artifact；
+- 检查作业集中在可复用的 `checks.yml`（`workflow_call`）：Rust 格式与 Clippy、Flutter analyze、FFI 生成物一致性；单测集中在 `tests.yml`（`workflow_call`）。`ci.yml` 与 `release.yml` 都调用它们。文档检查不进 CI。
+- `ci.yml` 负责 main 与 PR：调用 `checks.yml` 与 `tests.yml`，桌面与 Android 的 debug 构建仅依赖 `checks.yml`，不等待耗时的 `tests.yml`；
   tag 不触发它，发布时的平台构建只在 `release.yml` 里发生一次。
 - `ci.yml` 用 `paths-ignore` 跳过只改 `**/*.md` 或 `LICENSE` 的运行；文档检查
   不进 CI，纯文档改动不产生状态，把检查设为合并必需时要一并处理这一点。
-- `release.yml` 的 `build` 依赖 `checks`，检查失败时打包矩阵不启动。
+- `release.yml` 的 `build` 依赖 `checks` 与 `tests`，任一失败时打包矩阵不启动。
 - Rust 作业从 `plugins/flspeak_ffi/rust` 目录运行，才能使用锁定的工具链。
 - Dart 作业只格式化 `lib` 与 `setup.dart`，并运行 `flutter analyze`。
-- `dart-test` 作业同时跑单测与 FFI 生成物校验，两者共用一次 checkout、Flutter 与
-  native assets 编译；生成物校验重跑 `flutter_rust_bridge_codegen generate`，再用
-  `git diff` 检查。新增检查若同样依赖 native assets，优先并进这个作业。
+- `bindings` 作业负责 FFI 生成物校验与插件分析；生成物校验重跑 `flutter_rust_bridge_codegen generate`，再用 `git diff` 检查。
 - codegen 用官方 release 的 x86_64 linux 预编译附件，版本与 sha256 固定在
   `checks.yml` 顶部；升级 `flutter_rust_bridge` 时同步 `pubspec.yaml` 与这两个值。
 - Android 作业把 NDK 链接进 SDK，避免构建阶段再下一份；Gradle 依赖由

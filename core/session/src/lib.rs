@@ -16,8 +16,12 @@ mod network;
 pub use network::NetworkTelemetry;
 pub mod settings;
 mod store;
+mod streams;
 
 pub use settings::{AppSettings, AudioSettings, NetworkSettings, SettingsManager, UiSettings};
+pub use streams::{
+    LocalPublishState, PublisherSignal, StreamEndReason, StreamView, ViewerPeerState,
+};
 
 mod channel_tools;
 pub mod text_format;
@@ -203,6 +207,52 @@ pub enum SessionEvent {
         id: u64,
         error: Option<String>,
     },
+    /// 当前频道的屏幕共享目录或观看状态变了；`watching` 是正在观看的流 id。
+    Streams {
+        streams: Vec<StreamView>,
+        watching: Option<String>,
+    },
+    /// 推流者发来的 SDP Offer。
+    StreamOffer {
+        stream_id: String,
+        source_client_id: i32,
+        sdp: String,
+    },
+    /// 推流者发来的 ICE 候选；`sdp` 是候选行（TS6 线上字段名）。
+    StreamIceCandidate {
+        stream_id: String,
+        source_client_id: i32,
+        sdp: String,
+        mid: Option<String>,
+        m_line: Option<i32>,
+    },
+    /// 正在观看的流结束；随后的 `Streams` 事件里 `watching` 为空。
+    StreamEnded {
+        stream_id: String,
+        reason: StreamEndReason,
+    },
+    /// 本地屏幕共享已在服务器注册并拿到 `stream_id`。
+    ScreenSharePublished {
+        stream_id: String,
+    },
+    /// 本地屏幕共享推流已停止（主动停止、服务器中止、切频道或断线）。
+    ScreenShareStopped,
+    /// 远端观众请求加入本地屏幕共享。
+    StreamViewerJoinRequested {
+        stream_id: String,
+        viewer_clid: i32,
+    },
+    /// 收到本地推流观众发来的 WebRTC Answer 或 ICE 候选。
+    PublisherSignalReceived {
+        stream_id: String,
+        viewer_clid: i32,
+        signal: PublisherSignal,
+    },
+    /// 本地推流的某个观众已离开或被移出。
+    StreamViewerLeft {
+        stream_id: String,
+        viewer_clid: i32,
+    },
     Log {
         level: String,
         message: String,
@@ -373,6 +423,56 @@ pub enum SessionCommand {
         password: String,
         reply: oneshot::Sender<Result<Vec<ChannelFileView>, SessionError>>,
     },
+    JoinStream {
+        stream_id: String,
+        source_clid: i32,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
+    LeaveStream {
+        stream_id: String,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
+    SendStreamAnswer {
+        stream_id: String,
+        target_clid: i32,
+        sdp: String,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
+    SendStreamIceCandidate {
+        stream_id: String,
+        target_clid: i32,
+        sdp: String,
+        mid: Option<String>,
+        m_line: Option<i32>,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
+    StartScreenShare {
+        name: String,
+        audio: bool,
+        bitrate: u32,
+        viewer_limit: u32,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
+    StopScreenShare {
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
+    RespondStreamJoinRequest {
+        viewer_clid: i32,
+        accept: bool,
+        offer_sdp: String,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
+    SendPublisherIceCandidate {
+        viewer_clid: i32,
+        sdp: String,
+        mid: Option<String>,
+        m_line: Option<i32>,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
+    KickStreamViewer {
+        viewer_clid: i32,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
     Shutdown,
 }
 
@@ -413,6 +513,9 @@ pub enum SessionError {
 
     #[error("尚未进入频道")]
     NotInChannel,
+
+    #[error("屏幕共享: {0}")]
+    Stream(String),
 
     #[error("actor 线程启动失败: {0}")]
     Spawn(String),
@@ -843,6 +946,127 @@ impl SessionHandle {
     pub async fn fetch_icon(&self, icon_id: u32) -> Result<Vec<u8>, SessionError> {
         let (reply, rx) = oneshot::channel();
         self.send(SessionCommand::FetchIcon { icon_id, reply })?;
+        rx.await.map_err(|_| SessionError::Closed)?
+    }
+
+    /// 申请观看当前频道里的一路屏幕共享；Offer 随后经 `StreamOffer` 事件送达。
+    pub async fn join_stream(
+        &self,
+        stream_id: String,
+        source_clid: i32,
+    ) -> Result<(), SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::JoinStream {
+            stream_id,
+            source_clid,
+            reply,
+        })?;
+        rx.await.map_err(|_| SessionError::Closed)?
+    }
+
+    pub async fn leave_stream(&self, stream_id: String) -> Result<(), SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::LeaveStream { stream_id, reply })?;
+        rx.await.map_err(|_| SessionError::Closed)?
+    }
+
+    pub async fn send_stream_answer(
+        &self,
+        stream_id: String,
+        target_clid: i32,
+        sdp: String,
+    ) -> Result<(), SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::SendStreamAnswer {
+            stream_id,
+            target_clid,
+            sdp,
+            reply,
+        })?;
+        rx.await.map_err(|_| SessionError::Closed)?
+    }
+
+    pub async fn send_stream_ice_candidate(
+        &self,
+        stream_id: String,
+        target_clid: i32,
+        sdp: String,
+        mid: Option<String>,
+        m_line: Option<i32>,
+    ) -> Result<(), SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::SendStreamIceCandidate {
+            stream_id,
+            target_clid,
+            sdp,
+            mid,
+            m_line,
+            reply,
+        })?;
+        rx.await.map_err(|_| SessionError::Closed)?
+    }
+
+    pub async fn start_screen_share(
+        &self,
+        name: String,
+        audio: bool,
+        bitrate: u32,
+        viewer_limit: u32,
+    ) -> Result<(), SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::StartScreenShare {
+            name,
+            audio,
+            bitrate,
+            viewer_limit,
+            reply,
+        })?;
+        rx.await.map_err(|_| SessionError::Closed)?
+    }
+
+    pub async fn stop_screen_share(&self) -> Result<(), SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::StopScreenShare { reply })?;
+        rx.await.map_err(|_| SessionError::Closed)?
+    }
+
+    pub async fn respond_stream_join_request(
+        &self,
+        viewer_clid: i32,
+        accept: bool,
+        offer_sdp: String,
+    ) -> Result<(), SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::RespondStreamJoinRequest {
+            viewer_clid,
+            accept,
+            offer_sdp,
+            reply,
+        })?;
+        rx.await.map_err(|_| SessionError::Closed)?
+    }
+
+    pub async fn send_publisher_ice_candidate(
+        &self,
+        viewer_clid: i32,
+        sdp: String,
+        mid: Option<String>,
+        m_line: Option<i32>,
+    ) -> Result<(), SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::SendPublisherIceCandidate {
+            viewer_clid,
+            sdp,
+            mid,
+            m_line,
+            reply,
+        })?;
+        rx.await.map_err(|_| SessionError::Closed)?
+    }
+
+    pub async fn kick_stream_viewer(&self, viewer_clid: i32) -> Result<(), SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::KickStreamViewer { viewer_clid, reply })?;
         rx.await.map_err(|_| SessionError::Closed)?
     }
 

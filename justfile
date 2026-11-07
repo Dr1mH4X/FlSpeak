@@ -38,6 +38,11 @@ rust-test-proto:
 live-test server nickname='flspeak-probe':
     FLSPEAK_TEST_SERVER={{server}} FLSPEAK_TEST_NICKNAME={{nickname}} cargo test -p session --test live_connect -- --ignored --nocapture
 
+# 真机屏幕共享联调（手动）：本机推流，等官方客户端点击观看；target 是频道里那位客户端的昵称
+[group('manual')]
+live-share target='x414':
+    flutter test integration_test/live_publish_test.dart -d macos --timeout none --dart-define=LIVE_TARGET={{target}}
+
 # 保持在线抓消息的探针，Ctrl-C 结束：just probe example.com [昵称] [秒数]
 [group('manual')]
 [working-directory: 'plugins/flspeak_ffi/rust']

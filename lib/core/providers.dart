@@ -16,6 +16,8 @@ import 'image_host.dart';
 import 'notices.dart';
 import 'preferences.dart';
 import 'server_icon.dart';
+import 'stream_publisher.dart';
+import 'stream_viewer.dart';
 import 'voice_levels.dart';
 
 final _localizationsProvider = Provider<AppLocalizations>((ref) {
@@ -408,6 +410,92 @@ class SessionController extends Notifier<SessionView> {
     );
   }
 
+  /// 加入指定成员正在共享的屏幕流并准备 WebRTC 观看会话。
+  Future<bool> watchStream(StreamView stream) async {
+    if (!state.connected) return false;
+    final previousId = state.watchingStreamId;
+    if (previousId != null && previousId != stream.id) {
+      try {
+        await ref.read(coreSessionProvider).leaveStream(streamId: previousId);
+      } on CoreError catch (_) {
+        // 切换观看流时旧流退出失败不阻塞新流加入。
+      }
+    }
+    await ref
+        .read(streamViewerProvider.notifier)
+        .prepareWatch(streamId: stream.id, sourceClientId: stream.clientId);
+    if (!ref.mounted) return false;
+    state = state.copyWith(watchingStreamId: stream.id);
+    try {
+      await ref
+          .read(coreSessionProvider)
+          .joinStream(streamId: stream.id, sourceClid: stream.clientId);
+      return ref.mounted;
+    } on CoreError catch (error) {
+      if (ref.mounted) {
+        state = state.copyWith(watchingStreamId: null);
+        await ref.read(streamViewerProvider.notifier).closeSession();
+        _notifyCoreError(error);
+      }
+      return false;
+    }
+  }
+
+  /// 关闭当前正在观看的屏幕流并销毁 WebRTC 与渲染器资源。
+  Future<void> leaveStream([String? streamId]) async {
+    final targetId =
+        streamId ??
+        state.watchingStreamId ??
+        ref.read(streamViewerProvider).streamId;
+    if (state.watchingStreamId != null) {
+      state = state.copyWith(watchingStreamId: null);
+    }
+    await ref.read(streamViewerProvider.notifier).closeSession();
+    if (targetId == null || !ref.mounted) return;
+    try {
+      await ref.read(coreSessionProvider).leaveStream(streamId: targetId);
+    } on CoreError catch (error) {
+      _notifyCoreError(error);
+    }
+  }
+
+  /// 开启桌面屏幕或窗口共享。
+  Future<bool> startScreenShare({
+    required String sourceId,
+    required String sourceName,
+    ScreenShareResolutionPreset? resolution,
+    ScreenShareFrameRatePreset? frameRate,
+    bool audio = false,
+  }) async {
+    if (!state.connected) return false;
+    try {
+      return await ref
+          .read(streamPublisherProvider.notifier)
+          .startScreenShare(
+            sourceId: sourceId,
+            sourceName: sourceName,
+            resolution: resolution,
+            frameRate: frameRate,
+            audio: audio,
+          );
+    } on CoreError catch (error) {
+      if (ref.mounted) {
+        _notifyCoreError(error);
+      }
+      return false;
+    } on Object {
+      if (ref.mounted) {
+        _notify(ref.read(_localizationsProvider).streamPublishFailed);
+      }
+      return false;
+    }
+  }
+
+  /// 停止当前屏幕共享并释放全部推流 WebRTC 资源。
+  Future<void> stopScreenShare() async {
+    await ref.read(streamPublisherProvider.notifier).stopScreenShare();
+  }
+
   /// 上传可能跨越服务器/频道切换；发送闭包绑定用户发起操作时的目标。
   Future<bool> Function(String) prepareMessageSender() {
     final target = _messageDestination;
@@ -708,6 +796,20 @@ class SessionController extends Notifier<SessionView> {
         if (next is! CoreSessionState_Connected) {
           _latestLevels = VoiceLevels.silent;
           _levels.add(_latestLevels);
+          unawaited(ref.read(streamViewerProvider.notifier).closeSession());
+          unawaited(
+            ref
+                .read(streamPublisherProvider.notifier)
+                .stopScreenShare(notifyServer: false),
+          );
+        } else if (current.selfChannelId != null &&
+            next.channelId != current.selfChannelId) {
+          unawaited(ref.read(streamViewerProvider.notifier).closeSession());
+          unawaited(
+            ref
+                .read(streamPublisherProvider.notifier)
+                .stopScreenShare(notifyServer: false),
+          );
         }
         state = switch (next) {
           CoreSessionState_Disconnected() => current.copyWith(
@@ -716,6 +818,8 @@ class SessionController extends Notifier<SessionView> {
             activeServerId: null,
             channels: const [],
             clients: const [],
+            streams: const [],
+            watchingStreamId: null,
             speaking: const {},
             selfSpeaking: false,
             identityUpgradeTarget: null,
@@ -733,6 +837,8 @@ class SessionController extends Notifier<SessionView> {
                 : _connectingServerId,
             channels: const [],
             clients: const [],
+            streams: const [],
+            watchingStreamId: null,
             messages: const [],
             chatScope: ChatScope.channel,
             directRecipientUid: null,
@@ -748,6 +854,8 @@ class SessionController extends Notifier<SessionView> {
                 (_awaitingDisconnect ? null : _connectingServerId),
             channels: const [],
             clients: const [],
+            streams: const [],
+            watchingStreamId: null,
             speaking: const {},
             selfSpeaking: false,
           ),
@@ -832,6 +940,14 @@ class SessionController extends Notifier<SessionView> {
           clients: current.clients.where((client) => client.id != id).toList(),
         );
       case CoreEvent_ClientMoved(:final id, :final channelId):
+        if (id == current.selfClientId && channelId != current.selfChannelId) {
+          unawaited(ref.read(streamViewerProvider.notifier).closeSession());
+          unawaited(
+            ref
+                .read(streamPublisherProvider.notifier)
+                .stopScreenShare(notifyServer: false),
+          );
+        }
         state = current.copyWith(
           clients: [
             for (final client in current.clients)
@@ -961,8 +1077,116 @@ class SessionController extends Notifier<SessionView> {
           },
         );
         _transferReplies.remove(id)?.complete(error == null);
-      case CoreEvent_Log():
-        // 协议日志不进界面，避免刷屏。
+      case CoreEvent_Streams(:final streams, :final watching):
+        state = current.copyWith(streams: streams, watchingStreamId: watching);
+        unawaited(
+          ref
+              .read(streamViewerProvider.notifier)
+              .syncStreams(streams: streams, watchingStreamId: watching),
+        );
+      case CoreEvent_StreamOffer(
+        :final streamId,
+        :final sourceClientId,
+        :final sdp,
+      ):
+        if (current.watchingStreamId == null ||
+            current.watchingStreamId == streamId) {
+          state = current.copyWith(watchingStreamId: streamId);
+          unawaited(
+            ref
+                .read(streamViewerProvider.notifier)
+                .handleOffer(
+                  streamId: streamId,
+                  sourceClientId: sourceClientId,
+                  sdp: sdp,
+                ),
+          );
+        }
+      case CoreEvent_StreamIceCandidate(
+        :final streamId,
+        :final sourceClientId,
+        :final sdp,
+        :final mid,
+        :final mLine,
+      ):
+        unawaited(
+          ref
+              .read(streamViewerProvider.notifier)
+              .handleRemoteIceCandidate(
+                streamId: streamId,
+                sourceClientId: sourceClientId,
+                sdp: sdp,
+                mid: mid,
+                mLine: mLine,
+              ),
+        );
+      case CoreEvent_StreamEnded(:final streamId, :final reason):
+        if (current.watchingStreamId == streamId) {
+          state = current.copyWith(watchingStreamId: null);
+        }
+        unawaited(
+          ref
+              .read(streamViewerProvider.notifier)
+              .handleStreamEnded(streamId: streamId, reason: reason),
+        );
+        final l10n = ref.read(_localizationsProvider);
+        switch (reason) {
+          case StreamEndReason.sourceStopped:
+            _notify(l10n.streamEndedStopped, tone: NoticeTone.info);
+          case StreamEndReason.rejected:
+            _notify(l10n.streamEndedRejected);
+          case StreamEndReason.removed:
+            _notify(l10n.streamEndedRemoved, tone: NoticeTone.info);
+          case StreamEndReason.sourceLeft:
+          case StreamEndReason.sourceMoved:
+          case StreamEndReason.selfMoved:
+          case StreamEndReason.disconnected:
+          case StreamEndReason.left:
+            break;
+        }
+      case CoreEvent_ScreenSharePublished(:final streamId):
+        ref
+            .read(streamPublisherProvider.notifier)
+            .handlePublished(streamId: streamId);
+      case CoreEvent_ScreenShareStopped():
+        unawaited(ref.read(streamPublisherProvider.notifier).handleStopped());
+      case CoreEvent_StreamViewerJoinRequested(
+        :final streamId,
+        :final viewerClid,
+      ):
+        unawaited(
+          ref
+              .read(streamPublisherProvider.notifier)
+              .handleViewerJoinRequested(
+                streamId: streamId,
+                viewerClid: viewerClid,
+              ),
+        );
+      case CoreEvent_PublisherSignalReceived(
+        :final streamId,
+        :final viewerClid,
+        :final signal,
+      ):
+        unawaited(
+          ref
+              .read(streamPublisherProvider.notifier)
+              .handlePublisherSignal(
+                streamId: streamId,
+                viewerClid: viewerClid,
+                signal: signal,
+              ),
+        );
+      case CoreEvent_StreamViewerLeft(:final streamId, :final viewerClid):
+        unawaited(
+          ref
+              .read(streamPublisherProvider.notifier)
+              .handleViewerLeft(streamId: streamId, viewerClid: viewerClid),
+        );
+      case CoreEvent_Log(:final level, :final message):
+        // 协议日志不进界面，避免刷屏；调试模式输出以便排查。
+        if (kDebugMode) {
+          debugPrint('[Rust/$level] $message');
+        }
         break;
       case CoreEvent_Denied(:final message):
         _notifyFailure(message);
@@ -1036,11 +1260,47 @@ class PreferencesController extends Notifier<SessionPreferences> {
     _update(state.copyWith(channelPanelWidth: width));
   }
 
+  /// `null` 表示回到默认自适应高度。
+  void setStreamViewerHeight(double? height) {
+    if (height == state.streamViewerHeight) {
+      return;
+    }
+    _update(state.copyWith(streamViewerHeight: height));
+  }
+
   void setVoiceMeterSource(VoiceMeterSource source) {
     if (source == state.voiceMeterSource) {
       return;
     }
     _update(state.copyWith(voiceMeterSource: source));
+  }
+
+  void setScreenShareResolution(ScreenShareResolutionPreset preset) {
+    if (preset == state.screenShareResolution) {
+      return;
+    }
+    _update(state.copyWith(screenShareResolution: preset));
+  }
+
+  void setScreenShareFrameRate(ScreenShareFrameRatePreset preset) {
+    if (preset == state.screenShareFrameRate) {
+      return;
+    }
+    _update(state.copyWith(screenShareFrameRate: preset));
+  }
+
+  void setScreenShareCodec(ScreenShareCodecPreference codec) {
+    if (codec == state.screenShareCodec) {
+      return;
+    }
+    _update(state.copyWith(screenShareCodec: codec));
+  }
+
+  void setScreenShareDegradation(ScreenShareDegradationPreference degradation) {
+    if (degradation == state.screenShareDegradation) {
+      return;
+    }
+    _update(state.copyWith(screenShareDegradation: degradation));
   }
 
   void setServerIcon(String serverId, ServerIcon icon) {

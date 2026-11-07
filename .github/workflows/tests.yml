@@ -1,0 +1,68 @@
+name: tests
+
+# 供 ci.yml 与 release.yml 共用：Rust 与 Dart 的单元测试。
+on:
+  workflow_call:
+
+env:
+  FLUTTER_VERSION: '3.47.5'
+  CMAKE_POLICY_VERSION_MINIMUM: '3.5'
+
+jobs:
+  rust-test:
+    name: Rust tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: plugins/flspeak_ffi/rust
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: plugins/flspeak_ffi/rust
+          cache-directories: .dart_tool/hooks_runner
+          save-if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+      - name: Install audio build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake pkg-config libopus-dev libasound2-dev
+
+      - name: Test
+        run: cargo test --workspace --all-features
+
+  dart-test:
+    name: Dart tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: dart-test
+          workspaces: plugins/flspeak_ffi/rust
+          cache-directories: .dart_tool/hooks_runner
+          save-if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+      - name: Install audio build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake pkg-config libopus-dev libasound2-dev
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Test
+        run: flutter test

@@ -83,11 +83,15 @@ class SessionView {
     this.identityUpgradeTarget,
     this.transfers = const {},
     this.activeFileDownloads = const {},
+    this.streams = const <StreamView>[],
+    this.watchingStreamId,
     this.network,
   });
 
   final Map<int, FileTransfer> transfers;
   final Map<(int, int), int?> activeFileDownloads;
+  final List<StreamView> streams;
+  final String? watchingStreamId;
   final CoreSessionState state;
   final NetworkTelemetry? network;
   final List<ServerProfileView> servers;
@@ -266,6 +270,28 @@ class SessionView {
     return null;
   }
 
+  StreamView? get watchingStream {
+    final id = watchingStreamId;
+    if (id == null) {
+      return null;
+    }
+    for (final stream in streams) {
+      if (stream.id == id) {
+        return stream;
+      }
+    }
+    return null;
+  }
+
+  StreamView? streamForClient(int clientId) {
+    for (final stream in streams) {
+      if (stream.clientId == clientId) {
+        return stream;
+      }
+    }
+    return null;
+  }
+
   /// 当前范围下要显示的消息。默认看自己所在的频道。
   ///
   /// 私聊在任何范围都显示——漏掉一条私聊比多显示一行严重得多。
@@ -287,6 +313,8 @@ class SessionView {
     Object? network = _unset,
     Map<int, FileTransfer>? transfers,
     Map<(int, int), int?>? activeFileDownloads,
+    List<StreamView>? streams,
+    Object? watchingStreamId = _unset,
     CoreSessionState? state,
     List<ServerProfileView>? servers,
     List<ChannelView>? channels,
@@ -315,6 +343,10 @@ class SessionView {
         : network as NetworkTelemetry?,
     transfers: transfers ?? this.transfers,
     activeFileDownloads: activeFileDownloads ?? this.activeFileDownloads,
+    streams: streams ?? this.streams,
+    watchingStreamId: identical(watchingStreamId, _unset)
+        ? this.watchingStreamId
+        : watchingStreamId as String?,
     state: state ?? this.state,
     servers: servers ?? this.servers,
     channels: channels ?? this.channels,

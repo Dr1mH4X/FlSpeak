@@ -2,6 +2,7 @@
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -252,26 +253,49 @@ void main() {
         expect(find.bySemanticsLabel('收起侧边栏'), findsOneWidget);
       }
 
-      // 点击一级菜单项「语音」进入二级页面
-      final voiceCategory = find.widgetWithText(SettingsTile, '语音');
-      await tester.ensureVisible(voiceCategory);
-      await tester.tap(voiceCategory);
+      // 点击一级菜单项「通用」进入二级页面
+      final generalCategory = find.widgetWithText(SettingsTile, '通用');
+      await tester.ensureVisible(generalCategory);
+      await tester.tap(generalCategory);
       await tester.pumpAndSettle();
 
-      // 二级页面已占满展示
+      // 二级通用页面展示语音、屏幕共享与图片上传入口，且无小标题
+      expect(find.widgetWithText(SettingsTile, '语音'), findsOneWidget);
+      expect(find.widgetWithText(SettingsTile, '屏幕共享'), findsOneWidget);
+      expect(find.widgetWithText(SettingsTile, '图片上传'), findsOneWidget);
+      expect(find.text('按住说话'), findsNothing);
+
+      // 点击二级「语音」进入三级独立页面
+      final voiceTile = find.widgetWithText(SettingsTile, '语音');
+      await tester.tap(voiceTile);
+      await tester.pumpAndSettle();
+
+      // 三级页面允许小标题并完整展示配置
       expect(find.text('按住说话'), findsWidgets);
       expect(find.text('麦克风'), findsWidgets);
 
-      // 点击顶部返回按钮返回一级菜单
+      // 点击顶部返回按钮返回二级通用菜单
       final backBtn = find.byIcon(Icons.arrow_back_rounded);
       expect(backBtn, findsOneWidget);
       await tester.tap(backBtn);
       await tester.pumpAndSettle();
 
-      // 返回一级菜单后重新见到各个大类入口
-      expect(find.widgetWithText(SettingsTile, '外观'), findsOneWidget);
+      // 返回二级通用后重新见到通用子项入口
       expect(find.widgetWithText(SettingsTile, '语音'), findsOneWidget);
+      expect(find.widgetWithText(SettingsTile, '屏幕共享'), findsOneWidget);
+      expect(find.text('按住说话'), findsNothing);
+
+      // 再次点击返回按钮返回一级菜单
+      await tester.tap(backBtn);
+      await tester.pumpAndSettle();
+
+      // 返回一级菜单后重新见到各个大类入口（语音和屏幕共享已降级至通用下）
+      expect(find.widgetWithText(SettingsTile, '外观'), findsOneWidget);
       expect(find.widgetWithText(SettingsTile, '通用'), findsOneWidget);
+      expect(find.widgetWithText(SettingsTile, '数据'), findsOneWidget);
+      expect(find.widgetWithText(SettingsTile, '关于'), findsOneWidget);
+      expect(find.widgetWithText(SettingsTile, '语音'), findsNothing);
+      expect(find.widgetWithText(SettingsTile, '屏幕共享'), findsNothing);
     },
   );
 
@@ -327,6 +351,139 @@ void main() {
       // 二级页面已呈现并包含返回按钮
       expect(find.byIcon(Icons.arrow_back_rounded), findsOneWidget);
       expect(find.widgetWithText(SettingsTile, '存储目录'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'screen share settings category updates resolution, framerate, codec, and degradation preferences',
+    (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_Core()),
+          sessionViewProvider.overrideWith(_Session.new),
+          storePathProvider.overrideWithValue(
+            '/tmp/flspeak-test/preferences.json',
+          ),
+          preferencesStoreProvider.overrideWithValue(
+            PreferencesStore.inMemory(
+              preferences: const SessionPreferences(nickname: 'Test'),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            locale: const Locale('zh'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const SettingsPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final generalCategory = find.widgetWithText(SettingsTile, '通用');
+      expect(generalCategory, findsOneWidget);
+      await tester.ensureVisible(generalCategory);
+      await tester.tap(generalCategory);
+      await tester.pumpAndSettle();
+
+      final screenShareTile = find.widgetWithText(SettingsTile, '屏幕共享');
+      expect(screenShareTile, findsOneWidget);
+      await tester.tap(screenShareTile);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Tooltip), findsNothing);
+
+      final resolutionRow = find.widgetWithText(SettingsTile, '默认分辨率');
+      await tester.tap(resolutionRow);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('720p (1280×720)').last);
+      await tester.pumpAndSettle();
+      expect(
+        container.read(preferencesProvider).screenShareResolution,
+        ScreenShareResolutionPreset.p720,
+      );
+
+      final codecRow = find.widgetWithText(SettingsTile, '视频编码与硬件加速');
+      await tester.tap(codecRow);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('H.264 优先（硬件编解码加速）').last);
+      await tester.pumpAndSettle();
+      expect(
+        container.read(preferencesProvider).screenShareCodec,
+        ScreenShareCodecPreference.h264,
+      );
+    },
+  );
+
+  testWidgets(
+    'ESC key performs breadcrumb navigation from level 3 to level 2 to level 1 and preserves subheading rules',
+    (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_Core()),
+          sessionViewProvider.overrideWith(_Session.new),
+          storePathProvider.overrideWithValue(
+            '/tmp/flspeak-test/preferences.json',
+          ),
+          preferencesStoreProvider.overrideWithValue(
+            PreferencesStore.inMemory(
+              preferences: const SessionPreferences(nickname: 'Test'),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            locale: const Locale('zh'),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const SettingsPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 一级概览无小标题分组
+      expect(find.text('设置'), findsWidgets); // 仅顶栏标题
+      final generalCategory = find.widgetWithText(SettingsTile, '通用');
+      await tester.tap(generalCategory);
+      await tester.pumpAndSettle();
+
+      // 二级通用无小标题
+      expect(find.text('通用'), findsWidgets);
+      final voiceTile = find.widgetWithText(SettingsTile, '语音');
+      await tester.tap(voiceTile);
+      await tester.pumpAndSettle();
+
+      // 三级语音拥有小标题
+      expect(find.text('按住说话'), findsWidgets);
+      expect(find.text('麦克风'), findsWidgets);
+
+      // 按 ESC 退回二级通用
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(SettingsTile, '语音'), findsOneWidget);
+      expect(find.widgetWithText(SettingsTile, '屏幕共享'), findsOneWidget);
+      expect(find.text('按住说话'), findsNothing);
+
+      // 再次按 ESC 退回一级概览
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(SettingsTile, '外观'), findsOneWidget);
+      expect(find.widgetWithText(SettingsTile, '通用'), findsOneWidget);
+      expect(find.widgetWithText(SettingsTile, '语音'), findsNothing);
     },
   );
 }

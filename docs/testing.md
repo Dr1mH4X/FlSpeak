@@ -54,4 +54,4 @@ cargo run -p session --example live_probe
 
 ## CI 测试门
 
-本地提交前的聚合门禁是 `just check`。CI 的 `rust` 作业运行 `cargo fmt --check`、`cargo clippy -D warnings` 与 `cargo test --all-features`，`dart` 作业覆盖格式与分析，`dart-test` 作业覆盖单测、插件分析与 FFI 生成物一致性，见 [ci-cd.md](ci-cd.md)。测试用例本身不写入本文档。
+本地提交前的聚合门禁是 `just check`。CI 的 `checks.yml` 运行快速检查（`cargo fmt`、`clippy`、`dart format`、`flutter analyze` 与 FFI 生成物一致性），`tests.yml` 运行单测（`cargo test` 与 `flutter test`），见 [ci-cd.md](ci-cd.md)。测试用例本身不写入本文档。

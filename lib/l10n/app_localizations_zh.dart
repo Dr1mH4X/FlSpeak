@@ -206,6 +206,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get channelPaneResize => '调整频道栏宽度';
 
   @override
+  String get streamViewerResize => '调整屏幕共享高度';
+
+  @override
   String get voiceMute => '静音';
 
   @override
@@ -759,4 +762,144 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get aboutCopySuccess => '链接已复制到剪贴板';
+
+  @override
+  String get streamSharing => '正在共享屏幕';
+
+  @override
+  String get streamWatch => '观看';
+
+  @override
+  String get streamWatchScreen => '观看屏幕共享';
+
+  @override
+  String get streamWatching => '正在观看';
+
+  @override
+  String get streamStopWatching => '关闭观看';
+
+  @override
+  String get streamConnecting => '正在连接画面…';
+
+  @override
+  String get streamMute => '静音画面';
+
+  @override
+  String get streamUnmute => '取消静音画面';
+
+  @override
+  String get streamExpand => '展开画面';
+
+  @override
+  String get streamCollapse => '收起画面';
+
+  @override
+  String get streamFullscreen => '全屏观看';
+
+  @override
+  String get streamExitFullscreen => '退出全屏';
+
+  @override
+  String get streamEndedStopped => '对方已结束屏幕共享';
+
+  @override
+  String get streamEndedRejected => '观看请求被拒绝';
+
+  @override
+  String get streamEndedRemoved => '已从屏幕共享中移除';
+
+  @override
+  String get streamNegotiationFailed => '屏幕共享直连失败，请重试';
+
+  @override
+  String get streamStartShare => '共享屏幕';
+
+  @override
+  String get streamStopShare => '停止共享';
+
+  @override
+  String get streamPublishing => '正在共享';
+
+  @override
+  String streamViewerCount(int count) {
+    return '$count 人观看';
+  }
+
+  @override
+  String get streamPreviewShow => '展开本地预览';
+
+  @override
+  String get streamPreviewHide => '收起本地预览';
+
+  @override
+  String get streamPublishFailed => '无法启动屏幕共享，请检查屏幕录制权限后重试';
+
+  @override
+  String get streamPickerTitle => '选择共享内容';
+
+  @override
+  String get streamPickerScreens => '整个屏幕';
+
+  @override
+  String get streamPickerWindows => '应用窗口';
+
+  @override
+  String get streamPickerRefresh => '刷新列表';
+
+  @override
+  String get streamPickerEmpty => '未检测到可共享的屏幕或窗口';
+
+  @override
+  String get streamPickerResolution => '清晰度';
+
+  @override
+  String get streamPickerFrameRate => '帧率';
+
+  @override
+  String get streamPickerStart => '开始共享';
+
+  @override
+  String get settingsScreenShare => '屏幕共享';
+
+  @override
+  String get settingsScreenShareCapture => '默认画质';
+
+  @override
+  String get settingsScreenShareResolution => '默认分辨率';
+
+  @override
+  String get settingsScreenShareResolution720p => '720p (1280×720)';
+
+  @override
+  String get settingsScreenShareResolution1080p => '1080p (1920×1080)';
+
+  @override
+  String get settingsScreenShareFrameRate => '默认帧率';
+
+  @override
+  String get settingsScreenShareFrameRate30 => '30 FPS';
+
+  @override
+  String get settingsScreenShareFrameRate60 => '60 FPS';
+
+  @override
+  String get settingsScreenShareEncoding => '编码与网络策略';
+
+  @override
+  String get settingsScreenShareCodec => '视频编码与硬件加速';
+
+  @override
+  String get settingsScreenShareCodecVp8 => 'VP8 优先（TS6 兼容推荐）';
+
+  @override
+  String get settingsScreenShareCodecH264 => 'H.264 优先（硬件编解码加速）';
+
+  @override
+  String get settingsScreenShareDegradation => '弱网降级策略';
+
+  @override
+  String get settingsScreenShareDegradationResolution => '保持清晰度（优先降低帧率）';
+
+  @override
+  String get settingsScreenShareDegradationFramerate => '保持流畅度（优先降低分辨率）';
 }

@@ -4,24 +4,27 @@
 
 | 文件 | 触发 | 内容 |
 | --- | --- | --- |
-| `checks.yml` | `workflow_call` | 可复用的客户端检查作业：`rust`、`dart`、`dart-test` |
-| `ci.yml` | main push、PR、手动 | 调用 `checks.yml`，再跑 `desktop` 与 `android` 的 debug 构建；纯文档与 website 改动不触发 |
-| `release.yml` | `v*` tag、手动输入版本号 | `meta`、`checks`、5 平台 `build` 矩阵、`publish` |
+| `checks.yml` | `workflow_call` | 可复用的客户端快速检查作业：`rust`、`dart`、`bindings`（~40 秒内完成） |
+| `tests.yml` | `workflow_call` | 可复用的单测作业：`rust-test`、`dart-test` |
+| `ci.yml` | main push、PR、手动 | 调用 `checks.yml` 与 `tests.yml`，`desktop` 与 `android` 仅依赖 `checks.yml`，不等待耗时的 `tests.yml`；纯文档与 website 改动不触发 |
+| `release.yml` | `v*` tag、手动输入版本号 | `meta`、`checks`、`tests`、5 平台 `build` 矩阵、`publish` |
 | `deploy-website.yml` | main push/PR（`website/**`、自身）、release 成功、手动 | 独立完成官网的类型检查、构建与 GitHub Pages 自动部署 |
 
 tag 推送只启动 `release.yml`，平台打包因此只发生一次；main 与 PR 仍由 `ci.yml`
 覆盖桌面与 Android 的编译。`ci.yml` 用 `paths-ignore` 跳过只改 `**/*.md` 或
 `LICENSE` 的推送与 PR：文档没有独立的 CI 检查，这类改动不跑 Rust、Flutter 与平台
-构建。若将来把检查设为合并必需，纯文档 PR 不会产生状态，需要同时调整这项配置。`release.yml` 的 `build` 通过 `needs: [meta, checks]`
-等待检查，任一检查失败时打包矩阵不会启动，手动输入版本号的发版路径也走同一套检查。
+构建。若将来把检查设为合并必需，纯文档 PR 不会产生状态，需要同时调整这项配置。`release.yml` 的 `build` 通过 `needs: [meta, checks, tests]`
+等待检查与测试，任一失败时打包矩阵不会启动，手动输入版本号的发版路径也走同一套检查。
 
-## `checks.yml`
+## `checks.yml` 与 `tests.yml`
 
-| 作业 | 内容 |
-| --- | --- |
-| `rust` | `cargo fmt --check`、`clippy -D warnings`、`cargo test`（`--all-features`，含音频） |
-| `dart` | `dart format --output=none --set-exit-if-changed lib test setup.dart`、`flutter analyze` |
-| `dart-test` | `flutter test`（针对 `test/` 目录）与插件检查共用一个作业：重跑 `flutter_rust_bridge_codegen generate` 并用 `git diff` 校验生成物，再分析插件。`flutter test` 会触发 native assets 钩子，因此作业装 Rust 音频依赖并缓存 cargo 与钩子产物；两项检查共用这次编译 |
+| 工作流 | 作业 | 内容 |
+| --- | --- | --- |
+| `checks.yml` | `rust` | `cargo fmt --check`、`clippy -D warnings` |
+| `checks.yml` | `dart` | `dart format --output=none --set-exit-if-changed lib test setup.dart`、`flutter analyze` |
+| `checks.yml` | `bindings` | 重跑 `flutter_rust_bridge_codegen generate` 并用 `git diff` 校验生成物，再分析插件 |
+| `tests.yml` | `rust-test` | `cargo test`（`--all-features`，含音频） |
+| `tests.yml` | `dart-test` | `flutter test`（针对 `test/` 目录） |
 
 codegen 用官方 release 的 x86_64 linux 预编译附件（版本与 sha256 固定在
 `checks.yml` 顶部），不再从源码 `cargo install`；升级 `flutter_rust_bridge` 时把

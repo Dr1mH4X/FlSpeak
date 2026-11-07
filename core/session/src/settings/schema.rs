@@ -95,6 +95,14 @@ pub struct UiSettings {
     pub last_connected: HashMap<String, u64>,
     /// 服务器自定义图标映射（server_id -> icon_id）。
     pub server_icons: HashMap<String, String>,
+    /// 屏幕共享默认分辨率档位：720p / 1080p。
+    pub screen_share_resolution: String,
+    /// 屏幕共享默认帧率档位：30 / 60。
+    pub screen_share_frame_rate: u32,
+    /// 屏幕共享视频编码与硬件加速偏好：vp8 / h264。
+    pub screen_share_codec: String,
+    /// 屏幕共享弱网降级策略：maintainResolution / maintainFramerate。
+    pub screen_share_degradation: String,
 }
 
 impl UiSettings {
@@ -124,6 +132,10 @@ impl Default for UiSettings {
             locale: None,
             last_connected: HashMap::new(),
             server_icons: HashMap::new(),
+            screen_share_resolution: "1080p".to_string(),
+            screen_share_frame_rate: 30,
+            screen_share_codec: "vp8".to_string(),
+            screen_share_degradation: "maintainResolution".to_string(),
         }
     }
 }
