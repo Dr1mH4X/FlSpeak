@@ -475,7 +475,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get serverAddressDisconnect => 'Disconnect to change the address';
 
   @override
-  String get networkDetails => 'Network telemetry';
+  String get networkStatus => 'Network status';
 
   @override
   String get networkMeasuring => 'Checking network';
@@ -487,25 +487,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get networkPoor => 'Poor network quality';
 
   @override
-  String get networkLatency => 'Directory request latency';
+  String get networkPing => 'Ping';
 
   @override
-  String get networkJitter => 'Latency variation';
+  String get networkLossIn => 'Loss in';
 
   @override
-  String get networkFailureRate => 'Recent response failure rate';
+  String get networkLossOut => 'Loss out';
 
   @override
-  String get networkProbesSent => 'Sampled requests';
-
-  @override
-  String get networkProbesFailed => 'Requests without a valid response';
-
-  @override
-  String get networkConnectedTime => 'Connection duration';
-
-  @override
-  String get networkUpdatedAt => 'Updated at';
+  String get networkIdleTime => 'Idle time';
 
   @override
   String get networkUnavailable => 'Unavailable';
@@ -514,10 +505,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String networkMilliseconds(String value) {
     return '$value ms';
   }
-
-  @override
-  String get networkProbeExplanation =>
-      'Samples reuse the existing 30-second directory refresh without extra probes. Latency includes server processing and command throttling. The failure rate covers requests without a valid response among the last 10 samples, not UDP packet loss. The protocol library does not expose local packet loss or traffic counters.';
 
   @override
   String get voiceConnected => 'Voice connected';

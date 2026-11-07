@@ -469,7 +469,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get serverAddressDisconnect => '断开连接后可以修改地址';
 
   @override
-  String get networkDetails => '网络遥测';
+  String get networkStatus => '网络状态';
 
   @override
   String get networkMeasuring => '正在检测网络';
@@ -481,25 +481,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get networkPoor => '网络质量差';
 
   @override
-  String get networkLatency => '目录请求延迟';
+  String get networkPing => 'Ping';
 
   @override
-  String get networkJitter => '延迟波动';
+  String get networkLossIn => '丢包（入）';
 
   @override
-  String get networkFailureRate => '最近响应失败率';
+  String get networkLossOut => '丢包（出）';
 
   @override
-  String get networkProbesSent => '已采样请求';
-
-  @override
-  String get networkProbesFailed => '未收到有效响应的请求';
-
-  @override
-  String get networkConnectedTime => '本次连接时长';
-
-  @override
-  String get networkUpdatedAt => '更新时间';
+  String get networkIdleTime => '空闲时间';
 
   @override
   String get networkUnavailable => '暂无数据';
@@ -508,10 +499,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String networkMilliseconds(String value) {
     return '$value 毫秒';
   }
-
-  @override
-  String get networkProbeExplanation =>
-      '随现有的 30 秒目录刷新采样，不额外发送探测指令。延迟包含服务器处理和命令限流等待；失败率统计最近 10 次请求中未收到有效响应的比例，并非 UDP 丢包率。当前协议库未提供本机丢包和流量计数。';
 
   @override
   String get voiceConnected => '语音已连接';

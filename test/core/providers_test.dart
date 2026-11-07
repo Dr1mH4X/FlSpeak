@@ -216,12 +216,15 @@ void main() {
     );
     events.add(const CoreEvent.network(telemetry: telemetry));
     expect(container.read(sessionViewProvider).network, telemetry);
+    container.read(sessionViewProvider.notifier).setNetworkPanelPinned(true);
+    expect(container.read(sessionViewProvider).networkPanelPinned, isTrue);
     events.add(
       const CoreEvent.state(
         state: CoreSessionState.reconnecting(attempt: 1, delayMs: 1000),
       ),
     );
     expect(container.read(sessionViewProvider).network, isNull);
+    expect(container.read(sessionViewProvider).networkPanelPinned, isFalse);
     events.add(const CoreEvent.network(telemetry: telemetry));
     expect(container.read(sessionViewProvider).network, isNull);
   });

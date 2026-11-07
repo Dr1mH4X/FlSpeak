@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -50,6 +50,8 @@ pub(crate) const AUDIO_EVENT_CAPACITY: usize = 64;
 /// TeamSpeak 的 “command not found”：服务器不支持 TS6 屏幕共享命令。
 const COMMAND_NOT_FOUND: &str = "256";
 const STREAM_PROBE_TIMEOUT_MS: u64 = 5_000;
+const CONNECTION_INFO_REPLY_INTERVAL: Duration = Duration::from_secs(1);
+const NETWORK_SAMPLE_ERROR_LOG_INTERVAL: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct ChannelMetadata {
@@ -111,6 +113,16 @@ pub(crate) enum SessionSignal {
     /// 原始通知队列溢出过，流目录可能漏了更新，需要重新发现。
     StreamResync {
         epoch: u64,
+    },
+    /// `notifyconnectioninfo`：服务器返回自身连接的权威统计。
+    ConnectionInfo {
+        epoch: u64,
+        items: Vec<HashMap<String, String>>,
+    },
+    /// 服务器要求本端用 `setconnectioninfo` 上报连接统计。
+    ConnectionInfoRequested {
+        epoch: u64,
+        pending: Arc<AtomicBool>,
     },
 }
 
@@ -176,6 +188,8 @@ pub(crate) struct Actor {
     /// 当前连接的服务器是否认识 TS6 流命令；首次探测返回 command not found 后关闭。
     streams_supported: bool,
     network_monitor: Option<crate::network::NetworkMonitor>,
+    last_connection_info_reply: Option<Instant>,
+    last_network_sample_error: Option<Instant>,
     pending_images: VecDeque<PendingImage>,
     active_image: Option<ActiveImage>,
     disconnect_tx: watch::Sender<u64>,
@@ -242,6 +256,8 @@ impl Actor {
             streams: StreamCoordinator::default(),
             streams_supported: true,
             network_monitor: None,
+            last_connection_info_reply: None,
+            last_network_sample_error: None,
             pending_images: VecDeque::new(),
             active_image: None,
             disconnect_tx,
@@ -415,6 +431,9 @@ impl Actor {
             }
             SessionCommand::RequestSnapshot { reply } => {
                 let _ = reply.send(self.refresh_snapshot(true).await);
+            }
+            SessionCommand::SampleNetwork { reply } => {
+                let _ = reply.send(self.sample_network().await);
             }
             SessionCommand::Access { reply } => {
                 let result = match self.connected() {
@@ -1901,6 +1920,31 @@ impl Actor {
                     self.discover_streams().await;
                 }
             }
+            SessionSignal::ConnectionInfo { epoch, items } => {
+                if epoch != self.connection_epoch {
+                    return;
+                }
+                let Some(params) = items.iter().find(|item| match self.self_client_id {
+                    Some(id) => {
+                        item.get("clid").and_then(|value| value.parse::<i32>().ok()) == Some(id)
+                    }
+                    None => true,
+                }) else {
+                    return;
+                };
+                let Some(monitor) = &mut self.network_monitor else {
+                    return;
+                };
+                monitor.apply_connection_info(params);
+                let telemetry = monitor.snapshot(now_millis());
+                self.emit(SessionEvent::Network(telemetry));
+            }
+            SessionSignal::ConnectionInfoRequested { epoch, pending } => {
+                if epoch == self.connection_epoch {
+                    self.answer_connection_info_request().await;
+                }
+                pending.store(false, Ordering::Relaxed);
+            }
             SessionSignal::Snapshot { epoch, clients } => {
                 if epoch != self.connection_epoch {
                     return;
@@ -2492,6 +2536,71 @@ impl Actor {
         self.client.clone().ok_or(SessionError::NotConnected)
     }
 
+    /// 遥测面板打开时按需查询自身连接统计。命令写入仍在 actor 内串行执行，
+    /// 只等 `send_command_no_wait` 完成，不等待服务器回包；回包通过
+    /// `notifyconnectioninfo` 回到信号队列。
+    async fn sample_network(&mut self) -> Result<(), SessionError> {
+        let client = self.connected()?;
+        let client_id = self.self_client_id.ok_or(SessionError::NotConnected)?;
+        let result = client
+            .send_command_no_wait(&format!("getconnectioninfo clid={client_id}"))
+            .await
+            .map_err(protocol_error);
+        match &result {
+            Ok(()) => self.last_network_sample_error = None,
+            Err(error) => {
+                let now = Instant::now();
+                let should_log = self.last_network_sample_error.is_none_or(|last| {
+                    now.duration_since(last) >= NETWORK_SAMPLE_ERROR_LOG_INTERVAL
+                });
+                if should_log {
+                    self.last_network_sample_error = Some(now);
+                    self.emit(SessionEvent::Log {
+                        level: "warn".into(),
+                        message: format!("网络遥测查询失败: {error}"),
+                    });
+                }
+            }
+        }
+        result
+    }
+
+    /// 服务器查询本端连接信息时，用已知的协议层延迟作答。丢包和流量
+    /// 计数不在本端测量范围内，留空比伪造更诚实。
+    async fn answer_connection_info_request(&mut self) {
+        let Some(client) = self.client.clone() else {
+            return;
+        };
+        let (ping, jitter) = {
+            let Some(monitor) = self.network_monitor.as_ref() else {
+                return;
+            };
+            let Some(ping) = monitor.connection_ping() else {
+                return;
+            };
+            (ping, monitor.connection_jitter())
+        };
+        let now = Instant::now();
+        if self
+            .last_connection_info_reply
+            .is_some_and(|last| now.duration_since(last) < CONNECTION_INFO_REPLY_INTERVAL)
+        {
+            return;
+        }
+        self.last_connection_info_reply = Some(now);
+
+        let mut command = format!("setconnectioninfo connection_ping={ping:.4}");
+        if let Some(jitter) = jitter {
+            command.push_str(&format!(" connection_ping_deviation={jitter:.4}"));
+        }
+        if let Err(error) = client.send_command_no_wait(&command).await {
+            self.emit(SessionEvent::Log {
+                level: "warn".into(),
+                message: format!("回复连接信息失败: {error}"),
+            });
+        }
+    }
+
     fn invalidate_handlers(&mut self) {
         self.cancel_active_image();
         for request in self.pending_images.drain(..) {
@@ -2502,6 +2611,8 @@ impl Actor {
         self.levels.set_epoch(None);
         self.channel_tools = Default::default();
         self.transfer_target = None;
+        self.last_connection_info_reply = None;
+        self.last_network_sample_error = None;
         self.connection_epoch = self.connection_epoch.wrapping_add(1);
         self.epoch.store(self.connection_epoch, Ordering::SeqCst);
         let _ = self.disconnect_tx.send(self.connection_epoch);
@@ -3024,15 +3135,26 @@ fn register_handlers(
 
     let channel = signals;
     let live = Arc::clone(&current);
+    // 服务器可能连续索取连接信息；同一时刻只保留一条待处理请求。
+    let connection_info_pending = Arc::new(AtomicBool::new(false));
     client.on_raw_notification(Arc::new(move |event: ProtocolEvent| {
         if live.load(Ordering::Relaxed) != epoch {
             return;
         }
         match event {
-            ProtocolEvent::RawNotification { name, items }
-                if streams::is_stream_notification(&name) =>
-            {
-                let _ = channel.send(SessionSignal::StreamNotification { epoch, name, items });
+            ProtocolEvent::RawNotification { name, items } => {
+                if streams::is_stream_notification(&name) {
+                    let _ = channel.send(SessionSignal::StreamNotification { epoch, name, items });
+                } else if name == "notifyconnectioninfo" {
+                    let _ = channel.send(SessionSignal::ConnectionInfo { epoch, items });
+                } else if name == "notifyconnectioninforequest"
+                    && !connection_info_pending.swap(true, Ordering::Relaxed)
+                {
+                    let _ = channel.send(SessionSignal::ConnectionInfoRequested {
+                        epoch,
+                        pending: Arc::clone(&connection_info_pending),
+                    });
+                }
             }
             ProtocolEvent::NotificationOverflow { .. } => {
                 let _ = channel.send(SessionSignal::StreamResync { epoch });
@@ -3433,6 +3555,47 @@ mod tests {
                 assert_eq!(telemetry.probes_sent, 1);
                 assert_eq!(telemetry.probes_failed, 0);
                 assert!(telemetry.round_trip_ms.is_some());
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn network_sampling_sends_through_the_actor_queue() {
+        tokio::task::LocalSet::new()
+            .run_until(async {
+                let calls = Arc::new(std::sync::Mutex::new(Vec::new()));
+                let client = Client::new(
+                    tsclient_rs::generateIdentity(0),
+                    "127.0.0.1:9987".into(),
+                    "test".into(),
+                    tsclient_rs::ClientOptions {
+                        command_middleware: vec![Box::new(RefusedDirectory {
+                            calls: Arc::clone(&calls),
+                        })],
+                        ..Default::default()
+                    },
+                );
+                client.mark_connected();
+                let mut actor = audio_actor();
+                actor.client = Some(Arc::new(client));
+                actor.self_client_id = Some(7);
+                let (commands, receiver) = mpsc::unbounded_channel();
+                let task = tokio::task::spawn_local(async move {
+                    actor.run(receiver).await;
+                });
+
+                let (reply, result) = oneshot::channel();
+                commands
+                    .send(SessionCommand::SampleNetwork { reply })
+                    .unwrap();
+                assert!(result.await.unwrap().is_err());
+                assert_eq!(
+                    calls.lock().unwrap().last().map(String::as_str),
+                    Some("getconnectioninfo clid=7")
+                );
+
+                commands.send(SessionCommand::Shutdown).unwrap();
+                task.await.unwrap();
             })
             .await;
     }

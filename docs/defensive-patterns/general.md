@@ -35,3 +35,23 @@
 
 - 错误做法：用原始 JSON 值与字符串类型数据承载结构化信息，靠人肉校验。
 - 正确做法：优先选择强类型结构体，让编译器校验结构。
+
+## 时序不承载正确性
+
+正确性必须来自具名调用点、显式状态流与静态生命周期，绝不能依赖异步回调或事件落在循环队列的哪个微小时间缝隙。用延迟、微任务等待某项工作完成，是在与系统的其余部分并发竞态。
+
+- **错误做法（Dart / Flutter）**：
+  - 使用 `Future.delayed(Duration(...))` 等待渲染树构建完成或状态刷新；
+  - 使用 `scheduleMicrotask` 或 `Future.microtask` 规避“在 build 期间更新状态”的告警，假装时序成立；
+  - 使用 `addPostFrameCallback` 掩盖组件生命周期与 Riverpod 状态通知的竞态；
+  - 依赖多个未受控异步 Future 的完成先后顺序。
+- **正确做法（Dart / Flutter）**：
+  - 由 `SessionController` / Riverpod 状态机显式驱动状态演进；
+  - 将操作放到用户交互的事件回调中执行，或通过监听器（`ref.listen`）在确定性生命周期点触发；
+  - 瞬时通知走 `NoticeCenter`，不在 widget 内部做定时重试或轮询检查。
+- **错误做法（Rust）**：
+  - 在非测试代码中用 `std::thread::sleep`、`tokio::time::sleep` 猜测并等待其他线程、网络或 Actor 准备就绪；
+  - 在音频线程回调中做延时或等待。
+- **正确做法（Rust）**：
+  - 线程同步与工作调度依赖 Actor MPSC 信道、显式状态机、无锁环形缓冲区或 `tokio::sync::oneshot` / `watch`；
+  - 等待一个状态转换必须显式监听该事件或通知，严禁无依据的定时轮询。

@@ -135,6 +135,7 @@ class SessionController extends Notifier<SessionView> {
   int _serversRevision = 0;
   String? _connectingServerId;
   bool _awaitingDisconnect = false;
+  bool _samplingNetwork = false;
 
   /// 最近一次已提示的语音错误；Voice 事件重复带同一句时不再刷新提示。
   String? _lastVoiceNotice;
@@ -754,6 +755,23 @@ class SessionController extends Notifier<SessionView> {
     }
   }
 
+  /// 遥测面板打开期间的按需采样。失败时保留现有探测数据，不打断连接。
+  Future<void> sampleNetwork() async {
+    if (!state.connected || _samplingNetwork) return;
+    _samplingNetwork = true;
+    try {
+      await ref.read(coreSessionProvider).sampleNetwork();
+    } on CoreError {
+      // 服务器不允许查询连接信息时，面板继续显示已有的探测统计。
+    } finally {
+      _samplingNetwork = false;
+    }
+  }
+
+  void setNetworkPanelPinned(bool pinned) {
+    state = state.copyWith(networkPanelPinned: pinned);
+  }
+
   void _notifyCoreError(CoreError error) {
     if (ref.mounted) {
       _notify(describeCoreError(error, ref.read(_localizationsProvider)));
@@ -824,6 +842,7 @@ class SessionController extends Notifier<SessionView> {
         state = switch (next) {
           CoreSessionState_Disconnected() => current.copyWith(
             network: null,
+            networkPanelPinned: false,
             state: next,
             activeServerId: null,
             channels: const [],
@@ -841,6 +860,7 @@ class SessionController extends Notifier<SessionView> {
           ),
           CoreSessionState_Connecting() => current.copyWith(
             network: null,
+            networkPanelPinned: false,
             state: next,
             activeServerId: _awaitingDisconnect
                 ? current.activeServerId
@@ -858,6 +878,7 @@ class SessionController extends Notifier<SessionView> {
           ),
           CoreSessionState_Reconnecting() => current.copyWith(
             network: null,
+            networkPanelPinned: false,
             state: next,
             activeServerId:
                 current.activeServerId ??

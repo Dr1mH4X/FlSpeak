@@ -330,6 +330,9 @@ pub enum SessionCommand {
     RequestSnapshot {
         reply: oneshot::Sender<Result<(), SessionError>>,
     },
+    SampleNetwork {
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
     SetMuted {
         muted: bool,
         reply: oneshot::Sender<Result<(), SessionError>>,
@@ -766,6 +769,13 @@ impl SessionHandle {
     pub async fn request_snapshot(&self) -> Result<(), SessionError> {
         let (reply, rx) = oneshot::channel();
         self.send(SessionCommand::RequestSnapshot { reply })?;
+        rx.await.map_err(|_| SessionError::Closed)?
+    }
+
+    /// 只在遥测面板打开时调用：向服务器查询自身连接统计。
+    pub async fn sample_network(&self) -> Result<(), SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::SampleNetwork { reply })?;
         rx.await.map_err(|_| SessionError::Closed)?
     }
 

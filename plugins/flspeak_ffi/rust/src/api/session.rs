@@ -89,6 +89,9 @@ pub struct NetworkTelemetry {
     pub probes_sent: u64,
     pub probes_failed: u64,
     pub connected_seconds: u64,
+    pub idle_seconds: Option<u64>,
+    pub loss_in_percent: Option<f64>,
+    pub loss_out_percent: Option<f64>,
     pub sampled_at: u64,
 }
 
@@ -476,6 +479,11 @@ impl CoreSession {
     /// 主动拉一次频道/成员快照。连接期间 actor 也会每 30 秒自动刷新。
     pub async fn request_snapshot(&self) -> Result<(), CoreError> {
         Ok(self.handle.request_snapshot().await?)
+    }
+
+    /// 遥测面板打开时按需查询自身连接统计；关闭面板后调用方停止轮询。
+    pub async fn sample_network(&self) -> Result<(), CoreError> {
+        Ok(self.handle.sample_network().await?)
     }
 
     pub async fn set_muted(&self, muted: bool) -> Result<(), CoreError> {
@@ -961,6 +969,9 @@ impl From<SessionEvent> for CoreEvent {
                     probes_sent: telemetry.probes_sent,
                     probes_failed: telemetry.probes_failed,
                     connected_seconds: telemetry.connected_seconds,
+                    idle_seconds: telemetry.idle_seconds,
+                    loss_in_percent: telemetry.loss_in_percent,
+                    loss_out_percent: telemetry.loss_out_percent,
                     sampled_at: telemetry.sampled_at,
                 },
             },

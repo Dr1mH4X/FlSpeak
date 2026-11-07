@@ -962,11 +962,11 @@ abstract class AppLocalizations {
   /// **'Disconnect to change the address'**
   String get serverAddressDisconnect;
 
-  /// No description provided for @networkDetails.
+  /// No description provided for @networkStatus.
   ///
   /// In en, this message translates to:
-  /// **'Network telemetry'**
-  String get networkDetails;
+  /// **'Network status'**
+  String get networkStatus;
 
   /// No description provided for @networkMeasuring.
   ///
@@ -986,47 +986,29 @@ abstract class AppLocalizations {
   /// **'Poor network quality'**
   String get networkPoor;
 
-  /// No description provided for @networkLatency.
+  /// No description provided for @networkPing.
   ///
   /// In en, this message translates to:
-  /// **'Directory request latency'**
-  String get networkLatency;
+  /// **'Ping'**
+  String get networkPing;
 
-  /// No description provided for @networkJitter.
+  /// No description provided for @networkLossIn.
   ///
   /// In en, this message translates to:
-  /// **'Latency variation'**
-  String get networkJitter;
+  /// **'Loss in'**
+  String get networkLossIn;
 
-  /// No description provided for @networkFailureRate.
+  /// No description provided for @networkLossOut.
   ///
   /// In en, this message translates to:
-  /// **'Recent response failure rate'**
-  String get networkFailureRate;
+  /// **'Loss out'**
+  String get networkLossOut;
 
-  /// No description provided for @networkProbesSent.
+  /// No description provided for @networkIdleTime.
   ///
   /// In en, this message translates to:
-  /// **'Sampled requests'**
-  String get networkProbesSent;
-
-  /// No description provided for @networkProbesFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Requests without a valid response'**
-  String get networkProbesFailed;
-
-  /// No description provided for @networkConnectedTime.
-  ///
-  /// In en, this message translates to:
-  /// **'Connection duration'**
-  String get networkConnectedTime;
-
-  /// No description provided for @networkUpdatedAt.
-  ///
-  /// In en, this message translates to:
-  /// **'Updated at'**
-  String get networkUpdatedAt;
+  /// **'Idle time'**
+  String get networkIdleTime;
 
   /// No description provided for @networkUnavailable.
   ///
@@ -1039,12 +1021,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{value} ms'**
   String networkMilliseconds(String value);
-
-  /// No description provided for @networkProbeExplanation.
-  ///
-  /// In en, this message translates to:
-  /// **'Samples reuse the existing 30-second directory refresh without extra probes. Latency includes server processing and command throttling. The failure rate covers requests without a valid response among the last 10 samples, not UDP packet loss. The protocol library does not expose local packet loss or traffic counters.'**
-  String get networkProbeExplanation;
 
   /// No description provided for @voiceConnected.
   ///
