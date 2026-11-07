@@ -4,6 +4,7 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
@@ -36,6 +37,16 @@ final coreSessionProvider = Provider<CoreSession>(
 final storePathProvider = Provider<String>(
   (ref) => throw StateError('storePathProvider 必须在 ProviderScope 里覆盖'),
 );
+
+/// 日志存储目录的绝对路径，设置页展示与管理用。
+final logPathProvider = Provider<String>((ref) {
+  try {
+    final store = ref.watch(storePathProvider);
+    return p.join(p.dirname(store), 'logs');
+  } catch (_) {
+    return '/tmp/flspeak/logs';
+  }
+});
 
 /// 提供当前应用的包信息（版本号、构建号等）。
 final packageInfoProvider = FutureProvider<PackageInfo>((ref) {

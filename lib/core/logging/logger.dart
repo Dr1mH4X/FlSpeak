@@ -19,7 +19,7 @@ Future<Directory> resolveLogDirectory() async {
   return logDir;
 }
 
-Future<void> initLoggingPipeline({Directory? overrideLogDir}) async {
+Future<Directory> initLoggingPipeline({Directory? overrideLogDir}) async {
   final logDir = overrideLogDir ?? await resolveLogDirectory();
 
   // 1. 异步注入 Rust 侧
@@ -35,4 +35,6 @@ Future<void> initLoggingPipeline({Directory? overrideLogDir}) async {
     ),
     observer: JsonLinesFileObserver(logDir.path),
   );
+
+  return logDir;
 }

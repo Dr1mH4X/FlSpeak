@@ -49,6 +49,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get commonCopied => '已复制';
 
   @override
+  String get commonOpenDirectory => '打开目录';
+
+  @override
   String get commonRetry => '重试';
 
   @override
@@ -409,7 +412,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsAudioLoading => '正在读取音频设备…';
 
   @override
-  String get settingsStorePath => '存储目录';
+  String get settingsStorePath => '数据目录';
+
+  @override
+  String get settingsDataPath => '数据目录';
+
+  @override
+  String get settingsLogPath => '日志目录';
 
   @override
   String get connectTitle => '找到你的声音';
