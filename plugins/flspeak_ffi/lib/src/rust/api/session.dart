@@ -39,6 +39,14 @@ Future<String> uploadImage({
 void initSettings({required String storePath}) =>
     RustLib.instance.api.crateApiSessionInitSettings(storePath: storePath);
 
+/// 初始化全局日志（幂等，兼容 Flutter Hot Restart）。
+Future<void> initLogging({required String logDir}) =>
+    RustLib.instance.api.crateApiSessionInitLogging(logDir: logDir);
+
+/// 释放日志 worker，把队列写完；应用退出前调用。
+Future<void> shutdownLogging() =>
+    RustLib.instance.api.crateApiSessionShutdownLogging();
+
 /// 获取当前设置的完整 JSON 字符串。
 String getSettingsJson() =>
     RustLib.instance.api.crateApiSessionGetSettingsJson();

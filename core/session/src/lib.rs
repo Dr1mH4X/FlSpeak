@@ -12,6 +12,7 @@ mod downloads;
 mod events;
 mod image_upload;
 mod images;
+pub mod logging;
 mod network;
 pub use network::NetworkTelemetry;
 pub mod settings;

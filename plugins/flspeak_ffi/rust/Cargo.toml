@@ -17,12 +17,6 @@ audio = { workspace = true, features = ["audio"] }
 proto.workspace = true
 server.workspace = true
 session.workspace = true
-tracing.workspace = true
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json", "chrono", "local-time"] }
-tracing-appender = "0.2"
-
-[target.'cfg(target_os = "android")'.dependencies]
-tracing-android = "0.2"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }

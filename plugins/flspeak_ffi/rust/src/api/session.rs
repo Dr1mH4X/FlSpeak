@@ -3,7 +3,7 @@
 //! 这一层只做转发与类型转换：每个函数对应 core 里一个动作，Dart 侧拿到的类型都在
 //! 本文件定义，core 的类型变化不会直接冲进生成代码。
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use flutter_rust_bridge::for_generated::SseCodec;
@@ -1159,6 +1159,19 @@ pub fn init_settings(store_path: String) -> Result<(), CoreError> {
     session::SettingsManager::init(PathBuf::from(store_path)).map_err(|e| CoreError::Internal {
         message: format!("init_settings failed: {e}"),
     })?;
+    Ok(())
+}
+
+/// 初始化全局日志（幂等，兼容 Flutter Hot Restart）。
+pub fn init_logging(log_dir: String) -> Result<(), CoreError> {
+    session::logging::init(Path::new(&log_dir)).map_err(|e| CoreError::Internal {
+        message: format!("init_logging failed: {e}"),
+    })
+}
+
+/// 释放日志 worker，把队列写完；应用退出前调用。
+pub fn shutdown_logging() -> Result<(), CoreError> {
+    session::logging::shutdown();
     Ok(())
 }
 

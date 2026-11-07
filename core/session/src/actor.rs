@@ -3076,6 +3076,12 @@ struct EventLogger {
 
 impl EventLogger {
     fn log(&self, level: &str, message: &str) {
+        match level {
+            "error" => tracing::error!(target: "tsclient", message = message),
+            "warn" => tracing::warn!(target: "tsclient", message = message),
+            "debug" => tracing::debug!(target: "tsclient", message = message),
+            _ => tracing::info!(target: "tsclient", message = message),
+        }
         emit(
             &self.events,
             SessionEvent::Log {
