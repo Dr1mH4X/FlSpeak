@@ -86,6 +86,7 @@ class SessionView {
     this.streams = const <StreamView>[],
     this.watchingStreamId,
     this.network,
+    this.networkPanelPinned = false,
   });
 
   final Map<int, FileTransfer> transfers;
@@ -94,6 +95,9 @@ class SessionView {
   final String? watchingStreamId;
   final CoreSessionState state;
   final NetworkTelemetry? network;
+
+  /// 网络遥测面板是否固定为常开；只在当前连接内有效。
+  final bool networkPanelPinned;
   final List<ServerProfileView> servers;
   final List<ChannelView> channels;
   final List<ClientView> clients;
@@ -337,10 +341,12 @@ class SessionView {
     bool? selfSpeaking,
     bool? pttMode,
     Object? identityUpgradeTarget = _unset,
+    bool? networkPanelPinned,
   }) => SessionView(
     network: identical(network, _unset)
         ? this.network
         : network as NetworkTelemetry?,
+    networkPanelPinned: networkPanelPinned ?? this.networkPanelPinned,
     transfers: transfers ?? this.transfers,
     activeFileDownloads: activeFileDownloads ?? this.activeFileDownloads,
     streams: streams ?? this.streams,

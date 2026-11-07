@@ -153,6 +153,9 @@ abstract class CoreSession implements RustOpaqueInterface {
     required String offerSdp,
   });
 
+  /// 遥测面板打开时按需查询自身连接统计；关闭面板后调用方停止轮询。
+  Future<void> sampleNetwork();
+
   Future<void> sendPublisherIceCandidate({
     required int viewerClid,
     required String sdp,
@@ -753,6 +756,9 @@ class NetworkTelemetry {
   final int probesSent;
   final int probesFailed;
   final int connectedSeconds;
+  final int? idleSeconds;
+  final double? lossInPercent;
+  final double? lossOutPercent;
   final int sampledAt;
 
   const NetworkTelemetry({
@@ -762,6 +768,9 @@ class NetworkTelemetry {
     required this.probesSent,
     required this.probesFailed,
     required this.connectedSeconds,
+    this.idleSeconds,
+    this.lossInPercent,
+    this.lossOutPercent,
     required this.sampledAt,
   });
 
@@ -773,6 +782,9 @@ class NetworkTelemetry {
       probesSent.hashCode ^
       probesFailed.hashCode ^
       connectedSeconds.hashCode ^
+      idleSeconds.hashCode ^
+      lossInPercent.hashCode ^
+      lossOutPercent.hashCode ^
       sampledAt.hashCode;
 
   @override
@@ -786,6 +798,9 @@ class NetworkTelemetry {
           probesSent == other.probesSent &&
           probesFailed == other.probesFailed &&
           connectedSeconds == other.connectedSeconds &&
+          idleSeconds == other.idleSeconds &&
+          lossInPercent == other.lossInPercent &&
+          lossOutPercent == other.lossOutPercent &&
           sampledAt == other.sampledAt;
 }
 

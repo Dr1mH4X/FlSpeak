@@ -475,7 +475,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get serverAddressDisconnect => 'Disconnect to change the address';
 
   @override
-  String get networkDetails => 'Network telemetry';
+  String get networkStatus => 'Network status';
 
   @override
   String get networkMeasuring => 'Checking network';
@@ -487,25 +487,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get networkPoor => 'Poor network quality';
 
   @override
-  String get networkLatency => 'Directory request latency';
+  String get networkPing => 'Ping';
 
   @override
-  String get networkJitter => 'Latency variation';
+  String get networkLossIn => 'Loss in';
 
   @override
-  String get networkFailureRate => 'Recent response failure rate';
+  String get networkLossOut => 'Loss out';
 
   @override
-  String get networkProbesSent => 'Sampled requests';
-
-  @override
-  String get networkProbesFailed => 'Requests without a valid response';
-
-  @override
-  String get networkConnectedTime => 'Connection duration';
-
-  @override
-  String get networkUpdatedAt => 'Updated at';
+  String get networkIdleTime => 'Idle time';
 
   @override
   String get networkUnavailable => 'Unavailable';

@@ -622,7 +622,7 @@ class _MemberFlag extends StatelessWidget {
   }
 }
 
-class _UserFooter extends StatelessWidget {
+class _UserFooter extends ConsumerStatefulWidget {
   const _UserFooter({
     required this.view,
     required this.muted,
@@ -648,12 +648,52 @@ class _UserFooter extends StatelessWidget {
   final VoidCallback? onDisconnect;
 
   @override
+  ConsumerState<_UserFooter> createState() => _UserFooterState();
+}
+
+class _UserFooterState extends ConsumerState<_UserFooter> {
+  late bool _expanded = widget.view.networkPanelPinned;
+
+  @override
+  void didUpdateWidget(covariant _UserFooter oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.view.connected && oldWidget.view.connected) {
+      _expanded = false;
+    }
+    if (widget.view.networkPanelPinned &&
+        !oldWidget.view.networkPanelPinned &&
+        !_expanded) {
+      _expanded = true;
+    }
+  }
+
+  void _toggleNetwork() {
+    if (_expanded) {
+      _closeNetwork();
+    } else {
+      setState(() => _expanded = true);
+    }
+  }
+
+  void _closeNetwork() {
+    if (!_expanded) {
+      return;
+    }
+    setState(() => _expanded = false);
+    if (widget.view.networkPanelPinned) {
+      ref.read(sessionViewProvider.notifier).setNetworkPanelPinned(false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
+    final view = widget.view;
     final channel = view.selfChannelId == null
         ? null
         : view.channelById(view.selfChannelId!);
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
     return Container(
       margin: const EdgeInsets.all(8),
       decoration: BoxDecoration(
@@ -664,6 +704,22 @@ class _UserFooter extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          _CardExtension(
+            expanded: _expanded,
+            reduceMotion: reduceMotion,
+            builder: (context) => Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                NetworkTelemetryPanel(onClose: _closeNetwork),
+                Divider(
+                  height: 1,
+                  indent: 12,
+                  endIndent: 12,
+                  color: scheme.outlineVariant,
+                ),
+              ],
+            ),
+          ),
           if (view.connected || view.reconnecting)
             Padding(
               padding: const EdgeInsets.fromLTRB(4, 8, 4, 4),
@@ -672,6 +728,8 @@ class _UserFooter extends StatelessWidget {
                   Expanded(
                     child: NetworkStatus(
                       view: view,
+                      expanded: _expanded,
+                      onToggle: _toggleNetwork,
                       channelLabel: channel == null
                           ? (view.activeServer?.label ?? l10n.appName)
                           : channelDisplayName(channel),
@@ -680,18 +738,18 @@ class _UserFooter extends StatelessWidget {
                   if (view.connected && view.selfChannelId != null)
                     _IconToggle(
                       key: const ValueKey('voice-screen-share-toggle'),
-                      label: sharingScreen
+                      label: widget.sharingScreen
                           ? l10n.streamStopShare
                           : l10n.streamStartShare,
-                      icon: sharingScreen
+                      icon: widget.sharingScreen
                           ? Icons.stop_screen_share_rounded
                           : Icons.screen_share_rounded,
-                      active: sharingScreen,
-                      onTap: onToggleScreenShare,
+                      active: widget.sharingScreen,
+                      onTap: widget.onToggleScreenShare,
                     ),
-                  if (onDisconnect != null)
+                  if (widget.onDisconnect != null)
                     IconButton.filled(
-                      onPressed: view.busy ? null : onDisconnect,
+                      onPressed: view.busy ? null : widget.onDisconnect,
                       style: IconButton.styleFrom(
                         backgroundColor: scheme.error,
                         foregroundColor: scheme.onError,
@@ -730,31 +788,125 @@ class _UserFooter extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 _IconToggle(
-                  label: muted ? l10n.voiceUnmute : l10n.voiceMute,
-                  icon: muted ? Icons.mic_off_rounded : Icons.mic_rounded,
-                  active: muted,
-                  onTap: onToggleMute,
+                  label: widget.muted ? l10n.voiceUnmute : l10n.voiceMute,
+                  icon: widget.muted
+                      ? Icons.mic_off_rounded
+                      : Icons.mic_rounded,
+                  active: widget.muted,
+                  onTap: widget.onToggleMute,
                 ),
                 _IconToggle(
-                  label: deafened ? l10n.voiceUndeafen : l10n.voiceDeafen,
-                  icon: deafened
+                  label: widget.deafened
+                      ? l10n.voiceUndeafen
+                      : l10n.voiceDeafen,
+                  icon: widget.deafened
                       ? Icons.headset_off_rounded
                       : Icons.headphones_rounded,
-                  active: deafened,
-                  onTap: onToggleDeafen,
+                  active: widget.deafened,
+                  onTap: widget.onToggleDeafen,
                 ),
                 _IconToggle(
-                  label: away ? l10n.voiceUnaway : l10n.voiceAway,
+                  label: widget.away ? l10n.voiceUnaway : l10n.voiceAway,
                   icon: Icons.schedule_rounded,
-                  active: away,
+                  active: widget.away,
                   activeContainer: scheme.primaryContainer,
                   activeOnContainer: scheme.onPrimaryContainer,
-                  onTap: onToggleAway,
+                  onTap: widget.onToggleAway,
                 ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 用户卡向上延伸的展开区：内容随高度因子被裁剪，关闭动画结束后才释放面板。
+class _CardExtension extends StatefulWidget {
+  const _CardExtension({
+    required this.expanded,
+    required this.reduceMotion,
+    required this.builder,
+  });
+
+  final bool expanded;
+  final bool reduceMotion;
+  final WidgetBuilder builder;
+
+  @override
+  State<_CardExtension> createState() => _CardExtensionState();
+}
+
+class _CardExtensionState extends State<_CardExtension>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: Motion.effectsDefault,
+    reverseDuration: Motion.effectsFast,
+  );
+  late bool _visible = widget.expanded;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.expanded) {
+      _controller.value = 1;
+    }
+    _controller.addStatusListener(_handleStatus);
+  }
+
+  void _handleStatus(AnimationStatus status) {
+    if (status == AnimationStatus.dismissed && !widget.expanded && _visible) {
+      setState(() => _visible = false);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _CardExtension oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.reduceMotion) {
+      _controller.stop();
+      if (_visible != widget.expanded) {
+        setState(() => _visible = widget.expanded);
+      }
+      return;
+    }
+    if (widget.expanded) {
+      if (!_visible) {
+        setState(() => _visible = true);
+      }
+      _controller.forward();
+    } else {
+      _controller.reverse();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller
+      ..removeStatusListener(_handleStatus)
+      ..dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_visible) {
+      return const SizedBox.shrink();
+    }
+    if (widget.reduceMotion) {
+      return widget.builder(context);
+    }
+    return AnimatedBuilder(
+      animation: _controller,
+      child: widget.builder(context),
+      builder: (context, child) => ClipRect(
+        child: Align(
+          alignment: Alignment.topCenter,
+          heightFactor: _controller.value,
+          child: child,
+        ),
       ),
     );
   }

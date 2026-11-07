@@ -112,6 +112,15 @@ pub(crate) enum SessionSignal {
     StreamResync {
         epoch: u64,
     },
+    /// `notifyconnectioninfo`：服务器返回自身连接的权威统计。
+    ConnectionInfo {
+        epoch: u64,
+        items: Vec<HashMap<String, String>>,
+    },
+    /// 服务器要求本端用 `setconnectioninfo` 上报连接统计。
+    ConnectionInfoRequested {
+        epoch: u64,
+    },
 }
 
 pub(crate) struct SessionAudio {
@@ -415,6 +424,9 @@ impl Actor {
             }
             SessionCommand::RequestSnapshot { reply } => {
                 let _ = reply.send(self.refresh_snapshot(true).await);
+            }
+            SessionCommand::SampleNetwork { reply } => {
+                let _ = reply.send(self.sample_network());
             }
             SessionCommand::Access { reply } => {
                 let result = match self.connected() {
@@ -1901,6 +1913,30 @@ impl Actor {
                     self.discover_streams().await;
                 }
             }
+            SessionSignal::ConnectionInfo { epoch, items } => {
+                if epoch != self.connection_epoch {
+                    return;
+                }
+                let Some(params) = items.iter().find(|item| match self.self_client_id {
+                    Some(id) => {
+                        item.get("clid").and_then(|value| value.parse::<i32>().ok()) == Some(id)
+                    }
+                    None => true,
+                }) else {
+                    return;
+                };
+                let Some(monitor) = &mut self.network_monitor else {
+                    return;
+                };
+                monitor.apply_connection_info(params);
+                let telemetry = monitor.snapshot(now_millis());
+                self.emit(SessionEvent::Network(telemetry));
+            }
+            SessionSignal::ConnectionInfoRequested { epoch } => {
+                if epoch == self.connection_epoch {
+                    self.answer_connection_info_request();
+                }
+            }
             SessionSignal::Snapshot { epoch, clients } => {
                 if epoch != self.connection_epoch {
                     return;
@@ -2492,6 +2528,42 @@ impl Actor {
         self.client.clone().ok_or(SessionError::NotConnected)
     }
 
+    /// 遥测面板打开时按需查询自身连接统计。查询本身在后台任务里完成，
+    /// 不占用 actor 的命令循环；结果通过 `notifyconnectioninfo` 回到信号队列。
+    fn sample_network(&self) -> Result<(), SessionError> {
+        let client = self.connected()?;
+        let client_id = self.self_client_id.ok_or(SessionError::NotConnected)?;
+        tokio::task::spawn_local(async move {
+            let client_id = client_id.to_string();
+            let _ = client
+                .send_raw_command("getconnectioninfo", &[("clid", client_id.as_str())])
+                .await;
+        });
+        Ok(())
+    }
+
+    /// 服务器查询本端连接信息时，用已知的协议层延迟作答。丢包和流量
+    /// 计数不在本端测量范围内，留空比伪造更诚实。
+    fn answer_connection_info_request(&self) {
+        let Some(client) = self.client.clone() else {
+            return;
+        };
+        let Some(monitor) = self.network_monitor.as_ref() else {
+            return;
+        };
+        let Some(ping) = monitor.connection_ping() else {
+            return;
+        };
+        let jitter = monitor.connection_jitter();
+        tokio::task::spawn_local(async move {
+            let mut command = format!("setconnectioninfo connection_ping={ping:.4}");
+            if let Some(jitter) = jitter {
+                command.push_str(&format!(" connection_ping_deviation={jitter:.4}"));
+            }
+            let _ = client.send_command_no_wait(&command).await;
+        });
+    }
+
     fn invalidate_handlers(&mut self) {
         self.cancel_active_image();
         for request in self.pending_images.drain(..) {
@@ -3029,10 +3101,14 @@ fn register_handlers(
             return;
         }
         match event {
-            ProtocolEvent::RawNotification { name, items }
-                if streams::is_stream_notification(&name) =>
-            {
-                let _ = channel.send(SessionSignal::StreamNotification { epoch, name, items });
+            ProtocolEvent::RawNotification { name, items } => {
+                if streams::is_stream_notification(&name) {
+                    let _ = channel.send(SessionSignal::StreamNotification { epoch, name, items });
+                } else if name == "notifyconnectioninfo" {
+                    let _ = channel.send(SessionSignal::ConnectionInfo { epoch, items });
+                } else if name == "notifyconnectioninforequest" {
+                    let _ = channel.send(SessionSignal::ConnectionInfoRequested { epoch });
+                }
             }
             ProtocolEvent::NotificationOverflow { .. } => {
                 let _ = channel.send(SessionSignal::StreamResync { epoch });
