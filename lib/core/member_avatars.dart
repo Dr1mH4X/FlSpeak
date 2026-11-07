@@ -10,13 +10,44 @@ class _AvatarCache {
   bool alive = true;
   final requests = <String, Future<Uint8List>>{};
   final attempts = <String, int>{};
-  final timers = <Timer>{};
+  final timers = <String, Timer>{};
+  final cooldowns = <String, ({DateTime expiresAt, bool isTransient})>{};
+
+  void cancelTimer(String uid) {
+    timers.remove(uid)?.cancel();
+  }
+
+  void scheduleCooldown({
+    required String uid,
+    required Duration duration,
+    required bool isTransient,
+    required int attempt,
+  }) {
+    if (!alive) return;
+    cancelTimer(uid);
+    final expiresAt = DateTime.now().add(duration);
+    cooldowns[uid] = (expiresAt: expiresAt, isTransient: isTransient);
+
+    final timer = Timer(duration, () {
+      timers.remove(uid);
+      cooldowns.remove(uid);
+      requests.remove(uid);
+      if (!isTransient && attempt >= 3) {
+        attempts.remove(uid);
+      } else {
+        refreshers[uid]?.call();
+      }
+    });
+    timers[uid] = timer;
+  }
 
   void dispose() {
     alive = false;
-    for (final timer in timers) {
+    for (final timer in timers.values) {
       timer.cancel();
     }
+    timers.clear();
+    cooldowns.clear();
   }
 }
 
@@ -52,42 +83,59 @@ final memberAvatarProvider = FutureProvider.autoDispose
         if (identical(cache.refreshers[uid], refresh)) {
           cache.refreshers.remove(uid);
         }
+        cache.cancelTimer(uid);
       });
+      final cooldown = cache.cooldowns[uid];
+      if (cooldown != null) {
+        final remaining = cooldown.expiresAt.difference(DateTime.now());
+        if (remaining <= Duration.zero) {
+          cache.cooldowns.remove(uid);
+          cache.requests.remove(uid);
+          if (!cooldown.isTransient && (cache.attempts[uid] ?? 0) >= 3) {
+            cache.attempts.remove(uid);
+          }
+        } else if (!cache.timers.containsKey(uid)) {
+          cache.scheduleCooldown(
+            uid: uid,
+            duration: remaining,
+            isTransient: cooldown.isTransient,
+            attempt: cache.attempts[uid] ?? 1,
+          );
+        }
+      }
       return cache.requests.putIfAbsent(uid, () {
         return Future.sync(
           () => ref.read(coreSessionProvider).fetchAvatar(uid: uid),
         ).then(
           (bytes) {
+            cache.cancelTimer(uid);
+            cache.cooldowns.remove(uid);
             cache.attempts.remove(uid);
             return bytes;
           },
           onError: (Object error, StackTrace stack) {
             if (cache.alive) {
               final isTransient = _isTransientAvatarError(error);
-              late final Timer timer;
               if (isTransient) {
-                timer = Timer(const Duration(milliseconds: 500), () {
-                  cache.timers.remove(timer);
-                  cache.requests.remove(uid);
-                  cache.refreshers[uid]?.call();
-                });
+                cache.scheduleCooldown(
+                  uid: uid,
+                  duration: const Duration(milliseconds: 500),
+                  isTransient: true,
+                  attempt: 0,
+                );
               } else {
                 final attempt = cache.attempts.update(
                   uid,
                   (n) => n + 1,
                   ifAbsent: () => 1,
                 );
-                timer = Timer(const Duration(seconds: 30), () {
-                  cache.timers.remove(timer);
-                  cache.requests.remove(uid);
-                  if (attempt >= 3) {
-                    cache.attempts.remove(uid);
-                  } else {
-                    cache.refreshers[uid]?.call();
-                  }
-                });
+                cache.scheduleCooldown(
+                  uid: uid,
+                  duration: const Duration(seconds: 30),
+                  isTransient: false,
+                  attempt: attempt,
+                );
               }
-              cache.timers.add(timer);
             }
             Error.throwWithStackTrace(error, stack);
           },
