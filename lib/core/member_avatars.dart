@@ -33,6 +33,13 @@ final Provider<_AvatarCache?> _memberAvatarCacheProvider =
       return cache;
     });
 
+bool _isTransientAvatarError(Object error) {
+  final message = error.toString().toLowerCase();
+  return message.contains('queue is full') ||
+      message.contains('interrupted') ||
+      message.contains('busy');
+}
+
 final memberAvatarProvider = FutureProvider.autoDispose
     .family<Uint8List, String>((ref, uid) {
       final cache = ref.watch(_memberAvatarCacheProvider);
@@ -47,11 +54,6 @@ final memberAvatarProvider = FutureProvider.autoDispose
         }
       });
       return cache.requests.putIfAbsent(uid, () {
-        final attempt = cache.attempts.update(
-          uid,
-          (n) => n + 1,
-          ifAbsent: () => 1,
-        );
         return Future.sync(
           () => ref.read(coreSessionProvider).fetchAvatar(uid: uid),
         ).then(
@@ -61,12 +63,30 @@ final memberAvatarProvider = FutureProvider.autoDispose
           },
           onError: (Object error, StackTrace stack) {
             if (cache.alive) {
+              final isTransient = _isTransientAvatarError(error);
               late final Timer timer;
-              timer = Timer(const Duration(seconds: 30), () {
-                cache.timers.remove(timer);
-                cache.requests.remove(uid);
-                if (attempt < 3) cache.refreshers[uid]?.call();
-              });
+              if (isTransient) {
+                timer = Timer(const Duration(milliseconds: 500), () {
+                  cache.timers.remove(timer);
+                  cache.requests.remove(uid);
+                  cache.refreshers[uid]?.call();
+                });
+              } else {
+                final attempt = cache.attempts.update(
+                  uid,
+                  (n) => n + 1,
+                  ifAbsent: () => 1,
+                );
+                timer = Timer(const Duration(seconds: 30), () {
+                  cache.timers.remove(timer);
+                  cache.requests.remove(uid);
+                  if (attempt >= 3) {
+                    cache.attempts.remove(uid);
+                  } else {
+                    cache.refreshers[uid]?.call();
+                  }
+                });
+              }
               cache.timers.add(timer);
             }
             Error.throwWithStackTrace(error, stack);

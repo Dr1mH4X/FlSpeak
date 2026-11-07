@@ -77,6 +77,87 @@ void main() {
     await tester.pump();
   });
 
+  testWidgets(
+    'transient queue-full and interrupted errors retry promptly within 500ms without consuming attempt count',
+    (tester) async {
+      final core = _Core();
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(core),
+          sessionViewProvider.overrideWith(_Controller.new),
+        ],
+      );
+      final provider = memberAvatarProvider('uid-transient');
+      final subscription = container.listen(provider, (_, _) {});
+
+      // 1. 模拟队列满错误（transient）
+      expect(core.requests, hasLength(1));
+      final failure1 = expectLater(
+        container.read(provider.future),
+        throwsA(isA<StateError>()),
+      );
+      core.requests.last.completeError(
+        StateError('image request queue is full'),
+      );
+      await tester.pump();
+      await failure1;
+
+      // 400ms 时尚未重试
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(core.requests, hasLength(1));
+
+      // 500ms 时触发快速重试
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump();
+      expect(core.requests, hasLength(2));
+
+      // 2. 模拟被控制操作打断（transient）
+      final failure2 = expectLater(
+        container.read(provider.future),
+        throwsA(isA<StateError>()),
+      );
+      core.requests.last.completeError(
+        StateError('image negotiation interrupted'),
+      );
+      await tester.pump();
+      await failure2;
+
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump();
+      expect(core.requests, hasLength(3));
+
+      // 3. 此时发生一次真实超时（attempt 1），应当进入 30s 冷却而非 500ms
+      final failure3 = expectLater(
+        container.read(provider.future),
+        throwsA(isA<TimeoutException>()),
+      );
+      core.requests.last.completeError(
+        TimeoutException('real network timeout'),
+      );
+      await tester.pump();
+      await failure3;
+
+      // 500ms 时不应重试
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(core.requests, hasLength(3));
+
+      // 29s 后仍未重试，30s 后重试
+      await tester.pump(const Duration(seconds: 29));
+      expect(core.requests, hasLength(3));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
+      expect(core.requests, hasLength(4));
+
+      core.requests.last.complete(Uint8List.fromList([42]));
+      await tester.pump();
+      expect(await container.read(provider.future), [42]);
+
+      subscription.close();
+      container.dispose();
+      await tester.pump();
+    },
+  );
+
   for (final hasAvatar in [true, false]) {
     test(
       'recycled rows retain cached avatars and missing results, present=$hasAvatar',

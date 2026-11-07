@@ -8,7 +8,7 @@ Status: implemented
 
 ## Decision
 
-`core/session` 保存通过 `proto::client` 检查的 SRV 解析目标，所有文件传输复用它，端口来自协议协商。`FetchIcon` 在 actor 中串行协商频道 0 的 `/icon_<id>`，TCP 字节传输在 local task 中执行，不把 `Client` 协议操作交给并发任务。图标限制为 1 MiB、20 秒，下载完成后比较连接代次，旧连接的结果返回未连接错误。
+`core/session` 保存通过 `proto::client` 检查的 SRV 解析目标，所有文件传输复用它，端口来自协议协商。`FetchIcon` 在 actor 中串行排队协商频道 0 的 `/icon_<id>`，协商具有 5 秒超时保护且在控制命令到达时被抢占以保证控制零延迟；TCP 字节传输在 local task 中并发执行，不把 `Client` 协议操作交给并发任务。图标限制为 1 MiB、20 秒，断线或重连时通过连接代次广播立即取消后台传输，向旧连接快速返回未连接错误。
 
 文件传输对齐 JS/Go 参考实现：先发送原始 `ftkey`，随后收发明文字节，下载验证声明长度。普通上传读取器不补零，下载写入器不截断。相关音频记录仍由[双线程语音](../../implemented/architecture/2026-10-18-full-duplex-audio.md)维护，目标允许范围仍由[连接检查](../../implemented/architecture/2026-10-18-connection-boundary.md)维护。
 
@@ -28,7 +28,7 @@ FFI 构造器可显式关闭音频，默认启用；真实图标的本机渲染�
 
 ## Consequences
 
-图标解码失败或权限不足时保留可识别的占位符，重试入口使用无障碍名称。actor 的下载协商仍占用命令队列，实际 TCP 传输并发进行；断线后旧请求最多等待 20 秒，结果不会进入新连接。
+图标解码失败或权限不足时保留可识别的占位符，重试入口使用无障碍名称。actor 的下载协商进入有界队列并可被控制命令即时抢占，实际 TCP 传输并发进行；断线后通过连接代次变更即刻取消传输任务并返回错误。
 
 ## Testing
 
