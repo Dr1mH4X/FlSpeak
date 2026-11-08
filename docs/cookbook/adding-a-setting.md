@@ -11,7 +11,7 @@
 
 ### 1. 修改 Rust 侧数据模型 (`schema.rs`)
 
-在 `core/server/src/settings/schema.rs` 中定位到对应子分类的结构体（例如 `VoiceSettings` 或 `AppearanceSettings`）：
+在 `core/session/src/settings/schema.rs` 中定位到对应子分类的结构体（例如 `VoiceSettings` 或 `AppearanceSettings`）：
 
 1. 添加新字段，并确认包含 `#[serde(default)]`。
 2. 在 `impl Default` 中为新字段提供明确的默认值。
@@ -36,7 +36,7 @@
 
 ### 4. 接入 Flutter 设置页 UI
 
-1. 在 `arb/app_en.arb` 与 `arb/app_zh.arb` 中添加对应标题与说明文案。
+1. 在 `arb/intl_en.arb` 与 `arb/intl_zh.arb` 中添加对应标题与说明文案。
 2. 运行 l10n 代码生成：
    ```sh
    flutter gen-l10n

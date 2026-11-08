@@ -15,6 +15,7 @@ description: 审查 PR、分支或本地代码改动时使用：对照 docs/defe
 - [docs/defensive-patterns/ui.md](../../../docs/defensive-patterns/ui.md)
 - [docs/defensive-patterns/connection.md](../../../docs/defensive-patterns/connection.md)
 - [docs/defensive-patterns/audio.md](../../../docs/defensive-patterns/audio.md)
+- [docs/defensive-patterns/logging.md](../../../docs/defensive-patterns/logging.md)
 
 ## 工作流步骤
 
@@ -23,12 +24,9 @@ description: 审查 PR、分支或本地代码改动时使用：对照 docs/defe
    git status --short
    git diff --stat origin/main...HEAD
    ```
-2. **映射必读规则**：
-   对照 [docs/defensive-patterns/README.md](../../../docs/defensive-patterns/README.md) 的映射表，找出本次改动涉及的所有领域文档。在阅读 diff 前打开每一篇规则文档。
-3. **逐项进行阻断性审查**：
-   按 [docs/defensive-patterns/review.md](../../../docs/defensive-patterns/review.md) 的阻断性审查项逐项核对；各领域判据以映射表指向的文档为准，本技能不重述。
-4. **运行验证与证据复核**：
-   作者是否提供了能覆盖改动行为的最小验证命令与测试证据？
+2. **映射必读规则**：对照 [docs/defensive-patterns/README.md](../../../docs/defensive-patterns/README.md) 的映射表，找出本次改动涉及的所有领域文档。在阅读 diff 前打开每一篇规则文档。
+3. **逐项进行阻断性审查**：按 [docs/defensive-patterns/review.md](../../../docs/defensive-patterns/review.md) 的阻断性审查项逐项核对；各领域判据以映射表指向的文档为准，本技能不重述。
+4. **运行验证与证据复核**：作者是否提供了能覆盖改动行为的最小验证命令与测试证据？
 
 ## 验证命令
 

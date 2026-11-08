@@ -6,6 +6,7 @@
 | --- | --- | --- |
 | [FlClash](https://github.com/chen08209/FlClash) | GPL-3.0 | macOS 标题条布局、窗口尺寸与红绿灯让位，Windows 标题栏控制按钮与 Segoe Fluent 矢量图标，选项弹层、文字模糊切换动效、整屏主题与语言平滑过渡、Liquid Glass 与 Goo 渲染底座 |
 | [FlClash 的 `plugins/window`](https://github.com/chen08209/FlClash/tree/main/plugins/window) | MIT | 隐藏标题栏、窗口拖拽、双击缩放、最小化/最大化/关闭、置顶、系统材质特效（Mica/Acrylic）、单实例检测与全屏状态 |
+| [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | MIT | Markdown 正文段落单物理行检查门禁脚本 |
 
 ## FlClash
 
@@ -78,6 +79,16 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## DeepSeek Harness
+
+来源仓库：[deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)。原始许可证为 MIT License，版权归 DeepSeek 所有。
+
+复制与移植内容来自 `scripts/verify-md-wrap.ts` 的 AST/状态机段落单物理行检查门禁。
+
+| 本仓库文件 | 原始文件 |
+| --- | --- |
+| `website/scripts/verify-md-wrap.mjs` | `scripts/verify-md-wrap.ts` |
 
 ## 许可证关系
 

@@ -11,12 +11,9 @@
 
 ## 关键路径与序列
 
-1. **SRV 记录解析与重定向提取**：
-   收到 `ServerTarget` → 若为 IP 字面量或 localhost 直接透传 → 若为域名，调用 `hickory_resolver` 查询 `_ts3._udp.<host>` → 命中 SRV 时提取目标主机与端口。
-2. **唯一出口连接防御**：
-   解析后产出最终目标主机名 → 调用 `ensure_allowed_target` 匹配 `FORBIDDEN_HOST_SUFFIXES` → 若匹配官方后缀则直接返回 `ConnectError::Blocked` 熔断连接。
-3. **安全 Client 实例构建**：
-   通过 `proto::client()` 创建 `tsclient_rs::Client`，注入 `DenyResolver`，确保内部任何隐式域名查找均被直接拦截报错。
+1. **SRV 记录解析与重定向提取**：收到 `ServerTarget` → 若为 IP 字面量或 localhost 直接透传 → 若为域名，调用 `hickory_resolver` 查询 `_ts3._udp.<host>` → 命中 SRV 时提取目标主机与端口。
+2. **唯一出口连接防御**：解析后产出最终目标主机名 → 调用 `ensure_allowed_target` 匹配 `FORBIDDEN_HOST_SUFFIXES` → 若匹配官方后缀则直接返回 `ConnectError::Blocked` 熔断连接。
+3. **安全 Client 实例构建**：通过 `proto::client()` 创建 `tsclient_rs::Client`，注入 `DenyResolver`，确保内部任何隐式域名查找均被直接拦截报错。
 
 ## 不变量
 
@@ -26,4 +23,4 @@
 
 ## 相关决策
 
-- [连接边界架构设计](../../.agents/notes/implemented/architecture/2026-10-25-connection-boundary.md)
+- [连接边界架构设计](../../.agents/notes/implemented/architecture/2026-10-18-connection-boundary.md)

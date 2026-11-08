@@ -13,14 +13,10 @@
 
 ## 关键路径与序列
 
-1. **会话创建与初始化**：
-   Flutter 调用 `CoreSession.create(dbPath, storagePath)` → FFI 层拉起全局 Tokio 运行时并构建底层 `SessionHandle`。
-2. **UI 命令调用派发**：
-   Flutter 触发动作（如 `connect`, `switchChannel`, `sendMessage`） → FFI 桥函数完成入参从 Dart 类型到 Rust Core 类型的映射 → 异步调用对应 `SessionHandle` 方法 → 映射返回值或抛出结构化 `CoreError`。
-3. **事件流订阅与清理**：
-   Flutter 在初始化阶段建立事件订阅 → Rust 侧监听 `broadcast::Receiver<SessionEvent>` 并推送到 `StreamSink` → 当会话 `shutdown()` 时主动关闭 Sink，释放所有订阅者上下文。
-4. **日志管道初始化与清理**：
-   Flutter 启动时调用 `CoreSession.initLogging(logDir)` → FFI 桥转发至 `core/session::logging::init` 挂载 Rust 全局日志 worker；应用退出时调用 `CoreSession.shutdownLogging()` 转发至 `core/session::logging::shutdown`。
+1. **会话创建与初始化**：Flutter 调用 `CoreSession.create(dbPath, storagePath)` → FFI 层拉起全局 Tokio 运行时并构建底层 `SessionHandle`。
+2. **UI 命令调用派发**：Flutter 触发动作（如 `connect`, `switchChannel`, `sendMessage`） → FFI 桥函数完成入参从 Dart 类型到 Rust Core 类型的映射 → 异步调用对应 `SessionHandle` 方法 → 映射返回值或抛出结构化 `CoreError`。
+3. **事件流订阅与清理**：Flutter 在初始化阶段建立事件订阅 → Rust 侧监听 `broadcast::Receiver<SessionEvent>` 并推送到 `StreamSink` → 当会话 `shutdown()` 时主动关闭 Sink，释放所有订阅者上下文。
+4. **日志管道初始化与清理**：Flutter 启动时调用 `CoreSession.initLogging(logDir)` → FFI 桥转发至 `core/session::logging::init` 挂载 Rust 全局日志 worker；应用退出时调用 `CoreSession.shutdownLogging()` 转发至 `core/session::logging::shutdown`。
 5. **版本更新检查**：Flutter 启动或进入关于页时调用 `checkForUpdates()` → FFI 转发至 `core/session` 的独立检查函数 → 返回 `UpdateStateView`（是否可用、目标版本、Release URL）。该路径不进入 Session Actor，也不阻塞首帧。
 
 ## 不变量

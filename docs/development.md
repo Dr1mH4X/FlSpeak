@@ -4,9 +4,7 @@
 
 ## Rust
 
-`rust-toolchain.toml` 与 `rustfmt.toml` 必须待在 `plugins/flspeak_ffi/rust/`（native assets
-钩子只在那里找工具链；rustfmt 配置也跟着 crate 走，用来对齐生成代码的导入排序），所以想吃
-锁定工具链、想不被生成物干扰，就从那个目录跑 cargo：
+`rust-toolchain.toml` 与 `rustfmt.toml` 必须待在 `plugins/flspeak_ffi/rust/`（native assets 钩子只在那里找工具链；rustfmt 配置也跟着 crate 走，用来对齐生成代码的导入排序），所以想吃锁定工具链、想不被生成物干扰，就从那个目录跑 cargo：
 
 ```sh
 cd plugins/flspeak_ffi/rust
@@ -15,17 +13,14 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 ```
 
-**macOS 上的 Opus 构建**：`audio` 的 `audio` feature 会拉 `audiopus`。系统装了
-Homebrew opus 也只是有 `opus.pc`，没有 `pkg-config` 可执行文件时仍会退化成源码构建，而
-内置 Opus 的 `cmake_minimum_required(VERSION <3.5)` 会被 CMake 4 拒绝。两种解法选一个：
+**macOS 上的 Opus 构建**：`audio` 的 `audio` feature 会拉 `audiopus`。系统装了 Homebrew opus 也只是有 `opus.pc`，没有 `pkg-config` 可执行文件时仍会退化成源码构建，而内置 Opus 的 `cmake_minimum_required(VERSION <3.5)` 会被 CMake 4 拒绝。两种解法选一个：
 
 ```sh
 brew install pkgconf                       # 让 pkg-config 找到 /opt/homebrew/lib/pkgconfig
 CMAKE_POLICY_VERSION_MINIMUM=3.5 cargo test --workspace --all-features   # 或放宽 CMake 策略
 ```
 
-仓库根 `.cargo/config.toml` 已设置 `CMAKE_POLICY_VERSION_MINIMUM=3.5`；`session` 依赖
-`audio` 的 `audio` feature（Opus/cpal），跑它的测试同样需要 Opus 工具链。
+仓库根 `.cargo/config.toml` 已设置 `CMAKE_POLICY_VERSION_MINIMUM=3.5`；`session` 依赖 `audio` 的 `audio` feature（Opus/cpal），跑它的测试同样需要 Opus 工具链。
 
 Linux 桌面构建需要 `libsecret-1-dev`，用于图片上传配置的安全存储。开发机使用系统包管理器安装；CI 与发布流水线的 Linux 依赖步骤包含该包。
 
@@ -38,9 +33,7 @@ cd plugins/flspeak_ffi
 flutter_rust_bridge_codegen generate      # 需要 flutter_rust_bridge_codegen 2.13.0
 ```
 
-生成物：`plugins/flspeak_ffi/rust/src/frb_generated.rs`、
-`plugins/flspeak_ffi/lib/src/rust/**`。CI 会重跑并 `git diff` 校验一致性。
-配置在 `flutter_rust_bridge.yaml`（`type_64bit_int: true`：频道/客户端 ID 用 Dart `int`）。
+生成物：`plugins/flspeak_ffi/rust/src/frb_generated.rs`、`plugins/flspeak_ffi/lib/src/rust/**`。CI 会重跑并 `git diff` 校验一致性。配置在 `flutter_rust_bridge.yaml`（`type_64bit_int: true`：频道/客户端 ID 用 Dart `int`）。
 
 ## Flutter
 
@@ -58,9 +51,7 @@ flutter test                              # Dart 单测（位于 test/ 目录）
 cd plugins/flspeak_ffi && flutter analyze
 ```
 
-`flutter build` 会通过 native assets 钩子自动编译 Rust（首次会下载
-`rust-toolchain.toml` 里列的 10 个 target）。想跳过：`--dart-define` 无效，用
-`hooks.user_defines.flspeak_ffi.build_assets=false` 改 `pubspec.yaml`。
+`flutter build` 会通过 native assets 钩子自动编译 Rust（首次会下载 `rust-toolchain.toml` 里列的 10 个 target）。想跳过：`--dart-define` 无效，用 `hooks.user_defines.flspeak_ffi.build_assets=false` 改 `pubspec.yaml`。
 
 ## 开发流程
 
@@ -89,7 +80,7 @@ docs(boundary): record the SRV and TSDNS trade-offs
 dart setup.dart macos arm64 --version 0.2.0   # 内置 flutter build + 归拢产物到 dist/
 ```
 
-CI 上打 `v*` tag 会从 tag 推导版本号，再按 7 个平台矩阵打包。发版日志与 Release 正文见 [release/AGENTS.md](release/AGENTS.md)，发布矩阵与已知简化见 [ci-cd.md](ci-cd.md)。
+CI 上打 `v*` tag 会从 tag 推导版本号，再按 5 个构建作业打包生成 7 类平台架构产物。发版日志与 Release 正文见 [release/AGENTS.md](release/AGENTS.md)，发布矩阵与已知简化见 [ci-cd.md](ci-cd.md)。
 
 Android 的 debug 与 release 签名分开配置，都写进 `android/key.properties`：debug 用 `debugStoreFile`、`debugStorePassword`、`debugKeyAlias`、`debugKeyPassword`，release 用 `releaseStoreFile`、`releaseStorePassword`、`releaseKeyAlias`、`releaseKeyPassword`（路径相对 `android/app/` 解析）。没有对应配置时 debug 用平台默认调试密钥、release 退回 debug 配置，方便 `flutter run --release`。CI 侧的八个签名 secret 与 `REQUIRE_RELEASE_SIGNING` 见 [ci-cd.md](ci-cd.md)。
 

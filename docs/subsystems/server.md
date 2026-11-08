@@ -10,12 +10,9 @@
 
 ## 关键路径与序列
 
-1. **地址录入与解析**：
-   调用方传入原始字符串 `input` → `parse_address` 清除前后空白并校验非空 → 解析 IPv6/IPv4/域名与可选端口（默认端口 `9987`） → 产出强类型 `ServerTarget`。
-2. **档案生成与持久化**：
-   从 `ServerTarget` 构造 `ServerProfile`，以规范化的 `host:port` 作为唯一主键 `id` → 保存至 `ServerRegistry`。
-3. **连接前校验提取**：
-   连接发起时调用 `ServerProfile::target()` 重新解析，验证主键一致性后交付下游 `core/proto`。
+1. **地址录入与解析**：调用方传入原始字符串 `input` → `parse_address` 清除前后空白并校验非空 → 解析 IPv6/IPv4/域名与可选端口（默认端口 `9987`） → 产出强类型 `ServerTarget`。
+2. **档案生成与持久化**：从 `ServerTarget` 构造 `ServerProfile`，以规范化的 `host:port` 作为唯一主键 `id` → 保存至 `ServerRegistry`。
+3. **连接前校验提取**：连接发起时调用 `ServerProfile::target()` 重新解析，验证主键一致性后交付下游 `core/proto`。
 
 ## 不变量
 

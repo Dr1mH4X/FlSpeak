@@ -6,7 +6,7 @@
 
 - [connect/](connect/AGENTS.md)：服务器连接、历史档案列表与地址录入表单。
 - [workspace/](workspace/AGENTS.md)：主会话工作区（频道列表、聊天室、成员树、状态栏与快捷操作）。
-- [settings/](settings/AGENTS.md)：设置页两级菜单架构与持久化规范。
+- [settings/](settings/AGENTS.md)：设置页三级层级导航与排版规范。
 
 ## 规则与约束
 

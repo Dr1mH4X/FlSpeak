@@ -12,18 +12,23 @@ Dart 单测集中放置在根目录 `test/` 下，镜像 `lib/` 源码目录层�
 
 ## 测试范围选择
 
-提交改动时按「变更面」选最小测试集，不默认全量运行：改动所在 crate 及其直接依赖跑通即可，只改文档/配置时不重跑整套测试。定向示例（从 `plugins/flspeak_ffi/rust` 跑）：
+提交改动时按「变更面」选最小测试集，不默认全量运行：改动所在 crate 及其直接依赖跑通即可，只改文档/配置时不重跑整套测试。定向示例（从 `plugins/flspeak_ffi/rust` 跑或使用 `just rust-test-proto`）：
 
 ```sh
 cargo test -p server -p proto
 ```
 
-按需全量验证或交给 CI：本地全量门禁是 `just check`，CI 各作业见 [ci-cd.md](ci-cd.md)。
+常用测试命令映射：
+- `just test`：运行 Dart 单元测试
+- `just rust-test`：运行全量 Rust 单元测试
+- `just rust-test-proto`：仅运行档案与协议测试（不依赖 Opus 工具链）
+- `just check`：本地全量门禁（格式化、静态分析与全量测试聚合）
+
+各 CI 作业的触发与设计见 [ci-cd.md](ci-cd.md)。
 
 ## 真实服务器测试（手动，不走 CI）
 
-`core/session/tests/live_connect.rs` 默认 `#[ignore]`，只在显式指定时运行；它关闭音频，
-不会申请麦克风/扬声器权限：
+`core/session/tests/live_connect.rs` 默认 `#[ignore]`，只在显式指定时运行；它关闭音频，不会申请麦克风/扬声器权限：
 
 ```sh
 cd plugins/flspeak_ffi/rust
@@ -32,14 +37,15 @@ FLSPEAK_TEST_NICKNAME=flspeak-probe \
 cargo test -p session --test live_connect -- --ignored --nocapture
 ```
 
+快捷命令：`just live-test ts.example.com [昵称]`。
+
 注意：tsclient-rs 走 UDP 9987。`proto::resolve_target` 会先查标准 DNS 的 `_ts3._udp.<domain>` SRV；最终目标由 `proto::client` 检查一次，DNS 查询失败时回退到档案字面地址。TSDNS 尚未实现。服务器对访客关闭 `channellist` 时，测试只验证连接与状态，列表调用会打印权限拒绝而不判失败。
 
 设置 `FLSPEAK_TEST_ICON_DIR` 时，真实连接测试还会通过 actor 下载非零频道图标，并把原始图片和 `channels.json` 保存到该目录；此模式要求目标服务器至少有一个自定义频道图标。
 
 ### 最小消息探针（后台等消息）
 
-`core/session/examples/live_probe.rs` 会保持在线，把收到的文本消息**原文**写到 stdout 和
-`/tmp/flspeak-probe.log`，用于抓 TS6 图片消息的 BBCode/URL 格式：
+`core/session/examples/live_probe.rs` 会保持在线，把收到的文本消息**原文**写到 stdout 和 `/tmp/flspeak-probe.log`，用于抓 TS6 图片消息的 BBCode/URL 格式：
 
 ```sh
 cd plugins/flspeak_ffi/rust
@@ -49,8 +55,9 @@ FLSPEAK_PROBE_SECONDS=1800 \
 cargo run -p session --example live_probe
 ```
 
-访客身份可能没有服务器广播权限（`insufficient client permissions`）；连接、收消息不受影响。
-停止用 Ctrl-C，或把 `FLSPEAK_PROBE_SECONDS` 设小。
+快捷命令：`just probe example.com [昵称] [秒数]`。
+
+访客身份可能没有服务器广播权限（`insufficient client permissions`）；连接、收消息不受影响。停止用 Ctrl-C，或把 `FLSPEAK_PROBE_SECONDS` 设小。
 
 ## CI 测试门
 

@@ -12,12 +12,9 @@
 
 ## 关键路径与序列
 
-1. **输入采集链路**：
-   硬件麦克风产生 PCM 数据 → 采集回调推入无锁环形缓冲区 → 采集工作线程取出 → 重采样至 48kHz 单声道 → 能量电平分析与 VAD 激活判定 → 送入 Opus 编码器压缩为语音包 → 回传给 Session Actor 调度发送。
-2. **输出播放链路**：
-   网络收到的 Opus 语音包交付播放引擎 → Opus 解码器解压为 48kHz PCM → 送入带固定延迟的无锁抖动缓冲（Jitter Buffer） → 混音处理与软削波平滑 → 播放回调写入声卡扬声器输出。
-3. **设备重选与热插拔**：
-   用户或系统切换音频设备时，平滑释放原有流并重启 cpal 硬件流，不影响底层连接会话。
+1. **输入采集链路**：硬件麦克风产生 PCM 数据 → 采集回调推入无锁环形缓冲区 → 采集工作线程取出 → 重采样至 48kHz 单声道 → 能量电平分析与 VAD 激活判定 → 送入 Opus 编码器压缩为语音包 → 回传给 Session Actor 调度发送。
+2. **输出播放链路**：网络收到的 Opus 语音包交付播放引擎 → Opus 解码器解压为 48kHz PCM → 送入带固定延迟的无锁抖动缓冲（Jitter Buffer） → 混音处理与软削波平滑 → 播放回调写入声卡扬声器输出。
+3. **设备重选与热插拔**：用户或系统切换音频设备时，平滑释放原有流并重启 cpal 硬件流，不影响底层连接会话。
 
 ## 不变量
 
@@ -27,4 +24,7 @@
 
 ## 相关决策
 
+- [音频边界与线程隔离](../../.agents/notes/implemented/architecture/2026-10-08-audio-boundary.md)
+- [双线程全双工音频架构](../../.agents/notes/implemented/architecture/2026-10-18-full-duplex-audio.md)
+- [实时语音电平处理](../../.agents/notes/implemented/architecture/2026-10-29-realtime-voice-levels.md)
 - [跨平台结构化日志](../../.agents/notes/implemented/architecture/2026-11-07-cross-platform-logging.md)

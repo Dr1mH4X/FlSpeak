@@ -12,13 +12,9 @@ on_voice_data ──有界通道──> playback 线程
   → 48k 立体声 → 设备格式 → ArrayQueue ──cpal──> 扬声器
 ```
 
-- 48kHz 为内部采样率；codec 4（Opus Voice）上行单声道，codec 5（Opus Music）
-  上行立体声；下行统一按立体声解码。
-- **频道 codec 决定编码器**：TS3 的 codec 是频道属性，不是客户端全局配置。进 codec 4
-  频道用单声道 Voip 编码器，进 codec 5 频道重建为立体声 Audio 编码器。Opus 不支持
-  中途切声道数，切频道必须重建 encoder。
-- 全双工边界是两条独立线程：采集/编码/发送与接收/解码/混音/播放互不阻塞。cpal 回调
-  只做 `ArrayQueue` 的 push/pop，零分配、零锁；编码、解码、混音都在工作线程。
+- 48kHz 为内部采样率；codec 4（Opus Voice）上行单声道，codec 5（Opus Music）上行立体声；下行统一按立体声解码。
+- **频道 codec 决定编码器**：TS3 的 codec 是频道属性，不是客户端全局配置。进 codec 4 频道用单声道 Voip 编码器，进 codec 5 频道重建为立体声 Audio 编码器。Opus 不支持中途切声道数，切频道必须重建 encoder。
+- 全双工边界是两条独立线程：采集/编码/发送与接收/解码/混音/播放互不阻塞。cpal 回调只做 `ArrayQueue` 的 push/pop，零分配、零锁；编码、解码、混音都在工作线程。
 
 ## 线程
 
@@ -29,17 +25,13 @@ on_voice_data ──有界通道──> playback 线程
 | `voice-playback` | cpal 输出流、每说话人 jitter/解码/混音、设备格式转换 |
 | cpal 回调 | 只搬 `ArrayQueue` 里的 f32 样本 |
 
-控制命令（mute/deafen/设备/codec/PTT）走独立有界通道；语音帧走另一条有界通道，
-满了就丢，不会把 mute 之类的控制命令挤掉。
+控制命令（mute/deafen/设备/codec/PTT）走独立有界通道；语音帧走另一条有界通道，满了就丢，不会把 mute 之类的控制命令挤掉。
 
 ## 采集
 
-- 设备回调按设备原生格式写入环形队列；capture 线程每 10ms 排空一次，转成 48kHz
-  单声道或立体声，追加到采集缓冲。
-- 每 20ms 取一帧（不足补零），能量 VAD（默认阈值 0.012、250ms 尾音）判断是否发送。
-  PTT 模式绕过 VAD，按下才发。VAD 实现是可替换的 `Vad` trait，将来换 RNNoise 不动结构。
-- 一段语音开始时重置 Opus 熵编码状态；mute/deafen 会清空采集缓冲并停发，解静音后
-  不会补发旧音频。
+- 设备回调按设备原生格式写入环形队列；capture 线程每 10ms 排空一次，转成 48kHz 单声道或立体声，追加到采集缓冲。
+- 每 20ms 取一帧（不足补零），能量 VAD（默认阈值 0.012、250ms 尾音）判断是否发送。PTT 模式绕过 VAD，按下才发。VAD 实现是可替换的 `Vad` trait，将来换 RNNoise 不动结构。
+- 一段语音开始时重置 Opus 熵编码状态；mute/deafen 会清空采集缓冲并停发，解静音后不会补发旧音频。
 - `VoicePacer`：空闲复位、稳态每 20ms 一帧、落后超过 200ms 重定位，禁止倾泻。
 - Opus 编码与 actor 发送检查共用 484 字节载荷预算（TS 单包上限 500 字节，扣除 tag/头/语音头）。编码器以此限制单帧输出，保留完整可解码的包；64kbps 人声、128kbps 音乐是 VBR 的目标平均码率。
 - 编码包携带单调时钟时间；actor 丢弃等待超过 100ms 的包，并核对连接、频道、codec、采集状态与 mute/deafen/PTT。控制状态或频道变化会使此前排队的包失效。
@@ -47,15 +39,10 @@ on_voice_data ──有界通道──> playback 线程
 
 ## 播放
 
-- `on_voice_data` 只把 `VoiceFrame { client_id, codec, data }` 塞进有界通道；
-  1 字节控制帧和非 4/5 codec 直接忽略。
-- 每个说话人独立 `OpusDecoder`、jitter buffer、PCM 余量、增益包络。Opus 单包最长
-  120ms，解码缓冲按 5760 样本/声道准备。
-- 由于 tsclient-rs 的语音回调未提供包序号，播放侧只能按到达时间做固定目标延迟
-  （60ms），不能真正重排序；队列超过 200ms 或 12 帧时丢最旧。缺包先做最多 3 帧
-  PLC，再静音；说话人 500ms 无包后淡出并移除。
-- 10ms 混音 tick；所有说话人相加后用三段软削波（`|x|<=0.5` 线性，以上 tanh 压缩），
-  避免多人同时说话硬削顶。
+- `on_voice_data` 只把 `VoiceFrame { client_id, codec, data }` 塞进有界通道；1 字节控制帧和非 4/5 codec 直接忽略。
+- 每个说话人独立 `OpusDecoder`、jitter buffer、PCM 余量、增益包络。Opus 单包最长 120ms，解码缓冲按 5760 样本/声道准备。
+- 由于 tsclient-rs 的语音回调未提供包序号，播放侧只能按到达时间做固定目标延迟（60ms），不能真正重排序；队列超过 200ms 或 12 帧时丢最旧。缺包先做最多 3 帧 PLC，再静音；说话人 500ms 无包后淡出并移除。
+- 10ms 混音 tick；所有说话人相加后用三段软削波（`|x|<=0.5` 线性，以上 tanh 压缩），避免多人同时说话硬削顶。
 - deafen 清空解码状态并输出静音；mute/deafen 都会阻止上行。
 - 播放流重建清空说话人与缓冲，保留 deafen 控制状态。
 
@@ -92,9 +79,7 @@ brew install opus pkgconf
 sudo apt-get install -y libopus-dev libasound2-dev
 ```
 
-仓库根 `.cargo/config.toml` 设置了 `CMAKE_POLICY_VERSION_MINIMUM=3.5`，覆盖
-`audiopus_sys` 内置 Opus 的旧 CMake 下限；CI 也使用同一变量。`plugins/flspeak_ffi`
-打开了 `audio` feature，因此应用构建需要 Opus 工具链；只跑档案/协议测试时用：
+仓库根 `.cargo/config.toml` 设置了 `CMAKE_POLICY_VERSION_MINIMUM=3.5`，覆盖 `audiopus_sys` 内置 Opus 的旧 CMake 下限；CI 也使用同一变量。`plugins/flspeak_ffi` 打开了 `audio` feature，因此应用构建需要 Opus 工具链；只跑档案/协议测试时用：
 
 ```sh
 cd plugins/flspeak_ffi/rust
@@ -103,10 +88,7 @@ cargo test -p server -p proto
 
 ## 已知限制
 
-- 没有回声消除：外放会回授，当前建议耳机。将来做 AEC 时用 playback 回读 ring +
-  固定延迟，不在 cpal 回调里做。
+- 没有回声消除：外放会回授，当前建议耳机。将来做 AEC 时用 playback 回读 ring + 固定延迟，不在 cpal 回调里做。
 - 没有降噪、AGC、去混响；VAD 是能量阈值，机械键盘会误触发。
-- 没有真正的语音重排序/去重/精确丢包检测。上游候选改动是给 `VoiceData` 加
-  `packet_id`；拿到序号后只需替换 jitter buffer，不动混音层。
-- 界面只收 50Hz 的聚合电平（本端麦克风、远端混音）；不传音频样本或逐帧波形。
-  `Speaking` 只在活跃集合变化时发低频事件。
+- 没有真正的语音重排序/去重/精确丢包检测。上游候选改动是给 `VoiceData` 加 `packet_id`；拿到序号后只需替换 jitter buffer，不动混音层。
+- 界面只收 50Hz 的聚合电平（本端麦克风、远端混音）；不传音频样本或逐帧波形。`Speaking` 只在活跃集合变化时发低频事件。

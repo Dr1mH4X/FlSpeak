@@ -20,7 +20,7 @@ FlSpeak 是 TeamSpeak 第三方客户端：Flutter 负责界面，Rust 负责协
 | `plugins/` | `plugins/AGENTS.md` |
 | `plugins/flspeak_ffi/` | `plugins/flspeak_ffi/AGENTS.md` |
 | `lib/` | `lib/AGENTS.md` (及其下 `core/`, `features/`, `theme/`, `widgets/` 等) |
-| `docs/` | `docs/AGENTS.md` (及其下 `subsystems/`, `defensive-patterns/`, `cookbook/`, `release/`) |
+| `docs/` | `docs/AGENTS.md` (及架构与开发文档 `architecture.md`, `development.md`, `testing.md`，其下 `subsystems/`, `defensive-patterns/`, `cookbook/`, `release/`) |
 | `website/` | `website/AGENTS.md` |
 | `tool/` | `tool/AGENTS.md` |
 | `.github/` | `.github/AGENTS.md` |
@@ -42,13 +42,10 @@ FlSpeak 是 TeamSpeak 第三方客户端：Flutter 负责界面，Rust 负责协
 ## 硬规则
 
 1. **项目边界**：客户端只连接用户手动录入的 IP、域名或 localhost，不实现 myTeamSpeak 账号/云同步，也不调用官方媒体上传或附件下载。裸昵称不接受，`named.myteamspeak.com/lookup` 不使用。SRV（`_ts3._udp.<domain>`）是标准 DNS，可以解析；最终目标由 `core/proto` 的 `client` 做一次官方基础设施检查，不在 UI、FFI 或存储层重复审查。版本更新检查的固定 GitHub 元数据请求是唯一例外，约束见 [连接边界](docs/connection-boundary.md)。
-2. **官方主机清单只放在 `core/proto` 的 `FORBIDDEN_HOST_SUFFIXES`**。连接和图片抓取
-   共用这一份；测试需要官方域名时从该常量拼，不要写死。
+2. **官方主机清单只放在 `core/proto` 的 `FORBIDDEN_HOST_SUFFIXES`**。连接和图片抓取共用这一份；测试需要官方域名时从该常量拼，不要写死。
 3. **音频帧不过 FFI**。Rust 侧自己采集、编解码、播放，Dart 只收 UI 事件。
-4. `Client` 的一切协议调用都经过 `core/session` 的 actor 串行执行，不要在
-   别处并发调用 tsclient-rs。
-5. 生成代码（`frb_generated.*`、`plugins/flspeak_ffi/lib/src/rust/**`、`lib/l10n/**`）
-   不手改，改输入后重跑生成。
+4. `Client` 的一切协议调用都经过 `core/session` 的 actor 串行执行，不要在别处并发调用 tsclient-rs。
+5. 生成代码（`frb_generated.*`、`plugins/flspeak_ffi/lib/src/rust/**`、`lib/l10n/**`）不手改，改输入后重跑生成。
 6. **全仓不使用悬停提示**：遵守 [Flutter 界面文案与操作按钮约束](docs/defensive-patterns/ui.md)。
 
 ## 验证

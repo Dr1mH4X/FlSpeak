@@ -16,11 +16,13 @@
 
 | 层级 | 职责 | 不该放这里 |
 |---|---|---|
+| 根 `README.md` / `README.zh.md` | 面向终端用户与社区：项目定位、核心特性、快速体验下载、源码构建与平台支持 | 内部架构细节、长篇推导过程、代码审查反面模式 |
 | 根 `AGENTS.md` | 全局 standing orders：每个 session 都必须知道的规则与拓扑，每条一两行并链向归属地 | 展开细节、步骤式流程、任何从归属地重复的内容 |
-| `.agents/project.md` | 仓库结构、不变量、与 tsclient-rs 的关系 | 决策理由（→ `.agents/notes/`）、命令（→ `development.md`） |
+| `.agents/project.md` | 仓库结构、模块职责分层、核心架构不变量、与 tsclient-rs 的关系 | 决策理由（→ `.agents/notes/`）、命令（→ `development.md`） |
+| `.github/` | CI/CD 工作流、PR 模板与协作规范 | 业务逻辑、运行期契约 |
 | `docs/architecture.md` | 索引与拓扑：分层、一次连接的时序、事件流、线程模型、目录职责与「尚未接线」 | 跨文件契约与序列（→ 主题文档或 `docs/subsystems/`）、决策理由 |
-| `docs/` 主题文档（`audio.md`、`backend.md`、`channels.md`、`connection-boundary.md`、`images.md`、`permissions.md`） | 按链路组织的深潜文档：一条跨 crate 的链路或边界的契约、关键序列与已知限制 | 决策理由（→ `.agents/notes/`）、逐行实现细节（→ 源码） |
-| `docs/subsystems/` | 每个子系统一篇：契约、关键路径与序列、不变量；规则见其 `AGENTS.md` | 决策理由（→ `.agents/notes/`）、逐行实现细节（→ 源码） |
+| `docs/` 主题文档（`audio.md`、`backend.md`、`channels.md`、`connection-boundary.md`、`images.md`、`permissions.md`） | 跨 crate 端到端业务链路与安全边界：多模块协作契约、关键时序与已知限制 | 单一 crate 内部私有实现、决策理由（→ `.agents/notes/`） |
+| `docs/subsystems/` | 单一 crate 架构与模块契约：内部公开 API、核心类型定义、关键路径与子系统不变量 | 跨 crate 业务端到端串联（→ 主题文档）、决策理由（→ `.agents/notes/`） |
 | [docs/defensive-patterns/](defensive-patterns/README.md) | 编码反面与规范替代：[README.md](defensive-patterns/README.md) 独占承载「你在改什么 \| 动手前必读」映射表，子篇按领域承载审查强制准则（general, connection, audio, review, ui） | 子系统内部契约、常规开发流程、重复的全局声明 |
 | `docs/cookbook/` | 任务驱动式 Step-by-Step 实操指南，带带号步骤与验证命令 | 架构设计决策理由、语法级参考手册 |
 | `docs/development.md` | 开发流程与环境：常用命令、构建依赖与平台细节、FFI 绑定生成、语言约定、发版打包 | 架构图、测试约定、决策理由 |
@@ -32,9 +34,11 @@
 | `.agents/skills/` | agent 侧复用工作流与判定标准（`SKILL.md`，只放流程与命令，规则正文只链接不复述） | 产品与运行期契约（→ docs 或源码） |
 | 模块内 `AGENTS.md` | 目录级特有不变量与硬性约束，如 `core/AGENTS.md`、`lib/AGENTS.md`、`website/AGENTS.md`、各子 crate | 仓库级全局规则与全局阅读门禁（→ 根 AGENTS.md） |
 
-放置速查：standing orders → 根 `AGENTS.md`；结构与不变量 → `project.md`；命令与流程 → `development.md`；测试 → `testing.md`；编码反面 → `docs/defensive-patterns/`；实操指引 → `docs/cookbook/`；拓扑与索引 → `architecture.md`；跨 crate 链路 → 主题文档；单 crate 契约 → `docs/subsystems/`；workflow → `ci-cd.md`；发版日志 → `docs/release/`；第三方代码 → `docs/THIRD-PARTY.md`；决策理由 → `.agents/notes/`；复用流程 → `.agents/skills/`；目录规则 → 该目录的 `AGENTS.md`。
+放置速查：产品简介与体验 → `README.md` / `README.zh.md`；standing orders → 根 `AGENTS.md`；结构与不变量 → `project.md`；命令与流程 → `development.md`；测试 → `testing.md`；编码反面 → `docs/defensive-patterns/`；实操指引 → `docs/cookbook/`；拓扑与索引 → `architecture.md`；跨 crate 业务链路 → 主题文档；单 crate 契约 → `docs/subsystems/`；workflow 与 PR 模板 → `.github/` 及 `ci-cd.md`；发版日志 → `docs/release/`；第三方代码 → `docs/THIRD-PARTY.md`；决策理由 → `.agents/notes/`；复用流程 → `.agents/skills/`；目录规则 → 该目录的 `AGENTS.md`。
 
 ## 写作规则
+
+- **双语文档配对规范**：仅面向终端用户与开源社区的门面（根目录 `README.md` 与 `README.zh.md`）保持中英文档配对同步；面向开发者与 Agent 的技术参考文档、契约与决策笔记统一采用中文单语维护，避免跨语言内容漂移。
 
 - **只写当前状态，不写变更史。** 不用「之前/现在/不再/曾改名/已迁移」等说法，不写 PR 或 commit 编号，只写当前机制本身；变更故事归 commit、PR、`.agents/notes/` 与 `docs/release/` 的发版日志。
 - **一段一物理行。** Markdown 每段只占一行，用编辑器软换行；代码块、表格、列表结构保持原格式。

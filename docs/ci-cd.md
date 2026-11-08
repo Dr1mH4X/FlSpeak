@@ -10,11 +10,7 @@
 | `release.yml` | `v*` tag、手动输入版本号 | `meta`、`checks`、`tests`、5 平台 `build` 矩阵、`publish` |
 | `deploy-website.yml` | main push/PR（`website/**`、自身）、release 成功、手动 | 独立完成官网的类型检查、构建与 GitHub Pages 自动部署 |
 
-tag 推送只启动 `release.yml`，平台打包因此只发生一次；main 与 PR 仍由 `ci.yml`
-覆盖桌面与 Android 的编译。`ci.yml` 用 `paths-ignore` 跳过只改 `**/*.md` 或
-`LICENSE` 的推送与 PR：文档没有独立的 CI 检查，这类改动不跑 Rust、Flutter 与平台
-构建。若将来把检查设为合并必需，纯文档 PR 不会产生状态，需要同时调整这项配置。`release.yml` 的 `build` 通过 `needs: [meta, checks, tests]`
-等待检查与测试，任一失败时打包矩阵不会启动，手动输入版本号的发版路径也走同一套检查。
+tag 推送只启动 `release.yml`，平台打包因此只发生一次；main 与 PR 仍由 `ci.yml` 覆盖桌面与 Android 的编译。`ci.yml` 用 `paths-ignore` 跳过只改 `**/*.md` 或 `LICENSE` 的推送与 PR：文档没有独立的 CI 检查，这类改动不跑 Rust、Flutter 与平台构建。若将来把检查设为合并必需，纯文档 PR 不会产生状态，需要同时调整这项配置。`release.yml` 的 `build` 通过 `needs: [meta, checks, tests]` 等待检查与测试，任一失败时打包矩阵不会启动，手动输入版本号的发版路径也走同一套检查。
 
 ## `checks.yml` 与 `tests.yml`
 
@@ -26,21 +22,11 @@ tag 推送只启动 `release.yml`，平台打包因此只发生一次；main 与
 | `tests.yml` | `rust-test` | `cargo test`（`--all-features`，含音频） |
 | `tests.yml` | `dart-test` | `flutter test`（针对 `test/` 目录） |
 
-codegen 用官方 release 的 x86_64 linux 预编译附件（版本与 sha256 固定在
-`checks.yml` 顶部），不再从源码 `cargo install`；升级 `flutter_rust_bridge` 时把
-`plugins/flspeak_ffi/pubspec.yaml`、`FRB_CODEGEN_VERSION` 与 `FRB_CODEGEN_SHA256`
-一起改。
+codegen 用官方 release 的 x86_64 linux 预编译附件（版本与 sha256 固定在 `checks.yml` 顶部），不再从源码 `cargo install`；升级 `flutter_rust_bridge` 时把 `plugins/flspeak_ffi/pubspec.yaml`、`FRB_CODEGEN_VERSION` 与 `FRB_CODEGEN_SHA256` 一起改。
 
-两个环境细节：
-
-- **`rust-toolchain.toml` 放在 `plugins/flspeak_ffi/rust/`**：native assets 钩子只在 crate
-  目录里找它，找不到就直接失败。因此 cargo 也从那个目录跑（`defaults.run.working-directory`），
-  这样锁定的工具链与 10 个 target 才会生效。同目录的 `rustfmt.toml`（`style_edition = "2024"`）
-  让 rustfmt 的导入排序与 frb 生成代码一致，否则「生成物最新」与「格式干净」两个闸门会
-  互相改写同一个文件。
-- **`CMAKE_POLICY_VERSION_MINIMUM=3.5`**：`audiopus_sys` 内置的 Opus 用
-  `cmake_minimum_required(VERSION <3.5)`，CMake 4 默认拒绝；没装系统 libopus 的 runner
-  只能走源码构建这条路。
+环境细节约束：
+- **`rust-toolchain.toml` 放在 `plugins/flspeak_ffi/rust/`**：native assets 钩子只在 crate 目录里找它，找不到就直接失败。因此 cargo 也从那个目录跑（`defaults.run.working-directory`），这样锁定的工具链与 10 个 target 才会生效。同目录的 `rustfmt.toml`（`style_edition = "2024"`）让 rustfmt 的导入排序与 frb 生成代码一致，否则「生成物最新」与「格式干净」两个闸门会互相改写同一个文件。
+- **`CMAKE_POLICY_VERSION_MINIMUM=3.5`**：`audiopus_sys` 内置的 Opus 用 `cmake_minimum_required(VERSION <3.5)`，CMake 4 默认拒绝；没装系统 libopus 的 runner 只能走源码构建这条路。
 
 `FLUTTER_VERSION` 在 `checks.yml`、`ci.yml`、`release.yml` 各有一份，升级时三处一起改。
 
@@ -61,8 +47,7 @@ codegen 用官方 release 的 x86_64 linux 预编译附件（版本与 sha256 �
 
 1. `meta` 从 tag 推导版本号；
 2. `checks` 调用可复用工作流，覆盖 Rust、Dart、插件与 FFI 生成物；
-3. `build` 等待 `meta` 与 `checks`，在 5 个条目上跑
-   `dart setup.dart <platform> <arch> --version <version>`，产物上传为 artifact：
+3. `build` 等待 `meta` 与 `checks`，在 5 个构建作业条目上跑 `dart setup.dart <platform> <arch> --version <version>`，产物上传为 artifact：
 
    | 平台 | runner | 架构 |
    | --- | --- | --- |
@@ -74,22 +59,18 @@ codegen 用官方 release 的 x86_64 linux 预编译附件（版本与 sha256 �
 
 4. `publish`（仅 tag 推送时运行）校验 `docs/release/<tag>.md` 的存在性与首行格式，汇总产物，生成 `SHA256SUMS.txt`，以该日志为正文公开发布 GitHub Release（若带 `-beta`、`-rc`、`-dev` 自动标记为预发布）。
 
-版本号只在 `meta` 作业里从 tag 推导，并通过 `--version` 传给 `setup.dart`；
-产物名和 Flutter build name 使用这个值。
+版本号只在 `meta` 作业里从 tag 推导，并通过 `--version` 传给 `setup.dart`；产物名和 Flutter build name 使用这个值。
 
 ## Android 签名
 
-`android/app/build.gradle.kts` 从 `android/key.properties` 或环境变量读取两套签名，
-debug 与 release 分开配置，四项齐全才启用：
+`android/app/build.gradle.kts` 从 `android/key.properties` 或环境变量读取两套签名，debug 与 release 分开配置，四项齐全才启用：
 
 | 用途 | key.properties 键 | 环境变量 |
 | --- | --- | --- |
 | debug | `debugStoreFile`、`debugStorePassword`、`debugKeyAlias`、`debugKeyPassword` | `ANDROID_DEBUG_KEYSTORE_PATH`、`ANDROID_DEBUG_KEYSTORE_PASSWORD`、`ANDROID_DEBUG_KEY_ALIAS`、`ANDROID_DEBUG_KEY_PASSWORD` |
 | release | `releaseStoreFile`、`releaseStorePassword`、`releaseKeyAlias`、`releaseKeyPassword` | `ANDROID_RELEASE_KEYSTORE_PATH`、`ANDROID_RELEASE_KEYSTORE_PASSWORD`、`ANDROID_RELEASE_KEY_ALIAS`、`ANDROID_RELEASE_KEY_PASSWORD` |
 
-debug 缺省时退回平台默认 debug keystore；release 缺省时退回 debug 配置，方便本地
-`flutter run --release`。CI 的 release 打包步骤设置 `REQUIRE_RELEASE_SIGNING=true`，
-release 配置不完整时 Gradle 直接失败，release 产物不会在无提示的情况下使用调试密钥。
+debug 缺省时退回平台默认 debug keystore；release 缺省时退回 debug 配置，方便本地 `flutter run --release`。CI 的 release 打包步骤设置 `REQUIRE_RELEASE_SIGNING=true`，release 配置不完整时 Gradle 直接失败，release 产物不会在无提示的情况下使用调试密钥。
 
 GitHub secrets 的八个键：
 
@@ -104,11 +85,7 @@ GitHub secrets 的八个键：
 | `ANDROID_RELEASE_KEY_ALIAS` | release key alias |
 | `ANDROID_RELEASE_KEY_PASSWORD` | release key 密码 |
 
-`ci.yml` 的 Android 作业把 debug keystore 还原到 `android/app/debug-upload.jks`；
-未配置 `ANDROID_DEBUG_KEYSTORE_BASE64` 时使用 runner 默认 debug keystore，外部 PR
-不会因缺 secret 失败。`release.yml` 把 release keystore 还原到
-`android/app/release.jks`，四个 release secret 缺一即失败。keystore 文件与
-`android/key.properties` 都在 `.gitignore` 里。
+`ci.yml` 的 Android 作业把 debug keystore 还原到 `android/app/debug-upload.jks`；未配置 `ANDROID_DEBUG_KEYSTORE_BASE64` 时使用 runner 默认 debug keystore，外部 PR 不会因缺 secret 失败。`release.yml` 把 release keystore 还原到 `android/app/release.jks`，四个 release secret 缺一即失败。keystore 文件与 `android/key.properties` 都在 `.gitignore` 里。
 
 本地 `android/key.properties` 示例（路径相对 `android/app/`）：
 
@@ -123,23 +100,19 @@ releaseKeyAlias=<alias>
 releaseKeyPassword=<密码>
 ```
 
-切换 release 密钥后，已装旧签名的 Android 包无法原地升级，Release 正文要写明需要
-卸载重装。
+切换 release 密钥后，已装旧签名的 Android 包无法原地升级，Release 正文要写明需要卸载重装。
 
 ## `setup.dart` 做了与没做什么
 
-做：读版本号 → `flutter build <platform> --release --build-name/--build-number` →
-把平台产物按 `flspeak-<version>-<platform>-<arch>.<ext>` 归拢进 `dist/`。
+做：读版本号 → `flutter build <platform> --release --build-name/--build-number` → 把平台产物按 `flspeak-<version>-<platform>-<arch>.<ext>` 归拢进 `dist/`。
 
 没做（**已知简化**，需要各自的打包工具）：
-
 - dmg / pkg 与 Apple 公证；
 - deb / rpm / AppImage；
 - MSI / 安装器与 Windows 代码签名（当前产物是未签名 zip）；
 - F-Droid 元数据。
 
-`setup.dart` 还只会给**当前主机**能构建的平台打包：在 macOS 上请求 `windows` 会直接报错
-退出，交叉平台打包交给 release 矩阵。
+`setup.dart` 还只会给**当前主机**能构建的平台打包：在 macOS 上请求 `windows` 会直接报错退出，交叉平台打包交给 release 矩阵。
 
 ## 本地复现 CI
 

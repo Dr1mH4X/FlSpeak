@@ -17,12 +17,9 @@ proto        SRV 解析 + 最终连接边界 + deny-all 解析器 + 建连
 tsclient-rs           协议实现（版本见 Cargo.toml）
 ```
 
-Flutter 负责界面，Rust 负责协议、连接边界与音频。Dart 不持有身份私钥，
-也不把音频帧带过 FFI。
+Flutter 负责界面，Rust 负责协议、连接边界与音频。Dart 不持有身份私钥，也不把音频帧带过 FFI。
 
-音频是旁路：capture/playback 两条线程各自独占 cpal 流，cpal 回调只搬
-`ArrayQueue`；编码后的包回到 actor，由 actor 串行 `send_voice`。见
-`docs/audio.md`。
+音频是旁路：capture/playback 两条线程各自独占 cpal 流，cpal 回调只搬 `ArrayQueue`；编码后的包回到 actor，由 actor 串行 `send_voice`。详见 [audio.md](audio.md)。
 
 ## 一次连接
 
@@ -45,10 +42,7 @@ Dart: listChannels() / moveToChannel() / sendText()
   └─ 全部经同一个命令队列串行执行
 ```
 
-`server::parse_address` 只接受 IP、域名、`localhost` 和可选端口。裸昵称会被拒绝，
-因此 `named.myteamspeak.com/lookup` 不会从正常录入路径进入。`proto::client`
-是唯一的最终出口检查：目标命中官方主机清单时直接拒绝。SRV 查询失败会回退到
-档案里的字面地址；SRV 返回的目标也必须在 `client` 这一步通过检查。
+`server::parse_address` 只接受 IP、域名、`localhost` 和可选端口。裸昵称会被拒绝，因此 `named.myteamspeak.com/lookup` 不会从正常录入路径进入。`proto::client` 是唯一的最终出口检查：目标命中官方主机清单时直接拒绝。SRV 查询失败会回退到档案里的字面地址；SRV 返回的目标也必须在 `client` 这一步通过检查。
 
 ## 事件流
 
@@ -71,15 +65,7 @@ FFI 的 `check_for_updates` 直接调用 `core/session` 的独立函数，不进
 
 ## 日志
 
-Flutter 启动时把 `<应用支持目录>/logs` 同时交给 Dart 与 Rust，两边按 UTC 日期写
-NDJSON：`frontend.YYYY-MM-DD.log` 与 `backend.YYYY-MM-DD.log`。目录与档案、身份文件同级；
-`lib/core/logging/logger.dart` 负责路径与启动失败时的降级，`core/session` 的
-`logging` 模块安装 Rust 全局订阅器与滚动文件 worker。Dart 观察器按 UTC 日期清理两类
-文件；Rust 的 `max_log_files` 只是数量兜底。
-
-记录字段、分层职责边界与保留策略见
-[跨平台日志分层与职责边界](defensive-patterns/logging.md) 及
-[跨平台结构化日志](../.agents/notes/implemented/architecture/2026-11-07-cross-platform-logging.md)。
+Flutter 启动时把 `<应用支持目录>/logs` 传递给 Rust 与 Dart，两端分别按 UTC 日期输出结构化 NDJSON（`frontend.YYYY-MM-DD.log` 与 `backend.YYYY-MM-DD.log`）。Dart 观察器驱动生命周期清理，Rust 侧通过滚动文件 worker 兜底数量。记录字段、分层职责边界与保留策略见[跨平台日志分层与职责边界](defensive-patterns/logging.md)及[跨平台结构化日志](../.agents/notes/implemented/architecture/2026-11-07-cross-platform-logging.md)。
 
 ## 线程与并发模型
 
@@ -91,8 +77,7 @@ NDJSON：`frontend.YYYY-MM-DD.log` 与 `backend.YYYY-MM-DD.log`。目录与档�
 | `voice-capture` 线程 | cpal 输入、格式转换、VAD/PTT、20ms Opus、发送节拍 |
 | `voice-playback` 线程 | cpal 输出、每说话人 jitter/解码/混音、设备格式转换 |
 
-会话线程必须独占的原因见 `.agents/notes/implemented/architecture/2026-10-08-session-actor.md`：
-tsclient-rs 的建连 future 不是 `Send`。
+会话线程必须独占的原因见 [.agents/notes/implemented/architecture/2026-10-08-session-actor.md](../.agents/notes/implemented/architecture/2026-10-08-session-actor.md)：tsclient-rs 的建连 future 不是 `Send`。
 
 ## 目录职责
 
@@ -108,8 +93,7 @@ tsclient-rs 的建连 future 不是 `Send`。
 ## 尚未接线
 
 - 聊天图片：官方 myTS 附件只显示“不支持的图片格式”；第三方 URL 抓取与 HTTP PUT 图床上传已接线，磁盘缓存与解码像素上限尚未接线。详见 [images.md](images.md)。
-- 聊天正文：Dart `MessageContent` 渲染 TS6 Markdown 的一个子集；原始文本不做转换，
-  历史里保留原样。
+- 聊天正文：Dart `MessageContent` 渲染 TS6 Markdown 的一个子集；原始文本不做转换，历史里保留原样。
 - TSDNS：可选 legacy fallback，当前只做 SRV，未实现 TSDNS。
 - 文件传输：频道文件浏览、下载和进度已接线；普通文件上传 UI、断点续传尚未接线。详见 [channels.md](channels.md)。
 - 历史清除入口：历史已持久化并回放，设置页还不能清除。

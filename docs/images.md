@@ -1,140 +1,69 @@
 # 聊天图片与 TS6 富文本
 
-状态：官方附件显示“不支持的图片格式”占位；第三方 URL 图片支持聊天内显示、媒体墙与全屏查看；用户自配 HTTP PUT 图床支持选图、粘贴图片和发送。富文本渲染覆盖 Markdown 的常用子集。
+官方附件显示“不支持的图片格式”占位；第三方 URL 图片支持聊天内显示、媒体墙与全屏查看；用户自配 HTTP PUT 图床支持选图、粘贴图片和发送。富文本渲染覆盖 Markdown 的常用子集。
 
-## 结论先行
+## 格式与传输机制
 
-1. TS6 官方客户端的图片消息**不是 URL/BBCode**，而是一条 JSON 文本：
-   `{"msg_type":"ts.file.myts", ...}`。
-2. 图片字节不在 TeamSpeak 服务器上，而在 myTeamSpeak 的附件服务里；官方客户端通过
-   `tsclient_internal.tschat_downloadAttachment` 取回。消息里的 `file_id` 只是引用，
-   不是可直接访问的 HTTP 地址。
-3. 按当前连接边界（不使用 myTeamSpeak 账号体系/官方媒体服务），FlSpeak **不能下载**
-   这类图片。现在的实现只解析元数据，显示文件信息占位，不伪造图片。
-4. 发送侧同样不能伪造 `ts.file.myts`：官方客户端的发图流程是先上传到 myTS，再发这个
-   JSON。FlSpeak 只支持用户自配图床 + URL；官方客户端收到第三方 URL 是否渲染成图片
-   仍未验证，见文末互操作门禁。
+1. TS6 官方客户端的图片消息不是 URL/BBCode，而是一条 JSON 文本：`{"msg_type":"ts.file.myts", ...}`。
+2. 图片数据不在 TeamSpeak 服务器上，而在 myTeamSpeak 的附件服务里；官方客户端通过 `tsclient_internal.tschat_downloadAttachment` 取回。消息里的 `file_id` 只是引用，不是可直接访问的 HTTP 地址。
+3. 依据自托管连接边界（不接入 myTeamSpeak 账号体系与官方媒体服务），FlSpeak 解析其元数据并显示文件信息占位，不发起官方附件下载。
+4. 发送侧同样不伪造 `ts.file.myts`：官方发图依赖 myTS 上传；FlSpeak 提供用户自配 HTTP PUT 图床与直接发送公开图片 URL 机制。相关决策见 [.agents/notes/implemented/architecture/2026-10-18-ts6-attachments.md](../.agents/notes/implemented/architecture/2026-10-18-ts6-attachments.md)。
 
-## 已验证的原始消息
+## 抓包原始消息示例
 
-探针抓到的私聊原文（为可读性加了换行，实际是单行）：
+探针捕获的 TS6 私聊原文结构：
 
 ```json
 {"msg_type":"ts.file.myts","file_id":"eGNoenZrcmFxbWxxdG1iYmNud3puamFqeHZnd2VwbnJ3b2FzdWZ6dWt1bnJ3ZHVzanNmZHBsbWZubmFl","chat_user_id":"@ahho4uvek3l5db3mwajlpv26a4ewuddtmlmhkgbxucetz65d7y2eu===:chat-2.tmspk.net","file_name":"image_1792291789378.png","file_size":69244,"body":"image_1792291789378.png","v2":true}
 ```
 
-字段：
-
 | 字段 | 含义 |
 | --- | --- |
-| `msg_type` | 固定 `ts.file.myts` |
-| `file_id` | myTS 附件 id；Base64 后是一段 60 字符 slug，不是 URL |
-| `chat_user_id` | 发送者的 myTS/聊天身份，形如 `@...:chat-2.tmspk.net` |
-| `file_name` / `file_size` | 文件名与字节数 |
-| `body` | 官方客户端显示的说明/文件名 |
-| `v2` | 当前为 `true` |
+| `msg_type` | 固定为 `ts.file.myts` |
+| `file_id` | myTS 附件标识；Base64 解码后为 60 字符 slug，非直接 HTTP URL |
+| `chat_user_id` | 发送者的 myTS 聊天网络身份（形如 `@...:chat-2.tmspk.net`） |
+| `file_name` / `file_size` | 文件名与字节长度 |
+| `body` | 说明文本/文件名 |
+| `v2` | 协议版本标识，当前为 `true` |
 
-官方客户端代码里的对应路径：
-
-```text
-收：parse "ts.file.myts" -> attachment
-    -> file_cache.download -> tsclient_internal.tschat_downloadAttachment
-发：file_cache.upload -> tsclient_internal.myTsFileTransferUpload
-    -> sendFile -> 发出同样的 JSON
-```
-
-所以“对方发来的图片”与“我们发图”都绕不开 myTeamSpeak 服务，除非改连接边界。
-
-## 边界决策
-
-| 方案 | 行为 | 代价 |
-| --- | --- | --- |
-| A. 官方图片只占位（当前） | `ts.file.myts` 显示“不支持的图片格式”+文件信息，不下载 | 官方客户端图片看不到；边界不变 |
-| B. 只读官方附件 | 为显示官方图片接入 myTS 附件下载 | 需要 myTS 身份/鉴权与官方协议；违反当前“不使用官方媒体服务” |
-| C. 第三方 URL/图床 | 用户发 URL；FlSpeak 安全抓取并显示 | 官方客户端是否渲染第三方 URL 仍未验证 |
-
-当前实现选择 A + C：不做 myTS token，不访问官方附件服务；URL 图片独立抓取。官方 `file_id`
-永远不进入 URL 抓取器。
+官方附件标识 `file_id` 绝不进入 URL 抓取器。
 
 ## 图片显示
 
-已实现：
+- 识别 `ts.file.myts` JSON 并提取 `file_name`、`file_size`、`body`；展示“不支持的图片格式”占位卡片与文件尺寸信息，不发出任何网络请求；原始 JSON 完整写入本地聊天历史。
+- 识别 TS6 Markdown `![alt](https://...)`、TS3 风格 `[img]https://...[/img]` 以及整行图片链接（扩展名 png/jpg/jpeg/gif/webp/avif）。普通链接保持纯文本样式，不预抓取。
+- Dart `MessageContent` 通过 FFI `fetchImage(url)` 请求字节，由 Rust 侧 `core/session/src/images.rs` 执行安全校验与抓取。
+- 安全校验：仅允许 http/https 协议；拒绝携带凭据；拒绝 `proto::forbidden_host` 官方主机；拒绝 localhost、私有主机名（.local/.lan/.internal）、私网地址、链路本地与 CGNAT 网段；DNS 解析后固定到公网 IP 发起请求，防御 DNS 重绑定。
+- 抓取限制：最多跟随 3 次重定向（逐跳重新执行 SSRF 校验）；15 秒全局超时；20 MiB 响应体积上限；`Content-Type` 必须为 `image/*` 或文件头特征匹配 PNG/JPEG/GIF/WebP/AVIF。
+- 代理与透明网关适配：支持系统代理与环境变量代理；检测到代理时交由远端代理进行 DNS 解析以避免本地污染。允许 RFC 2544 保留网段 `198.18.0.0/15`（TUN/fake-IP 网关），满足透明代理抓取需求，同时严格拦截真实局域网与环回私网。
+- 聊天缩略图、媒体墙与全屏查看器共享 `remoteImageProvider` 缓存，按 URL 合并并发请求并在全部离开视图后释放内存。
 
-- 识别 `ts.file.myts` JSON，解析 `file_name`、`file_size`、`body`、`file_id`；
-- 官方附件显示 **“不支持的图片格式”** 卡片和文件信息，不发网络请求；
-- 解析失败或普通文本时按原文显示，不吞消息；
-- 原始 JSON 仍原样进历史。
-
-URL 图片已实现：
-
-- 识别 TS6 Markdown `![alt](https://...)`、TS3 风格 `[img]https://...[/img]`、整行裸图片
-  URL（扩展名 png/jpg/jpeg/gif/webp/avif）；普通链接不抓取。
-- Dart `MessageContent` 通过 FFI `fetchImage(url)` 取字节，Rust 侧
-  `core/session/src/images.rs` 做校验与抓取。
-- 校验：只允许 http/https、拒绝凭据、拒绝 `proto::forbidden_host` 命中的官方主机、
-  拒绝 localhost/私有主机名（.local/.lan/.internal）/私网/链路本地/组播/CGNAT/IPv4-mapped IPv6；DNS 解析后逐个检查并
-  固定到选中的公网地址（降低 DNS rebinding）。
-- 限制：最多 3 次重定向，每一跳重新校验；15s 超时；20 MiB 上限；content-type 必须
-  `image/*` 或字节 magic 命中 PNG/JPEG/GIF/WebP/AVIF；失败显示“图片加载失败”和 URL。
-- 聊天缩略图、媒体墙与全屏查看器共用 `remoteImageProvider`，通过 Rust 抓取图片，按 URL 合并可见视图的请求；视图全部离开后释放字节。失败状态提供原地重试，普通重建不自动重试。
-- 图片请求支持环境 HTTP 代理（`HTTP_PROXY`/`ALL_PROXY` 等）与操作系统级系统代理（macOS/Windows/Linux），当检测到代理存在时跳过本地 DNS 预解析与 IP 绑定，由代理端远端解析以避免 DNS 污染；未配置代理时继续在本地进行 DNS 校验并固定 IP。无论是否使用代理，均严格校验公网 IP 字面量并拦截本地/私有主机名。DNS、重定向与读取合计受 15s 超时限制。
-- fake-IP DNS 返回的 `198.18.0.0/15`（RFC 2544 基准测试保留网段）予以放行，允许 FlClash、Clash 等 TUN/fake-IP 透明网卡代理在不修改域名过滤列表的情况下直接抓取图片；局域网（10/172.16/192.168）与环回私网仍被严格拦截。重定向后的图片域名也需满足同一条件。
-- 全屏查看器支持打开、前后翻页和关闭；图片文件名按 URL 路径规则解码一次。
-
-未实现：
-
-- 磁盘 LRU 缓存、隐私开关、查看器缩放与保存；
-- 解码后像素上限（目前只有 20 MiB 传输上限，仍有解压炸弹风险）；
-- EXIF 清理（显示的是原始字节，未写回磁盘）；
+尚未接线能力：磁盘 LRU 缓存、解码后最大像素上限限制与客户端 EXIF 剥离。
 
 ## 图片上传与发送
 
-在设置页的“图片上传”，或聊天输入框图片菜单里，填写 HTTP PUT 上传根地址、公开访问根地址与可选 Bearer token。三个值保存在平台安全存储，普通偏好与消息历史不保存令牌。没有图床时仍可手动发送公网图片 URL。
+在设置页或聊天输入框菜单中配置 HTTP PUT 上传根地址、公开访问根地址与可选 Bearer token。配置保存在操作系统安全存储（Secure Storage）中，不落盘至普通偏好或聊天历史文件。
 
-上传接口接收 `PUT <上传根地址>/<随机文件名>`，请求体是原始图片字节，`Content-Type` 按 PNG/JPEG/GIF/WebP/AVIF 的字节特征确定。配置 token 时附加 `Authorization: Bearer <token>`。服务端返回任意 2xx 即为成功；客户端从公开根地址和相同文件名生成图片 URL，不读取响应正文或重定向地址。
+- 客户端通过 `PUT <上传根地址>/<随机文件名>` 发起原始图片二进制上传，`Content-Type` 根据图片文件头特征自动推导。配置 token 时自动附带 `Authorization: Bearer <token>` 请求头。
+- 服务端响应 2xx 状态码视为上传成功；客户端根据公开访问根地址与同一随机文件名拼装公开访问 URL，不解析服务端响应正文或重定向。
+- 上传根地址与公开访问根地址只接受无凭据、查询参数和片段的 HTTPS URL（本地回环开发允许 HTTP），并强制校验官方主机黑名单。上传超时为 60 秒，限制 20 MiB。
+- 聊天图片发送流程：选图或粘贴 → 生成缩略预览 → 上传图片 → 提交 `![](<公开 URL>)` 文本消息至服务器 → 确认成功后清空草稿。上传失败保留草稿供重试。
 
-例如上传根地址 `https://images.example.com/upload/`、公开根地址 `https://images.example.com/images/`：图床把 `/upload/<文件名>` 的 PUT 内容保存为 `/images/<文件名>`，并允许接收方通过 GET 访问公开路径。S3 签名、multipart 表单与返回 JSON URL 的接口尚未接线，需要由图床服务适配上述 PUT 接口。
+## TS6 富文本支持矩阵
 
-上传根地址与公开根地址只接受无凭据、查询参数和片段的 HTTPS URL；本机开发允许 loopback HTTP。两者都检查官方主机清单。上传使用随机文件名、20 MiB 上限与 60 秒超时，不使用环境 HTTP 代理，不跟随重定向。图床配置由用户直接填写；聊天消息不能更改上传目标。
-
-聊天图片菜单提供选图、粘贴图片和图床配置。选图或粘贴后显示预览，可移除，再与文字一起发送。发送顺序是上传图片、发送 `![](<公开 URL>)`、等待服务器确认。消息发送失败会保留草稿，重试复用已上传地址；上传期间切换服务器、连接代次或投递目标会中止发送并保留草稿。粘贴图片通过菜单操作，普通文本粘贴不受影响。
-
-接收方仍按图片抓取规则校验公开 URL，因此私网公开地址无法在聊天中显示。图床需向接收方提供公网 HTTPS 地址；loopback HTTP 仅用于接口开发测试。客户端不部署图床、不清理孤立上传文件，也不伪造官方 `ts.file.myts` 附件。
-
-## TS6 富文本
-
-用户实测的 TS6 消息是 Markdown 风格，不是 TS3 BBCode。已支持的子集：
-
-| 语法 | 渲染 |
+| 语法 | 渲染行为 |
 | --- | --- |
 | `**bold**` / `*italic*` | 粗体 / 斜体 |
 | `~~strike~~` / `++underline++` | 删除线 / 下划线 |
-| `==highlight==` | 高亮背景 |
-| `` `code` `` / ``` 围栏 | 行内/块级等宽 |
-| `[text](url)` / 裸 URL | 链接样式（暂不打开） |
-| `# heading` / `> quote` | 标题 / 引用 |
-| `- item` / `1. item` | 列表 |
-| `| a | b |` | 表格 |
-| `:::details` / `:::left` | 折叠块 / 左对齐块 |
-| `$math$` | 等宽斜体（不计算） |
-| `||spoiler||` | 隐藏文本（暂不能点击揭示） |
-| `:+1:` 等 | 少量 emoji 短码 |
+| `==highlight==` | 高亮背景色 |
+| `` `code` `` / ` ``` ` 围栏 | 行内等宽代码 / 独立代码块 |
+| `[text](url)` / 裸 URL | 链接文本样式 |
+| `# heading` / `> quote` | 标题 / 引用块 |
+| `- item` / `1. item` | 无序与有序列表 |
+| `| a | b |` | Markdown 表格 |
+| `:::details` / `:::left` | 折叠展示块 / 左对齐块 |
+| `$math$` | 等宽斜体排版 |
+| `||spoiler||` | 隐藏防剧透文本 |
+| `:+1:` 等 | 基础 Emoji 短码映射 |
 
-未支持/降级：脚注 `[^x]`、完整数学排版、mermaid 渲染、嵌套复杂列表、链接点击。
-原始文本仍完整保留；渲染器只影响 UI，不影响历史与转发。
-
-## 互操作门禁
-
-- [x] TS6 原始图片消息格式；
-- [x] 官方附件元数据解析 + “不支持的图片格式”占位；
-- [x] 第三方 URL 图片抓取（Rust 校验 + FFI）；
-- [ ] 官方附件实际下载（不做 token，已放弃）；
-- [ ] 第三方 URL 磁盘缓存/隐私开关/像素上限；
-- [ ] 官方客户端收到第三方 URL 后是否渲染为图片；
-- [ ] 官方客户端发图时 `file_id` 是否有过期/权限语义；
-- [x] HTTP PUT 图床配置、平台安全存储、选图与粘贴发送。
-
-## 后台门禁
-
-格式门禁已关闭。用户已明确不走 myTS token：官方附件只显示“不支持的图片格式”，
-URL 图片走独立抓取，发送使用用户配置的 HTTP PUT 图床。
+原始文本在收到和发送时均原样保留；富文本渲染仅作用于展示层，不破坏聊天历史原文。
