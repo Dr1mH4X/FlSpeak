@@ -104,6 +104,49 @@ jobs:
             mv "$RUNNER_TEMP/WebRTC.xcframework.zip" "$target"
           fi
 
+      # 预热 WebRTC 二进制依赖，避免 Linux CMake 走网页直链下载遭遇 GitHub Releases 504 超时。
+      - name: Pre-cache WebRTC for CMake (Linux)
+        if: matrix.platform == 'linux'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          webrtc_dir="$(find "${PUB_CACHE:-$HOME/.pub-cache}" -type d -name "flutter_webrtc-*" 2>/dev/null | head -n 1)"
+          test -n "$webrtc_dir" || { echo "未在 pub-cache 中找到 flutter_webrtc" >&2; exit 1; }
+          third_party="$webrtc_dir/third_party"
+          mkdir -p "$third_party/downloads"
+          asset="libwebrtc-linux-x64-release"
+          zip_target="$third_party/downloads/${asset}.zip"
+          if [ ! -f "$zip_target" ]; then
+            if ! gh release download "libwebrtc.m150.7871.07" \
+                --repo webrtc-sdk/libwebrtc \
+                --pattern "${asset}.zip" \
+                --dir "$RUNNER_TEMP" \
+                --clobber; then
+              echo "gh release download 失败，回退到 curl..."
+              curl --proto '=https' --tlsv1.2 -fsSL \
+                --retry 8 --retry-delay 5 --retry-all-errors \
+                -o "$RUNNER_TEMP/${asset}.zip" \
+                "https://github.com/webrtc-sdk/libwebrtc/releases/download/libwebrtc.m150.7871.07/${asset}.zip"
+            fi
+            mv "$RUNNER_TEMP/${asset}.zip" "$zip_target"
+          fi
+          if [ ! -f "$third_party/libwebrtc/lib/libwebrtc.so" ]; then
+            rm -rf "$RUNNER_TEMP/webrtc_extract"
+            mkdir -p "$RUNNER_TEMP/webrtc_extract"
+            unzip -q "$zip_target" -d "$RUNNER_TEMP/webrtc_extract"
+            rm -rf "$third_party/libwebrtc"
+            if [ -d "$RUNNER_TEMP/webrtc_extract/linux-x64-release" ]; then
+              mv "$RUNNER_TEMP/webrtc_extract/linux-x64-release" "$third_party/libwebrtc"
+            else
+              mv "$RUNNER_TEMP/webrtc_extract" "$third_party/libwebrtc"
+            fi
+          fi
+          test -f "$third_party/libwebrtc/lib/libwebrtc.so" || {
+            echo "预置后仍未在预期路径找到 libwebrtc.so" >&2
+            exit 1
+          }
+          echo "WebRTC Linux 二进制已就位: $third_party/libwebrtc/lib/libwebrtc.so"
+
       # 保留完整 bundle，包含 Rust 动态库与 Flutter 资源。
       - name: Build debug bundle
         run: flutter build ${{ matrix.platform }} --debug
