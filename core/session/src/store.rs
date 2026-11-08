@@ -31,6 +31,8 @@ struct HistoryEntry {
     message: String,
     target_mode: i32,
     target_id: u64,
+    #[serde(default)]
+    peer_uid: String,
 }
 
 impl HistoryEntry {
@@ -44,6 +46,7 @@ impl HistoryEntry {
             message: message.message.clone(),
             target_mode: message.target_mode,
             target_id: message.target_id,
+            peer_uid: message.peer_uid.clone(),
         }
     }
 
@@ -55,6 +58,7 @@ impl HistoryEntry {
             message: self.message,
             target_mode: self.target_mode,
             target_id: self.target_id,
+            peer_uid: self.peer_uid,
             at: self.at,
         }
     }
@@ -321,6 +325,7 @@ mod tests {
             message: text.into(),
             target_mode: 2,
             target_id: 7,
+            peer_uid: String::new(),
             at,
         }
     }
@@ -365,6 +370,46 @@ mod tests {
         assert_eq!(loaded[0].at, 2);
         assert_eq!(loaded[0].from_id, 8);
         assert_eq!(loaded[2].at, 4);
+
+        append_history(
+            &path,
+            "ts.example.com:9987",
+            &TextMessageView {
+                target_mode: 1,
+                target_id: 8,
+                peer_uid: "uid-alice".into(),
+                ..message(7, "dm")
+            },
+        )
+        .await
+        .unwrap();
+        let loaded = load_history(&path, "ts.example.com:9987", 1).await.unwrap();
+        assert_eq!(loaded[0].peer_uid, "uid-alice");
+        assert_eq!(loaded[0].target_mode, 1);
+
+        let _ = tokio::fs::remove_dir_all(&dir).await;
+    }
+
+    #[tokio::test]
+    async fn history_without_peer_uid_still_loads() {
+        let dir = std::env::temp_dir().join("flspeak-session-legacy-history-test");
+        let path = history_path(&dir.join("preferences.json"));
+        let _ = tokio::fs::remove_dir_all(&dir).await;
+        tokio::fs::create_dir_all(&dir).await.unwrap();
+        tokio::fs::write(
+            &path,
+            concat!(
+                "{\"server_id\":\"ts.example.com:9987\",\"at\":1,\"from\":\"alice\",",
+                "\"from_uid\":\"uid-alice\",\"from_id\":8,\"message\":\"hi\",",
+                "\"target_mode\":1,\"target_id\":7}\n"
+            ),
+        )
+        .await
+        .unwrap();
+
+        let loaded = load_history(&path, "ts.example.com:9987", 5).await.unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].peer_uid, "");
 
         let _ = tokio::fs::remove_dir_all(&dir).await;
     }

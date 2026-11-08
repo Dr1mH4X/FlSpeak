@@ -31,6 +31,7 @@ class ChatMessage {
     required this.scope,
     required this.targetId,
     this.fromId = 0,
+    this.peerUid = '',
   });
 
   final String from;
@@ -43,6 +44,11 @@ class ChatMessage {
   /// 频道消息是频道 id，私聊是收件客户端 id，服务器广播为 0。
   final int targetId;
 
+  /// 私聊对话的另一方 UID；频道与服务器广播为空。
+  ///
+  /// 客户端 id 每次连接都会变，私聊列表与历史归类只认这个字段。
+  final String peerUid;
+
   factory ChatMessage.fromCore(CoreMessage message) => ChatMessage(
     from: message.from,
     fromUid: message.fromUid,
@@ -51,6 +57,7 @@ class ChatMessage {
     at: DateTime.fromMillisecondsSinceEpoch(message.at),
     scope: ChatScope.fromProtocol(message.targetMode),
     targetId: message.targetId,
+    peerUid: message.peerUid,
   );
 }
 
@@ -68,6 +75,8 @@ class SessionView {
     this.chatScope = ChatScope.channel,
     this.directRecipientUid,
     this.directRecipientId,
+    this.unreadScopes = const <ChatScope>{},
+    this.unreadPeers = const <String>{},
     this.busy = false,
     this.failureSeq = 0,
     this.connectionEpoch = 0,
@@ -110,6 +119,14 @@ class SessionView {
   final ChatScope chatScope;
   final String? directRecipientUid;
   final int? directRecipientId;
+
+  /// 当前范围之外收到、尚未打开的消息来源；频道与服务器广播按范围合并。
+  final Set<ChatScope> unreadScopes;
+
+  /// 有未读私聊的对方 UID。
+  final Set<String> unreadPeers;
+
+  bool get hasUnreadChat => unreadScopes.isNotEmpty || unreadPeers.isNotEmpty;
 
   ClientView? get directRecipient {
     if (directRecipientId != null) {
@@ -298,18 +315,24 @@ class SessionView {
 
   /// 当前范围下要显示的消息。默认看自己所在的频道。
   ///
-  /// 私聊在任何范围都显示——漏掉一条私聊比多显示一行严重得多。
+  /// 一个范围只显示一类消息；别处收到的消息由输入框范围按钮的红点提示。
   List<ChatMessage> visibleMessages({int? channelId}) {
     final scopeChannel = channelId ?? selfChannelId;
     return messages.where((message) {
-      if (message.scope == ChatScope.direct) {
-        return true;
-      }
-      if (chatScope == ChatScope.server) {
-        return message.scope == ChatScope.server;
-      }
-      return message.scope == ChatScope.channel &&
-          message.targetId == scopeChannel;
+      return switch (chatScope) {
+        ChatScope.server => message.scope == ChatScope.server,
+        ChatScope.channel =>
+          message.scope == ChatScope.channel &&
+              message.targetId == scopeChannel,
+        ChatScope.direct =>
+          message.scope == ChatScope.direct &&
+              directRecipientUid != null &&
+              (message.peerUid.isNotEmpty
+                  // 加字段前的历史记录没有 peer_uid，对方的发言仍能按 UID 认领。
+                  ? message.peerUid == directRecipientUid
+                  : !isOwnMessage(message) &&
+                        message.fromUid == directRecipientUid),
+      };
     }).toList();
   }
 
@@ -328,6 +351,8 @@ class SessionView {
     ChatScope? chatScope,
     Object? directRecipientUid = _unset,
     Object? directRecipientId = _unset,
+    Set<ChatScope>? unreadScopes,
+    Set<String>? unreadPeers,
     bool? busy,
     int? failureSeq,
     int? connectionEpoch,
@@ -368,6 +393,8 @@ class SessionView {
     directRecipientId: identical(directRecipientId, _unset)
         ? this.directRecipientId
         : directRecipientId as int?,
+    unreadScopes: unreadScopes ?? this.unreadScopes,
+    unreadPeers: unreadPeers ?? this.unreadPeers,
     busy: busy ?? this.busy,
     failureSeq: failureSeq ?? this.failureSeq,
     connectionEpoch: connectionEpoch ?? this.connectionEpoch,

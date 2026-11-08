@@ -3395,6 +3395,7 @@ impl SseDecode for crate::api::session::CoreEvent {
                 let mut var_message = <String>::sse_decode(deserializer);
                 let mut var_targetMode = <i32>::sse_decode(deserializer);
                 let mut var_targetId = <u64>::sse_decode(deserializer);
+                let mut var_peerUid = <String>::sse_decode(deserializer);
                 let mut var_at = <u64>::sse_decode(deserializer);
                 return crate::api::session::CoreEvent::TextMessage {
                     from: var_from,
@@ -3403,6 +3404,7 @@ impl SseDecode for crate::api::session::CoreEvent {
                     message: var_message,
                     target_mode: var_targetMode,
                     target_id: var_targetId,
+                    peer_uid: var_peerUid,
                     at: var_at,
                 };
             }
@@ -3633,6 +3635,7 @@ impl SseDecode for crate::api::session::CoreMessage {
         let mut var_message = <String>::sse_decode(deserializer);
         let mut var_targetMode = <i32>::sse_decode(deserializer);
         let mut var_targetId = <u64>::sse_decode(deserializer);
+        let mut var_peerUid = <String>::sse_decode(deserializer);
         let mut var_at = <u64>::sse_decode(deserializer);
         return crate::api::session::CoreMessage {
             from: var_from,
@@ -3641,6 +3644,7 @@ impl SseDecode for crate::api::session::CoreMessage {
             message: var_message,
             target_mode: var_targetMode,
             target_id: var_targetId,
+            peer_uid: var_peerUid,
             at: var_at,
         };
     }
@@ -4630,6 +4634,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::session::CoreEvent {
                 message,
                 target_mode,
                 target_id,
+                peer_uid,
                 at,
             } => [
                 6.into_dart(),
@@ -4639,6 +4644,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::session::CoreEvent {
                 message.into_into_dart().into_dart(),
                 target_mode.into_into_dart().into_dart(),
                 target_id.into_into_dart().into_dart(),
+                peer_uid.into_into_dart().into_dart(),
                 at.into_into_dart().into_dart(),
             ]
             .into_dart(),
@@ -4849,6 +4855,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::session::CoreMessage {
             self.message.into_into_dart().into_dart(),
             self.target_mode.into_into_dart().into_dart(),
             self.target_id.into_into_dart().into_dart(),
+            self.peer_uid.into_into_dart().into_dart(),
             self.at.into_into_dart().into_dart(),
         ]
         .into_dart()
@@ -5356,6 +5363,7 @@ impl SseEncode for crate::api::session::CoreEvent {
                 message,
                 target_mode,
                 target_id,
+                peer_uid,
                 at,
             } => {
                 <i32>::sse_encode(6, serializer);
@@ -5365,6 +5373,7 @@ impl SseEncode for crate::api::session::CoreEvent {
                 <String>::sse_encode(message, serializer);
                 <i32>::sse_encode(target_mode, serializer);
                 <u64>::sse_encode(target_id, serializer);
+                <String>::sse_encode(peer_uid, serializer);
                 <u64>::sse_encode(at, serializer);
             }
             crate::api::session::CoreEvent::Poked { from, message } => {
@@ -5556,6 +5565,7 @@ impl SseEncode for crate::api::session::CoreMessage {
         <String>::sse_encode(self.message, serializer);
         <i32>::sse_encode(self.target_mode, serializer);
         <u64>::sse_encode(self.target_id, serializer);
+        <String>::sse_encode(self.peer_uid, serializer);
         <u64>::sse_encode(self.at, serializer);
     }
 }

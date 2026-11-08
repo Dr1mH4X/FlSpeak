@@ -236,7 +236,15 @@ class SessionController extends Notifier<SessionView> {
   }
 
   void selectChatScope(ChatScope scope) {
-    state = state.copyWith(chatScope: scope);
+    state = state.copyWith(
+      chatScope: scope,
+      unreadScopes: scope == ChatScope.direct
+          ? state.unreadScopes
+          : ({...state.unreadScopes}..remove(scope)),
+      unreadPeers: scope == ChatScope.direct
+          ? _clearPeerUnread(state.unreadPeers, state.directRecipientUid)
+          : state.unreadPeers,
+    );
   }
 
   void selectDirectRecipient(String uid, {int? clientId}) {
@@ -244,7 +252,49 @@ class SessionController extends Notifier<SessionView> {
       chatScope: ChatScope.direct,
       directRecipientUid: uid,
       directRecipientId: clientId,
+      unreadPeers: _clearPeerUnread(state.unreadPeers, uid),
     );
+  }
+
+  static Set<String> _clearPeerUnread(Set<String> peers, String? uid) {
+    if (uid == null || !peers.contains(uid)) return peers;
+    return {...peers}..remove(uid);
+  }
+
+  /// 新消息落在当前查看范围之外时，记录来源给输入框范围按钮显示红点。
+  static ({Set<ChatScope> scopes, Set<String> peers}) _unreadFor(
+    SessionView view,
+    ChatMessage message,
+  ) {
+    if (view.isOwnMessage(message)) {
+      return (scopes: view.unreadScopes, peers: view.unreadPeers);
+    }
+    switch (message.scope) {
+      case ChatScope.channel:
+        if (view.chatScope == ChatScope.channel) {
+          return (scopes: view.unreadScopes, peers: view.unreadPeers);
+        }
+        return (
+          scopes: {...view.unreadScopes, ChatScope.channel},
+          peers: view.unreadPeers,
+        );
+      case ChatScope.server:
+        if (view.chatScope == ChatScope.server) {
+          return (scopes: view.unreadScopes, peers: view.unreadPeers);
+        }
+        return (
+          scopes: {...view.unreadScopes, ChatScope.server},
+          peers: view.unreadPeers,
+        );
+      case ChatScope.direct:
+        final peer = message.peerUid;
+        if (peer.isEmpty ||
+            (view.chatScope == ChatScope.direct &&
+                peer == view.directRecipientUid)) {
+          return (scopes: view.unreadScopes, peers: view.unreadPeers);
+        }
+        return (scopes: view.unreadScopes, peers: {...view.unreadPeers, peer});
+    }
   }
 
   void replyToMessage(ChatMessage message) {
@@ -862,6 +912,8 @@ class SessionController extends Notifier<SessionView> {
             chatScope: ChatScope.channel,
             directRecipientUid: null,
             directRecipientId: null,
+            unreadScopes: const {},
+            unreadPeers: const {},
             speaking: const {},
             selfSpeaking: false,
           ),
@@ -905,6 +957,8 @@ class SessionController extends Notifier<SessionView> {
       case CoreEvent_History(:final messages):
         state = current.copyWith(
           messages: messages.map(ChatMessage.fromCore).toList(),
+          unreadScopes: const {},
+          unreadPeers: const {},
         );
       case CoreEvent_TextMessage(
         :final from,
@@ -913,24 +967,27 @@ class SessionController extends Notifier<SessionView> {
         :final message,
         :final targetMode,
         :final targetId,
+        :final peerUid,
         :final at,
       ):
-        final appended = [
-          ...current.messages,
-          ChatMessage(
-            from: from,
-            fromUid: fromUid,
-            fromId: fromId,
-            text: message,
-            at: DateTime.fromMillisecondsSinceEpoch(at),
-            scope: ChatScope.fromProtocol(targetMode),
-            targetId: targetId,
-          ),
-        ];
+        final received = ChatMessage(
+          from: from,
+          fromUid: fromUid,
+          fromId: fromId,
+          text: message,
+          at: DateTime.fromMillisecondsSinceEpoch(at),
+          scope: ChatScope.fromProtocol(targetMode),
+          targetId: targetId,
+          peerUid: peerUid,
+        );
+        final unread = _unreadFor(current, received);
+        final appended = [...current.messages, received];
         state = current.copyWith(
           messages: appended.length > _messageLimit
               ? appended.sublist(appended.length - _messageLimit)
               : appended,
+          unreadScopes: unread.scopes,
+          unreadPeers: unread.peers,
         );
       case CoreEvent_Poked(:final from, :final message):
         _notify(

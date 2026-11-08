@@ -133,7 +133,7 @@ Connected ──非主动断开──> Reconnecting{attempt, delay}
 - 发送由 actor 通过 `Client::exec_command` 提交转义后的 `sendtextmessage` 并等待服务器确认（5 秒超时）：`target_mode=1` 私聊、`2` 频道、`3` 服务器；频道消息的 `target` 是频道 id，服务器广播是 0。Dart 仅在确认成功后清空草稿，私聊同时核对收件人的在线客户端 id 与 UID。
 - 戳一下通过同一 actor 串行调用 `tsclient_rs::poke`，接收侧只注册一个 `on_poked`，核对连接代次后转成 UI 通知；戳一下不写入聊天历史。
 - ServerQuery 单行上限 8192 字节。actor 在发送前按 UTF-8 字符边界分片，优先在空白处断开；分片之间不保证原子性，网络中断时可能只发出前几片。
-- 接收侧只注册一个 `on_text_message` 处理器，转成 `TextMessageView` 后进 actor 的事件队列；`TextMessageView.from_id` 保留发送者客户端 id，私聊回复需要它。
+- 接收侧只注册一个 `on_text_message` 处理器，转成 `TextMessageView` 后进 actor 的事件队列；`TextMessageView.from_id` 保留发送者客户端 id，私聊回复需要它。actor 在写历史前补齐 `peer_uid`：收到的私聊取发送者 UID，自己发出的私聊回显按目标客户端 id 查当前快照。私聊会话与历史归类只认这个 UID，客户端 id 每次连接都会变。
 - TS6 图片是 `{"msg_type":"ts.file.myts",...}` JSON，不是 URL；官方客户端从 myTS 附件
   服务下载。FlSpeak 不携带 myTS token，官方附件只显示“不支持的图片格式”占位。
 - 第三方 URL 图片走 `core/session/src/images.rs` + FFI `fetchImage(url)`：校验 http/https、

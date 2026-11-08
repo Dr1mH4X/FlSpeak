@@ -2755,7 +2755,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           message: dco_decode_String(raw[4]),
           targetMode: dco_decode_i_32(raw[5]),
           targetId: dco_decode_CastedPrimitive_u_64(raw[6]),
-          at: dco_decode_CastedPrimitive_u_64(raw[7]),
+          peerUid: dco_decode_String(raw[7]),
+          at: dco_decode_CastedPrimitive_u_64(raw[8]),
         );
       case 7:
         return CoreEvent_Poked(
@@ -2888,8 +2889,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   CoreMessage dco_decode_core_message(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 7)
-      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
     return CoreMessage(
       from: dco_decode_String(arr[0]),
       fromUid: dco_decode_String(arr[1]),
@@ -2897,7 +2898,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       message: dco_decode_String(arr[3]),
       targetMode: dco_decode_i_32(arr[4]),
       targetId: dco_decode_CastedPrimitive_u_64(arr[5]),
-      at: dco_decode_CastedPrimitive_u_64(arr[6]),
+      peerUid: dco_decode_String(arr[6]),
+      at: dco_decode_CastedPrimitive_u_64(arr[7]),
     );
   }
 
@@ -3510,6 +3512,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         var var_message = sse_decode_String(deserializer);
         var var_targetMode = sse_decode_i_32(deserializer);
         var var_targetId = sse_decode_CastedPrimitive_u_64(deserializer);
+        var var_peerUid = sse_decode_String(deserializer);
         var var_at = sse_decode_CastedPrimitive_u_64(deserializer);
         return CoreEvent_TextMessage(
           from: var_from,
@@ -3518,6 +3521,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           message: var_message,
           targetMode: var_targetMode,
           targetId: var_targetId,
+          peerUid: var_peerUid,
           at: var_at,
         );
       case 7:
@@ -3684,6 +3688,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_message = sse_decode_String(deserializer);
     var var_targetMode = sse_decode_i_32(deserializer);
     var var_targetId = sse_decode_CastedPrimitive_u_64(deserializer);
+    var var_peerUid = sse_decode_String(deserializer);
     var var_at = sse_decode_CastedPrimitive_u_64(deserializer);
     return CoreMessage(
       from: var_from,
@@ -3692,6 +3697,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       message: var_message,
       targetMode: var_targetMode,
       targetId: var_targetId,
+      peerUid: var_peerUid,
       at: var_at,
     );
   }
@@ -4413,6 +4419,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         message: final message,
         targetMode: final targetMode,
         targetId: final targetId,
+        peerUid: final peerUid,
         at: final at,
       ):
         sse_encode_i_32(6, serializer);
@@ -4422,6 +4429,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(message, serializer);
         sse_encode_i_32(targetMode, serializer);
         sse_encode_CastedPrimitive_u_64(targetId, serializer);
+        sse_encode_String(peerUid, serializer);
         sse_encode_CastedPrimitive_u_64(at, serializer);
       case CoreEvent_Poked(from: final from, message: final message):
         sse_encode_i_32(7, serializer);
@@ -4585,6 +4593,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.message, serializer);
     sse_encode_i_32(self.targetMode, serializer);
     sse_encode_CastedPrimitive_u_64(self.targetId, serializer);
+    sse_encode_String(self.peerUid, serializer);
     sse_encode_CastedPrimitive_u_64(self.at, serializer);
   }
 

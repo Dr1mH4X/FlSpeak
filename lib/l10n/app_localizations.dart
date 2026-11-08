@@ -614,6 +614,24 @@ abstract class AppLocalizations {
   /// **'Direct'**
   String get chatScopeDirect;
 
+  /// No description provided for @chatServerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Server messages'**
+  String get chatServerTitle;
+
+  /// No description provided for @chatScopeUnread.
+  ///
+  /// In en, this message translates to:
+  /// **'Send to, unread messages'**
+  String get chatScopeUnread;
+
+  /// No description provided for @chatUnread.
+  ///
+  /// In en, this message translates to:
+  /// **'Unread messages'**
+  String get chatUnread;
+
   /// No description provided for @chatUnsupportedImage.
   ///
   /// In en, this message translates to:

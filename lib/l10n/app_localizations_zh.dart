@@ -295,6 +295,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatScopeDirect => '私聊';
 
   @override
+  String get chatServerTitle => '服务器消息';
+
+  @override
+  String get chatScopeUnread => '发送范围，有未读消息';
+
+  @override
+  String get chatUnread => '有未读消息';
+
+  @override
   String get chatUnsupportedImage => '不支持的图片格式';
 
   @override

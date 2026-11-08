@@ -75,6 +75,10 @@ pub struct TextMessageView {
     pub message: String,
     pub target_mode: i32,
     pub target_id: u64,
+    /// 私聊对话的另一方 UID；频道消息与服务器广播为空。
+    ///
+    /// 私聊按 UID 归类：客户端 id 每次连接都会变，历史消息也要能回到原对话。
+    pub peer_uid: String,
     /// Unix 毫秒。历史回放需要原始时间，不能由 UI 收到时再取 `now()`。
     pub at: u64,
 }

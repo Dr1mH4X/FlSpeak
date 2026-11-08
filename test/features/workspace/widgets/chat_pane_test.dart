@@ -294,7 +294,7 @@ void main() {
   );
 
   testWidgets(
-    'recipient picker names the private target and channel description is visible',
+    'recipient picker names the private target and the pane drops channel copy',
     (tester) async {
       String? chosen;
       await tester.pumpWidget(
@@ -323,14 +323,15 @@ void main() {
           ),
         ),
       );
-      expect(find.text('Channel introduction'), findsOneWidget);
+      expect(find.text('Channel introduction'), findsNothing);
+      expect(find.text('Peer'), findsOneWidget);
       expect(find.text('发送到 Peer'), findsOneWidget);
       await tester.tap(find.byIcon(Icons.person_rounded));
       await tester.pumpAndSettle();
       // 用户选项默认收起，点击展开后方可选中对应私聊成员。
       await tester.tap(find.text('私聊'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Peer'));
+      await tester.tap(find.widgetWithText(ListTile, 'Peer'));
       await tester.pumpAndSettle();
       expect(chosen, 'peer');
     },
@@ -375,6 +376,44 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Alice'), findsOneWidget);
   });
+  testWidgets('unread scopes and peers surface a marker on the scope control', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: ChatPane(
+            channelName: 'Lobby',
+            messages: const [],
+            scope: ChatScope.channel,
+            canSendChannel: true,
+            busy: false,
+            selfUid: 'self',
+            recipients: const [
+              ClientView(id: 2, nickname: 'Alice', uid: 'alice', channelId: 1),
+            ],
+            recipientUid: null,
+            unreadScopes: const {ChatScope.server},
+            unreadPeers: const {'alice'},
+            onRecipientChanged: (_) {},
+            onReply: (_) {},
+            onScopeChanged: (_) {},
+            onSend: (_) async => true,
+          ),
+        ),
+      ),
+    );
+
+    expect(tester.widget<Badge>(find.byType(Badge)).isLabelVisible, isTrue);
+    await tester.tap(find.byIcon(Icons.chat_bubble_rounded));
+    await tester.pumpAndSettle();
+    // 服务器行与「私聊」分组各一个圆点；私聊成员行折叠时不构建。
+    expect(find.byIcon(Icons.circle), findsNWidgets(2));
+  });
+
   testWidgets(
     'image send preserves uploaded URL and draft on failure; retry does not upload twice',
     (tester) async {

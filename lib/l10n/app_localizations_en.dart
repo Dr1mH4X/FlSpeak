@@ -298,6 +298,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatScopeDirect => 'Direct';
 
   @override
+  String get chatServerTitle => 'Server messages';
+
+  @override
+  String get chatScopeUnread => 'Send to, unread messages';
+
+  @override
+  String get chatUnread => 'Unread messages';
+
+  @override
   String get chatUnsupportedImage => 'Unsupported image format';
 
   @override

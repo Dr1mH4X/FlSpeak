@@ -492,6 +492,9 @@ sealed class CoreEvent with _$CoreEvent {
     required String message,
     required int targetMode,
     required int targetId,
+
+    /// 私聊对话的另一方 UID；频道与服务器广播为空。
+    required String peerUid,
     required int at,
   }) = CoreEvent_TextMessage;
   const factory CoreEvent.poked({
@@ -601,6 +604,9 @@ class CoreMessage {
   final String message;
   final int targetMode;
   final int targetId;
+
+  /// 私聊对话的另一方 UID；频道与服务器广播为空。
+  final String peerUid;
   final int at;
 
   const CoreMessage({
@@ -610,6 +616,7 @@ class CoreMessage {
     required this.message,
     required this.targetMode,
     required this.targetId,
+    required this.peerUid,
     required this.at,
   });
 
@@ -621,6 +628,7 @@ class CoreMessage {
       message.hashCode ^
       targetMode.hashCode ^
       targetId.hashCode ^
+      peerUid.hashCode ^
       at.hashCode;
 
   @override
@@ -634,6 +642,7 @@ class CoreMessage {
           message == other.message &&
           targetMode == other.targetMode &&
           targetId == other.targetId &&
+          peerUid == other.peerUid &&
           at == other.at;
 }
 

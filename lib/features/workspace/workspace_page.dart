@@ -224,6 +224,8 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
               .toList(),
           recipientUid: view.directRecipientUid,
           recipientId: view.directRecipientId,
+          unreadScopes: view.unreadScopes,
+          unreadPeers: view.unreadPeers,
           selfUid: view.selfUid,
           selfClientId: view.selfClientId,
           onRecipientChanged: controller.selectDirectRecipient,

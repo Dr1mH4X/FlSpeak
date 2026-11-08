@@ -121,6 +121,7 @@ mod tests {
                 message: "still delivered".into(),
                 target_mode: 2,
                 target_id: 5,
+                peer_uid: String::new(),
                 at: 1,
             }))
             .unwrap();

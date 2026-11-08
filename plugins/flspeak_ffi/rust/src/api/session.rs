@@ -66,6 +66,8 @@ pub struct CoreMessage {
     pub message: String,
     pub target_mode: i32,
     pub target_id: u64,
+    /// 私聊对话的另一方 UID；频道与服务器广播为空。
+    pub peer_uid: String,
     pub at: u64,
 }
 
@@ -181,6 +183,8 @@ pub enum CoreEvent {
         message: String,
         target_mode: i32,
         target_id: u64,
+        /// 私聊对话的另一方 UID；频道与服务器广播为空。
+        peer_uid: String,
         at: u64,
     },
     Poked {
@@ -854,6 +858,7 @@ impl From<CoreTextMessage> for CoreMessage {
             message: message.message,
             target_mode: message.target_mode,
             target_id: message.target_id,
+            peer_uid: message.peer_uid,
             at: message.at,
         }
     }
@@ -996,6 +1001,7 @@ impl From<SessionEvent> for CoreEvent {
                 message: message.message,
                 target_mode: message.target_mode,
                 target_id: message.target_id,
+                peer_uid: message.peer_uid,
                 at: message.at,
             },
             SessionEvent::Poked { from, message } => CoreEvent::Poked { from, message },

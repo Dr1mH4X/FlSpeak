@@ -1024,4 +1024,115 @@ void main() {
     await pumpEventQueue();
     expect(container.read(sessionViewProvider).accessRevision, 3);
   });
+
+  test(
+    'messages outside the active scope stay unread until their scope opens',
+    () {
+      final events = StreamController<CoreEvent>.broadcast(sync: true);
+      final core = _Core(events);
+      final container = ProviderContainer(
+        overrides: [coreSessionProvider.overrideWithValue(core)],
+      );
+      addTearDown(() async {
+        container.dispose();
+        await events.close();
+      });
+      final controller = container.read(sessionViewProvider.notifier);
+      events.add(
+        const CoreEvent.state(
+          state: CoreSessionState.connected(clientId: 1, channelId: 7),
+        ),
+      );
+      controller.selectChatScope(ChatScope.channel);
+
+      events.add(
+        const CoreEvent.textMessage(
+          from: 'Peer',
+          fromUid: 'peer',
+          fromId: 2,
+          message: 'hi',
+          targetMode: 1,
+          targetId: 1,
+          peerUid: 'peer',
+          at: 10,
+        ),
+      );
+      var view = container.read(sessionViewProvider);
+      expect(view.unreadPeers, {'peer'});
+      expect(view.hasUnreadChat, isTrue);
+      expect(view.visibleMessages(channelId: 7), isEmpty);
+
+      controller.selectDirectRecipient('peer');
+      view = container.read(sessionViewProvider);
+      expect(view.unreadPeers, isEmpty);
+      expect(view.visibleMessages(channelId: 7).single.text, 'hi');
+
+      // 自己发出的回显不应把正在看的会话标成未读。
+      events.add(
+        const CoreEvent.textMessage(
+          from: 'Self',
+          fromUid: 'self',
+          fromId: 1,
+          message: 'hello',
+          targetMode: 1,
+          targetId: 2,
+          peerUid: 'peer',
+          at: 11,
+        ),
+      );
+      view = container.read(sessionViewProvider);
+      expect(view.hasUnreadChat, isFalse);
+      expect(view.visibleMessages(channelId: 7).map((item) => item.text), [
+        'hi',
+        'hello',
+      ]);
+
+      events.add(
+        const CoreEvent.textMessage(
+          from: 'Admin',
+          fromUid: 'admin',
+          fromId: 3,
+          message: 'notice',
+          targetMode: 3,
+          targetId: 0,
+          peerUid: '',
+          at: 12,
+        ),
+      );
+      view = container.read(sessionViewProvider);
+      expect(view.unreadScopes, {ChatScope.server});
+      controller.selectChatScope(ChatScope.server);
+      view = container.read(sessionViewProvider);
+      expect(view.unreadScopes, isEmpty);
+      expect(view.visibleMessages(channelId: 7).map((item) => item.text), [
+        'notice',
+      ]);
+
+      controller.selectChatScope(ChatScope.direct);
+      events.add(
+        const CoreEvent.textMessage(
+          from: 'Peer',
+          fromUid: 'peer',
+          fromId: 2,
+          message: 'channel talk',
+          targetMode: 2,
+          targetId: 7,
+          peerUid: '',
+          at: 13,
+        ),
+      );
+      view = container.read(sessionViewProvider);
+      expect(view.unreadScopes, {ChatScope.channel});
+      expect(view.visibleMessages(channelId: 7).map((item) => item.text), [
+        'hi',
+        'hello',
+      ]);
+      controller.selectChatScope(ChatScope.channel);
+      view = container.read(sessionViewProvider);
+      expect(view.unreadScopes, isEmpty);
+      expect(view.visibleMessages(channelId: 7).map((item) => item.text), [
+        'channel talk',
+      ]);
+    },
+  );
 }

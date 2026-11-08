@@ -1840,10 +1840,11 @@ impl Actor {
 
     async fn handle_signal(&mut self, signal: SessionSignal) {
         match signal {
-            SessionSignal::TextMessage { epoch, message } => {
+            SessionSignal::TextMessage { epoch, mut message } => {
                 if epoch != self.connection_epoch {
                     return;
                 }
+                message.peer_uid = self.direct_peer_uid(&message);
                 if let Some(server_id) = self.active_server_id.clone() {
                     let path = store::history_path(&self.store_path);
                     if let Err(message) = store::append_history(&path, &server_id, &message).await {
@@ -1977,6 +1978,35 @@ impl Actor {
                 }
             }
         }
+    }
+
+    /// 私聊对端 UID：收到的是发送者；自己发出的回显按目标客户端 id 查当前快照。
+    /// 频道与服务器广播没有单一对端，返回空串。
+    fn direct_peer_uid(&self, message: &TextMessageView) -> String {
+        if message.target_mode != 1 {
+            return String::new();
+        }
+        let own = self.self_client_id == Some(message.from_id);
+        if !own {
+            return message.from_uid.clone();
+        }
+        self.last_snapshot
+            .as_ref()
+            .and_then(|(_, clients)| {
+                clients
+                    .iter()
+                    .find(|client| client.id as u64 == message.target_id)
+                    .map(|client| client.uid.clone())
+            })
+            .or_else(|| {
+                let snapshot = self.client.as_ref()?.directory_snapshot()?;
+                snapshot
+                    .clients
+                    .into_iter()
+                    .find(|client| client.id as u64 == message.target_id)
+                    .map(|client| client.uid)
+            })
+            .unwrap_or_default()
     }
 
     async fn on_connection_lost(&mut self, message: String, allow_reconnect: bool) {
@@ -2993,6 +3023,7 @@ fn register_handlers(
                     message: crate::text_format::bbcode_to_markdown(&message.message),
                     target_mode: message.target_mode,
                     target_id: message.target_id,
+                    peer_uid: String::new(),
                     at: now_millis(),
                 },
             });
@@ -3699,6 +3730,68 @@ mod tests {
         actor.self_channel_id = 5;
         actor.capture_active = true;
         actor
+    }
+
+    #[test]
+    fn direct_peer_uid_uses_the_sender_or_resolves_the_echo_target() {
+        let mut actor = audio_actor();
+        actor.self_client_id = Some(7);
+        actor.last_snapshot = Some((
+            Vec::new(),
+            vec![
+                ClientView {
+                    id: 7,
+                    nickname: "Self".into(),
+                    uid: "self".into(),
+                    channel_id: 5,
+                    input_muted: None,
+                    output_muted: None,
+                    away: None,
+                    away_message: None,
+                },
+                ClientView {
+                    id: 9,
+                    nickname: "Peer".into(),
+                    uid: "peer".into(),
+                    channel_id: 5,
+                    input_muted: None,
+                    output_muted: None,
+                    away: None,
+                    away_message: None,
+                },
+            ],
+        ));
+
+        let incoming = TextMessageView {
+            from: "Peer".into(),
+            from_uid: "peer".into(),
+            from_id: 9,
+            message: "hi".into(),
+            target_mode: 1,
+            target_id: 7,
+            peer_uid: String::new(),
+            at: 1,
+        };
+        assert_eq!(actor.direct_peer_uid(&incoming), "peer");
+
+        let echo = TextMessageView {
+            from: "Self".into(),
+            from_uid: "self".into(),
+            from_id: 7,
+            message: "hello".into(),
+            target_mode: 1,
+            target_id: 9,
+            peer_uid: String::new(),
+            at: 2,
+        };
+        assert_eq!(actor.direct_peer_uid(&echo), "peer");
+
+        let broadcast = TextMessageView {
+            target_mode: 3,
+            target_id: 0,
+            ..echo
+        };
+        assert_eq!(actor.direct_peer_uid(&broadcast), "");
     }
 
     #[test]

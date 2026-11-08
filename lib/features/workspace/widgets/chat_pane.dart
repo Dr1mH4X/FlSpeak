@@ -36,6 +36,8 @@ class ChatPane extends StatefulWidget {
     this.selfClientId,
     this.recipientId,
     this.onRecipientSelected,
+    this.unreadScopes = const <ChatScope>{},
+    this.unreadPeers = const <String>{},
     this.description = '',
     this.onPickImage,
     this.onPasteImage,
@@ -60,6 +62,10 @@ class ChatPane extends StatefulWidget {
   final ValueChanged<String> onRecipientChanged;
   final ValueChanged<ClientView>? onRecipientSelected;
   final ValueChanged<ChatMessage> onReply;
+
+  /// 当前范围之外收到消息的来源，由输入框范围按钮提示。
+  final Set<ChatScope> unreadScopes;
+  final Set<String> unreadPeers;
   final String description;
   final Future<PickedChatImage?> Function()? onPickImage;
   final Future<PickedChatImage?> Function()? onPasteImage;
@@ -160,8 +166,12 @@ class _ChatPaneState extends State<ChatPane> {
   @override
   void initState() {
     super.initState();
+    _recipientName = _selectedRecipient?.nickname;
     _scheduleScrollToEnd();
   }
+
+  /// 私聊对象离线后仍保留会话标题，历史还能读。
+  String? _recipientName;
 
   @override
   void didUpdateWidget(ChatPane oldWidget) {
@@ -169,6 +179,12 @@ class _ChatPaneState extends State<ChatPane> {
     final previous = _target(oldWidget);
     final current = _target(widget);
     final changed = previous != current;
+    final recipient = _selectedRecipient;
+    if (recipient != null) {
+      _recipientName = recipient.nickname;
+    } else if (oldWidget.recipientUid != widget.recipientUid) {
+      _recipientName = null;
+    }
     if (changed) {
       if (_input.text.isNotEmpty || _image != null) {
         _drafts[previous] = _snapshot();
@@ -324,6 +340,16 @@ class _ChatPaneState extends State<ChatPane> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final horizontal = context.isCompact ? 16.0 : 32.0;
+    final welcomeTitle = switch (widget.scope) {
+      ChatScope.channel => l10n.chatWelcomeTitle(widget.channelName),
+      ChatScope.server => l10n.chatServerTitle,
+      ChatScope.direct => _recipientName ?? l10n.chatScopeDirect,
+    };
+    final welcomeBody = widget.scope == ChatScope.channel
+        ? (widget.description.isEmpty
+              ? l10n.chatWelcomeBody
+              : widget.description)
+        : '';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -365,10 +391,7 @@ class _ChatPaneState extends State<ChatPane> {
                 itemCount: widget.messages.length + 1,
                 itemBuilder: (context, index) {
                   final child = index == 0
-                      ? _Welcome(
-                          channelName: widget.channelName,
-                          description: widget.description,
-                        )
+                      ? _Welcome(title: welcomeTitle, body: welcomeBody)
                       : _MessageRow(
                           avatar: widget.avatarBuilder?.call(
                             widget.messages[index - 1],
@@ -485,6 +508,8 @@ class _ChatPaneState extends State<ChatPane> {
                   onRecipientChanged: widget.onRecipientChanged,
                   onRecipientSelected: widget.onRecipientSelected,
                   selectedRecipient: _selectedRecipient,
+                  unreadScopes: widget.unreadScopes,
+                  unreadPeers: widget.unreadPeers,
                   enabled: !_sending && !widget.busy,
                 ),
                 if (widget.onPickImage != null || widget.onPasteImage != null)
@@ -638,6 +663,8 @@ class _ScopeButton extends StatelessWidget {
     required this.recipients,
     required this.onRecipientChanged,
     required this.enabled,
+    required this.unreadScopes,
+    required this.unreadPeers,
     this.selectedRecipient,
     this.onRecipientSelected,
   });
@@ -649,6 +676,10 @@ class _ScopeButton extends StatelessWidget {
   final ValueChanged<ClientView>? onRecipientSelected;
   final ClientView? selectedRecipient;
   final bool enabled;
+  final Set<ChatScope> unreadScopes;
+  final Set<String> unreadPeers;
+
+  bool get _hasUnread => unreadScopes.isNotEmpty || unreadPeers.isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
@@ -685,6 +716,9 @@ class _ScopeButton extends StatelessWidget {
                         ListTile(
                           leading: Icon(entry.$3),
                           title: Text(entry.$2),
+                          trailing: unreadScopes.contains(entry.$1)
+                              ? const _UnreadDot()
+                              : null,
                           selected: scope == entry.$1,
                           onTap: () {
                             Navigator.pop(context);
@@ -695,7 +729,15 @@ class _ScopeButton extends StatelessWidget {
                         const Divider(),
                         ExpansionTile(
                           leading: const Icon(Icons.person_rounded),
-                          title: Text(l10n.chatScopeDirect),
+                          title: Row(
+                            children: [
+                              Text(l10n.chatScopeDirect),
+                              if (unreadPeers.isNotEmpty) ...[
+                                const SizedBox(width: 8),
+                                const _UnreadDot(),
+                              ],
+                            ],
+                          ),
                           initiallyExpanded: false,
                           shape: const Border(),
                           collapsedShape: const Border(),
@@ -709,6 +751,9 @@ class _ScopeButton extends StatelessWidget {
                                 leading: const Icon(Icons.person_rounded),
                                 title: Text(peer.nickname),
                                 subtitle: Text(l10n.chatDirectTag),
+                                trailing: unreadPeers.contains(peer.uid)
+                                    ? const _UnreadDot()
+                                    : null,
                                 selected:
                                     isDirect &&
                                     peer.uid == selectedRecipient?.uid,
@@ -729,28 +774,49 @@ class _ScopeButton extends StatelessWidget {
                 ),
               ),
             ),
-      icon: Icon(
-        switch (scope) {
-          ChatScope.server => Icons.public_rounded,
-          ChatScope.channel => Icons.chat_bubble_rounded,
-          ChatScope.direct => Icons.person_rounded,
-        },
-        size: IconSizes.toolbar,
-        semanticLabel: l10n.chatScopeTitle,
+      icon: Badge(
+        isLabelVisible: _hasUnread,
+        smallSize: 8,
+        backgroundColor: scheme.error,
+        child: Icon(
+          switch (scope) {
+            ChatScope.server => Icons.public_rounded,
+            ChatScope.channel => Icons.chat_bubble_rounded,
+            ChatScope.direct => Icons.person_rounded,
+          },
+          size: IconSizes.toolbar,
+          semanticLabel: _hasUnread
+              ? l10n.chatScopeUnread
+              : l10n.chatScopeTitle,
+        ),
       ),
     );
   }
 }
 
-class _Welcome extends StatelessWidget {
-  const _Welcome({required this.channelName, required this.description});
-
-  final String channelName;
-  final String description;
+/// 未读提示的小圆点；随行文字一起读出，不额外占用文案。
+class _UnreadDot extends StatelessWidget {
+  const _UnreadDot();
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
+    return Icon(
+      Icons.circle,
+      size: 8,
+      color: context.scheme.error,
+      semanticLabel: AppLocalizations.of(context).chatUnread,
+    );
+  }
+}
+
+class _Welcome extends StatelessWidget {
+  const _Welcome({required this.title, required this.body});
+
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
     final scheme = context.scheme;
     final texts = context.texts;
 
@@ -762,22 +828,24 @@ class _Welcome extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              l10n.chatWelcomeTitle(channelName),
+              title,
               style: texts.headlineSmall?.copyWith(
                 fontSize: 24,
                 fontWeight: FontWeight.w500,
               ),
             ),
-            const SizedBox(height: 4),
-            MessageContent(
-              text: description.isEmpty ? l10n.chatWelcomeBody : description,
-              style:
-                  texts.bodyMedium?.copyWith(
-                    fontSize: 14,
-                    color: scheme.onSurfaceVariant,
-                  ) ??
-                  const TextStyle(),
-            ),
+            if (body.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              MessageContent(
+                text: body,
+                style:
+                    texts.bodyMedium?.copyWith(
+                      fontSize: 14,
+                      color: scheme.onSurfaceVariant,
+                    ) ??
+                    const TextStyle(),
+              ),
+            ],
           ],
         ),
       ),
@@ -874,15 +942,6 @@ class _MessageRowState extends State<_MessageRow>
                         fontFeatures: tabularFigures,
                       ),
                     ),
-                    if (message.scope == ChatScope.direct) ...[
-                      const SizedBox(width: 8),
-                      Text(
-                        l10n.chatDirectTag,
-                        style: texts.labelSmall?.copyWith(
-                          color: scheme.primary,
-                        ),
-                      ),
-                    ],
                     if (message.scope == ChatScope.direct &&
                         widget.onReply != null)
                       IconButton(
