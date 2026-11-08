@@ -155,6 +155,19 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      # 预热 WebRTC XCFramework 缓存，避免 SwiftPM 走网页直链下载遭遇 GitHub Releases 504 超时。
+      - name: Pre-cache WebRTC for SwiftPM (macOS)
+        if: matrix.platform == 'macos'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p ~/Library/Caches/org.swift.swiftpm/artifacts
+          target="$HOME/Library/Caches/org.swift.swiftpm/artifacts/https___github_com_webrtc_sdk_Specs_releases_download_150_7871_04_WebRTC_xcframework_zip"
+          if [ ! -f "$target" ]; then
+            gh release download 150.7871.04 --repo webrtc-sdk/Specs --pattern "WebRTC.xcframework.zip" --dir "$RUNNER_TEMP" --clobber
+            mv "$RUNNER_TEMP/WebRTC.xcframework.zip" "$target"
+          fi
+
       - name: Package
         if: matrix.platform != 'android'
         env:
