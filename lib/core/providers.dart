@@ -198,6 +198,7 @@ class SessionController extends Notifier<SessionView> {
   Future<bool> connect({required String id, required String nickname}) async {
     if (!ref.mounted || state.busy || state.connecting) return false;
     if (state.connected && state.activeServerId == id) return true;
+    logInfo('连接服务器: $nickname ($id)', target: 'session');
     _connectingServerId = id;
     _awaitingDisconnect = true;
     var attempted = false;
@@ -213,6 +214,7 @@ class SessionController extends Notifier<SessionView> {
   }
 
   Future<bool> disconnect() {
+    logInfo('断开服务器连接', target: 'session');
     _connectingServerId = null;
     return _run(() => ref.read(coreSessionProvider).disconnect());
   }
@@ -223,6 +225,7 @@ class SessionController extends Notifier<SessionView> {
     if (clientId == null) {
       return false;
     }
+    logDebug('切换频道: $channelId', target: 'session');
     return _run(() async {
       await ref
           .read(coreSessionProvider)
@@ -1262,7 +1265,7 @@ class SessionController extends Notifier<SessionView> {
       case CoreEvent_Log(:final level, :final message):
         // 协议日志不进界面，避免刷屏；调试模式输出以便排查。
         if (kDebugMode) {
-          debugPrint('[Rust/$level] $message');
+          debugPrint('[Backend/$level] $message');
         }
         break;
       case CoreEvent_Denied(:final message):

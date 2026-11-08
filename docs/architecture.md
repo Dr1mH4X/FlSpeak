@@ -72,7 +72,7 @@ FFI 的 `check_for_updates` 直接调用 `core/session` 的独立函数，不进
 ## 日志
 
 Flutter 启动时把 `<应用支持目录>/logs` 同时交给 Dart 与 Rust，两边按 UTC 日期写
-NDJSON：`dart.YYYY-MM-DD.log` 与 `rust.YYYY-MM-DD.log`。目录与档案、身份文件同级；
+NDJSON：`frontend.YYYY-MM-DD.log` 与 `backend.YYYY-MM-DD.log`。目录与档案、身份文件同级；
 `lib/core/logging/logger.dart` 负责路径与启动失败时的降级，`core/session` 的
 `logging` 模块安装 Rust 全局订阅器与滚动文件 worker。Dart 观察器按 UTC 日期清理两类
 文件；Rust 的 `max_log_files` 只是数量兜底。

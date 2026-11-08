@@ -72,7 +72,7 @@ pub fn init(log_dir: &Path) -> Result<(), LoggingError> {
 
     let appender = RollingFileAppender::builder()
         .rotation(Rotation::DAILY)
-        .filename_prefix("rust")
+        .filename_prefix("backend")
         .filename_suffix("log")
         .max_log_files(MAX_LOG_FILES)
         .build(log_dir)

@@ -50,7 +50,7 @@ void main() {
     final files = tempDir
         .listSync()
         .whereType<File>()
-        .where((file) => p.basename(file.path).startsWith('dart.'))
+        .where((file) => p.basename(file.path).startsWith('frontend.'))
         .toList();
     expect(files, isNotEmpty);
     expect(files.first.readAsStringSync(), contains('after rust failure'));

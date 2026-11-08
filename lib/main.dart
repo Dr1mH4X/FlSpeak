@@ -24,6 +24,13 @@ Future<void> main() async {
   final storePath = await resolveStorePath();
   final logDir = logDirectoryFor(storePath);
   final logging = await initLoggingPipeline(overrideLogDir: logDir);
+  final version = appVersion();
+  final versionLabel = version.startsWith('v') ? version : 'v$version';
+  logInfo(
+    'FlSpeak $versionLabel started',
+    target: 'app',
+    fields: {'version': version},
+  );
 
   final session = CoreSession(storePath: storePath);
   final preferences = await PreferencesStore.load(

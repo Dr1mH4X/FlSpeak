@@ -33,9 +33,9 @@ fn concurrent_init_writes_ndjson_and_is_idempotent() {
         .find(|path| {
             path.file_name()
                 .and_then(|name| name.to_str())
-                .is_some_and(|name| name.starts_with("rust.") && name.ends_with(".log"))
+                .is_some_and(|name| name.starts_with("backend.") && name.ends_with(".log"))
         })
-        .expect("rust log file");
+        .expect("backend log file");
     let content = fs::read_to_string(file).expect("read log file");
     let record: serde_json::Value =
         serde_json::from_str(content.lines().next().expect("at least one log line"))

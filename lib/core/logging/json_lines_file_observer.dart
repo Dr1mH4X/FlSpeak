@@ -40,7 +40,7 @@ class JsonLinesFileObserver extends TalkerObserver {
   static const int _batchSize = 128;
 
   static final RegExp _logName = RegExp(
-    r'^(?:dart|rust)\.(\d{4}-\d{2}-\d{2})\.log$',
+    r'^(?:frontend|backend|dart|rust)\.(\d{4}-\d{2}-\d{2})\.log$',
   );
 
   final Queue<_PendingRecord> _queue = Queue<_PendingRecord>();
@@ -110,7 +110,7 @@ class JsonLinesFileObserver extends TalkerObserver {
     await flush();
   }
 
-  /// 清理超过保留期的 `dart.*` 与 `rust.*` 文件。
+  /// 清理超过保留期的 `frontend.*` 与 `backend.*` 文件（包含历史 `dart.*`/`rust.*`）。
   Future<void> pruneNow({bool force = false}) => _pruneIfDue(force: force);
 
   bool _passes(LogLevel level) {
@@ -145,7 +145,7 @@ class JsonLinesFileObserver extends TalkerObserver {
       }
 
       for (final entry in byDate.entries) {
-        final file = File(p.join(logDir, 'dart.${entry.key}.log'));
+        final file = File(p.join(logDir, 'frontend.${entry.key}.log'));
         try {
           await file.writeAsString(
             '${entry.value.map((record) => record.line).join('\n')}\n',

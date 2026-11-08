@@ -30,7 +30,7 @@ void main() {
   test(
     'writes ndjson with UTC timestamp, uppercase level and fields',
     () async {
-      final file = File(p.join(tempDir.path, 'dart.2026-11-07.log'));
+      final file = File(p.join(tempDir.path, 'frontend.2026-11-07.log'));
 
       final logObserver = observer();
       logObserver.onLog(
@@ -76,7 +76,7 @@ void main() {
     final files = tempDir
         .listSync()
         .whereType<File>()
-        .where((file) => p.basename(file.path).startsWith('dart.'))
+        .where((file) => p.basename(file.path).startsWith('frontend.'))
         .toList();
     expect(files, hasLength(1));
     final lines = files.single.readAsLinesSync();
@@ -91,30 +91,42 @@ void main() {
     expect(second['error'], contains('bad format'));
   });
 
-  test('prunes both dart and rust files older than seven days', () async {
-    final old = now.subtract(const Duration(days: 10));
-    final recent = now.subtract(const Duration(days: 2));
-    String date(DateTime value) =>
-        '${value.year.toString().padLeft(4, '0')}-'
-        '${value.month.toString().padLeft(2, '0')}-'
-        '${value.day.toString().padLeft(2, '0')}';
+  test(
+    'prunes both frontend and backend files older than seven days',
+    () async {
+      final old = now.subtract(const Duration(days: 10));
+      final recent = now.subtract(const Duration(days: 2));
+      String date(DateTime value) =>
+          '${value.year.toString().padLeft(4, '0')}-'
+          '${value.month.toString().padLeft(2, '0')}-'
+          '${value.day.toString().padLeft(2, '0')}';
 
-    final oldDart = File(p.join(tempDir.path, 'dart.${date(old)}.log'))
-      ..writeAsStringSync('{}\n');
-    final oldRust = File(p.join(tempDir.path, 'rust.${date(old)}.log'))
-      ..writeAsStringSync('{}\n');
-    final recentDart = File(p.join(tempDir.path, 'dart.${date(recent)}.log'))
-      ..writeAsStringSync('{}\n');
-    final recentRust = File(p.join(tempDir.path, 'rust.${date(recent)}.log'))
-      ..writeAsStringSync('{}\n');
+      final oldFrontend = File(
+        p.join(tempDir.path, 'frontend.${date(old)}.log'),
+      )..writeAsStringSync('{}\n');
+      final oldBackend = File(p.join(tempDir.path, 'backend.${date(old)}.log'))
+        ..writeAsStringSync('{}\n');
+      final oldDart = File(p.join(tempDir.path, 'dart.${date(old)}.log'))
+        ..writeAsStringSync('{}\n');
+      final oldRust = File(p.join(tempDir.path, 'rust.${date(old)}.log'))
+        ..writeAsStringSync('{}\n');
+      final recentFrontend = File(
+        p.join(tempDir.path, 'frontend.${date(recent)}.log'),
+      )..writeAsStringSync('{}\n');
+      final recentBackend = File(
+        p.join(tempDir.path, 'backend.${date(recent)}.log'),
+      )..writeAsStringSync('{}\n');
 
-    await observer().pruneNow(force: true);
+      await observer().pruneNow(force: true);
 
-    expect(oldDart.existsSync(), isFalse);
-    expect(oldRust.existsSync(), isFalse);
-    expect(recentDart.existsSync(), isTrue);
-    expect(recentRust.existsSync(), isTrue);
-  });
+      expect(oldFrontend.existsSync(), isFalse);
+      expect(oldBackend.existsSync(), isFalse);
+      expect(oldDart.existsSync(), isFalse);
+      expect(oldRust.existsSync(), isFalse);
+      expect(recentFrontend.existsSync(), isTrue);
+      expect(recentBackend.existsSync(), isTrue);
+    },
+  );
 
   test('prune failures do not escape', () async {
     final blocker = File(p.join(tempDir.path, 'not-a-directory'))
@@ -127,7 +139,7 @@ void main() {
   });
 
   test('drops records below the configured level', () async {
-    final file = File(p.join(tempDir.path, 'dart.2026-11-07.log'));
+    final file = File(p.join(tempDir.path, 'frontend.2026-11-07.log'));
     final logObserver = observer(minimumLevel: LogLevel.info);
 
     logObserver.onLog(
@@ -143,8 +155,8 @@ void main() {
     expect(lines.single, contains('warning detail'));
   });
 
-  test('dart records expose the same keys as rust records', () async {
-    final file = File(p.join(tempDir.path, 'dart.2026-11-07.log'));
+  test('frontend records expose the same keys as backend records', () async {
+    final file = File(p.join(tempDir.path, 'frontend.2026-11-07.log'));
 
     final logObserver = observer();
     logObserver.onLog(
@@ -152,13 +164,13 @@ void main() {
     );
     await logObserver.flush();
 
-    final dartRecord =
+    final frontendRecord =
         jsonDecode(file.readAsLinesSync().single) as Map<String, dynamic>;
-    final rustRecord = jsonDecode(
+    final backendRecord = jsonDecode(
       '{"timestamp":"2026-11-07T12:00:00Z","level":"INFO",'
       '"message":"unified","target":"session"}',
     ) as Map<String, dynamic>;
 
-    expect(dartRecord.keys.toSet(), rustRecord.keys.toSet());
+    expect(frontendRecord.keys.toSet(), backendRecord.keys.toSet());
   });
 }

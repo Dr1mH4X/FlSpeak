@@ -2959,6 +2959,14 @@ pub(crate) fn unescape_text(raw: &str) -> String {
 }
 
 fn emit(events: &broadcast::Sender<SessionEvent>, event: SessionEvent) {
+    if let SessionEvent::Log { level, message } = &event {
+        match level.as_str() {
+            "error" => tracing::error!(target: "session", "{message}"),
+            "warn" => tracing::warn!(target: "session", "{message}"),
+            "debug" => tracing::debug!(target: "session", "{message}"),
+            _ => tracing::info!(target: "session", "{message}"),
+        }
+    }
     // 没有订阅者时事件直接丢弃，actor 不因此停下。
     let _ = events.send(event);
 }

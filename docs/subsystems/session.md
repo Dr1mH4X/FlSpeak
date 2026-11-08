@@ -8,7 +8,7 @@
 - 采用 Actor 模型串行执行所有协议调用，彻底规避底库内部跨 await 持锁的死锁风险。
 - 管理会话状态机（`Disconnected`, `Connecting`, `Connected`, `Reconnecting`）、频道快照轮询及断线重连。
 - 维护本地身份标识、服务器历史消息持久化（上限 500 条）及应用配置管理 `SettingsManager`。
-- 管理全局 `tracing` 订阅器与每日按 UTC 轮转的文件 worker（`rust.YYYY-MM-DD.log`）。
+- 管理全局 `tracing` 订阅器与每日按 UTC 轮转的文件 worker（`backend.YYYY-MM-DD.log`）。
 - 处理第三方聊天图片安全抓取校验及图床上传逻辑。
 - 提供版本更新检查、6 小时缓存与失败回退；它不进入 Actor 命令队列。
 
