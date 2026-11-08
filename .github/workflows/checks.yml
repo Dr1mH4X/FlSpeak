@@ -96,10 +96,23 @@ jobs:
         run: flutter pub get
 
       - name: Install codegen
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           base="https://github.com/fzyzcjy/flutter_rust_bridge/releases/download/v${FRB_CODEGEN_VERSION}"
           archive="flutter_rust_bridge_codegen-x86_64-unknown-linux-gnu-v${FRB_CODEGEN_VERSION}.tgz"
-          curl --proto '=https' --tlsv1.2 -fsSL -o "$RUNNER_TEMP/$archive" "$base/$archive"
+
+          if ! gh release download "v${FRB_CODEGEN_VERSION}" \
+              --repo fzyzcjy/flutter_rust_bridge \
+              --pattern "$archive" \
+              --dir "$RUNNER_TEMP" \
+              --clobber; then
+            echo "gh release download 失败，回退到 curl 下载..."
+            curl --proto '=https' --tlsv1.2 -fsSL \
+              --retry 5 --retry-delay 3 --retry-all-errors \
+              -o "$RUNNER_TEMP/$archive" "$base/$archive"
+          fi
+
           actual=$(sha256sum "$RUNNER_TEMP/$archive" | cut -d' ' -f1)
           test "$actual" = "$FRB_CODEGEN_SHA256" || {
             echo "codegen 校验和不匹配: $actual" >&2
