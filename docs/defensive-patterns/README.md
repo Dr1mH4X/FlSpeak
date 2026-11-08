@@ -13,6 +13,7 @@
 | 音频采集、编解码、播放、环形缓冲区与 FFI 音频链路 | [audio.md](audio.md) 与 [core/audio/AGENTS.md](../../core/audio/AGENTS.md) | 音频帧零跨越 FFI 边界；双线程无锁环形缓冲区，Rust 侧自闭环。 |
 | 通用代码质量、时序与并发、第一性原则、类型安全、警告消除 | [general.md](general.md) | 时序不承载正确性（严禁 `Future.delayed` / `sleep` 补丁）、FAILFAST、消除所有警告、边界处做显式强类型校验。 |
 | 缺陷诊断、审查原则与事实陈述 | [review.md](review.md) | 事实陈述基于代码与实测，避免主观臆测与未经证实的推论。 |
+| 日志管道、前后端日志职责、诊断事件与保留期清理 | [logging.md](logging.md) 与 [../architecture.md](../architecture.md) | 遵循单一事实来源；前端严禁越权记录后端领域状态；文件命名严格为 frontend 与 backend。 |
 
 ---
 

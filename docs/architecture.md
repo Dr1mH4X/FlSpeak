@@ -77,7 +77,8 @@ NDJSON：`frontend.YYYY-MM-DD.log` 与 `backend.YYYY-MM-DD.log`。目录与档�
 `logging` 模块安装 Rust 全局订阅器与滚动文件 worker。Dart 观察器按 UTC 日期清理两类
 文件；Rust 的 `max_log_files` 只是数量兜底。
 
-记录字段、启动降级和保留策略见
+记录字段、分层职责边界与保留策略见
+[跨平台日志分层与职责边界](defensive-patterns/logging.md) 及
 [跨平台结构化日志](../.agents/notes/implemented/architecture/2026-11-07-cross-platform-logging.md)。
 
 ## 线程与并发模型

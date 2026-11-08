@@ -3243,13 +3243,10 @@ impl EventLogger {
             "debug" => tracing::debug!(target: "tsclient", message = message),
             _ => tracing::info!(target: "tsclient", message = message),
         }
-        emit(
-            &self.events,
-            SessionEvent::Log {
-                level: level.to_string(),
-                message: message.to_string(),
-            },
-        );
+        let _ = self.events.send(SessionEvent::Log {
+            level: level.to_string(),
+            message: message.to_string(),
+        });
     }
 }
 
