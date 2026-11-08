@@ -28,3 +28,4 @@
 - `release.yml` 把 release keystore 还原成 `android/app/release.jks`，并设置
   `REQUIRE_RELEASE_SIGNING`，四个 release secret 缺一即失败，避免 debug 签名包流出。
 - `android/app/*.jks` 与本地 `android/key.properties` 都在 `.gitignore` 里，不要提交。
+- `pull_request_template.md` 定义仓库标准 PR 描述结构（改动描述、验证方式及末尾的 AI 使用信息区）；非 AI PR 可删除 AI 区块或填不适用。

@@ -1,6 +1,12 @@
 # AGENTS.md
 
-FlSpeak 是 TeamSpeak 第三方客户端：Flutter 负责界面，Rust 负责协议、连接边界与音频。改动 `lib/` 前必读 [docs/defensive-patterns/ui.md](docs/defensive-patterns/ui.md) 与 [lib/AGENTS.md](lib/AGENTS.md)；改动 `core/` 前必读 [docs/architecture.md](docs/architecture.md) 与对应子树 `AGENTS.md`；文档遵循 [docs/AGENTS.md](docs/AGENTS.md)。
+FlSpeak 是 TeamSpeak 第三方客户端：Flutter 负责界面，Rust 负责协议、连接边界与音频。改动 `lib/` 前必读 [docs/defensive-patterns/ui.md](docs/defensive-patterns/ui.md) 与 [lib/AGENTS.md](lib/AGENTS.md)；改动 `core/` 前必读 [docs/architecture.md](docs/architecture.md) 与对应子树 `AGENTS.md`；文档遵循 [docs/AGENTS.md](docs/AGENTS.md)；权限与访问边界见 [docs/permissions.md](docs/permissions.md)。
+
+- **技术选型**：
+  - **Frontend**: Flutter
+  - **Backend**: Rust
+  - **State Management**: Riverpod
+  - **Internationalization**: Flutter Intl (`arb/`)
 
 ## 防御模式与变更前必读
 
@@ -29,7 +35,9 @@ FlSpeak 是 TeamSpeak 第三方客户端：Flutter 负责界面，Rust 负责协
 - **运行本地检查与提推前验证**：在提交或推送前，遵循 [fls-pre-push-checks](.agents/skills/fls-pre-push-checks/SKILL.md)；按即将推出的 diff 选出覆盖它的最小检查集，不反射式地跑全量套件。
 - **Agent Notes 决策记录**：只有不可变长效决策才建笔记，遵循 [fls-archive-agent-notes](.agents/skills/fls-archive-agent-notes/SKILL.md)；归档记录冻结不改。
 - **清理思维链泄漏**：代码注释、文档或提交说明中禁止残留推理过程、评审者辩解或对冲式规划，遵循 [fls-trim-cot-leakage](.agents/skills/fls-trim-cot-leakage/SKILL.md)。
+- **适度重构**：在修改功能时，若发现冗余代码，应在确保行为一致的前提下进行抽象，保持代码库整洁。
 - **发版日志**：发版前编写版本变更记录，遵循 [fls-release-log](.agents/skills/fls-release-log/SKILL.md)。
+- **AI PR 提交规范**：由 AI 编写或辅助编写的 PR，创建 PR 前必须请用户明确提供本次实际使用的 **Agent（AI 编程工具）、模型名称/版本和思考强度（reasoning effort）**。若用户已在当前对话中明确提供这三项信息，可直接使用；信息不全时，应等待用户补充后再创建 PR。必须将用户提供的信息填写在 PR 描述末尾（模板见 [.github/pull_request_template.md](.github/pull_request_template.md)）；AI 不得自行判断、推测或补全模型名称等字段。多个 Agent 或模型参与时，逐一提供对应信息；「未知」或「不适用」也只能按用户明确提供的内容填写。
 
 ## 硬规则
 

@@ -19,7 +19,7 @@
 | 根 `AGENTS.md` | 全局 standing orders：每个 session 都必须知道的规则与拓扑，每条一两行并链向归属地 | 展开细节、步骤式流程、任何从归属地重复的内容 |
 | `.agents/project.md` | 仓库结构、不变量、与 tsclient-rs 的关系 | 决策理由（→ `.agents/notes/`）、命令（→ `development.md`） |
 | `docs/architecture.md` | 索引与拓扑：分层、一次连接的时序、事件流、线程模型、目录职责与「尚未接线」 | 跨文件契约与序列（→ 主题文档或 `docs/subsystems/`）、决策理由 |
-| `docs/` 主题文档（`audio.md`、`backend.md`、`channels.md`、`connection-boundary.md`、`images.md`） | 按链路组织的深潜文档：一条跨 crate 的链路或边界的契约、关键序列与已知限制 | 决策理由（→ `.agents/notes/`）、逐行实现细节（→ 源码） |
+| `docs/` 主题文档（`audio.md`、`backend.md`、`channels.md`、`connection-boundary.md`、`images.md`、`permissions.md`） | 按链路组织的深潜文档：一条跨 crate 的链路或边界的契约、关键序列与已知限制 | 决策理由（→ `.agents/notes/`）、逐行实现细节（→ 源码） |
 | `docs/subsystems/` | 每个子系统一篇：契约、关键路径与序列、不变量；规则见其 `AGENTS.md` | 决策理由（→ `.agents/notes/`）、逐行实现细节（→ 源码） |
 | [docs/defensive-patterns/](defensive-patterns/README.md) | 编码反面与规范替代：[README.md](defensive-patterns/README.md) 独占承载「你在改什么 \| 动手前必读」映射表，子篇按领域承载审查强制准则（general, connection, audio, review, ui） | 子系统内部契约、常规开发流程、重复的全局声明 |
 | `docs/cookbook/` | 任务驱动式 Step-by-Step 实操指南，带带号步骤与验证命令 | 架构设计决策理由、语法级参考手册 |
