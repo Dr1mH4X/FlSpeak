@@ -156,37 +156,6 @@ fn is_forbidden_local_host(host: &str) -> bool {
         || lower.ends_with(".lan")
 }
 
-fn has_env_proxy() -> bool {
-    [
-        "HTTP_PROXY",
-        "http_proxy",
-        "HTTPS_PROXY",
-        "https_proxy",
-        "ALL_PROXY",
-        "all_proxy",
-    ]
-    .iter()
-    .any(|k| std::env::var_os(k).is_some_and(|v| !v.is_empty()))
-}
-
-#[cfg(any(target_os = "windows", target_os = "macos", target_os = "linux"))]
-fn get_system_proxy() -> Option<reqwest::Proxy> {
-    if let Ok(sys_proxy) = sysproxy::Sysproxy::get_system_proxy()
-        && sys_proxy.enable
-        && !sys_proxy.host.is_empty()
-        && sys_proxy.port > 0
-    {
-        let proxy_url = format!("http://{}:{}", sys_proxy.host, sys_proxy.port);
-        return reqwest::Proxy::all(&proxy_url).ok();
-    }
-    None
-}
-
-#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-fn get_system_proxy() -> Option<reqwest::Proxy> {
-    None
-}
-
 async fn build_client(url: &Url) -> Result<Client, ImageError> {
     let host = url
         .host_str()
@@ -195,15 +164,8 @@ async fn build_client(url: &Url) -> Result<Client, ImageError> {
         .port_or_known_default()
         .ok_or_else(|| ImageError::InvalidUrl("缺少端口".into()))?;
 
-    let mut builder = Client::builder().timeout(TIMEOUT).redirect(Policy::none());
-
-    let has_env = has_env_proxy();
-    let sys_proxy = if !has_env { get_system_proxy() } else { None };
-    let has_proxy = has_env || sys_proxy.is_some();
-
-    if let Some(proxy) = sys_proxy {
-        builder = builder.proxy(proxy);
-    }
+    let (mut builder, has_proxy) =
+        crate::proxy::configure(Client::builder().timeout(TIMEOUT).redirect(Policy::none()));
 
     let literal_host = host.trim_start_matches('[').trim_end_matches(']');
     if let Ok(ip) = literal_host.parse::<IpAddr>() {

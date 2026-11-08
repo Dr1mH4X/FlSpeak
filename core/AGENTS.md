@@ -13,6 +13,7 @@
   actor，由 actor 调用 `send_voice`。
 - 保持依赖方向：`server` 不依赖网络或协议；`proto` 依赖 `server`；
   `session` 依赖 `proto` 与 `audio`；FFI 只依赖 `session`。
+- 版本更新检查是 `session` 的旁路，不进入 Actor 命令队列；固定主机、超时、缓存、失败回退与静默约束见 [connection-boundary.md](../docs/connection-boundary.md)。
 
 子 crate 特有规则见对应目录：
 - [core/server](server/AGENTS.md)

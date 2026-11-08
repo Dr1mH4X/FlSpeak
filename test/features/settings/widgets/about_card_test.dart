@@ -1,19 +1,29 @@
 // ignore_for_file: depend_on_referenced_packages
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flspeak/core/providers.dart';
+import 'package:flspeak/core/update_check.dart';
 import 'package:flspeak/features/settings/widgets/about_card.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
 import 'package:flspeak/widgets/common.dart';
+import 'package:flspeak/widgets/update_dot.dart';
+import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 void main() {
   Widget buildTestWidget({
     Locale locale = const Locale('zh'),
     String? version,
     Future<bool> Function(String url)? onOpenUrl,
+    UpdateStateView updateResult = const UpdateStateView(available: false),
   }) {
     return ProviderScope(
+      overrides: [
+        appVersionProvider.overrideWithValue('0.1.0'),
+        updateCheckClientProvider.overrideWithValue(() async => updateResult),
+      ],
       child: MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
@@ -29,6 +39,12 @@ void main() {
       ),
     );
   }
+
+  test('rejects non-http external urls', () async {
+    expect(await openExternalUrl('file:///tmp/flspeak'), isFalse);
+    expect(await openExternalUrl('ftp://example.com/file'), isFalse);
+    expect(await openExternalUrl('not a url'), isFalse);
+  });
 
   testWidgets('renders about card elements correctly in Chinese and English', (
     tester,
@@ -125,5 +141,64 @@ void main() {
     await tester.pumpWidget(buildTestWidget(version: 'v1.0.0'));
     await tester.pumpAndSettle();
     expect(find.text('v1.0.0'), findsOneWidget);
+  });
+
+  testWidgets('does not make the version pill actionable without an update', (
+    tester,
+  ) async {
+    final opened = <String>[];
+    await tester.pumpWidget(
+      buildTestWidget(
+        version: '0.1.0',
+        onOpenUrl: (url) async {
+          opened.add(url);
+          return true;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(UpdateDot), findsNothing);
+    await tester.tap(find.text('v0.1.0'));
+    await tester.pumpAndSettle();
+    expect(opened, isEmpty);
+  });
+
+  testWidgets('shows the update dot and opens the release page', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    final opened = <String>[];
+    await tester.pumpWidget(
+      buildTestWidget(
+        version: '0.1.0',
+        updateResult: const UpdateStateView(
+          available: true,
+          latestVersion: '0.2.0',
+          releaseUrl: 'https://github.com/Dr1mH4X/FlSpeak/releases/tag/v0.2.0',
+        ),
+        onOpenUrl: (url) async {
+          opened.add(url);
+          return true;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(UpdateDot), findsOneWidget);
+    final link = find.bySemanticsLabel('打开版本 0.2.0 的发布页面');
+    expect(link, findsOneWidget);
+    expect(
+      tester
+          .getSemantics(link)
+          .getSemanticsData()
+          .hasAction(SemanticsAction.tap),
+      isTrue,
+    );
+
+    await tester.tap(find.text('v0.1.0'));
+    await tester.pumpAndSettle();
+    expect(opened, ['https://github.com/Dr1mH4X/FlSpeak/releases/tag/v0.2.0']);
+    semantics.dispose();
   });
 }

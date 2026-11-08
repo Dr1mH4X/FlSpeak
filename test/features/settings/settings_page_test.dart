@@ -10,9 +10,11 @@ import 'package:flspeak/core/directory_launcher.dart';
 import 'package:flspeak/core/models.dart';
 import 'package:flspeak/core/preferences.dart';
 import 'package:flspeak/core/providers.dart';
+import 'package:flspeak/core/update_check.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
 import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/widgets/app_navigation_sidebar.dart';
+import 'package:flspeak/widgets/update_dot.dart';
 import 'package:flspeak/features/settings/settings_page.dart';
 import 'package:flspeak/features/settings/widgets/settings_section.dart';
 
@@ -21,6 +23,15 @@ class _Core extends Fake implements CoreSession {}
 class _Session extends SessionController {
   @override
   SessionView build() => const SessionView();
+}
+
+class _Update extends UpdateController {
+  @override
+  UpdateStateView build() => const UpdateStateView(
+    available: true,
+    latestVersion: '0.2.0',
+    releaseUrl: 'https://github.com/Dr1mH4X/FlSpeak/releases/tag/v0.2.0',
+  );
 }
 
 void main() {
@@ -581,4 +592,45 @@ void main() {
       expect(find.widgetWithText(SettingsTile, '语音'), findsNothing);
     },
   );
+
+  testWidgets('shows an update dot on the About entry', (tester) async {
+    final semantics = tester.ensureSemantics();
+    final container = ProviderContainer(
+      overrides: [
+        coreSessionProvider.overrideWithValue(_Core()),
+        sessionViewProvider.overrideWith(_Session.new),
+        updateProvider.overrideWith(_Update.new),
+        storePathProvider.overrideWithValue(
+          '/tmp/flspeak-test/preferences.json',
+        ),
+        preferencesStoreProvider.overrideWithValue(
+          PreferencesStore.inMemory(
+            preferences: const SessionPreferences(
+              nickname: 'Test',
+              locale: 'zh',
+            ),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: const SettingsPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(UpdateDot), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('有新版本 0.2.0')), findsOneWidget);
+    semantics.dispose();
+  });
 }

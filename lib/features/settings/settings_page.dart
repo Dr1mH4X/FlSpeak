@@ -14,11 +14,13 @@ import '../../core/models.dart';
 import '../../core/notices.dart';
 import '../../core/preferences.dart';
 import '../../core/providers.dart';
+import '../../core/update_check.dart';
 import '../../l10n/app_localizations.dart';
 import '../../router.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_navigation_sidebar.dart';
 import '../../widgets/common.dart';
+import '../../widgets/update_dot.dart';
 import '../../widgets/window_header.dart';
 import 'settings_state.dart';
 import 'widgets/about_card.dart';
@@ -227,6 +229,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final l10n = AppLocalizations.of(context);
     final preferences = ref.watch(preferencesProvider);
     final view = ref.watch(sessionViewProvider);
+    final update = ref.watch(updateProvider);
+    final latestVersion = update.available ? update.latestVersion : null;
     final audioSelection = ref.watch(audioSelectionProvider);
     final storePath = ref.watch(storePathProvider);
     final logPath = ref.watch(logPathProvider);
@@ -289,6 +293,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             SettingsTile(
               icon: Icons.info_outline_rounded,
               title: l10n.settingsAbout,
+              badge: latestVersion == null
+                  ? null
+                  : UpdateDot(
+                      semanticLabel: l10n.updateAvailableBadge(latestVersion),
+                    ),
               onTap: () =>
                   setState(() => _activeCategory = SettingsCategory.about),
             ),

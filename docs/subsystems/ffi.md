@@ -9,6 +9,7 @@
 - 将 Rust 底层异步事件收敛为 `StreamSink`，提供面向 Flutter UI 的单向不可变事件流 `CoreSession.events()`。
 - 转发全局日志初始化（`init_logging`）与停机（`shutdown_logging`）调用至 `core/session`。
 - 将 Rust 侧复杂错误统一归一化为枚举型 `CoreError`，消除字符串匹配依赖。
+- 转发版本更新检查，返回可直接渲染的 `UpdateStateView`；网络、缓存与失败回退留在 `core/session`。
 
 ## 关键路径与序列
 
@@ -20,11 +21,12 @@
    Flutter 在初始化阶段建立事件订阅 → Rust 侧监听 `broadcast::Receiver<SessionEvent>` 并推送到 `StreamSink` → 当会话 `shutdown()` 时主动关闭 Sink，释放所有订阅者上下文。
 4. **日志管道初始化与清理**：
    Flutter 启动时调用 `CoreSession.initLogging(logDir)` → FFI 桥转发至 `core/session::logging::init` 挂载 Rust 全局日志 worker；应用退出时调用 `CoreSession.shutdownLogging()` 转发至 `core/session::logging::shutdown`。
+5. **版本更新检查**：Flutter 启动或进入关于页时调用 `checkForUpdates()` → FFI 转发至 `core/session` 的独立检查函数 → 返回 `UpdateStateView`（是否可用、目标版本、Release URL）。该路径不进入 Session Actor，也不阻塞首帧。
 
 ## 不变量
 
-- `rust/src/api/session.rs` 是 flutter_rust_bridge 唯一被扫描的解析入口，严禁暴露未经视图包装的 `core/` 原始结构体。
-- FFI 桥绝不承载业务逻辑、地址解析策略或音频编解码操作，只做契约转发与类型转换。
+- `rust/src/api/` 下的模块是 flutter_rust_bridge 的解析入口，严禁暴露未经视图包装的 `core/` 原始结构体。
+- FFI 桥绝不承载业务逻辑、地址解析策略或音频编解码操作，只做契约转发与类型转换；更新可用性与失败回退由 `core/session` 判定。
 - FFI 层不自行创建文件句柄或管理日志订阅器状态，仅负责日志初始化与停机调用的参数转发与错误映射。
 - 生成代码（`rust/src/frb_generated.*`、`lib/src/rust/**`）禁止人工编辑，变更接口后统一通过 codegen 刷新。
 

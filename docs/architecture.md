@@ -7,7 +7,7 @@ Flutter UI (lib/)
   │  只读 sessionViewProvider；只发语义化命令
   ▼
 FFI 边界 (plugins/flspeak_ffi)
-  │  api/session.rs 是 flutter_rust_bridge 唯一解析的模块
+  │  api/ 是 flutter_rust_bridge 唯一解析的模块
   ▼
 session      命令队列 + 事件广播，独占 Client
   ▼
@@ -65,6 +65,10 @@ Poked / AccessChanged / Transfer* / Log / Denied / Failed
 - `Log` 事件目前不入界面，保留给调试面板。
 - 语音帧不在这条链路上。
 
+## 版本更新检查
+
+FFI 的 `check_for_updates` 直接调用 `core/session` 的独立函数，不进入 Actor 命令队列；连接与消息命令不能被一次 HTTP 请求排在后面。请求固定访问 `api.github.com` 的 Releases 列表，按 SemVer 选出当前通道可用的最高版本，缓存 6 小时并携带 ETag。缓存文件 `update-cache.json` 与 `preferences.json` 同目录，只保存远端候选版本与 URL。Rust 用全局异步锁串行化检查，并把网络或解析失败合并为最近一次成功缓存的状态；Dart 只接收并渲染最终 `UpdateStateView`。
+
 ## 日志
 
 Flutter 启动时把 `<应用支持目录>/logs` 同时交给 Dart 与 Rust，两边按 UTC 日期写
@@ -81,7 +85,7 @@ NDJSON：`dart.YYYY-MM-DD.log` 与 `rust.YYYY-MM-DD.log`。目录与档案、身
 | 线程 | 职责 |
 | --- | --- |
 | Flutter main isolate | UI、`Stream<CoreEvent>` 消费 |
-| FFI runtime（2 线程，`OnceLock`） | 事件转发任务（`broadcast` → `StreamSink`） |
+| FFI runtime（2 线程，`OnceLock`） | 事件转发任务（`broadcast` → `StreamSink`）、图片抓取与更新检查请求 |
 | `session` 线程 | current-thread runtime + `LocalSet`，串行执行所有协议调用 |
 | `voice-capture` 线程 | cpal 输入、格式转换、VAD/PTT、20ms Opus、发送节拍 |
 | `voice-playback` 线程 | cpal 输出、每说话人 jitter/解码/混音、设备格式转换 |
@@ -95,7 +99,7 @@ tsclient-rs 的建连 future 不是 `Send`。
 | --- | --- |
 | `core/server` | `ServerProfile`、`ServerRegistry`、地址解析；无网络、无协议依赖 |
 | `core/proto` | `resolve_target`、`DenyResolver`、最终连接边界、`client()`、`check_transfer_host()` |
-| `core/session` | `SessionHandle` / actor / 档案与身份持久化 / 全局日志订阅器 / 第三方图片抓取与图床上传 |
+| `core/session` | `SessionHandle` / actor / 档案与身份持久化 / 全局日志订阅器 / 第三方图片抓取与图床上传 / 版本更新检查与最终状态合并 |
 | `core/audio` | 设备枚举、双线程采集/播放、Opus、VAD、jitter/PLC、软削波 |
 | `plugins/flspeak_ffi` | Dart 侧类型、转发、事件桥、生成物 |
 | `lib/` | UI、状态收敛、本地化、Dart 日志观察器 |

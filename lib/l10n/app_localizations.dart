@@ -1502,6 +1502,18 @@ abstract class AppLocalizations {
   /// **'Issue Tracker'**
   String get aboutIssueTracker;
 
+  /// No description provided for @updateAvailableBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'New version {version} available'**
+  String updateAvailableBadge(String version);
+
+  /// No description provided for @updateAvailableAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the release page for version {version}'**
+  String updateAvailableAction(String version);
+
   /// No description provided for @aboutLicense.
   ///
   /// In en, this message translates to:

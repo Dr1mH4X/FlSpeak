@@ -364,6 +364,22 @@
   "aboutSourceAndFeedback": "项目与源码",
   "aboutSourceCode": "开源代码",
   "aboutIssueTracker": "问题反馈",
+  "updateAvailableBadge": "有新版本 {version}",
+  "@updateAvailableBadge": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "updateAvailableAction": "打开版本 {version} 的发布页面",
+  "@updateAvailableAction": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
   "aboutLicense": "许可证",
   "aboutCopySuccess": "链接已复制到剪贴板",
   "streamSharing": "正在共享屏幕",

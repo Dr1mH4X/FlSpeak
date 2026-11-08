@@ -757,6 +757,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aboutIssueTracker => '问题反馈';
 
   @override
+  String updateAvailableBadge(String version) {
+    return '有新版本 $version';
+  }
+
+  @override
+  String updateAvailableAction(String version) {
+    return '打开版本 $version 的发布页面';
+  }
+
+  @override
   String get aboutLicense => '许可证';
 
   @override

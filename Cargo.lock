@@ -2576,12 +2576,14 @@ dependencies = [
 name = "session"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "audio",
  "base64 0.22.1",
  "proto",
  "pulldown-cmark",
  "rand 0.10.3",
  "reqwest",
+ "semver",
  "serde",
  "serde_json",
  "server",

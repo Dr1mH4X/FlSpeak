@@ -123,6 +123,7 @@ class SettingsTile extends StatelessWidget {
     this.icon,
     this.leading,
     this.trailing,
+    this.badge,
     this.onTap,
     this.destructive = false,
     this.selected = false,
@@ -135,6 +136,7 @@ class SettingsTile extends StatelessWidget {
   final IconData? icon;
   final Widget? leading;
   final Widget? trailing;
+  final Widget? badge;
   final VoidCallback? onTap;
   final bool destructive;
   final bool selected;
@@ -215,6 +217,7 @@ class SettingsTile extends StatelessWidget {
                 ],
               ),
             ),
+            if (badge != null) ...[const SizedBox(width: 8), badge!],
             if (trailing != null) ...[
               const SizedBox(width: 8),
               trailing!,

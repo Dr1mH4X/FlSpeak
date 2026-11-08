@@ -2,8 +2,9 @@
 
 这些规则补充根 [AGENTS.md](../../AGENTS.md)，只覆盖 `plugins/flspeak_ffi/`。
 
-- `rust/src/api/session.rs` 是 flutter_rust_bridge 唯一解析的模块。新增或修改
-  Dart 可见类型时只改这里，不要把 `core/` 的内部类型直接暴露给桥。
+- `rust/src/api/` 下的模块都由 flutter_rust_bridge 解析。新增或修改 Dart 可见类型时
+  只改这里（会话在 `session.rs`，更新检查在 `update.rs`），不要把 `core/` 的内部类型
+  直接暴露给桥。
 - 这一层只做转发和类型转换。协议、连接边界、音频、日志订阅器和持久化逻辑留在 `core/`。
 - 改完 `rust/src/api/**` 后重跑：
 

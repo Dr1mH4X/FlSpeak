@@ -50,6 +50,16 @@ impl SettingsManager {
             .ok_or_else(|| "SettingsManager 尚未初始化，请先调用 init(path)".to_string())
     }
 
+    /// 设置文件所在目录，供同级的更新缓存等旁路文件使用。
+    pub(crate) fn data_dir() -> Result<PathBuf, String> {
+        let manager = Self::global()?;
+        manager
+            .path
+            .parent()
+            .map(Path::to_path_buf)
+            .ok_or_else(|| "设置文件缺少父目录".to_string())
+    }
+
     /// 只读访问当前设置快照。
     pub fn with<R, F: FnOnce(&AppSettings) -> R>(f: F) -> Result<R, String> {
         let manager = Self::global()?;

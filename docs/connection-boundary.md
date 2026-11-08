@@ -1,7 +1,6 @@
 # 连接边界
 
-FlSpeak 只面向 TeamSpeak 服务器。边界由录入格式和最终建连出口各承担一件事，
-不在 UI、FFI 或存储层重复审查。
+FlSpeak 的 TeamSpeak 连接只面向 TeamSpeak 服务器。边界由录入格式和最终建连出口各承担一件事，不在 UI、FFI 或存储层重复审查。版本更新检查是独立的固定主机旁路，规则见下方。
 
 ## 规则
 
@@ -16,6 +15,7 @@ FlSpeak 只面向 TeamSpeak 服务器。边界由录入格式和最终建连出�
 - 第三方图片 URL 仍然经过 `images.rs` 的 SSRF 检查（只允许 http/https、公网地址、
   有限重定向和大小）；官方媒体和 `ts.file.myts` 附件不访问。
 - 文件传输主机必须等于会话主机（`proto::check_transfer_host`）。
+- 版本更新检查只访问 `https://api.github.com/repos/Dr1mH4X/FlSpeak/releases`：固定主机与路径、不跟随重定向、8s 超时、4 MiB 响应上限、失败静默、不内置 token。请求携带 `User-Agent`、`Accept: application/vnd.github+json` 与 `X-GitHub-Api-Version: 2022-11-28`。
 
 ## 代码位置
 
@@ -25,6 +25,7 @@ FlSpeak 只面向 TeamSpeak 服务器。边界由录入格式和最终建连出�
 | `core/proto/src/lib.rs` | SRV 解析、`DenyResolver`、最终官方主机检查和建连 |
 | `core/session/src/images.rs` | 图片 URL 的 host 检查与 SSRF 防护 |
 | `core/session/src/actor.rs` | 连接流程、重连和文件传输主机校验 |
+| `core/session/src/updates.rs` | 固定 GitHub Releases 主机的版本检查、SemVer 比较、6 小时缓存与失败回退 |
 
 ## 验证
 

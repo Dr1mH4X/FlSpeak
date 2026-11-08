@@ -33,10 +33,7 @@ FlSpeak 是 TeamSpeak 第三方客户端：Flutter 负责界面，Rust 负责协
 
 ## 硬规则
 
-1. **项目边界**：客户端只连接用户手动录入的 IP、域名或 localhost，不实现 myTeamSpeak
-   账号/云同步，也不调用官方媒体上传或附件下载。裸昵称不接受，`named.myteamspeak.com/lookup`
-   不使用。SRV（`_ts3._udp.<domain>`）是标准 DNS，可以解析；最终目标由
-   `core/proto` 的 `client` 做一次官方基础设施检查，不在 UI、FFI 或存储层重复审查。
+1. **项目边界**：客户端只连接用户手动录入的 IP、域名或 localhost，不实现 myTeamSpeak 账号/云同步，也不调用官方媒体上传或附件下载。裸昵称不接受，`named.myteamspeak.com/lookup` 不使用。SRV（`_ts3._udp.<domain>`）是标准 DNS，可以解析；最终目标由 `core/proto` 的 `client` 做一次官方基础设施检查，不在 UI、FFI 或存储层重复审查。版本更新检查的固定 GitHub 元数据请求是唯一例外，约束见 [连接边界](docs/connection-boundary.md)。
 2. **官方主机清单只放在 `core/proto` 的 `FORBIDDEN_HOST_SUFFIXES`**。连接和图片抓取
    共用这一份；测试需要官方域名时从该常量拼，不要写死。
 3. **音频帧不过 FFI**。Rust 侧自己采集、编解码、播放，Dart 只收 UI 事件。

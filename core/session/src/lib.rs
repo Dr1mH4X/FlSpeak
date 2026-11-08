@@ -15,9 +15,11 @@ mod images;
 pub mod logging;
 mod network;
 pub use network::NetworkTelemetry;
+mod proxy;
 pub mod settings;
 mod store;
 mod streams;
+mod updates;
 
 pub use settings::{AppSettings, AudioSettings, NetworkSettings, SettingsManager, UiSettings};
 pub use streams::{
@@ -42,6 +44,7 @@ use tokio::task::LocalSet;
 pub use image_upload::{upload_image, validate_image_host};
 pub use images::{ImageError, fetch_image};
 pub use proto::ConnectError;
+pub use updates::{UpdateState, check_for_updates};
 
 /// 事件广播通道容量，溢出时订阅者收到 Lagged 并跳过旧事件。
 pub const EVENT_CHANNEL_CAPACITY: usize = 256;

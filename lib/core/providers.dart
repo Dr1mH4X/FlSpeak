@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -47,19 +46,9 @@ final logPathProvider = Provider<String>(
 /// 日志初始化失败的原因；null 表示文件日志可用。启动后提示一次。
 final loggingFailureProvider = Provider<Object?>((ref) => null);
 
-/// 提供当前应用的包信息（版本号、构建号等）。
-final packageInfoProvider = FutureProvider<PackageInfo>((ref) {
-  return PackageInfo.fromPlatform();
-});
-
-/// 提供格式化后的版本号字符串（如 `0.1.0`），如果尚未加载完成或异常则回退到备用版本。
-final appVersionProvider = Provider<String>((ref) {
-  final asyncInfo = ref.watch(packageInfoProvider);
-  return switch (asyncInfo) {
-    AsyncData(:final value) => value.version,
-    _ => '0.1.0',
-  };
-});
+/// 当前构建的版本号。Cargo workspace 与 Flutter 包版本由
+/// `tool/bump_version.dart` 同步，这里以 Rust 侧为唯一来源。
+final appVersionProvider = Provider<String>((ref) => appVersion());
 
 /// `CoreEvent` 流收敛成的界面状态。
 final sessionViewProvider = NotifierProvider<SessionController, SessionView>(

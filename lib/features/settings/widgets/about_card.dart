@@ -1,13 +1,16 @@
-import 'dart:io' show Platform, Process;
+import 'dart:async';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/providers.dart';
+import '../../../core/update_check.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
+import '../../../widgets/update_dot.dart';
 
 const String _repoUrl = 'https://github.com/Dr1mH4X/FlSpeak';
 const String _issuesUrl = 'https://github.com/Dr1mH4X/FlSpeak/issues';
@@ -15,39 +18,50 @@ const String _licenseUrl =
     'https://github.com/Dr1mH4X/FlSpeak/blob/main/LICENSE';
 const String _tsclientUrl = 'https://github.com/Dr1mH4X/tsclient-rs';
 
-/// 跨平台在系统默认浏览器中打开外部链接。
+/// 在系统默认浏览器中打开外部链接。
 Future<bool> openExternalUrl(String url) async {
-  if (kIsWeb) return false;
-  try {
-    if (Platform.isMacOS) {
-      final res = await Process.run('open', [url]);
-      return res.exitCode == 0;
-    } else if (Platform.isWindows) {
-      final res = await Process.run('cmd', ['/c', 'start', '', url]);
-      return res.exitCode == 0;
-    } else if (Platform.isLinux) {
-      final res = await Process.run('xdg-open', [url]);
-      return res.exitCode == 0;
-    }
-  } catch (_) {
-    // 忽略异常，由调用方或界面降级处理
+  if (kIsWeb) {
+    return false;
   }
-  return false;
+  final uri = Uri.tryParse(url);
+  if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
+    return false;
+  }
+  try {
+    return await launchUrl(uri, mode: LaunchMode.externalApplication);
+  } on Exception {
+    return false;
+  }
 }
 
 /// 关于页主信息卡片。
-class AboutCard extends ConsumerWidget {
+class AboutCard extends ConsumerStatefulWidget {
   const AboutCard({super.key, this.version, this.onOpenUrl = openExternalUrl});
 
   final String? version;
   final Future<bool> Function(String url) onOpenUrl;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AboutCard> createState() => _AboutCardState();
+}
+
+class _AboutCardState extends ConsumerState<AboutCard> {
+  @override
+  void initState() {
+    super.initState();
+    unawaited(ref.read(updateProvider.notifier).refresh());
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
     final isDark = context.isDark;
-    final String displayVersion = version ?? ref.watch(appVersionProvider);
+    final update = ref.watch(updateProvider);
+    final latestVersion = update.latestVersion;
+    final releaseUrl = update.releaseUrl;
+    final String displayVersion =
+        widget.version ?? ref.watch(appVersionProvider);
 
     final sectionBg = isDark
         ? scheme.surfaceContainer
@@ -94,7 +108,18 @@ class AboutCard extends ConsumerWidget {
             const SizedBox(height: 10),
 
             // 3. 版本号胶囊
-            Center(child: _VersionPill(version: displayVersion)),
+            Center(
+              child: _VersionPill(
+                version: displayVersion,
+                hasUpdate: update.available,
+                actionLabel: latestVersion == null
+                    ? null
+                    : l10n.updateAvailableAction(latestVersion),
+                onTap: releaseUrl == null
+                    ? null
+                    : () => unawaited(widget.onOpenUrl(releaseUrl)),
+              ),
+            ),
             const SizedBox(height: 12),
 
             // 4. 副标题 / 描述
@@ -124,14 +149,14 @@ class AboutCard extends ConsumerWidget {
                     label: '${l10n.aboutSourceCode}: ',
                     linkText: 'GitHub',
                     url: _repoUrl,
-                    onTap: () => onOpenUrl(_repoUrl),
+                    onTap: () => widget.onOpenUrl(_repoUrl),
                   ),
                   const SizedBox(height: 8),
                   _BulletLinkRow(
                     label: '${l10n.aboutIssueTracker}: ',
                     linkText: 'GitHub Issue',
                     url: _issuesUrl,
-                    onTap: () => onOpenUrl(_issuesUrl),
+                    onTap: () => widget.onOpenUrl(_issuesUrl),
                   ),
                 ],
               ),
@@ -151,7 +176,7 @@ class AboutCard extends ConsumerWidget {
                   child: InkWell(
                     borderRadius: BorderRadius.circular(6),
                     mouseCursor: SystemMouseCursors.click,
-                    onTap: () => onOpenUrl(_licenseUrl),
+                    onTap: () => widget.onOpenUrl(_licenseUrl),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                         vertical: 4,
@@ -208,7 +233,7 @@ class AboutCard extends ConsumerWidget {
                   _InteractiveLink(
                     text: 'tsclient-rs',
                     url: _tsclientUrl,
-                    onTap: () => onOpenUrl(_tsclientUrl),
+                    onTap: () => widget.onOpenUrl(_tsclientUrl),
                     textStyle: context.texts.bodySmall?.copyWith(
                       color: scheme.primary,
                       fontWeight: FontWeight.w600,
@@ -384,16 +409,24 @@ class _InteractiveLinkState extends State<_InteractiveLink> {
 }
 
 class _VersionPill extends StatelessWidget {
-  const _VersionPill({required this.version});
+  const _VersionPill({
+    required this.version,
+    required this.hasUpdate,
+    this.actionLabel,
+    this.onTap,
+  });
 
   final String version;
+  final bool hasUpdate;
+  final String? actionLabel;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final scheme = context.scheme;
     final label = version.startsWith('v') ? version : 'v$version';
 
-    return DecoratedBox(
+    final pill = DecoratedBox(
       decoration: ShapeDecoration(
         color: scheme.primary,
         shape: const StadiumBorder(),
@@ -406,6 +439,47 @@ class _VersionPill extends StatelessWidget {
             color: scheme.onPrimary,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.2,
+          ),
+        ),
+      ),
+    );
+
+    final content = Stack(
+      clipBehavior: Clip.none,
+      children: [
+        pill,
+        if (hasUpdate)
+          Positioned(
+            top: -2,
+            right: -2,
+            child: UpdateDot(
+              semanticLabel: actionLabel,
+              size: 10,
+              borderColor: context.cardColor,
+            ),
+          ),
+      ],
+    );
+
+    final padded = ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+      child: Center(child: content),
+    );
+
+    if (onTap == null) {
+      return padded;
+    }
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: Semantics(
+        link: true,
+        label: actionLabel,
+        onTap: onTap,
+        child: ExcludeSemantics(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onTap,
+            child: padded,
           ),
         ),
       ),

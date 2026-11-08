@@ -5,12 +5,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flspeak_ffi/flspeak_ffi.dart' show isRustLibInitialized;
 
 import 'core/global_hotkey.dart';
 import 'core/logging/logger.dart';
 import 'core/notices.dart';
 import 'core/preferences.dart';
 import 'core/providers.dart';
+import 'core/update_check.dart';
 import 'core/window_chrome.dart';
 import 'core/window_metrics.dart';
 import 'l10n/app_localizations.dart';
@@ -56,6 +58,9 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
       (previous, keyId) => unawaited(_syncRegistration(keyId)),
       fireImmediately: true,
     );
+    if (isRustLibInitialized) {
+      unawaited(ref.read(updateProvider.notifier).refresh());
+    }
   }
 
   @override

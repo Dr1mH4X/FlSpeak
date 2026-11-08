@@ -775,6 +775,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aboutIssueTracker => 'Issue Tracker';
 
   @override
+  String updateAvailableBadge(String version) {
+    return 'New version $version available';
+  }
+
+  @override
+  String updateAvailableAction(String version) {
+    return 'Open the release page for version $version';
+  }
+
+  @override
   String get aboutLicense => 'License';
 
   @override

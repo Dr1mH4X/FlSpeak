@@ -364,6 +364,22 @@
   "aboutSourceAndFeedback": "Project & Source",
   "aboutSourceCode": "Source Code",
   "aboutIssueTracker": "Issue Tracker",
+  "updateAvailableBadge": "New version {version} available",
+  "@updateAvailableBadge": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "updateAvailableAction": "Open the release page for version {version}",
+  "@updateAvailableAction": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
   "aboutLicense": "License",
   "aboutCopySuccess": "Link copied to clipboard",
   "streamSharing": "Sharing screen",
