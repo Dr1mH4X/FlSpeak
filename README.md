@@ -73,14 +73,6 @@ To run checks and tests across Dart and Rust codebases:
 just check
 ```
 
-## Documentation
-
-- [Architecture Overview](docs/architecture.md): Deep-dive into threading model, actor runtime, and layers.
-- [Development Guide](docs/development.md): Environment setup, commands, FFI codegen, and packaging.
-- [Testing Guidelines](docs/testing.md): Automated tests, manual live probes, and CI requirements.
-- [Connection Boundaries & Security](docs/connection-boundary.md): Self-hosted connection constraints and forbidden hosts.
-- [Agent & Contributor Rules](AGENTS.md): Standing orders and workflow rules for developers and AI agents.
-
 ## License & Disclaimer
 
 This project is licensed under the **AGPL-3.0-only** license. See [LICENSE](LICENSE) for details.

@@ -73,14 +73,6 @@ just run
 just check
 ```
 
-## 文档指引
-
-- [架构总览](docs/architecture.md)：线程模型、Actor 运行时、事件总线与系统分层。
-- [开发指南](docs/development.md)：环境搭建、常用命令、FFI 代码生成与打包流水线。
-- [测试约定](docs/testing.md)：自动化测试、单测规范、真实服务器探针与质量门禁。
-- [连接边界与安全约束](docs/connection-boundary.md)：自托管连接规则与官方域名黑名单清单。
-- [Agent 与贡献者守则](AGENTS.md)：全局规则、防御模式审查与行为工作流。
-
 ## 许可证与免责声明
 
 本项目采用 **AGPL-3.0-only** 开源许可证，详情参阅 [LICENSE](LICENSE)。
