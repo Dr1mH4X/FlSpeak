@@ -20,15 +20,11 @@ _又一个多平台，开放的 teamspeak 客户端._
   </a>
   <img src="https://img.shields.io/badge/TeamSpeak-2580C3?style=for-the-badge&logo=teamspeak&logoColor=white" alt="TeamSpeak Support">
 
-<br><br>
-
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="website/public/preview-dark.png">
   <source media="(prefers-color-scheme: light)" srcset="website/public/preview-light.png">
   <img alt="FlSpeak 应用预览" src="website/public/preview-light.png" width="90%">
 </picture>
-
-<br><br>
 
 由 [tsclient-rs](https://github.com/Dr1mH4X/tsclient-rs) 驱动
 
