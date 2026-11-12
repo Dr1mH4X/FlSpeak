@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../../core/channel_display.dart';
+import '../../core/models.dart';
 import '../../core/providers.dart';
 
 /// 用户在频道树里点开的频道，连同当时的服务器，避免换服务器后误用同号频道。
@@ -17,6 +18,7 @@ class SelectedChannelController extends Notifier<SelectedChannel?> {
   SelectedChannel? build() => null;
 
   void select(int channelId, {String? serverId}) {
+    ref.read(selectedMemberProvider.notifier).clear();
     state = (serverId: serverId, channelId: channelId);
   }
 
@@ -58,6 +60,112 @@ class SelectedChannelController extends Notifier<SelectedChannel?> {
     }
   }
 }
+
+/// 选中的用户，连同当时的服务器以及快照信息。
+typedef SelectedMember = ({
+  String? serverId,
+  int clientId,
+  String uid,
+  ClientView snapshot,
+  int selectionEpoch,
+});
+
+final selectedMemberProvider =
+    NotifierProvider<SelectedMemberController, SelectedMember?>(
+      SelectedMemberController.new,
+    );
+
+class SelectedMemberController extends Notifier<SelectedMember?> {
+  int _epoch = 0;
+
+  @override
+  SelectedMember? build() => null;
+
+  void select(ClientView client, {String? serverId}) {
+    state = (
+      serverId: serverId,
+      clientId: client.id,
+      uid: client.uid,
+      snapshot: client,
+      selectionEpoch: ++_epoch,
+    );
+  }
+
+  void clear() {
+    state = null;
+  }
+}
+
+/// 详情面板要展示的目标类型：频道详情或用户详情。
+sealed class DetailsTarget {
+  const DetailsTarget();
+}
+
+class ChannelDetailsTarget extends DetailsTarget {
+  const ChannelDetailsTarget(this.channel);
+  final ChannelView channel;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ChannelDetailsTarget &&
+          runtimeType == other.runtimeType &&
+          channel.id == other.channel.id;
+
+  @override
+  int get hashCode => channel.id.hashCode;
+}
+
+class MemberDetailsTarget extends DetailsTarget {
+  const MemberDetailsTarget({required this.client, this.isOffline = false});
+  final ClientView client;
+  final bool isOffline;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is MemberDetailsTarget &&
+          runtimeType == other.runtimeType &&
+          client.id == other.client.id &&
+          client.uid == other.client.uid &&
+          isOffline == other.isOffline;
+
+  @override
+  int get hashCode => Object.hash(client.id, client.uid, isOffline);
+}
+
+/// 详情页签当前展示的目标：优先选中的用户，其次私聊对象，最后退回到活动频道。
+final activeDetailsTargetProvider = Provider<DetailsTarget?>((ref) {
+  final view = ref.watch(sessionViewProvider);
+  final selectedMember = ref.watch(selectedMemberProvider);
+
+  if (selectedMember != null &&
+      selectedMember.serverId == view.activeServerId) {
+    final live = view.clients
+        .where(
+          (peer) =>
+              peer.id == selectedMember.clientId &&
+              peer.uid == selectedMember.uid,
+        )
+        .firstOrNull;
+    if (live != null) {
+      return MemberDetailsTarget(client: live, isOffline: false);
+    }
+    return MemberDetailsTarget(
+      client: selectedMember.snapshot,
+      isOffline: true,
+    );
+  }
+
+  if (view.chatScope == ChatScope.direct && view.directRecipient != null) {
+    return MemberDetailsTarget(client: view.directRecipient!, isOffline: false);
+  }
+
+  final channelId = ref.watch(activeChannelIdProvider);
+  if (channelId == null) return null;
+  final channel = view.channelById(channelId);
+  return channel == null ? null : ChannelDetailsTarget(channel);
+});
 
 /// 主区域正在展示的频道：优先用户点开的那一个，其次自己所在的频道，
 /// 最后退到根频道的第一项。频道被服务端删掉时也能自然回到一个有效值。

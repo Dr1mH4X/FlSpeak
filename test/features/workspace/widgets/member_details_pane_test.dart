@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -7,8 +9,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flspeak/core/models.dart';
 import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/features/workspace/widgets/channel_pane.dart';
-import 'package:flspeak/features/workspace/widgets/client_actions.dart';
+import 'package:flspeak/features/workspace/widgets/member_details_pane.dart';
+import 'package:flspeak/features/workspace/widgets/channel_details_pane.dart';
 import 'package:flspeak/features/workspace/widgets/members_pane.dart';
+import 'package:flspeak/features/workspace/workspace_page.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
 import 'package:flspeak/theme/app_theme.dart';
 
@@ -27,8 +31,12 @@ class _Controller extends SessionController {
   @override
   SessionView build() => const SessionView(
     state: CoreSessionState.connected(clientId: 1, channelId: 1),
+    activeServerId: 'server-1',
     clients: [_peer],
-    channels: [ChannelView(id: 1, parentId: 0, name: 'Home', description: '')],
+    channels: [
+      ChannelView(id: 1, parentId: 0, name: 'Home', description: 'Home Topic'),
+      ChannelView(id: 2, parentId: 0, name: 'Lobby', description: ''),
+    ],
   );
 
   void updateClients(List<ClientView> clients) {
@@ -40,9 +48,22 @@ class _Controller extends SessionController {
   }
 }
 
-Future<ProviderContainer> _mount(WidgetTester tester, Widget child) async {
+class _FakeCore extends Fake implements CoreSession {
+  @override
+  Future<void> queryPeerIdentity({required int targetClid}) async {}
+  @override
+  Future<Uint8List> fetchAvatar({required String uid}) async => Uint8List(0);
+  @override
+  Future<String> channelDescription({required int channelId}) async => '';
+}
+
+Future<ProviderContainer> _mountWorkspace(
+  WidgetTester tester, {
+  Widget? sidePanel,
+}) async {
   final container = ProviderContainer(
     overrides: [
+      coreSessionProvider.overrideWithValue(_FakeCore()),
       sessionViewProvider.overrideWith(_Controller.new),
       sessionAccessProvider.overrideWith((ref) async => const AccessView()),
     ],
@@ -56,7 +77,15 @@ Future<ProviderContainer> _mount(WidgetTester tester, Widget child) async {
         locale: const Locale('zh'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(body: child),
+        home: Scaffold(
+          body: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (sidePanel != null) sidePanel,
+              const Expanded(child: WorkspacePage()),
+            ],
+          ),
+        ),
       ),
     ),
   );
@@ -67,19 +96,23 @@ Future<ProviderContainer> _mount(WidgetTester tester, Widget child) async {
 void main() {
   for (final channelTree in [true, false]) {
     testWidgets(
-      '${channelTree ? 'channel tree' : 'members pane'} member highlights on hover and opens details on primary click',
+      '${channelTree ? 'channel tree' : 'members pane'} member highlights on hover and opens details in workspace pane without modal dialog',
       (tester) async {
-        await _mount(
+        await _mountWorkspace(
           tester,
-          channelTree
-              ? const SizedBox(width: 320, child: ChannelPanel())
-              : Consumer(
-                  builder: (context, ref, child) => MembersPane(
-                    view: ref.watch(sessionViewProvider),
-                    channelId: 1,
+          sidePanel: SizedBox(
+            width: 320,
+            child: channelTree
+                ? const ChannelPanel()
+                : Consumer(
+                    builder: (context, ref, child) => MembersPane(
+                      view: ref.watch(sessionViewProvider),
+                      channelId: 1,
+                    ),
                   ),
-                ),
+          ),
         );
+
         final row = find.ancestor(
           of: find.text('Peer'),
           matching: find.byType(InkWell),
@@ -93,30 +126,70 @@ void main() {
           contains(WidgetState.hovered),
         );
         await mouse.removePointer();
+
+        // Primary click on member
         await tester.tap(find.text('Peer'));
         await tester.pumpAndSettle();
-        expect(find.text('用户详情'), findsOneWidget);
+
+        // No modal dialog should pop up
+        expect(find.byType(Dialog), findsNothing);
+
+        // Details pane should be rendered in the main workspace
+        expect(find.byType(MemberDetailsPane), findsOneWidget);
         expect(find.text('peer-uid'), findsOneWidget);
         expect(find.widgetWithText(SelectableText, 'Home'), findsOneWidget);
-        expect(find.widgetWithText(Chip, '麦克风已静音'), findsOneWidget);
-        expect(find.widgetWithText(Chip, '扬声器已静音'), findsOneWidget);
-        expect(find.widgetWithText(Chip, '离开：Lunch'), findsOneWidget);
+        expect(find.text('麦克风已静音'), findsOneWidget);
+        expect(find.text('扬声器已静音'), findsOneWidget);
+        expect(find.text('离开：Lunch'), findsOneWidget);
+
+        // Clicking a channel should clear member details and switch to channel details
+        if (channelTree) {
+          await tester.tap(find.text('Lobby'));
+          await tester.pumpAndSettle();
+          expect(find.byType(MemberDetailsPane), findsNothing);
+          expect(find.byType(ChannelDetailsPane), findsOneWidget);
+        }
       },
     );
   }
 
-  testWidgets('details follow live member updates and stop at a new session', (
+  testWidgets(
+    'clicking messages tab after selecting member switches to direct chat with that member',
+    (tester) async {
+      final container = await _mountWorkspace(
+        tester,
+        sidePanel: const SizedBox(width: 320, child: ChannelPanel()),
+      );
+
+      // Tap member Peer
+      await tester.tap(find.text('Peer'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(MemberDetailsPane), findsOneWidget);
+
+      // Tap Messages tab (icon Icons.chat_bubble_rounded)
+      final messagesTab = find.byIcon(Icons.chat_bubble_rounded);
+      await tester.tap(messagesTab);
+      await tester.pumpAndSettle();
+
+      final session = container.read(sessionViewProvider);
+      expect(session.chatScope, ChatScope.direct);
+      expect(session.directRecipientUid, 'peer-uid');
+      expect(session.directRecipientId, 2);
+    },
+  );
+
+  testWidgets('details follow live member updates and show offline banner', (
     tester,
   ) async {
-    final container = await _mount(
+    final container = await _mountWorkspace(
       tester,
-      const ClientActionsButton(
-        client: _peer,
-        child: SizedBox(width: 240, height: 48, child: Text('Peer')),
-      ),
+      sidePanel: const SizedBox(width: 320, child: ChannelPanel()),
     );
+
     await tester.tap(find.text('Peer'));
     await tester.pumpAndSettle();
+
     final controller =
         container.read(sessionViewProvider.notifier) as _Controller;
     controller.updateClients([
@@ -128,12 +201,17 @@ void main() {
       ),
     ]);
     await tester.pumpAndSettle();
-    expect(find.text('Renamed'), findsOneWidget);
-    expect(find.widgetWithText(Chip, '麦克风已静音'), findsNothing);
-    controller.reconnect();
+
+    expect(find.text('Renamed'), findsWidgets);
+    expect(find.text('麦克风已静音'), findsNothing);
+
+    // Remove client from server
+    controller.updateClients([]);
     await tester.pumpAndSettle();
+
+    // Stays on member details pane with offline badge
+    expect(find.byType(MemberDetailsPane), findsOneWidget);
     expect(find.text('该用户已离线'), findsOneWidget);
-    expect(find.text('Renamed'), findsNothing);
   });
 
   for (final client in [
@@ -143,23 +221,20 @@ void main() {
     testWidgets('${client.nickname} can open details without a context menu', (
       tester,
     ) async {
-      final container = await _mount(
+      final container = await _mountWorkspace(
         tester,
-        ClientActionsButton(
-          client: client,
-          child: SizedBox(width: 240, height: 48, child: Text(client.nickname)),
-        ),
+        sidePanel: const SizedBox(width: 320, child: ChannelPanel()),
       );
       (container.read(sessionViewProvider.notifier) as _Controller)
           .updateClients([client]);
       await tester.pumpAndSettle();
+
       await tester.tap(find.text(client.nickname));
       await tester.pumpAndSettle();
-      expect(find.text('用户详情'), findsOneWidget);
-      expect(
-        find.widgetWithText(SelectableText, client.nickname),
-        findsOneWidget,
-      );
+
+      expect(find.byType(Dialog), findsNothing);
+      expect(find.byType(MemberDetailsPane), findsOneWidget);
+      expect(find.text(client.nickname), findsWidgets);
     });
   }
 
@@ -186,9 +261,9 @@ void main() {
         appVersion: '0.1.12',
         capabilities: ['audio:stereo', 'stream:view'],
       );
-      final container = await _mount(
+      final container = await _mountWorkspace(
         tester,
-        const SizedBox(width: 320, child: ChannelPanel()),
+        sidePanel: const SizedBox(width: 320, child: ChannelPanel()),
       );
       (container.read(sessionViewProvider.notifier) as _Controller)
           .updateClients([bot, flspeakPeer]);
@@ -207,8 +282,8 @@ void main() {
         find.widgetWithText(SelectableText, 'TsMusicBot v2.1.0'),
         findsOneWidget,
       );
-      expect(find.widgetWithText(Chip, 'chat:slash_commands'), findsOneWidget);
-      expect(find.widgetWithText(Chip, 'audio:stereo'), findsOneWidget);
+      expect(find.text('chat:slash_commands'), findsOneWidget);
+      expect(find.text('audio:stereo'), findsOneWidget);
     },
   );
 }

@@ -14,6 +14,7 @@ import '../settings/widgets/image_host_dialog.dart';
 import 'widgets/chat_pane.dart';
 import 'widgets/channel_files_pane.dart';
 import 'widgets/channel_details_pane.dart';
+import 'widgets/member_details_pane.dart';
 import 'widgets/media_grid.dart';
 import 'widgets/media_viewer.dart';
 import 'widgets/members_pane.dart';
@@ -44,6 +45,19 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
     // 目标内容与指示器同时切换，不等待指示器动画结束。
     final tab = _MainTab.values[_tabController.index];
     if (tab != _tab) {
+      if (tab == _MainTab.chat) {
+        final selectedMember = ref.read(selectedMemberProvider);
+        if (selectedMember != null &&
+            selectedMember.serverId ==
+                ref.read(sessionViewProvider).activeServerId) {
+          ref
+              .read(sessionViewProvider.notifier)
+              .selectDirectRecipient(
+                selectedMember.uid,
+                clientId: selectedMember.clientId,
+              );
+        }
+      }
       setState(() => _tab = tab);
     }
   }
@@ -74,8 +88,20 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
       },
     );
 
+    ref.listen(selectedMemberProvider, (previous, next) {
+      if (next != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _tabController.index != 3) {
+            _tabController.index = 3;
+          }
+        });
+      }
+    });
+
     final channel = channelId == null ? null : view.channelById(channelId);
     final compact = MediaQuery.sizeOf(context).width < Breakpoints.compact;
+    final detailsTarget = ref.watch(activeDetailsTargetProvider);
+    final isMemberDetails = detailsTarget is MemberDetailsTarget;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -84,6 +110,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
           compact: compact,
           channel: channel,
           tabController: _tabController,
+          isMemberDetails: isMemberDetails,
         ),
         if (view.identityUpgradeTarget != null)
           _IdentityBanner(
@@ -128,8 +155,15 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
                         channelId,
                         view.connected,
                         view.connecting || view.reconnecting,
+                        _tab == _MainTab.details ? detailsTarget : null,
                       )),
-                      child: _buildBody(context, l10n, view, channel),
+                      child: _buildBody(
+                        context,
+                        l10n,
+                        view,
+                        channel,
+                        detailsTarget,
+                      ),
                     ),
                   ),
                 ),
@@ -150,6 +184,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
     AppLocalizations l10n,
     SessionView view,
     ChannelView? channel,
+    DetailsTarget? detailsTarget,
   ) {
     if (view.connecting || view.reconnecting) {
       final scheme = context.scheme;
@@ -173,6 +208,18 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
     }
 
     if (channel == null) {
+      if (_tab == _MainTab.details && detailsTarget is MemberDetailsTarget) {
+        return MemberDetailsPane(
+          key: ValueKey((
+            detailsTarget.client.id,
+            detailsTarget.client.uid,
+            detailsTarget.isOffline,
+            view.connectionEpoch,
+          )),
+          client: detailsTarget.client,
+          isOffline: detailsTarget.isOffline,
+        );
+      }
       return EmptyState(
         icon: view.connected ? Icons.forum_rounded : Icons.link_off_rounded,
         body: view.connected ? l10n.workspaceNoChannels : l10n.workspaceDropped,
@@ -182,6 +229,18 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
     final controller = ref.read(sessionViewProvider.notifier);
     switch (_tab) {
       case _MainTab.details:
+        if (detailsTarget is MemberDetailsTarget) {
+          return MemberDetailsPane(
+            key: ValueKey((
+              detailsTarget.client.id,
+              detailsTarget.client.uid,
+              detailsTarget.isOffline,
+              view.connectionEpoch,
+            )),
+            client: detailsTarget.client,
+            isOffline: detailsTarget.isOffline,
+          );
+        }
         return ChannelDetailsPane(
           key: ValueKey((channel.id, channel.iconId, channel.name)),
           channel: channel,
@@ -247,7 +306,10 @@ class _TabSpec {
   final IconData icon;
 }
 
-List<_TabSpec> _tabSpecs(AppLocalizations l10n) => [
+List<_TabSpec> _tabSpecs(
+  AppLocalizations l10n, {
+  required bool isMemberDetails,
+}) => [
   _TabSpec(
     tab: _MainTab.chat,
     label: l10n.chatTabMessages,
@@ -265,7 +327,7 @@ List<_TabSpec> _tabSpecs(AppLocalizations l10n) => [
   ),
   _TabSpec(
     tab: _MainTab.details,
-    label: l10n.channelDetails,
+    label: isMemberDetails ? l10n.memberDetails : l10n.channelDetails,
     icon: Icons.info_outline_rounded,
   ),
 ];
@@ -275,11 +337,13 @@ class _ChannelHeader extends StatelessWidget {
     required this.compact,
     required this.channel,
     required this.tabController,
+    required this.isMemberDetails,
   });
 
   final bool compact;
   final ChannelView? channel;
   final TabController tabController;
+  final bool isMemberDetails;
 
   @override
   Widget build(BuildContext context) {
@@ -335,7 +399,10 @@ class _ChannelHeader extends StatelessWidget {
             ),
             if (hasChannel) ...[
               const SizedBox(width: 6),
-              _ViewTabs(tabs: _tabSpecs(l10n), controller: tabController),
+              _ViewTabs(
+                tabs: _tabSpecs(l10n, isMemberDetails: isMemberDetails),
+                controller: tabController,
+              ),
             ],
           ],
         ),

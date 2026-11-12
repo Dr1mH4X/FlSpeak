@@ -66,6 +66,7 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
       ref
           .read(selectedChannelProvider.notifier)
           .select(channel.id, serverId: view.activeServerId);
+      ref.read(sessionViewProvider.notifier).selectChatScope(ChatScope.channel);
       widget.onChannelSelected?.call();
     }
 
@@ -244,6 +245,8 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
       );
     }
 
+    final selectedMember = ref.watch(selectedMemberProvider);
+
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
       itemCount: rows.length,
@@ -263,6 +266,11 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
           _MemberRow(:final client, :final depth) => _MemberTile(
             client: client,
             depth: depth,
+            selected:
+                selectedMember != null &&
+                selectedMember.serverId == view.activeServerId &&
+                selectedMember.clientId == client.id &&
+                selectedMember.uid == client.uid,
             // 服务器不回显自己的声音，自己说话由 SelfSpeaking 事件单独表达。
             speaking:
                 view.speaking.contains(client.id) ||
@@ -519,18 +527,23 @@ class _MemberTile extends StatelessWidget {
     required this.client,
     required this.depth,
     required this.speaking,
+    required this.selected,
     this.stream,
   });
 
   final ClientView client;
   final int depth;
   final bool speaking;
+  final bool selected;
   final StreamView? stream;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
+    final foreground = selected
+        ? scheme.onPrimaryContainer
+        : scheme.onSurfaceVariant;
     final avatar = SessionMemberAvatar(
       uid: client.uid,
       nickname: client.nickname,
@@ -540,11 +553,11 @@ class _MemberTile extends StatelessWidget {
     );
 
     return Padding(
-      padding: EdgeInsets.only(left: 40.0 + (depth - 1) * 16.0, right: 14),
+      padding: EdgeInsets.only(left: 32.0 + (depth - 1) * 16.0, right: 6),
       child: ClientActionsButton(
         client: client,
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: Row(
             children: [
               // 头像本身用光环表达说话；读屏靠外层标签拿到同一个状态。
@@ -559,7 +572,7 @@ class _MemberTile extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: context.texts.bodySmall?.copyWith(
                     fontSize: 13,
-                    color: scheme.onSurfaceVariant,
+                    color: foreground,
                   ),
                 ),
               ),
