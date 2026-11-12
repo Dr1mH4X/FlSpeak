@@ -43,6 +43,7 @@ class ChatPane extends StatefulWidget {
     this.onPasteImage,
     this.onUploadImage,
     this.onConfigureImageHost,
+    this.onFetchBotCommands,
     this.avatarBuilder,
     super.key,
   });
@@ -71,6 +72,7 @@ class ChatPane extends StatefulWidget {
   final Future<PickedChatImage?> Function()? onPasteImage;
   final Future<String?> Function(Uint8List)? onUploadImage;
   final VoidCallback? onConfigureImageHost;
+  final ValueChanged<ClientView>? onFetchBotCommands;
   final Widget Function(ChatMessage message)? avatarBuilder;
 
   @override
@@ -167,11 +169,24 @@ class _ChatPaneState extends State<ChatPane> {
   void initState() {
     super.initState();
     _recipientName = _selectedRecipient?.nickname;
+    _input.addListener(_onInputChanged);
     _scheduleScrollToEnd();
   }
 
   /// 私聊对象离线后仍保留会话标题，历史还能读。
   String? _recipientName;
+
+  void _onInputChanged() {
+    if (widget.scope != ChatScope.direct || !_input.text.startsWith('/')) {
+      return;
+    }
+    final recipient = _selectedRecipient;
+    if (recipient != null &&
+        recipient.capabilities.contains('chat:slash_commands') &&
+        recipient.botCommands == null) {
+      widget.onFetchBotCommands?.call(recipient);
+    }
+  }
 
   @override
   void didUpdateWidget(ChatPane oldWidget) {
@@ -208,6 +223,7 @@ class _ChatPaneState extends State<ChatPane> {
 
   @override
   void dispose() {
+    _input.removeListener(_onInputChanged);
     _input.dispose();
     _focus.dispose();
     _scroll.dispose();
@@ -466,8 +482,126 @@ class _ChatPaneState extends State<ChatPane> {
               ),
             ),
           ),
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: _input,
+          builder: (context, value, _) => _buildSlashCommandAutocomplete(
+            context,
+            _selectedRecipient,
+            value.text,
+          ),
+        ),
         _buildComposer(context, l10n),
       ],
+    );
+  }
+
+  Widget _buildSlashCommandAutocomplete(
+    BuildContext context,
+    ClientView? recipient,
+    String text,
+  ) {
+    if (!text.startsWith('/') ||
+        widget.scope != ChatScope.direct ||
+        text.contains(' ')) {
+      return const SizedBox.shrink();
+    }
+    if (recipient == null ||
+        !recipient.capabilities.contains('chat:slash_commands')) {
+      return const SizedBox.shrink();
+    }
+    final commands = recipient.botCommands;
+    if (commands == null || commands.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final query = text.substring(1).toLowerCase();
+    final matched = commands
+        .where((c) => c.name.toLowerCase().startsWith(query))
+        .toList();
+    if (matched.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final scheme = context.scheme;
+    final horizontal = context.isCompact ? 16.0 : 32.0;
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: horizontal),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: _contentMaxWidth,
+            maxHeight: 220,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Material(
+              color: scheme.surfaceContainerHighest,
+              clipBehavior: Clip.antiAlias,
+              shape: RoundedRectangleBorder(
+                borderRadius: Radii.largeAll,
+                side: BorderSide(color: scheme.outlineVariant),
+              ),
+              child: ListView.builder(
+                shrinkWrap: true,
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                itemCount: matched.length,
+                itemBuilder: (context, index) {
+                  final cmd = matched[index];
+                  return InkWell(
+                    onTap: () {
+                      final completed = '/${cmd.name} ';
+                      _input.value = TextEditingValue(
+                        text: completed,
+                        selection: TextSelection.collapsed(
+                          offset: completed.length,
+                        ),
+                      );
+                      _focus.requestFocus();
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        children: [
+                          Text(
+                            '/${cmd.name}',
+                            style: context.texts.labelLarge?.copyWith(
+                              color: scheme.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          if (cmd.args.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            Text(
+                              cmd.args,
+                              style: context.texts.bodySmall?.copyWith(
+                                color: scheme.tertiary,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              cmd.desc,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: context.texts.bodySmall?.copyWith(
+                                color: scheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 

@@ -1819,6 +1819,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Maintain frame rate (Drop resolution first)'**
   String get settingsScreenShareDegradationFramerate;
+
+  /// No description provided for @clientTypeBot.
+  ///
+  /// In en, this message translates to:
+  /// **'Bot'**
+  String get clientTypeBot;
+
+  /// No description provided for @clientTypeFlSpeak.
+  ///
+  /// In en, this message translates to:
+  /// **'FlSpeak client'**
+  String get clientTypeFlSpeak;
+
+  /// No description provided for @memberClientSoftware.
+  ///
+  /// In en, this message translates to:
+  /// **'Client software'**
+  String get memberClientSoftware;
 }
 
 class _AppLocalizationsDelegate

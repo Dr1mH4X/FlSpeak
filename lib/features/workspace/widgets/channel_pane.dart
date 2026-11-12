@@ -552,7 +552,7 @@ class _MemberTile extends StatelessWidget {
                   ? Semantics(label: l10n.memberSpeaking, child: avatar)
                   : avatar,
               const SizedBox(width: 8),
-              Expanded(
+              Flexible(
                 child: Text(
                   client.nickname,
                   maxLines: 1,
@@ -563,6 +563,28 @@ class _MemberTile extends StatelessWidget {
                   ),
                 ),
               ),
+              if (client.clientType == ClientType.bot) ...[
+                const SizedBox(width: 4),
+                Semantics(
+                  label: l10n.clientTypeBot,
+                  child: Icon(
+                    Icons.smart_toy_rounded,
+                    size: 13,
+                    color: scheme.tertiary,
+                  ),
+                ),
+              ] else if (client.clientType == ClientType.flSpeak) ...[
+                const SizedBox(width: 4),
+                Semantics(
+                  label: l10n.clientTypeFlSpeak,
+                  child: Icon(
+                    Icons.electric_bolt_rounded,
+                    size: 13,
+                    color: scheme.primary,
+                  ),
+                ),
+              ],
+              const Spacer(),
               if (stream != null)
                 _MemberFlag(
                   label: l10n.streamSharing,

@@ -231,6 +231,8 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
           onRecipientChanged: controller.selectDirectRecipient,
           onRecipientSelected: (peer) =>
               controller.selectDirectRecipient(peer.uid, clientId: peer.id),
+          onFetchBotCommands: (peer) =>
+              controller.fetchBotCommands(peer.id, peer.uid),
           onReply: controller.replyToMessage,
         );
     }

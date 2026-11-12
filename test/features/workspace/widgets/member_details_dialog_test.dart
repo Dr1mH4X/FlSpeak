@@ -162,4 +162,53 @@ void main() {
       );
     });
   }
+
+  testWidgets(
+    'channel tree badges bot and FlSpeak clients with semantics and member details shows software and capabilities',
+    (tester) async {
+      const bot = ClientView(
+        id: 10,
+        nickname: 'MusicBot',
+        uid: 'bot-uid',
+        channelId: 1,
+        clientType: ClientType.bot,
+        appName: 'TsMusicBot',
+        appVersion: '2.1.0',
+        capabilities: ['chat:slash_commands', 'audio:stereo'],
+      );
+      const flspeakPeer = ClientView(
+        id: 11,
+        nickname: 'Alice',
+        uid: 'alice-uid',
+        channelId: 1,
+        clientType: ClientType.flSpeak,
+        appName: 'FlSpeak',
+        appVersion: '0.1.12',
+        capabilities: ['audio:stereo', 'stream:view'],
+      );
+      final container = await _mount(
+        tester,
+        const SizedBox(width: 320, child: ChannelPanel()),
+      );
+      (container.read(sessionViewProvider.notifier) as _Controller)
+          .updateClients([bot, flspeakPeer]);
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.smart_toy_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.electric_bolt_rounded), findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp('机器人')), findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp('FlSpeak 客户端')), findsOneWidget);
+      expect(find.byType(Tooltip), findsNothing);
+
+      await tester.tap(find.text('MusicBot'));
+      await tester.pumpAndSettle();
+      expect(find.text('客户端'), findsOneWidget);
+      expect(
+        find.widgetWithText(SelectableText, 'TsMusicBot v2.1.0'),
+        findsOneWidget,
+      );
+      expect(find.widgetWithText(Chip, 'chat:slash_commands'), findsOneWidget);
+      expect(find.widgetWithText(Chip, 'audio:stereo'), findsOneWidget);
+    },
+  );
 }

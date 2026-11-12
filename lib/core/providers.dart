@@ -254,6 +254,19 @@ class SessionController extends Notifier<SessionView> {
       directRecipientId: clientId,
       unreadPeers: _clearPeerUnread(state.unreadPeers, uid),
     );
+    _probeDirectRecipient();
+  }
+
+  void _probeDirectRecipient() {
+    if (!state.connected || state.chatScope != ChatScope.direct) return;
+    final recipient = state.directRecipient;
+    if (recipient == null) return;
+    if (recipient.clientType == ClientType.standard) {
+      unawaited(queryPeerIdentity(recipient.id));
+    } else if (recipient.capabilities.contains('chat:slash_commands') &&
+        recipient.botCommands == null) {
+      unawaited(fetchBotCommands(recipient.id, recipient.uid));
+    }
   }
 
   static Set<String> _clearPeerUnread(Set<String> peers, String? uid) {
@@ -811,6 +824,30 @@ class SessionController extends Notifier<SessionView> {
     state = state.copyWith(networkPanelPinned: pinned);
   }
 
+  /// 对未识别身份的私聊节点发起单播身份查询。
+  Future<void> queryPeerIdentity(int targetClid) async {
+    if (!state.connected) return;
+    try {
+      await ref
+          .read(coreSessionProvider)
+          .queryPeerIdentity(targetClid: targetClid);
+    } on CoreError {
+      // 对端不支持或服务器禁用 plugincmd 时静默降级为普通客户端。
+    }
+  }
+
+  /// 按需向声明支持 `chat:slash_commands` 的节点拉取命令清单。
+  Future<void> fetchBotCommands(int targetClid, String targetUid) async {
+    if (!state.connected || targetUid.isEmpty) return;
+    try {
+      await ref
+          .read(coreSessionProvider)
+          .fetchBotCommands(targetClid: targetClid, targetUid: targetUid);
+    } on CoreError {
+      // 拉取失败不阻塞输入框。
+    }
+  }
+
   void _notifyCoreError(CoreError error) {
     if (ref.mounted) {
       _notify(describeCoreError(error, ref.read(_localizationsProvider)));
@@ -954,6 +991,13 @@ class SessionController extends Notifier<SessionView> {
           clients: clients,
           accessRevision: current.accessRevision + 1,
         );
+        final recipient = state.directRecipient;
+        if (state.chatScope == ChatScope.direct &&
+            recipient != null &&
+            recipient.capabilities.contains('chat:slash_commands') &&
+            recipient.botCommands == null) {
+          unawaited(fetchBotCommands(recipient.id, recipient.uid));
+        }
       case CoreEvent_History(:final messages):
         state = current.copyWith(
           messages: messages.map(ChatMessage.fromCore).toList(),
@@ -1000,6 +1044,12 @@ class SessionController extends Notifier<SessionView> {
         :final uid,
         :final channelId,
       ):
+        final existing = current.clients
+            .where(
+              (client) =>
+                  client.id == id || (uid.isNotEmpty && client.uid == uid),
+            )
+            .firstOrNull;
         final others = current.clients.where((client) => client.id != id);
         state = current.copyWith(
           clients: [
@@ -1009,6 +1059,11 @@ class SessionController extends Notifier<SessionView> {
               nickname: nickname,
               uid: uid,
               channelId: channelId,
+              clientType: existing?.clientType ?? ClientType.standard,
+              appName: existing?.appName,
+              appVersion: existing?.appVersion,
+              capabilities: existing?.capabilities ?? const [],
+              botCommands: existing?.botCommands,
             ),
           ],
         );
@@ -1039,6 +1094,11 @@ class SessionController extends Notifier<SessionView> {
                   outputMuted: client.outputMuted,
                   away: client.away,
                   awayMessage: client.awayMessage,
+                  clientType: client.clientType,
+                  appName: client.appName,
+                  appVersion: client.appVersion,
+                  capabilities: client.capabilities,
+                  botCommands: client.botCommands,
                 )
               else
                 client,
@@ -1065,6 +1125,11 @@ class SessionController extends Notifier<SessionView> {
                   outputMuted: outputMuted ?? client.outputMuted,
                   away: away ?? client.away,
                   awayMessage: awayMessage ?? client.awayMessage,
+                  clientType: client.clientType,
+                  appName: client.appName,
+                  appVersion: client.appVersion,
+                  capabilities: client.capabilities,
+                  botCommands: client.botCommands,
                 )
               else
                 client,

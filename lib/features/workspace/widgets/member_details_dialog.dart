@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/channel_display.dart';
 import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
 import '../../../widgets/monogram.dart';
 import 'member_avatar.dart';
@@ -76,6 +77,42 @@ class _MemberDetails extends ConsumerWidget {
             title: Text(l10n.memberChannel),
             subtitle: SelectableText(channelDisplayName(channel)),
           ),
+        if (member.clientType != ClientType.standard) ...[
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(
+              member.clientType == ClientType.bot
+                  ? Icons.smart_toy_rounded
+                  : Icons.electric_bolt_rounded,
+              color: member.clientType == ClientType.bot
+                  ? context.scheme.tertiary
+                  : context.scheme.primary,
+            ),
+            title: Text(l10n.memberClientSoftware),
+            subtitle: SelectableText(
+              [
+                member.appName ?? l10n.clientTypeBot,
+                if (member.appVersion != null && member.appVersion!.isNotEmpty)
+                  'v${member.appVersion}',
+              ].join(' '),
+            ),
+          ),
+          if (member.capabilities.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final cap in member.capabilities)
+                    Chip(
+                      visualDensity: VisualDensity.compact,
+                      label: Text(cap, style: context.texts.labelSmall),
+                    ),
+                ],
+              ),
+            ),
+        ],
         Wrap(
           spacing: 8,
           runSpacing: 8,

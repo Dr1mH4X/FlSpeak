@@ -571,4 +571,99 @@ void main() {
     );
     expect(sendButton.style?.backgroundColor?.resolve({}), isNull);
   });
+
+  testWidgets(
+    'slash command autocomplete fetches lazily, filters by prefix, completes with space, and auto-dismisses',
+    (tester) async {
+      final fetched = <ClientView>[];
+      var botRecipient = const ClientView(
+        id: 9,
+        nickname: 'MusicBot',
+        uid: 'bot-uid',
+        channelId: 5,
+        clientType: ClientType.bot,
+        capabilities: ['chat:slash_commands'],
+      );
+
+      late StateSetter updateState;
+      await tester.pumpWidget(
+        StatefulBuilder(
+          builder: (context, setState) {
+            updateState = setState;
+            return MaterialApp(
+              theme: buildAppTheme(Brightness.light),
+              locale: const Locale('zh'),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Scaffold(
+                body: SizedBox(
+                  width: 480,
+                  height: 600,
+                  child: ChatPane(
+                    channelName: 'Lobby',
+                    messages: const [],
+                    scope: ChatScope.direct,
+                    canSendChannel: true,
+                    busy: false,
+                    selfUid: 'self',
+                    selfClientId: 1,
+                    recipients: [botRecipient],
+                    recipientUid: 'bot-uid',
+                    recipientId: 9,
+                    onRecipientChanged: (_) {},
+                    onFetchBotCommands: fetched.add,
+                    onReply: (_) {},
+                    onScopeChanged: (_) {},
+                    onSend: (_) async => true,
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      );
+
+      // 首次键入 "/" 且本地尚未缓存命令列表时，触发按需拉取回调。
+      await tester.enterText(find.byType(TextField), '/');
+      await tester.pump();
+      expect(fetched, hasLength(1));
+      expect(fetched.single.uid, 'bot-uid');
+
+      // 回包填入 botCommands 后，浮层展示匹配的命令项。
+      updateState(() {
+        botRecipient = const ClientView(
+          id: 9,
+          nickname: 'MusicBot',
+          uid: 'bot-uid',
+          channelId: 5,
+          clientType: ClientType.bot,
+          capabilities: ['chat:slash_commands'],
+          botCommands: [
+            BotCommandView(name: 'play', args: '<url|歌名>', desc: '点播指定歌曲或音频流'),
+            BotCommandView(name: 'skip', args: '', desc: '跳过当前播放曲目'),
+          ],
+        );
+      });
+      await tester.pumpAndSettle();
+      expect(find.text('/play'), findsOneWidget);
+      expect(find.text('<url|歌名>'), findsOneWidget);
+      expect(find.text('点播指定歌曲或音频流'), findsOneWidget);
+      expect(find.text('/skip'), findsOneWidget);
+
+      // 输入前缀过滤命令列表。
+      await tester.enterText(find.byType(TextField), '/pl');
+      await tester.pump();
+      expect(find.text('/play'), findsOneWidget);
+      expect(find.text('/skip'), findsNothing);
+
+      // 点击候选命令后自动填入 "/play " 并收起补全浮层。
+      await tester.tap(find.text('/play'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        '/play ',
+      );
+      expect(find.text('点播指定歌曲或音频流'), findsNothing);
+    },
+  );
 }

@@ -66,6 +66,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool dco_decode_bool(dynamic raw);
 
   @protected
+  BotCommandView dco_decode_bot_command_view(dynamic raw);
+
+  @protected
   bool dco_decode_box_autoadd_bool(dynamic raw);
 
   @protected
@@ -97,6 +100,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ChannelView dco_decode_channel_view(dynamic raw);
+
+  @protected
+  ClientType dco_decode_client_type(dynamic raw);
 
   @protected
   ClientView dco_decode_client_view(dynamic raw);
@@ -132,7 +138,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   KickTarget dco_decode_kick_target(dynamic raw);
 
   @protected
+  List<String> dco_decode_list_String(dynamic raw);
+
+  @protected
   List<AudioDeviceView> dco_decode_list_audio_device_view(dynamic raw);
+
+  @protected
+  List<BotCommandView> dco_decode_list_bot_command_view(dynamic raw);
 
   @protected
   List<ChannelFileView> dco_decode_list_channel_file_view(dynamic raw);
@@ -190,6 +202,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   int? dco_decode_opt_box_autoadd_u_32(dynamic raw);
+
+  @protected
+  List<BotCommandView>? dco_decode_opt_list_bot_command_view(dynamic raw);
 
   @protected
   PublisherSignal dco_decode_publisher_signal(dynamic raw);
@@ -269,6 +284,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
+  BotCommandView sse_decode_bot_command_view(SseDeserializer deserializer);
+
+  @protected
   bool sse_decode_box_autoadd_bool(SseDeserializer deserializer);
 
   @protected
@@ -310,6 +328,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ChannelView sse_decode_channel_view(SseDeserializer deserializer);
 
   @protected
+  ClientType sse_decode_client_type(SseDeserializer deserializer);
+
+  @protected
   ClientView sse_decode_client_view(SseDeserializer deserializer);
 
   @protected
@@ -345,7 +366,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   KickTarget sse_decode_kick_target(SseDeserializer deserializer);
 
   @protected
+  List<String> sse_decode_list_String(SseDeserializer deserializer);
+
+  @protected
   List<AudioDeviceView> sse_decode_list_audio_device_view(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<BotCommandView> sse_decode_list_bot_command_view(
     SseDeserializer deserializer,
   );
 
@@ -411,6 +440,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer);
+
+  @protected
+  List<BotCommandView>? sse_decode_opt_list_bot_command_view(
+    SseDeserializer deserializer,
+  );
 
   @protected
   PublisherSignal sse_decode_publisher_signal(SseDeserializer deserializer);
@@ -505,6 +539,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
+  void sse_encode_bot_command_view(
+    BotCommandView self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_bool(bool self, SseSerializer serializer);
 
   @protected
@@ -553,6 +593,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_channel_view(ChannelView self, SseSerializer serializer);
 
   @protected
+  void sse_encode_client_type(ClientType self, SseSerializer serializer);
+
+  @protected
   void sse_encode_client_view(ClientView self, SseSerializer serializer);
 
   @protected
@@ -595,8 +638,17 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_kick_target(KickTarget self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_String(List<String> self, SseSerializer serializer);
+
+  @protected
   void sse_encode_list_audio_device_view(
     List<AudioDeviceView> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_bot_command_view(
+    List<BotCommandView> self,
     SseSerializer serializer,
   );
 
@@ -689,6 +741,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_list_bot_command_view(
+    List<BotCommandView>? self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_publisher_signal(

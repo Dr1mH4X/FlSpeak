@@ -437,5 +437,8 @@
   "settingsScreenShareCodecH264": "H.264 first (Hardware encode/decode)",
   "settingsScreenShareDegradation": "Bandwidth degradation preference",
   "settingsScreenShareDegradationResolution": "Maintain resolution (Drop frame rate first)",
-  "settingsScreenShareDegradationFramerate": "Maintain frame rate (Drop resolution first)"
+  "settingsScreenShareDegradationFramerate": "Maintain frame rate (Drop resolution first)",
+  "clientTypeBot": "Bot",
+  "clientTypeFlSpeak": "FlSpeak client",
+  "memberClientSoftware": "Client software"
 }

@@ -951,4 +951,13 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsScreenShareDegradationFramerate =>
       'Maintain frame rate (Drop resolution first)';
+
+  @override
+  String get clientTypeBot => 'Bot';
+
+  @override
+  String get clientTypeFlSpeak => 'FlSpeak client';
+
+  @override
+  String get memberClientSoftware => 'Client software';
 }

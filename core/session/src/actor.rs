@@ -18,14 +18,15 @@ use tokio::io::{AsyncRead, ReadBuf};
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
 use tsclient_rs::{
     AbortSignal, ChannelInfo, Client, ClientInfo, Event as ProtocolEvent, FileDownloadInfo, Logger,
+    PluginCommandEvent, PluginCommandTarget,
 };
 
 use crate::store::{self, identity_path};
 use crate::streams::{self, StreamCoordinator, StreamEndReason};
 use crate::{
-    AudioDeviceView, AudioDevicesView, ChannelView, ClientView, SessionCommand, SessionError,
-    SessionEvent, SessionState, SettingsManager, TextMessageView, TransferDirection,
-    VoiceStateView,
+    AudioDeviceView, AudioDevicesView, BotCommandView, ChannelView, ClientType, ClientView,
+    SessionCommand, SessionError, SessionEvent, SessionState, SettingsManager, TextMessageView,
+    TransferDirection, VoiceStateView,
 };
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(8);
@@ -52,6 +53,48 @@ const COMMAND_NOT_FOUND: &str = "256";
 const STREAM_PROBE_TIMEOUT_MS: u64 = 5_000;
 const CONNECTION_INFO_REPLY_INTERVAL: Duration = Duration::from_secs(1);
 const NETWORK_SAMPLE_ERROR_LOG_INTERVAL: Duration = Duration::from_secs(30);
+
+const IDENTITY_PLUGIN: &str = "tsclient:identity";
+const COMMANDS_PLUGIN: &str = "tsclient:commands";
+const ANNOUNCE_ACK_COOLDOWN: Duration = Duration::from_secs(10);
+const QUERY_ACK_COOLDOWN: Duration = Duration::from_secs(5);
+const SELF_ANNOUNCE_DEBOUNCE: Duration = Duration::from_secs(2);
+const MAX_IDENTITY_FIELD_CHARS: usize = 32;
+const MAX_CAPABILITIES: usize = 16;
+const MAX_BOT_COMMANDS: usize = 16;
+const MAX_COMMAND_NAME_CHARS: usize = 24;
+const MAX_COMMAND_ARGS_CHARS: usize = 32;
+const MAX_COMMAND_DESC_CHARS: usize = 64;
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct IdentityPayload {
+    v: u8,
+    action: String,
+    #[serde(default)]
+    client_type: String,
+    #[serde(default)]
+    app_name: String,
+    #[serde(default)]
+    app_version: String,
+    #[serde(default)]
+    capabilities: Vec<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct CommandsPayload {
+    v: u8,
+    action: String,
+    #[serde(default)]
+    commands: Vec<BotCommandView>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CachedPeerIdentity {
+    client_type: ClientType,
+    app_name: String,
+    app_version: String,
+    capabilities: Vec<String>,
+}
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct ChannelMetadata {
@@ -82,6 +125,10 @@ pub(crate) enum SessionSignal {
         epoch: u64,
         message: TextMessageView,
     },
+    ClientJoined {
+        epoch: u64,
+        client: ClientView,
+    },
     ClientMoved {
         epoch: u64,
         id: i32,
@@ -103,6 +150,10 @@ pub(crate) enum SessionSignal {
     ClientLeft {
         epoch: u64,
         id: i32,
+    },
+    PluginCommand {
+        epoch: u64,
+        event: PluginCommandEvent,
     },
     /// TS6 屏幕共享相关的原始通知，一条通知可能带多行。
     StreamNotification {
@@ -190,6 +241,11 @@ pub(crate) struct Actor {
     network_monitor: Option<crate::network::NetworkMonitor>,
     last_connection_info_reply: Option<Instant>,
     last_network_sample_error: Option<Instant>,
+    peer_identities: HashMap<String, CachedPeerIdentity>,
+    peer_commands: HashMap<String, Vec<BotCommandView>>,
+    commands_fetching: HashSet<String>,
+    ack_cooldowns: HashMap<String, Instant>,
+    last_announce_time: Option<Instant>,
     pending_images: VecDeque<PendingImage>,
     active_image: Option<ActiveImage>,
     disconnect_tx: watch::Sender<u64>,
@@ -258,6 +314,11 @@ impl Actor {
             network_monitor: None,
             last_connection_info_reply: None,
             last_network_sample_error: None,
+            peer_identities: HashMap::new(),
+            peer_commands: HashMap::new(),
+            commands_fetching: HashSet::new(),
+            ack_cooldowns: HashMap::new(),
+            last_announce_time: None,
             pending_images: VecDeque::new(),
             active_image: None,
             disconnect_tx,
@@ -417,6 +478,9 @@ impl Actor {
                 let result = self.move_to_channel(client_id, channel_id, password).await;
                 if result.is_ok() {
                     let _ = self.refresh_snapshot(true).await;
+                    if self.self_client_id == Some(client_id) && channel_id != 0 {
+                        self.maybe_announce_identity().await;
+                    }
                 }
                 let _ = reply.send(result);
             }
@@ -721,6 +785,16 @@ impl Actor {
             SessionCommand::KickStreamViewer { viewer_clid, reply } => {
                 let _ = reply.send(self.kick_stream_viewer(viewer_clid).await);
             }
+            SessionCommand::QueryPeerIdentity { target_clid, reply } => {
+                let _ = reply.send(self.query_peer_identity(target_clid).await);
+            }
+            SessionCommand::FetchBotCommands {
+                target_clid,
+                target_uid,
+                reply,
+            } => {
+                let _ = reply.send(self.fetch_bot_commands(target_clid, &target_uid).await);
+            }
         }
         true
     }
@@ -912,6 +986,7 @@ impl Actor {
                         message: err.to_string(),
                     });
                 }
+                self.maybe_announce_identity().await;
                 self.start_voice();
                 // 服务器端自己的标志在（重）连后是重置过的，把本地状态重新同步。
                 self.report_voice_flags().await;
@@ -1079,6 +1154,7 @@ impl Actor {
             }
         };
         self.ensure_self_row(client, &mut rows).await;
+        self.enrich_clients(&mut rows);
         Ok(rows)
     }
 
@@ -1148,6 +1224,11 @@ impl Actor {
                 .get("client_away_message")
                 .filter(|value| !value.is_empty())
                 .map(|value| unescape_text(value)),
+            client_type: ClientType::FlSpeak,
+            app_name: Some("FlSpeak".into()),
+            app_version: Some(env!("CARGO_PKG_VERSION").into()),
+            capabilities: self_capabilities(),
+            bot_commands: None,
         };
         match rows.iter_mut().find(|row| row.id == self_id) {
             Some(row) => *row = view,
@@ -1180,6 +1261,11 @@ impl Actor {
                 output_muted: Some(self.voice_state.deafened),
                 away: Some(self.voice_state.away),
                 away_message: None,
+                client_type: ClientType::FlSpeak,
+                app_name: Some("FlSpeak".into()),
+                app_version: Some(env!("CARGO_PKG_VERSION").into()),
+                capabilities: self_capabilities(),
+                bot_commands: None,
             }),
         }
     }
@@ -1855,6 +1941,13 @@ impl Actor {
                 }
                 self.emit(SessionEvent::TextMessage(message));
             }
+            SessionSignal::ClientJoined { epoch, mut client } => {
+                if epoch != self.connection_epoch {
+                    return;
+                }
+                self.enrich_client(&mut client);
+                self.emit(SessionEvent::ClientJoined(client));
+            }
             SessionSignal::ClientMoved {
                 epoch,
                 id,
@@ -1879,6 +1972,16 @@ impl Actor {
                 if epoch == self.connection_epoch {
                     let events = self.streams.client_left(id);
                     self.emit_all(events);
+                }
+            }
+            SessionSignal::PluginCommand { epoch, event } => {
+                if epoch != self.connection_epoch {
+                    return;
+                }
+                if event.name == IDENTITY_PLUGIN {
+                    self.handle_identity_event(event).await;
+                } else if event.name == COMMANDS_PLUGIN {
+                    self.handle_commands_event(event);
                 }
             }
             SessionSignal::StreamNotification { epoch, name, items } => {
@@ -1958,6 +2061,7 @@ impl Actor {
                 // TS6 服务器推给自己的行永远缺频道，用会话状态补齐再比较。
                 let mut clients = clients;
                 self.patch_self_row(&mut clients);
+                self.enrich_clients(&mut clients);
                 if previous == clients {
                     return;
                 }
@@ -2151,6 +2255,9 @@ impl Actor {
             }
         }
         self.apply_self_channel(channel_id, codec);
+        if channel_id != 0 {
+            self.maybe_announce_identity().await;
+        }
     }
 
     /// 流目录与本地推流都跟随自己所在的频道。频道变了就作废旧目录、退出观看流并停止推流，再在新频道里发现。
@@ -2643,9 +2750,254 @@ impl Actor {
         self.transfer_target = None;
         self.last_connection_info_reply = None;
         self.last_network_sample_error = None;
+        self.peer_identities.clear();
+        self.peer_commands.clear();
+        self.commands_fetching.clear();
+        self.ack_cooldowns.clear();
+        self.last_announce_time = None;
         self.connection_epoch = self.connection_epoch.wrapping_add(1);
         self.epoch.store(self.connection_epoch, Ordering::SeqCst);
         let _ = self.disconnect_tx.send(self.connection_epoch);
+    }
+
+    fn enrich_clients(&self, clients: &mut [ClientView]) {
+        for client in clients {
+            self.enrich_client(client);
+        }
+    }
+
+    fn enrich_client(&self, client: &mut ClientView) {
+        if Some(client.id) == self.self_client_id {
+            client.client_type = ClientType::FlSpeak;
+            client.app_name = Some("FlSpeak".into());
+            client.app_version = Some(env!("CARGO_PKG_VERSION").into());
+            client.capabilities = self_capabilities();
+            client.bot_commands = None;
+            return;
+        }
+        if client.uid.is_empty() {
+            return;
+        }
+        if let Some(identity) = self.peer_identities.get(&client.uid) {
+            client.client_type = identity.client_type;
+            client.app_name = Some(identity.app_name.clone());
+            client.app_version = Some(identity.app_version.clone());
+            client.capabilities = identity.capabilities.clone();
+        }
+        if let Some(commands) = self.peer_commands.get(&client.uid) {
+            client.bot_commands = Some(commands.clone());
+        }
+    }
+
+    fn sync_peer_metadata_to_snapshot(&mut self) {
+        let Some((channels, mut clients)) = self.last_snapshot.clone() else {
+            return;
+        };
+        self.enrich_clients(&mut clients);
+        if self
+            .last_snapshot
+            .as_ref()
+            .is_some_and(|(_, old_clients)| old_clients == &clients)
+        {
+            return;
+        }
+        self.last_snapshot = Some((channels.clone(), clients.clone()));
+        self.emit(SessionEvent::Snapshot { channels, clients });
+    }
+
+    fn resolve_peer_uid(&self, invoker_id: i32, invoker_uid: &str) -> String {
+        if !invoker_uid.is_empty() {
+            return invoker_uid.to_string();
+        }
+        self.last_snapshot
+            .as_ref()
+            .and_then(|(_, clients)| {
+                clients
+                    .iter()
+                    .find(|client| client.id == invoker_id && !client.uid.is_empty())
+                    .map(|client| client.uid.clone())
+            })
+            .or_else(|| {
+                self.client
+                    .as_ref()?
+                    .directory_snapshot()?
+                    .clients
+                    .into_iter()
+                    .find(|client| client.id == invoker_id && !client.uid.is_empty())
+                    .map(|client| client.uid)
+            })
+            .unwrap_or_default()
+    }
+
+    async fn maybe_announce_identity(&mut self) {
+        if self.self_channel_id == 0 {
+            return;
+        }
+        let Some(client) = self.client.clone() else {
+            return;
+        };
+        let now = Instant::now();
+        if let Some(last) = self.last_announce_time
+            && now.duration_since(last) < SELF_ANNOUNCE_DEBOUNCE
+        {
+            return;
+        }
+        self.last_announce_time = Some(now);
+        let payload = IdentityPayload {
+            v: 1,
+            action: "announce".into(),
+            client_type: "flspeak".into(),
+            app_name: "FlSpeak".into(),
+            app_version: env!("CARGO_PKG_VERSION").into(),
+            capabilities: self_capabilities(),
+        };
+        if let Ok(data) = serde_json::to_string(&payload) {
+            let _ = tsclient_rs::send_plugin_command(
+                &client,
+                IDENTITY_PLUGIN,
+                &data,
+                PluginCommandTarget::CurrentChannel,
+                None,
+            )
+            .await;
+        }
+    }
+
+    fn should_reply_identity_ack(
+        &mut self,
+        cooldown_key: &str,
+        action: &str,
+        now: Instant,
+    ) -> bool {
+        let cooldown = match action {
+            "announce" => ANNOUNCE_ACK_COOLDOWN,
+            "query" => QUERY_ACK_COOLDOWN,
+            _ => return false,
+        };
+        if let Some(last) = self.ack_cooldowns.get(cooldown_key)
+            && now.duration_since(*last) < cooldown
+        {
+            return false;
+        }
+        self.ack_cooldowns.insert(cooldown_key.to_string(), now);
+        true
+    }
+
+    async fn handle_identity_event(&mut self, event: PluginCommandEvent) {
+        let Ok(payload) = serde_json::from_str::<IdentityPayload>(&event.data) else {
+            return;
+        };
+        if self.self_client_id == Some(event.invoker_id) {
+            return;
+        }
+
+        let peer_uid = self.resolve_peer_uid(event.invoker_id, &event.invoker_uid);
+        if !peer_uid.is_empty() && !payload.client_type.is_empty() {
+            let cached = sanitize_identity_payload(&payload);
+            self.peer_identities.insert(peer_uid.clone(), cached);
+            self.sync_peer_metadata_to_snapshot();
+        }
+
+        let cooldown_key = if !peer_uid.is_empty() {
+            peer_uid
+        } else {
+            event.invoker_id.to_string()
+        };
+        if !self.should_reply_identity_ack(&cooldown_key, &payload.action, Instant::now()) {
+            return;
+        }
+
+        if let Some(client) = self.client.clone() {
+            let reply = IdentityPayload {
+                v: 1,
+                action: "announce_ack".into(),
+                client_type: "flspeak".into(),
+                app_name: "FlSpeak".into(),
+                app_version: env!("CARGO_PKG_VERSION").into(),
+                capabilities: self_capabilities(),
+            };
+            if let Ok(data) = serde_json::to_string(&reply) {
+                let _ = tsclient_rs::send_plugin_command(
+                    &client,
+                    IDENTITY_PLUGIN,
+                    &data,
+                    PluginCommandTarget::Client,
+                    Some(event.invoker_id),
+                )
+                .await;
+            }
+        }
+    }
+
+    async fn query_peer_identity(&mut self, target_clid: i32) -> Result<(), SessionError> {
+        let client = self.connected()?;
+        let req = serde_json::json!({
+            "v": 1,
+            "action": "query"
+        });
+        tsclient_rs::send_plugin_command(
+            &client,
+            IDENTITY_PLUGIN,
+            &req.to_string(),
+            PluginCommandTarget::Client,
+            Some(target_clid),
+        )
+        .await
+        .map_err(protocol_error)
+    }
+
+    fn handle_commands_event(&mut self, event: PluginCommandEvent) {
+        let Ok(payload) = serde_json::from_str::<CommandsPayload>(&event.data) else {
+            return;
+        };
+        if payload.action != "list_ack" || self.self_client_id == Some(event.invoker_id) {
+            return;
+        }
+        let peer_uid = self.resolve_peer_uid(event.invoker_id, &event.invoker_uid);
+        if peer_uid.is_empty() {
+            return;
+        }
+        self.commands_fetching.remove(&peer_uid);
+        let sanitized = sanitize_bot_commands(payload.commands);
+        self.peer_commands.insert(peer_uid, sanitized);
+        self.sync_peer_metadata_to_snapshot();
+    }
+
+    async fn fetch_bot_commands(
+        &mut self,
+        target_clid: i32,
+        target_uid: &str,
+    ) -> Result<(), SessionError> {
+        if target_uid.is_empty()
+            || self.peer_commands.contains_key(target_uid)
+            || !self.commands_fetching.insert(target_uid.to_string())
+        {
+            return Ok(());
+        }
+        let client = match self.connected() {
+            Ok(client) => client,
+            Err(err) => {
+                self.commands_fetching.remove(target_uid);
+                return Err(err);
+            }
+        };
+        let req = serde_json::json!({
+            "v": 1,
+            "action": "list_req"
+        });
+        let result = tsclient_rs::send_plugin_command(
+            &client,
+            COMMANDS_PLUGIN,
+            &req.to_string(),
+            PluginCommandTarget::Client,
+            Some(target_clid),
+        )
+        .await
+        .map_err(protocol_error);
+        if result.is_err() {
+            self.commands_fetching.remove(target_uid);
+        }
+        result
     }
 
     fn set_state(&mut self, state: SessionState) {
@@ -3063,14 +3415,28 @@ fn register_handlers(
         }
     }));
 
-    let channel = events.clone();
+    let channel = signals.clone();
     let live = Arc::clone(&current);
     client.on_client_enter(Arc::new(move |event: ProtocolEvent| {
         if live.load(Ordering::Relaxed) != epoch {
             return;
         }
         if let ProtocolEvent::ClientEnter(info) = event {
-            emit(&channel, SessionEvent::ClientJoined(ClientView::from(info)));
+            let _ = channel.send(SessionSignal::ClientJoined {
+                epoch,
+                client: ClientView::from(info),
+            });
+        }
+    }));
+
+    let channel = signals.clone();
+    let live = Arc::clone(&current);
+    client.on_plugin_command(Arc::new(move |event: ProtocolEvent| {
+        if live.load(Ordering::Relaxed) != epoch {
+            return;
+        }
+        if let ProtocolEvent::PluginCommand(event) = event {
+            let _ = channel.send(SessionSignal::PluginCommand { epoch, event });
         }
     }));
 
@@ -3216,6 +3582,49 @@ fn register_handlers(
     }));
 }
 
+fn self_capabilities() -> Vec<String> {
+    vec!["audio:stereo".into(), "stream:view".into()]
+}
+
+fn truncate_chars(s: &str, max_chars: usize) -> String {
+    s.chars().take(max_chars).collect()
+}
+
+fn sanitize_identity_payload(payload: &IdentityPayload) -> CachedPeerIdentity {
+    let client_type = match payload.client_type.as_str() {
+        "flspeak" => ClientType::FlSpeak,
+        "bot" => ClientType::Bot,
+        _ => ClientType::Custom,
+    };
+    let app_name = truncate_chars(&payload.app_name, MAX_IDENTITY_FIELD_CHARS);
+    let app_version = truncate_chars(&payload.app_version, MAX_IDENTITY_FIELD_CHARS);
+    let capabilities = payload
+        .capabilities
+        .iter()
+        .take(MAX_CAPABILITIES)
+        .map(|cap| truncate_chars(cap, MAX_IDENTITY_FIELD_CHARS))
+        .collect();
+    CachedPeerIdentity {
+        client_type,
+        app_name,
+        app_version,
+        capabilities,
+    }
+}
+
+fn sanitize_bot_commands(commands: Vec<BotCommandView>) -> Vec<BotCommandView> {
+    commands
+        .into_iter()
+        .take(MAX_BOT_COMMANDS)
+        .map(|mut cmd| {
+            cmd.name = truncate_chars(&cmd.name, MAX_COMMAND_NAME_CHARS);
+            cmd.args = truncate_chars(&cmd.args, MAX_COMMAND_ARGS_CHARS);
+            cmd.desc = truncate_chars(&cmd.desc, MAX_COMMAND_DESC_CHARS);
+            cmd
+        })
+        .collect()
+}
+
 impl From<ClientInfo> for ClientView {
     fn from(info: ClientInfo) -> Self {
         Self {
@@ -3227,6 +3636,11 @@ impl From<ClientInfo> for ClientView {
             output_muted: info.output_muted,
             away: info.away,
             away_message: info.away_message,
+            client_type: ClientType::Standard,
+            app_name: None,
+            app_version: None,
+            capabilities: Vec::new(),
+            bot_commands: None,
         }
     }
 }
@@ -3753,6 +4167,11 @@ mod tests {
                     output_muted: None,
                     away: None,
                     away_message: None,
+                    client_type: ClientType::FlSpeak,
+                    app_name: Some("FlSpeak".into()),
+                    app_version: Some("0.1.12".into()),
+                    capabilities: Vec::new(),
+                    bot_commands: None,
                 },
                 ClientView {
                     id: 9,
@@ -3763,6 +4182,11 @@ mod tests {
                     output_muted: None,
                     away: None,
                     away_message: None,
+                    client_type: ClientType::Standard,
+                    app_name: None,
+                    app_version: None,
+                    capabilities: Vec::new(),
+                    bot_commands: None,
                 },
             ],
         ));
@@ -4076,5 +4500,214 @@ mod tests {
         let fallback = channel_view(channel, None);
         assert_eq!(fallback.order, Some(1));
         assert_eq!(fallback.password_protected, None);
+    }
+
+    #[test]
+    fn bot_command_view_deserializes_with_default_args_and_desc() {
+        let json = r#"{"v":1,"action":"list_ack","commands":[{"name":"ping"},{"name":"play","args":"<song>","desc":"Play song"}]}"#;
+        let payload: CommandsPayload = serde_json::from_str(json).expect("deserialize commands");
+        assert_eq!(payload.commands.len(), 2);
+        assert_eq!(
+            payload.commands[0],
+            BotCommandView {
+                name: "ping".into(),
+                args: String::new(),
+                desc: String::new(),
+            }
+        );
+        assert_eq!(
+            payload.commands[1],
+            BotCommandView {
+                name: "play".into(),
+                args: "<song>".into(),
+                desc: "Play song".into(),
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn identity_event_truncates_fields_ignores_self_and_updates_snapshot() {
+        let mut actor = audio_actor();
+        actor.self_client_id = Some(7);
+        actor.last_snapshot = Some((
+            Vec::new(),
+            vec![
+                ClientView::from(ClientInfo {
+                    id: 7,
+                    nickname: "Self".into(),
+                    uid: "self-uid".into(),
+                    ..client_info(7, 5, "Self")
+                }),
+                ClientView::from(ClientInfo {
+                    id: 12,
+                    nickname: "MusicBot".into(),
+                    uid: "bot-uid".into(),
+                    ..client_info(12, 5, "MusicBot")
+                }),
+            ],
+        ));
+        let mut events = actor.events.subscribe();
+
+        // 自身广播回显直接忽略，不写入缓存也不触发回复。
+        actor
+            .handle_identity_event(PluginCommandEvent {
+                name: IDENTITY_PLUGIN.into(),
+                data: r#"{"v":1,"action":"announce","client_type":"bot","app_name":"FakeSelf","app_version":"9.9"}"#.into(),
+                invoker_id: 7,
+                invoker_name: "Self".into(),
+                invoker_uid: "self-uid".into(),
+            })
+            .await;
+        assert!(!actor.peer_identities.contains_key("self-uid"));
+        assert!(!actor.ack_cooldowns.contains_key("self-uid"));
+        assert!(events.try_recv().is_err());
+
+        // 对端宣告超长字段与过多 capability 时按上限截断，并同步刷新内存快照。
+        let long_name = "B".repeat(50);
+        let long_ver = "1".repeat(40);
+        let caps: Vec<String> = (0..20)
+            .map(|i| format!("cap-{i:02}-{}", "x".repeat(40)))
+            .collect();
+        let data = serde_json::json!({
+            "v": 1,
+            "action": "announce_ack",
+            "client_type": "bot",
+            "app_name": long_name,
+            "app_version": long_ver,
+            "capabilities": caps,
+        })
+        .to_string();
+
+        actor
+            .handle_identity_event(PluginCommandEvent {
+                name: IDENTITY_PLUGIN.into(),
+                data,
+                invoker_id: 12,
+                invoker_name: "MusicBot".into(),
+                invoker_uid: "bot-uid".into(),
+            })
+            .await;
+
+        let Some(SessionEvent::Snapshot { clients, .. }) = events.try_recv().ok() else {
+            panic!("expected Snapshot event after identity update");
+        };
+        let bot = clients.iter().find(|c| c.id == 12).expect("bot row");
+        assert_eq!(bot.client_type, ClientType::Bot);
+        assert_eq!(bot.app_name.as_deref().map(str::len), Some(32));
+        assert_eq!(bot.app_version.as_deref().map(str::len), Some(32));
+        assert_eq!(bot.capabilities.len(), 16);
+        assert!(bot.capabilities.iter().all(|c| c.chars().count() <= 32));
+    }
+
+    #[test]
+    fn identity_reply_cooldown_throttles_announce_and_query_per_uid() {
+        let mut actor = audio_actor();
+        let t0 = Instant::now();
+
+        assert!(actor.should_reply_identity_ack("peer-a", "announce", t0));
+        assert!(!actor.should_reply_identity_ack(
+            "peer-a",
+            "announce",
+            t0 + Duration::from_secs(9)
+        ));
+        assert!(actor.should_reply_identity_ack(
+            "peer-a",
+            "announce",
+            t0 + Duration::from_secs(10)
+        ));
+
+        let t1 = t0 + Duration::from_secs(20);
+        assert!(actor.should_reply_identity_ack("peer-b", "query", t1));
+        assert!(!actor.should_reply_identity_ack("peer-b", "query", t1 + Duration::from_secs(4)));
+        assert!(actor.should_reply_identity_ack("peer-b", "query", t1 + Duration::from_secs(5)));
+
+        assert!(!actor.should_reply_identity_ack("peer-c", "announce_ack", t1));
+    }
+
+    #[tokio::test]
+    async fn commands_event_truncates_fields_clears_inflight_and_updates_snapshot() {
+        let mut actor = audio_actor();
+        actor.self_client_id = Some(7);
+        actor.last_snapshot = Some((
+            Vec::new(),
+            vec![ClientView::from(ClientInfo {
+                id: 12,
+                nickname: "MusicBot".into(),
+                uid: "bot-uid".into(),
+                ..client_info(12, 5, "MusicBot")
+            })],
+        ));
+        actor.commands_fetching.insert("bot-uid".into());
+
+        // 请求仍在途中时，重复调用 fetch_bot_commands 直接幂等跳过。
+        assert!(actor.fetch_bot_commands(12, "bot-uid").await.is_ok());
+
+        let mut events = actor.events.subscribe();
+        let raw_commands: Vec<serde_json::Value> = (0..20)
+            .map(|i| {
+                serde_json::json!({
+                    "name": format!("cmd_{i:02}_{}", "n".repeat(30)),
+                    "args": "a".repeat(45),
+                    "desc": "转化说明".repeat(25),
+                })
+            })
+            .collect();
+        let payload = serde_json::json!({
+            "v": 1,
+            "action": "list_ack",
+            "commands": raw_commands,
+        })
+        .to_string();
+
+        actor.handle_commands_event(PluginCommandEvent {
+            name: COMMANDS_PLUGIN.into(),
+            data: payload,
+            invoker_id: 12,
+            invoker_name: "MusicBot".into(),
+            invoker_uid: "bot-uid".into(),
+        });
+
+        assert!(!actor.commands_fetching.contains("bot-uid"));
+        let cached = actor.peer_commands.get("bot-uid").expect("cached commands");
+        assert_eq!(cached.len(), 16);
+        assert!(cached.iter().all(|c| c.name.chars().count() <= 24));
+        assert!(cached.iter().all(|c| c.args.chars().count() <= 32));
+        assert!(cached.iter().all(|c| c.desc.chars().count() <= 64));
+
+        let Some(SessionEvent::Snapshot { clients, .. }) = events.try_recv().ok() else {
+            panic!("expected Snapshot event after commands update");
+        };
+        let bot = clients.iter().find(|c| c.id == 12).expect("bot row");
+        assert_eq!(bot.bot_commands.as_ref().map(Vec::len), Some(16));
+
+        // 命中本地缓存时 fetch_bot_commands 直接返回 Ok(())，跳过网络请求。
+        assert!(actor.fetch_bot_commands(12, "bot-uid").await.is_ok());
+        assert!(!actor.commands_fetching.contains("bot-uid"));
+    }
+
+    #[test]
+    fn invalidate_handlers_resets_open_protocol_caches_and_cooldowns() {
+        let mut actor = audio_actor();
+        actor.peer_identities.insert(
+            "bot-uid".into(),
+            CachedPeerIdentity {
+                client_type: ClientType::Bot,
+                app_name: "Bot".into(),
+                app_version: "1.0".into(),
+                capabilities: vec!["chat:slash_commands".into()],
+            },
+        );
+        actor.peer_commands.insert("bot-uid".into(), Vec::new());
+        actor.commands_fetching.insert("other-uid".into());
+        actor.ack_cooldowns.insert("bot-uid".into(), Instant::now());
+        actor.last_announce_time = Some(Instant::now());
+
+        actor.invalidate_handlers();
+
+        assert!(actor.peer_identities.is_empty());
+        assert!(actor.peer_commands.is_empty());
+        assert!(actor.commands_fetching.is_empty());
+        assert!(actor.ack_cooldowns.is_empty());
+        assert!(actor.last_announce_time.is_none());
     }
 }
