@@ -137,17 +137,51 @@ void main() {
         // Details pane should be rendered in the main workspace
         expect(find.byType(MemberDetailsPane), findsOneWidget);
         expect(find.text('peer-uid'), findsOneWidget);
-        expect(find.widgetWithText(SelectableText, 'Home'), findsOneWidget);
+        expect(find.text('Home'), findsWidgets);
         expect(find.text('麦克风已静音'), findsOneWidget);
         expect(find.text('扬声器已静音'), findsOneWidget);
         expect(find.text('离开：Lunch'), findsOneWidget);
 
         // Clicking a channel should clear member details and switch to channel details
         if (channelTree) {
+          // Verify that ONLY the selected member is highlighted and no channel is highlighted
+          final homeContainer = tester.widget<AnimatedContainer>(
+            find
+                .ancestor(
+                  of: find.descendant(
+                    of: find.byType(ChannelPanel),
+                    matching: find.text('Home'),
+                  ),
+                  matching: find.byType(AnimatedContainer),
+                )
+                .first,
+          );
+          expect(
+            (homeContainer.decoration as BoxDecoration).color,
+            Colors.transparent,
+          );
+
           await tester.tap(find.text('Lobby'));
           await tester.pumpAndSettle();
           expect(find.byType(MemberDetailsPane), findsNothing);
           expect(find.byType(ChannelDetailsPane), findsOneWidget);
+
+          // Now Lobby channel is highlighted, and Peer is not
+          final lobbyContainer = tester.widget<AnimatedContainer>(
+            find
+                .ancestor(
+                  of: find.descendant(
+                    of: find.byType(ChannelPanel),
+                    matching: find.text('Lobby'),
+                  ),
+                  matching: find.byType(AnimatedContainer),
+                )
+                .first,
+          );
+          expect(
+            (lobbyContainer.decoration as BoxDecoration).color,
+            isNot(Colors.transparent),
+          );
         }
       },
     );
@@ -278,12 +312,15 @@ void main() {
       await tester.tap(find.text('MusicBot'));
       await tester.pumpAndSettle();
       expect(find.text('客户端'), findsOneWidget);
-      expect(
-        find.widgetWithText(SelectableText, 'TsMusicBot v2.1.0'),
-        findsOneWidget,
-      );
+      expect(find.text('TsMusicBot v2.1.0'), findsOneWidget);
       expect(find.text('chat:slash_commands'), findsOneWidget);
       expect(find.text('audio:stereo'), findsOneWidget);
+
+      // FlSpeak client does not show extension capabilities
+      await tester.tap(find.text('Alice'));
+      await tester.pumpAndSettle();
+      expect(find.text('FlSpeak v0.1.12'), findsOneWidget);
+      expect(find.text('stream:view'), findsNothing);
     },
   );
 }

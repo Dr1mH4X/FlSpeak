@@ -246,6 +246,9 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
     }
 
     final selectedMember = ref.watch(selectedMemberProvider);
+    final hasSelectedMember =
+        selectedMember != null &&
+        selectedMember.serverId == view.activeServerId;
 
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
@@ -257,7 +260,7 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
             _ChannelTile(
               channel: channel,
               depth: depth,
-              selected: channel.id == activeId,
+              selected: !hasSelectedMember && channel.id == activeId,
               onTap: () => onTap(channel),
               onJoin: () => onJoin(channel),
               canJoin: _canJoin(view, channel),
@@ -267,8 +270,7 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
             client: client,
             depth: depth,
             selected:
-                selectedMember != null &&
-                selectedMember.serverId == view.activeServerId &&
+                hasSelectedMember &&
                 selectedMember.clientId == client.id &&
                 selectedMember.uid == client.uid,
             // 服务器不回显自己的声音，自己说话由 SelfSpeaking 事件单独表达。

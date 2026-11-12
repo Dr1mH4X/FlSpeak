@@ -3583,7 +3583,7 @@ fn register_handlers(
 }
 
 fn self_capabilities() -> Vec<String> {
-    vec!["audio:stereo".into(), "stream:view".into()]
+    Vec::new()
 }
 
 fn truncate_chars(s: &str, max_chars: usize) -> String {

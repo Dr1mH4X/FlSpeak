@@ -104,6 +104,7 @@ class MemberDetailsPane extends ConsumerWidget {
                                       ),
                                       child: Text(
                                         l10n.memberUnavailable,
+                                        maxLines: 1,
                                         style: texts.labelSmall?.copyWith(
                                           color: scheme.onErrorContainer,
                                           fontWeight: FontWeight.w600,
@@ -117,23 +118,29 @@ class MemberDetailsPane extends ConsumerWidget {
                                   member.outputMuted == true ||
                                   member.away == true) ...[
                                 const SizedBox(height: 8),
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 6,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                Row(
                                   children: [
                                     if (member.away == true)
-                                      _StatusPill(
-                                        icon: Icons.history_toggle_off_rounded,
-                                        color: scheme.tertiary,
-                                        backgroundColor:
-                                            scheme.tertiaryContainer,
-                                        textColor: scheme.onTertiaryContainer,
-                                        label: switch (member.awayMessage) {
-                                          null || '' => l10n.memberAway,
-                                          final msg => l10n.memberAwayWith(msg),
-                                        },
+                                      Flexible(
+                                        child: _StatusPill(
+                                          icon:
+                                              Icons.history_toggle_off_rounded,
+                                          color: scheme.tertiary,
+                                          backgroundColor:
+                                              scheme.tertiaryContainer,
+                                          textColor: scheme.onTertiaryContainer,
+                                          label: switch (member.awayMessage) {
+                                            null || '' => l10n.memberAway,
+                                            final msg => l10n.memberAwayWith(
+                                              msg,
+                                            ),
+                                          },
+                                        ),
                                       ),
+                                    if (member.away == true &&
+                                        (member.inputMuted == true ||
+                                            member.outputMuted == true))
+                                      const SizedBox(width: 8),
                                     if (member.inputMuted == true)
                                       _StatusPill(
                                         icon: Icons.mic_off_rounded,
@@ -142,6 +149,9 @@ class MemberDetailsPane extends ConsumerWidget {
                                         textColor: scheme.onErrorContainer,
                                         label: l10n.memberMicMuted,
                                       ),
+                                    if (member.inputMuted == true &&
+                                        member.outputMuted == true)
+                                      const SizedBox(width: 8),
                                     if (member.outputMuted == true)
                                       _StatusPill(
                                         icon: Icons.volume_off_rounded,
@@ -167,7 +177,7 @@ class MemberDetailsPane extends ConsumerWidget {
                     color: scheme.outlineVariant,
                   ),
 
-                  // 精炼属性列表
+                  // 单行精炼属性列表
                   Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 24,
@@ -180,16 +190,17 @@ class MemberDetailsPane extends ConsumerWidget {
                           _AttributeRow(
                             label: l10n.memberChannel,
                             content: Row(
-                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 ChannelIcon(
                                   iconId: channel.iconId,
                                   color: scheme.primary,
                                 ),
                                 const SizedBox(width: 8),
-                                Flexible(
-                                  child: SelectableText(
+                                Expanded(
+                                  child: Text(
                                     channelDisplayName(channel),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                     style: texts.bodyMedium,
                                   ),
                                 ),
@@ -200,11 +211,12 @@ class MemberDetailsPane extends ConsumerWidget {
                           _AttributeRow(
                             label: l10n.memberUid,
                             content: Row(
-                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                Flexible(
-                                  child: SelectableText(
+                                Expanded(
+                                  child: Text(
                                     member.uid,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                     style: texts.bodyMedium?.copyWith(
                                       fontFamily: 'RobotoMono',
                                       letterSpacing: 0.2,
@@ -237,44 +249,41 @@ class MemberDetailsPane extends ConsumerWidget {
                                 member.appName!.isNotEmpty))
                           _AttributeRow(
                             label: l10n.memberClientSoftware,
-                            content: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      member.clientType == ClientType.bot
-                                          ? Icons.smart_toy_rounded
-                                          : Icons.electric_bolt_rounded,
-                                      size: IconSizes.small,
-                                      color: member.clientType == ClientType.bot
-                                          ? scheme.tertiary
-                                          : scheme.primary,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Flexible(
-                                      child: SelectableText(
-                                        [
-                                          member.appName ?? l10n.clientTypeBot,
-                                          if (member.appVersion != null &&
-                                              member.appVersion!.isNotEmpty)
-                                            'v${member.appVersion}',
-                                        ].join(' '),
-                                        style: texts.bodyMedium,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                if (member.capabilities.isNotEmpty) ...[
-                                  const SizedBox(height: 6),
-                                  Wrap(
-                                    spacing: 6,
-                                    runSpacing: 4,
-                                    children: [
-                                      for (final cap in member.capabilities)
-                                        Container(
+                            content: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    member.clientType == ClientType.bot
+                                        ? Icons.smart_toy_rounded
+                                        : Icons.electric_bolt_rounded,
+                                    size: IconSizes.small,
+                                    color: member.clientType == ClientType.bot
+                                        ? scheme.tertiary
+                                        : scheme.primary,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    [
+                                      member.appName ?? l10n.clientTypeBot,
+                                      if (member.appVersion != null &&
+                                          member.appVersion!.isNotEmpty)
+                                        'v${member.appVersion}',
+                                    ].join(' '),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: texts.bodyMedium,
+                                  ),
+                                  if (member.clientType == ClientType.bot &&
+                                      member.capabilities.isNotEmpty) ...[
+                                    const SizedBox(width: 8),
+                                    for (final cap in member.capabilities)
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          right: 4,
+                                        ),
+                                        child: Container(
                                           padding: const EdgeInsets.symmetric(
                                             horizontal: 6,
                                             vertical: 2,
@@ -286,15 +295,17 @@ class MemberDetailsPane extends ConsumerWidget {
                                           ),
                                           child: Text(
                                             cap,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
                                             style: texts.labelSmall?.copyWith(
                                               color: scheme.onSurfaceVariant,
                                             ),
                                           ),
                                         ),
-                                    ],
-                                  ),
+                                      ),
+                                  ],
                                 ],
-                              ],
+                              ),
                             ),
                           ),
                       ],
@@ -339,11 +350,15 @@ class _StatusPill extends StatelessWidget {
         children: [
           Icon(icon, size: 14, color: color),
           const SizedBox(width: 4),
-          Text(
-            label,
-            style: texts.labelSmall?.copyWith(
-              color: textColor,
-              fontWeight: FontWeight.w500,
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: texts.labelSmall?.copyWith(
+                color: textColor,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],
@@ -362,27 +377,6 @@ class _AttributeRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = context.scheme;
     final texts = context.texts;
-    final compact = context.isCompact;
-
-    if (compact) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: texts.labelMedium?.copyWith(
-                color: scheme.onSurfaceVariant,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 4),
-            content,
-          ],
-        ),
-      );
-    }
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -390,15 +384,18 @@ class _AttributeRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           SizedBox(
-            width: 120,
+            width: 96,
             child: Text(
               label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: texts.labelMedium?.copyWith(
                 color: scheme.onSurfaceVariant,
                 fontWeight: FontWeight.w500,
               ),
             ),
           ),
+          const SizedBox(width: 12),
           Expanded(child: content),
         ],
       ),
