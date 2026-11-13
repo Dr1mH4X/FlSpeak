@@ -9,11 +9,35 @@ import 'package:talker/talker.dart';
 
 import 'json_lines_file_observer.dart';
 
+/// 纯文本控制台日志格式化器，不绘制边框或分隔线。
+class PlainLoggerFormatter implements LoggerFormatter {
+  const PlainLoggerFormatter();
+
+  @override
+  String fmt(LogDetails details, TalkerLoggerSettings settings) {
+    final msg = details.message?.toString() ?? '';
+    if (!settings.enableColors) {
+      return msg;
+    }
+    return msg.split('\n').map(details.pen.write).join('\n');
+  }
+}
+
+Talker _createTalker({
+  required bool useConsoleLogs,
+  TalkerObserver? observer,
+}) => Talker(
+  logger: TalkerLogger(formatter: const PlainLoggerFormatter()),
+  settings: TalkerSettings(
+    useConsoleLogs: useConsoleLogs,
+    maxHistoryItems: 1000,
+  ),
+  observer: observer,
+);
+
 /// 生产路径在 `initLoggingPipeline` 里替换成带文件观察器的实例；
 /// 测试与初始化前的日志落在这个不写盘的控制台实例上。
-Talker talker = Talker(
-  settings: TalkerSettings(useConsoleLogs: false, maxHistoryItems: 1000),
-);
+Talker talker = _createTalker(useConsoleLogs: false);
 
 JsonLinesFileObserver? _fileObserver;
 
@@ -87,10 +111,7 @@ Future<LoggingSetup> initLoggingPipeline({
     await previous.dispose();
   }
 
-  talker = Talker(
-    settings: TalkerSettings(useConsoleLogs: kDebugMode, maxHistoryItems: 1000),
-    observer: observer,
-  );
+  talker = _createTalker(useConsoleLogs: kDebugMode, observer: observer);
 
   return LoggingSetup(logDir: logDir, error: error);
 }

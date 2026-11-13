@@ -114,4 +114,33 @@ void main() {
     expect(content, isNot(contains('phase-error-warn')));
     expect(content, contains('phase-error-error'));
   });
+
+  test('PlainLoggerFormatter outputs lines without box borders', () {
+    const formatter = PlainLoggerFormatter();
+    final pen = AnsiPen()..green();
+
+    final plain = formatter.fmt(
+      LogDetails(
+        message: '[app] | 0:28:00 368ms | FlSpeak v0.1.12 started',
+        level: LogLevel.info,
+        pen: pen,
+      ),
+      TalkerLoggerSettings(enableColors: false),
+    );
+    expect(plain, '[app] | 0:28:00 368ms | FlSpeak v0.1.12 started');
+    expect(
+      plain,
+      isNot(anyOf(contains('┌'), contains('│'), contains('└'), contains('─'))),
+    );
+
+    final colored = formatter.fmt(
+      LogDetails(message: 'line1\nline2', level: LogLevel.info, pen: pen),
+      TalkerLoggerSettings(enableColors: true),
+    );
+    expect(colored, '${pen.write('line1')}\n${pen.write('line2')}');
+    expect(
+      colored,
+      isNot(anyOf(contains('┌'), contains('│'), contains('└'), contains('─'))),
+    );
+  });
 }
