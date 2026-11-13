@@ -643,7 +643,7 @@ void main() {
   });
 
   group('StreamViewerController & SessionController integration', () {
-    test('negotiates TS6 viewer offer/answer with MID 0=video, MID 1=audio, VP8 priority, and cached early ICE candidates', () async {
+    test('negotiates TS6 viewer offer/answer with MID 0=video, MID 1=audio, H264 priority, and cached early ICE candidates', () async {
       final events = StreamController<CoreEvent>.broadcast();
       final core = _FakeCoreSession(events);
       final remoteGate = Completer<void>();
@@ -714,7 +714,7 @@ void main() {
       );
       expect(
         peer.addedTransceivers[0].preferredCodecs?.first.mimeType.toLowerCase(),
-        'video/vp8',
+        'video/h264',
       );
       expect(
         peer.addedTransceivers[1].kind,
@@ -749,7 +749,7 @@ void main() {
       expect(peer.addedCandidates, isEmpty);
 
       // 4. Complete setRemoteDescription -> cached candidates flush in order,
-      // Answer is created with VP8 first & m=audio preserved, and sent via FFI.
+      // Answer is created with H264 first & m=audio preserved, and sent via FFI.
       remoteGate.complete();
       await _pumpEventQueue();
 
@@ -766,7 +766,7 @@ void main() {
       expect(sentAnswer.targetClid, 7);
       expect(
         sentAnswer.sdp,
-        contains('m=video 9 UDP/TLS/RTP/SAVPF 96 97 102 103\r\n'),
+        contains('m=video 9 UDP/TLS/RTP/SAVPF 102 103 96 97\r\n'),
       );
       expect(inspectSdpMediaLayout(sentAnswer.sdp).isTs6Compatible, isTrue);
 

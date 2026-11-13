@@ -49,9 +49,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get commonCopied => '已复制';
 
   @override
-  String get commonOpenDirectory => '打开目录';
-
-  @override
   String get loggingUnavailable => '文件日志不可用，应用将继续以控制台日志运行。';
 
   @override
@@ -343,9 +340,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsVoice => '语音';
 
   @override
-  String get settingsData => '数据';
-
-  @override
   String get settingsAbout => '关于';
 
   @override
@@ -424,13 +418,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsAudioLoading => '正在读取音频设备…';
 
   @override
-  String get settingsStorePath => '数据目录';
+  String get settingsAutoCheckUpdate => '自动检查更新';
 
   @override
-  String get settingsDataPath => '数据目录';
-
-  @override
-  String get settingsLogPath => '日志目录';
+  String get settingsLogLevel => '日志等级';
 
   @override
   String get connectTitle => '找到你的声音';
@@ -886,10 +877,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsScreenShareResolution => '默认分辨率';
 
   @override
-  String get settingsScreenShareResolution720p => '720p (1280×720)';
+  String get settingsScreenShareResolution720p => '720p';
 
   @override
-  String get settingsScreenShareResolution1080p => '1080p (1920×1080)';
+  String get settingsScreenShareResolution1080p => '1080p';
 
   @override
   String get settingsScreenShareFrameRate => '默认帧率';
@@ -907,19 +898,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsScreenShareCodec => '视频编码与硬件加速';
 
   @override
-  String get settingsScreenShareCodecVp8 => 'VP8 优先（TS6 兼容推荐）';
+  String get settingsScreenShareCodecVp8 => 'VP8 优先';
 
   @override
-  String get settingsScreenShareCodecH264 => 'H.264 优先（硬件编解码加速）';
+  String get settingsScreenShareCodecH264 => 'H.264 优先';
 
   @override
   String get settingsScreenShareDegradation => '弱网降级策略';
 
   @override
-  String get settingsScreenShareDegradationResolution => '保持清晰度（优先降低帧率）';
+  String get settingsScreenShareDegradationResolution => '保持清晰度';
 
   @override
-  String get settingsScreenShareDegradationFramerate => '保持流畅度（优先降低分辨率）';
+  String get settingsScreenShareDegradationFramerate => '保持流畅度';
 
   @override
   String get clientTypeBot => '机器人';

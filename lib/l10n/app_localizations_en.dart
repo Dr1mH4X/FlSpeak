@@ -49,9 +49,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get commonCopied => 'Copied';
 
   @override
-  String get commonOpenDirectory => 'Open directory';
-
-  @override
   String get loggingUnavailable =>
       'File logging is unavailable; the app keeps running with console logs.';
 
@@ -347,9 +344,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsVoice => 'Voice';
 
   @override
-  String get settingsData => 'Data';
-
-  @override
   String get settingsAbout => 'About';
 
   @override
@@ -429,13 +423,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAudioLoading => 'Reading audio devices…';
 
   @override
-  String get settingsStorePath => 'Data directory';
+  String get settingsAutoCheckUpdate => 'Auto check updates';
 
   @override
-  String get settingsDataPath => 'Data directory';
-
-  @override
-  String get settingsLogPath => 'Log directory';
+  String get settingsLogLevel => 'Log level';
 
   @override
   String get connectTitle => 'Find your people';
@@ -913,10 +904,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsScreenShareResolution => 'Default resolution';
 
   @override
-  String get settingsScreenShareResolution720p => '720p (1280×720)';
+  String get settingsScreenShareResolution720p => '720p';
 
   @override
-  String get settingsScreenShareResolution1080p => '1080p (1920×1080)';
+  String get settingsScreenShareResolution1080p => '1080p';
 
   @override
   String get settingsScreenShareFrameRate => 'Default frame rate';
@@ -934,23 +925,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsScreenShareCodec => 'Video codec & hardware acceleration';
 
   @override
-  String get settingsScreenShareCodecVp8 => 'VP8 first (Recommended for TS6)';
+  String get settingsScreenShareCodecVp8 => 'VP8 first';
 
   @override
-  String get settingsScreenShareCodecH264 =>
-      'H.264 first (Hardware encode/decode)';
+  String get settingsScreenShareCodecH264 => 'H.264 first';
 
   @override
   String get settingsScreenShareDegradation =>
       'Bandwidth degradation preference';
 
   @override
-  String get settingsScreenShareDegradationResolution =>
-      'Maintain resolution (Drop frame rate first)';
+  String get settingsScreenShareDegradationResolution => 'Maintain resolution';
 
   @override
-  String get settingsScreenShareDegradationFramerate =>
-      'Maintain frame rate (Drop resolution first)';
+  String get settingsScreenShareDegradationFramerate => 'Maintain frame rate';
 
   @override
   String get clientTypeBot => 'Bot';

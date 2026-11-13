@@ -673,11 +673,11 @@ void main() {
       expect(offerConstraints?['mandatory'], isEmpty);
       expect(offerConstraints?['optional'], isEmpty);
 
-      // Verify video RtpSender parameters: degradationPreference = MAINTAIN_RESOLUTION.
+      // Verify video RtpSender parameters: default degradationPreference = MAINTAIN_FRAMERATE.
       final sender101 = peer101.sendersList.single;
       expect(
         sender101.updatedParameters?.degradationPreference,
-        RTCDegradationPreference.MAINTAIN_RESOLUTION,
+        RTCDegradationPreference.MAINTAIN_FRAMERATE,
       );
       expect(
         sender101.updatedParameters?.encodings?.single.maxBitrate,
@@ -1001,7 +1001,7 @@ void main() {
       final videoSender = peer301.sendersList.first;
       expect(
         videoSender.updatedParameters?.degradationPreference,
-        RTCDegradationPreference.MAINTAIN_RESOLUTION,
+        RTCDegradationPreference.MAINTAIN_FRAMERATE,
       );
       expect(
         videoSender.updatedParameters?.encodings?.single.maxBitrate,
@@ -1235,6 +1235,67 @@ void main() {
         expect(bindings.createdPeers.single.disposed, isTrue);
         expect(core.kickedViewers, [505]);
       });
+    });
+
+    test('orders H264 codecs first by default and VP8 codecs first when configured', () async {
+      for (final configured in [null, ScreenShareCodecPreference.vp8]) {
+        final events = StreamController<CoreEvent>.broadcast();
+        final core = _FakeCoreSession(events);
+        final bindings = _FakePublisherWebRtcBindings();
+
+        final container = ProviderContainer(
+          overrides: [
+            coreSessionProvider.overrideWithValue(core),
+            webRtcBindingsProvider.overrideWithValue(bindings),
+            if (configured != null)
+              preferencesStoreProvider.overrideWithValue(
+                PreferencesStore.inMemory(
+                  preferences: SessionPreferences(
+                    nickname: 'TestUser',
+                    screenShareCodec: configured,
+                  ),
+                ),
+              ),
+          ],
+        );
+
+        container.read(sessionViewProvider);
+        events.add(
+          const CoreEvent.state(
+            state: CoreSessionState.connected(clientId: 1, channelId: 5),
+          ),
+        );
+        await _pumpEventQueue();
+
+        await container
+            .read(sessionViewProvider.notifier)
+            .startScreenShare(
+              sourceId: 'screen:0',
+              sourceName: 'Entire Screen',
+            );
+        events.add(
+          const CoreEvent.screenSharePublished(streamId: 'pub-stream-codec'),
+        );
+        await _pumpEventQueue();
+
+        events.add(
+          const CoreEvent.streamViewerJoinRequested(
+            streamId: 'pub-stream-codec',
+            viewerClid: 606,
+          ),
+        );
+        await _pumpEventQueue();
+
+        final videoTransceiver =
+            bindings.createdPeers.single.transceiversList.first;
+        final expectedFirst = configured == ScreenShareCodecPreference.vp8
+            ? 'video/VP8'
+            : 'video/H264';
+        expect(videoTransceiver.preferredCodecs?.first.mimeType, expectedFirst);
+
+        await events.close();
+        container.dispose();
+      }
     });
   });
 }

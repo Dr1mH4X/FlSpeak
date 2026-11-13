@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
-import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
@@ -38,13 +37,13 @@ final storePathProvider = Provider<String>(
   (ref) => throw StateError('storePathProvider 必须在 ProviderScope 里覆盖'),
 );
 
-/// 日志存储目录的绝对路径，设置页展示与管理用。
-final logPathProvider = Provider<String>(
-  (ref) => p.join(p.dirname(ref.watch(storePathProvider)), 'logs'),
-);
-
 /// 日志初始化失败的原因；null 表示文件日志可用。启动后提示一次。
 final loggingFailureProvider = Provider<Object?>((ref) => null);
+
+/// 启动阶段是否允许触发自动检查更新；测试可覆盖此标志验证启动更新流程。
+final startupUpdateCheckEnabledProvider = Provider<bool>(
+  (ref) => isRustLibInitialized,
+);
 
 /// 当前构建的版本号。Cargo workspace 与 Flutter 包版本由
 /// `tool/bump_version.dart` 同步，这里以 Rust 侧为唯一来源。
@@ -1449,6 +1448,21 @@ class PreferencesController extends Notifier<SessionPreferences> {
       return;
     }
     _update(state.copyWith(screenShareDegradation: degradation));
+  }
+
+  void setAutoCheckUpdate(bool enabled) {
+    if (enabled == state.autoCheckUpdate) {
+      return;
+    }
+    _update(state.copyWith(autoCheckUpdate: enabled));
+  }
+
+  void setLogLevel(AppLogLevel level) {
+    if (level == state.logLevel) {
+      return;
+    }
+    _update(state.copyWith(logLevel: level));
+    unawaited(syncLogLevel(level.talkerLevel, rustLevelId: level.id));
   }
 
   void setServerIcon(String serverId, ServerIcon icon) {

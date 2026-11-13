@@ -36,6 +36,10 @@ Future<void> main() async {
   final preferences = await PreferencesStore.load(
     PreferencesStore.pathFor(storePath),
   );
+  await syncLogLevel(
+    preferences.current.logLevel.talkerLevel,
+    rustLevelId: preferences.current.logLevel.id,
+  );
 
   runApp(
     ProviderScope(
@@ -43,7 +47,6 @@ Future<void> main() async {
         coreSessionProvider.overrideWithValue(session),
         preferencesStoreProvider.overrideWithValue(preferences),
         storePathProvider.overrideWithValue(storePath),
-        logPathProvider.overrideWithValue(logDir.path),
         loggingFailureProvider.overrideWithValue(logging.error),
       ],
       child: const TsClientApp(),

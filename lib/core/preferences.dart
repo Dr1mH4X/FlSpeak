@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart' as ffi;
 import 'package:path/path.dart' as p;
+import 'package:talker/talker.dart' show LogLevel;
 
 import 'logging/logger.dart';
 import 'server_icon.dart';
@@ -93,7 +94,7 @@ enum ScreenShareResolutionPreset {
         return preset;
       }
     }
-    return ScreenShareResolutionPreset.p1080;
+    return ScreenShareResolutionPreset.p720;
   }
 }
 
@@ -142,7 +143,7 @@ enum ScreenShareCodecPreference {
         return codec;
       }
     }
-    return ScreenShareCodecPreference.vp8;
+    return ScreenShareCodecPreference.h264;
   }
 }
 
@@ -161,7 +162,40 @@ enum ScreenShareDegradationPreference {
         return pref;
       }
     }
-    return ScreenShareDegradationPreference.maintainResolution;
+    return ScreenShareDegradationPreference.maintainFramerate;
+  }
+}
+
+/// 应用日志等级，前后端文件日志共用同一阈值。
+enum AppLogLevel {
+  debug('debug'),
+  info('info'),
+  warning('warning'),
+  error('error');
+
+  const AppLogLevel(this.id);
+
+  final String id;
+
+  /// Debug 模式默认 `debug`，Release 模式默认 `info`。
+  static const AppLogLevel defaultForBuild = kDebugMode
+      ? AppLogLevel.debug
+      : AppLogLevel.info;
+
+  LogLevel get talkerLevel => switch (this) {
+    AppLogLevel.debug => LogLevel.debug,
+    AppLogLevel.info => LogLevel.info,
+    AppLogLevel.warning => LogLevel.warning,
+    AppLogLevel.error => LogLevel.error,
+  };
+
+  static AppLogLevel fromId(Object? value) {
+    for (final level in values) {
+      if (level.id == value) {
+        return level;
+      }
+    }
+    return defaultForBuild;
   }
 }
 
@@ -182,11 +216,13 @@ class SessionPreferences {
     this.streamViewerHeight,
     this.voiceMeterSource = VoiceMeterSource.microphone,
     this.serverIcons = const {},
-    this.screenShareResolution = ScreenShareResolutionPreset.p1080,
+    this.screenShareResolution = ScreenShareResolutionPreset.p720,
     this.screenShareFrameRate = ScreenShareFrameRatePreset.fps30,
-    this.screenShareCodec = ScreenShareCodecPreference.vp8,
+    this.screenShareCodec = ScreenShareCodecPreference.h264,
     this.screenShareDegradation =
-        ScreenShareDegradationPreference.maintainResolution,
+        ScreenShareDegradationPreference.maintainFramerate,
+    this.autoCheckUpdate = true,
+    this.logLevel = AppLogLevel.defaultForBuild,
   });
 
   /// 没有设置过昵称时的默认值。
@@ -222,6 +258,8 @@ class SessionPreferences {
   final ScreenShareFrameRatePreset screenShareFrameRate;
   final ScreenShareCodecPreference screenShareCodec;
   final ScreenShareDegradationPreference screenShareDegradation;
+  final bool autoCheckUpdate;
+  final AppLogLevel logLevel;
 
   SessionPreferences copyWith({
     String? nickname,
@@ -238,6 +276,8 @@ class SessionPreferences {
     ScreenShareFrameRatePreset? screenShareFrameRate,
     ScreenShareCodecPreference? screenShareCodec,
     ScreenShareDegradationPreference? screenShareDegradation,
+    bool? autoCheckUpdate,
+    AppLogLevel? logLevel,
   }) => SessionPreferences(
     nickname: nickname ?? this.nickname,
     lastConnected: lastConnected ?? this.lastConnected,
@@ -260,6 +300,8 @@ class SessionPreferences {
     screenShareCodec: screenShareCodec ?? this.screenShareCodec,
     screenShareDegradation:
         screenShareDegradation ?? this.screenShareDegradation,
+    autoCheckUpdate: autoCheckUpdate ?? this.autoCheckUpdate,
+    logLevel: logLevel ?? this.logLevel,
   );
 
   Map<String, Object?> toJson() => {
@@ -281,6 +323,8 @@ class SessionPreferences {
     'screenShareFrameRate': screenShareFrameRate.fps,
     'screenShareCodec': screenShareCodec.id,
     'screenShareDegradation': screenShareDegradation.id,
+    'autoCheckUpdate': autoCheckUpdate,
+    'logLevel': logLevel.id,
   };
 
   static SessionPreferences fromJson(Map<String, Object?> json) {
@@ -313,6 +357,7 @@ class SessionPreferences {
     final rawPttHotkey = ui['pttHotkey'];
     final rawPanelWidth = ui['channelPanelWidth'];
     final rawStreamViewerHeight = ui['streamViewerHeight'];
+    final rawAutoCheckUpdate = ui['autoCheckUpdate'];
     return SessionPreferences(
       nickname: nickname.isEmpty || nickname == _legacyFallbackNickname
           ? fallbackNickname
@@ -344,6 +389,8 @@ class SessionPreferences {
       screenShareDegradation: ScreenShareDegradationPreference.fromId(
         ui['screenShareDegradation'],
       ),
+      autoCheckUpdate: rawAutoCheckUpdate is bool ? rawAutoCheckUpdate : true,
+      logLevel: AppLogLevel.fromId(ui['logLevel']),
     );
   }
 }

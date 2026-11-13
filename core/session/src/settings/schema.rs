@@ -103,11 +103,24 @@ pub struct UiSettings {
     pub screen_share_codec: String,
     /// 屏幕共享弱网降级策略：maintainResolution / maintainFramerate。
     pub screen_share_degradation: String,
+    /// 是否在启动时自动检查更新。
+    pub auto_check_update: bool,
+    /// 日志等级：debug / info / warning / error。
+    pub log_level: String,
 }
 
 impl UiSettings {
     /// 默认昵称常量。
     pub const DEFAULT_NICKNAME: &'static str = "FlSpeakUser";
+
+    /// 当前构建形态的默认日志等级。
+    pub fn default_log_level() -> &'static str {
+        if cfg!(debug_assertions) {
+            "debug"
+        } else {
+            "info"
+        }
+    }
 
     /// 规范化昵称：去除前后空白字符，若为空值则自动回退为默认昵称。
     pub fn normalize_nickname(&mut self) {
@@ -132,10 +145,26 @@ impl Default for UiSettings {
             locale: None,
             last_connected: HashMap::new(),
             server_icons: HashMap::new(),
-            screen_share_resolution: "1080p".to_string(),
+            screen_share_resolution: "720p".to_string(),
             screen_share_frame_rate: 30,
-            screen_share_codec: "vp8".to_string(),
-            screen_share_degradation: "maintainResolution".to_string(),
+            screen_share_codec: "h264".to_string(),
+            screen_share_degradation: "maintainFramerate".to_string(),
+            auto_check_update: true,
+            log_level: Self::default_log_level().to_string(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::UiSettings;
+
+    #[test]
+    fn ui_settings_screen_share_defaults_match_spec() {
+        let ui = UiSettings::default();
+        assert_eq!(ui.screen_share_resolution, "720p");
+        assert_eq!(ui.screen_share_frame_rate, 30);
+        assert_eq!(ui.screen_share_codec, "h264");
+        assert_eq!(ui.screen_share_degradation, "maintainFramerate");
     }
 }

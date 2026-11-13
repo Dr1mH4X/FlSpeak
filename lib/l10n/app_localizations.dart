@@ -176,12 +176,6 @@ abstract class AppLocalizations {
   /// **'Copied'**
   String get commonCopied;
 
-  /// No description provided for @commonOpenDirectory.
-  ///
-  /// In en, this message translates to:
-  /// **'Open directory'**
-  String get commonOpenDirectory;
-
   /// No description provided for @loggingUnavailable.
   ///
   /// In en, this message translates to:
@@ -710,12 +704,6 @@ abstract class AppLocalizations {
   /// **'Voice'**
   String get settingsVoice;
 
-  /// No description provided for @settingsData.
-  ///
-  /// In en, this message translates to:
-  /// **'Data'**
-  String get settingsData;
-
   /// No description provided for @settingsAbout.
   ///
   /// In en, this message translates to:
@@ -872,23 +860,17 @@ abstract class AppLocalizations {
   /// **'Reading audio devices…'**
   String get settingsAudioLoading;
 
-  /// No description provided for @settingsStorePath.
+  /// No description provided for @settingsAutoCheckUpdate.
   ///
   /// In en, this message translates to:
-  /// **'Data directory'**
-  String get settingsStorePath;
+  /// **'Auto check updates'**
+  String get settingsAutoCheckUpdate;
 
-  /// No description provided for @settingsDataPath.
+  /// No description provided for @settingsLogLevel.
   ///
   /// In en, this message translates to:
-  /// **'Data directory'**
-  String get settingsDataPath;
-
-  /// No description provided for @settingsLogPath.
-  ///
-  /// In en, this message translates to:
-  /// **'Log directory'**
-  String get settingsLogPath;
+  /// **'Log level'**
+  String get settingsLogLevel;
 
   /// No description provided for @connectTitle.
   ///
@@ -1751,13 +1733,13 @@ abstract class AppLocalizations {
   /// No description provided for @settingsScreenShareResolution720p.
   ///
   /// In en, this message translates to:
-  /// **'720p (1280×720)'**
+  /// **'720p'**
   String get settingsScreenShareResolution720p;
 
   /// No description provided for @settingsScreenShareResolution1080p.
   ///
   /// In en, this message translates to:
-  /// **'1080p (1920×1080)'**
+  /// **'1080p'**
   String get settingsScreenShareResolution1080p;
 
   /// No description provided for @settingsScreenShareFrameRate.
@@ -1793,13 +1775,13 @@ abstract class AppLocalizations {
   /// No description provided for @settingsScreenShareCodecVp8.
   ///
   /// In en, this message translates to:
-  /// **'VP8 first (Recommended for TS6)'**
+  /// **'VP8 first'**
   String get settingsScreenShareCodecVp8;
 
   /// No description provided for @settingsScreenShareCodecH264.
   ///
   /// In en, this message translates to:
-  /// **'H.264 first (Hardware encode/decode)'**
+  /// **'H.264 first'**
   String get settingsScreenShareCodecH264;
 
   /// No description provided for @settingsScreenShareDegradation.
@@ -1811,13 +1793,13 @@ abstract class AppLocalizations {
   /// No description provided for @settingsScreenShareDegradationResolution.
   ///
   /// In en, this message translates to:
-  /// **'Maintain resolution (Drop frame rate first)'**
+  /// **'Maintain resolution'**
   String get settingsScreenShareDegradationResolution;
 
   /// No description provided for @settingsScreenShareDegradationFramerate.
   ///
   /// In en, this message translates to:
-  /// **'Maintain frame rate (Drop resolution first)'**
+  /// **'Maintain frame rate'**
   String get settingsScreenShareDegradationFramerate;
 
   /// No description provided for @clientTypeBot.

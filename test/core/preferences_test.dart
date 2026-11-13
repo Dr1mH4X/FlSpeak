@@ -194,4 +194,78 @@ void main() {
     });
     expect(infinite.streamViewerHeight, isNull);
   });
+
+  test(
+    'autoCheckUpdate and logLevel serialize, deserialize, and fall back safely',
+    () {
+      const defaults = SessionPreferences(nickname: 'TestUser');
+      expect(defaults.autoCheckUpdate, isTrue);
+      expect(defaults.logLevel, AppLogLevel.defaultForBuild);
+
+      for (final level in AppLogLevel.values) {
+        final json = SessionPreferences(
+          nickname: 'TestUser',
+          autoCheckUpdate: false,
+          logLevel: level,
+        ).toJson();
+        final restored = SessionPreferences.fromJson(json);
+        expect(restored.autoCheckUpdate, isFalse);
+        expect(restored.logLevel, level);
+      }
+
+      final fallback = SessionPreferences.fromJson(const {
+        'autoCheckUpdate': 'not-a-bool',
+        'logLevel': 'verbose',
+      });
+      expect(fallback.autoCheckUpdate, isTrue);
+      expect(fallback.logLevel, AppLogLevel.defaultForBuild);
+    },
+  );
+
+  test('screen share preferences default to 720p, 30fps, h264, maintainFramerate and round-trip', () {
+    const defaults = SessionPreferences(nickname: 'TestUser');
+    expect(defaults.screenShareResolution, ScreenShareResolutionPreset.p720);
+    expect(defaults.screenShareFrameRate, ScreenShareFrameRatePreset.fps30);
+    expect(defaults.screenShareCodec, ScreenShareCodecPreference.h264);
+    expect(
+      defaults.screenShareDegradation,
+      ScreenShareDegradationPreference.maintainFramerate,
+    );
+
+    final missingFields = SessionPreferences.fromJson(const {});
+    expect(
+      missingFields.screenShareResolution,
+      ScreenShareResolutionPreset.p720,
+    );
+    expect(
+      missingFields.screenShareFrameRate,
+      ScreenShareFrameRatePreset.fps30,
+    );
+    expect(missingFields.screenShareCodec, ScreenShareCodecPreference.h264);
+    expect(
+      missingFields.screenShareDegradation,
+      ScreenShareDegradationPreference.maintainFramerate,
+    );
+
+    final roundTripped = SessionPreferences.fromJson(
+      const SessionPreferences(
+        nickname: 'TestUser',
+        screenShareResolution: ScreenShareResolutionPreset.p1080,
+        screenShareFrameRate: ScreenShareFrameRatePreset.fps60,
+        screenShareCodec: ScreenShareCodecPreference.vp8,
+        screenShareDegradation:
+            ScreenShareDegradationPreference.maintainResolution,
+      ).toJson(),
+    );
+    expect(
+      roundTripped.screenShareResolution,
+      ScreenShareResolutionPreset.p1080,
+    );
+    expect(roundTripped.screenShareFrameRate, ScreenShareFrameRatePreset.fps60);
+    expect(roundTripped.screenShareCodec, ScreenShareCodecPreference.vp8);
+    expect(
+      roundTripped.screenShareDegradation,
+      ScreenShareDegradationPreference.maintainResolution,
+    );
+  });
 }

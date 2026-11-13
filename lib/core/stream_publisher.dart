@@ -76,7 +76,7 @@ class StreamPublisherState {
     this.streamId,
     this.sourceId,
     this.sourceName,
-    this.resolution = ScreenShareResolutionPreset.p1080,
+    this.resolution = ScreenShareResolutionPreset.p720,
     this.frameRate = ScreenShareFrameRatePreset.fps30,
     this.hasAudio = false,
     this.isStarting = false,
@@ -411,10 +411,14 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
 
     final bindings = ref.read(webRtcBindingsProvider);
     final prefs = ref.read(preferencesProvider);
-    // TS6 official native client rejects certain platform-default H.264
-    // profiles (e.g. Constrained Baseline); force VP8 as the preferred
-    // video codec when creating offers for viewers.
-    const preferredCodec = 'VP8';
+    final preferredCodec =
+        prefs.screenShareCodec == ScreenShareCodecPreference.h264
+        ? 'H264'
+        : 'VP8';
+    final preferredMime =
+        prefs.screenShareCodec == ScreenShareCodecPreference.h264
+        ? 'video/h264'
+        : 'video/vp8';
 
     try {
       final peer = await bindings.createPeer({
@@ -462,7 +466,11 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
       }
 
       // Configure transceiver directions and preferred video codec.
-      await _configurePublisherTransceivers(bindings: bindings, peer: peer);
+      await _configurePublisherTransceivers(
+        bindings: bindings,
+        peer: peer,
+        preferredMimeType: preferredMime,
+      );
       if (!_isViewerSessionValid(
         currentGeneration,
         viewerClid,
@@ -857,6 +865,7 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
   Future<void> _configurePublisherTransceivers({
     required WebRtcBindings bindings,
     required RTCPeerConnection peer,
+    required String preferredMimeType,
   }) async {
     List<RTCRtpTransceiver> transceivers;
     try {
@@ -877,27 +886,32 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
         await _preferPrimaryVideoCodecs(
           capabilities: capabilities,
           transceiver: transceiver,
+          preferredMimeType: preferredMimeType,
         );
       }
     }
   }
 
-  /// Restricts the publisher's offer to VP8 and H.264, the codec set the
-  /// reference TS6 implementations hand to native viewers. libwebrtc then writes
-  /// the offer itself, so no SDP rewriting is needed to stay inside the command
-  /// line limit.
+  /// Restricts the publisher's offer to H.264 and VP8 with the configured codec
+  /// ordered first. libwebrtc then writes the offer itself, so no SDP rewriting
+  /// is needed to stay inside the command line limit.
   Future<void> _preferPrimaryVideoCodecs({
     required RTCRtpCapabilities? capabilities,
     required RTCRtpTransceiver transceiver,
+    required String preferredMimeType,
   }) async {
     final codecs = capabilities?.codecs;
     if (codecs == null || codecs.isEmpty) return;
     String mimeOf(RTCRtpCodecCapability codec) => codec.mimeType.toLowerCase();
+    final targetMime = preferredMimeType.toLowerCase();
+    final secondaryMime = targetMime == 'video/h264'
+        ? 'video/vp8'
+        : 'video/h264';
     final preferred = [
       for (final codec in codecs)
-        if (mimeOf(codec) == 'video/vp8') codec,
+        if (mimeOf(codec) == targetMime) codec,
       for (final codec in codecs)
-        if (mimeOf(codec) == 'video/h264') codec,
+        if (mimeOf(codec) == secondaryMime) codec,
     ];
     if (preferred.isEmpty) return;
     try {
