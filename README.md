@@ -26,7 +26,7 @@ _Yet another teamspeak client, multi-platform and open-source._
   <img alt="FlSpeak App Preview" src="website/public/preview-light.png" width="90%">
 </picture>
 
-Powered by [tsclient-rs](https://github.com/Dr1mH4X/tsclient-rs)
+Powered by [tsclient-rs](https://github.com/Dr1mH4X/tsclient-rs) · Supports [OpenProtocol](https://github.com/Dr1mH4X/tsclient-rs/blob/master/docs/open-protocol.md)
 
 </div>
 

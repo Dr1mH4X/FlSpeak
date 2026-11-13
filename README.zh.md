@@ -26,7 +26,7 @@ _又一个多平台，开放的 teamspeak 客户端._
   <img alt="FlSpeak 应用预览" src="website/public/preview-light.png" width="90%">
 </picture>
 
-由 [tsclient-rs](https://github.com/Dr1mH4X/tsclient-rs) 驱动
+由 [tsclient-rs](https://github.com/Dr1mH4X/tsclient-rs) 驱动 · 已接入 [OpenProtocol](https://github.com/Dr1mH4X/tsclient-rs/blob/master/docs/open-protocol.md)
 
 </div>
 
