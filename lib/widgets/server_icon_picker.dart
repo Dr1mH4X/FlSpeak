@@ -1,20 +1,36 @@
-import 'package:flutter/material.dart';
+import 'dart:typed_data';
+
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        Checkbox,
+        Chip,
+        Divider,
+        FilledButton,
+        IconButton,
+        LinearProgressIndicator,
+        OutlinedButton,
+        Switch,
+        TextButton;
 
 import '../core/server_icon.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
 import 'common.dart';
 import 'expressive_frame.dart';
+import 'monogram.dart';
 import 'prism.dart';
 
-Future<ServerIcon?> showServerIconPicker(
+Future<ServerIconChoice?> showServerIconPicker(
   BuildContext context,
-  ServerIcon selected,
-) => showAppModal<ServerIcon>(
+  ServerIconChoice selected, {
+  Uint8List? serverIconBytes,
+}) => showAppModal<ServerIconChoice>(
   context,
   title: AppLocalizations.of(context).serverIconTitle,
   builder: (context) => ServerIconGrid(
     selected: selected,
+    serverIconBytes: serverIconBytes,
     onSelected: (icon) => Navigator.of(context).pop(icon),
   ),
 );
@@ -23,21 +39,27 @@ class ServerIconGrid extends StatelessWidget {
   const ServerIconGrid({
     required this.selected,
     required this.onSelected,
+    this.serverIconBytes,
     super.key,
   });
 
-  final ServerIcon selected;
-  final ValueChanged<ServerIcon> onSelected;
+  final ServerIconChoice selected;
+  final ValueChanged<ServerIconChoice> onSelected;
+  final Uint8List? serverIconBytes;
 
   @override
   Widget build(BuildContext context) {
     final scheme = context.scheme;
     final l10n = AppLocalizations.of(context);
+    final choices = <ServerIconChoice>[
+      ServerIconChoice.auto,
+      for (final preset in ServerIcon.values) ServerIconChoice.preset(preset),
+    ];
     return Wrap(
       spacing: 12,
       runSpacing: 12,
       children: [
-        for (final icon in ServerIcon.values)
+        for (final icon in choices)
           SizedBox(
             width: 80,
             child: Semantics(
@@ -55,9 +77,12 @@ class ServerIconGrid extends StatelessWidget {
                         color: selected == icon
                             ? scheme.primaryContainer
                             : scheme.surfaceContainerHigh,
-                        child: Icon(
-                          icon.icon,
-                          color: selected == icon
+                        child: ServerIconGlyph(
+                          choice: icon,
+                          serverIconBytes: serverIconBytes,
+                          size: 48,
+                          useAutoGlyph: true,
+                          fallbackColor: selected == icon
                               ? scheme.onPrimaryContainer
                               : scheme.onSurfaceVariant,
                         ),

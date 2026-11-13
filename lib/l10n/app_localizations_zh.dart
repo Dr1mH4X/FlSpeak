@@ -507,6 +507,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get serverIconChange => '更换图标';
 
   @override
+  String get serverIconAuto => '跟随服务器';
+
+  @override
   String get serverIconCommunity => '社区';
 
   @override

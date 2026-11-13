@@ -171,6 +171,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
+  List<ServerIconView> dco_decode_list_server_icon_view(dynamic raw);
+
+  @protected
   List<ServerProfileView> dco_decode_list_server_profile_view(dynamic raw);
 
   @protected
@@ -207,7 +210,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<BotCommandView>? dco_decode_opt_list_bot_command_view(dynamic raw);
 
   @protected
+  Uint8List? dco_decode_opt_list_prim_u_8_strict(dynamic raw);
+
+  @protected
   PublisherSignal dco_decode_publisher_signal(dynamic raw);
+
+  @protected
+  ServerIconView dco_decode_server_icon_view(dynamic raw);
 
   @protected
   ServerProfileView dco_decode_server_profile_view(dynamic raw);
@@ -407,6 +416,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
+  List<ServerIconView> sse_decode_list_server_icon_view(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   List<ServerProfileView> sse_decode_list_server_profile_view(
     SseDeserializer deserializer,
   );
@@ -447,7 +461,13 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  Uint8List? sse_decode_opt_list_prim_u_8_strict(SseDeserializer deserializer);
+
+  @protected
   PublisherSignal sse_decode_publisher_signal(SseDeserializer deserializer);
+
+  @protected
+  ServerIconView sse_decode_server_icon_view(SseDeserializer deserializer);
 
   @protected
   ServerProfileView sse_decode_server_profile_view(
@@ -698,6 +718,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_server_icon_view(
+    List<ServerIconView> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_server_profile_view(
     List<ServerProfileView> self,
     SseSerializer serializer,
@@ -749,8 +775,20 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_opt_list_prim_u_8_strict(
+    Uint8List? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_publisher_signal(
     PublisherSignal self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_server_icon_view(
+    ServerIconView self,
     SseSerializer serializer,
   );
 

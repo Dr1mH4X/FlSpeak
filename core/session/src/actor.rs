@@ -25,8 +25,8 @@ use crate::store::{self, identity_path};
 use crate::streams::{self, StreamCoordinator, StreamEndReason};
 use crate::{
     AudioDeviceView, AudioDevicesView, BotCommandView, ChannelView, ClientType, ClientView,
-    SessionCommand, SessionError, SessionEvent, SessionState, SettingsManager, TextMessageView,
-    TransferDirection, VoiceStateView,
+    ServerIconView, SessionCommand, SessionError, SessionEvent, SessionState, SettingsManager,
+    TextMessageView, TransferDirection, VoiceStateView,
 };
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(8);
@@ -175,6 +175,25 @@ pub(crate) enum SessionSignal {
         epoch: u64,
         items: Vec<HashMap<String, String>>,
     },
+    /// `initserver` / `notifyserveredited` / `notifyserverupdated` 带来的服务器图标变化。
+    ServerInfoUpdated {
+        epoch: u64,
+        icon_id: Option<u32>,
+    },
+    /// 当前连接的服务器自定义图标下载完成。
+    ServerIconFetched {
+        epoch: u64,
+        server_id: String,
+        icon_id: u32,
+        result: Result<Vec<u8>, SessionError>,
+    },
+    /// 当前连接的频道图标下载完成。
+    ChannelIconFetched {
+        epoch: u64,
+        server_id: String,
+        icon_id: u32,
+        result: Result<Vec<u8>, SessionError>,
+    },
 }
 
 pub(crate) struct SessionAudio {
@@ -186,16 +205,23 @@ pub(crate) struct SessionAudio {
 
 type ImageNegotiation =
     Pin<Box<dyn std::future::Future<Output = Result<(String, FileDownloadInfo), SessionError>>>>;
+type ChannelIconKey = (u64, String, u32);
+type ChannelIconWaiters = Vec<oneshot::Sender<Result<Vec<u8>, SessionError>>>;
 
 struct PendingImage {
     remote_path: String,
     reply: oneshot::Sender<Result<Vec<u8>, SessionError>>,
+    preempt_retries: u8,
 }
 
 struct ActiveImage {
+    remote_path: String,
     negotiation: ImageNegotiation,
     reply: oneshot::Sender<Result<Vec<u8>, SessionError>>,
+    preempt_retries: u8,
 }
+
+const ICON_PREEMPT_RETRIES: u8 = 5;
 
 pub(crate) struct Actor {
     registry: ServerRegistry,
@@ -252,6 +278,10 @@ pub(crate) struct Actor {
     last_announce_time: Option<Instant>,
     pending_images: VecDeque<PendingImage>,
     active_image: Option<ActiveImage>,
+    server_icons: HashMap<String, crate::server_icons::CachedServerIcon>,
+    active_server_icon_id: Option<u32>,
+    fetching_server_icon: Option<(u64, String, u32)>,
+    in_flight_channel_icons: HashMap<ChannelIconKey, ChannelIconWaiters>,
     disconnect_tx: watch::Sender<u64>,
     disconnect_rx: watch::Receiver<u64>,
 }
@@ -275,6 +305,13 @@ impl Actor {
         let logger: Arc<dyn Logger> = Arc::new(EventLogger {
             events: events.clone(),
         });
+        let active_server_ids: Vec<&str> = registry
+            .profiles()
+            .iter()
+            .map(|profile| profile.id.as_str())
+            .collect();
+        let server_icons = crate::server_icons::load(&store_path, &active_server_ids);
+        crate::channel_icons::prune_orphans(&store_path, &active_server_ids);
         Self {
             registry,
             store_path,
@@ -329,6 +366,10 @@ impl Actor {
             last_announce_time: None,
             pending_images: VecDeque::new(),
             active_image: None,
+            server_icons,
+            active_server_icon_id: None,
+            fetching_server_icon: None,
+            in_flight_channel_icons: HashMap::new(),
             disconnect_tx,
             disconnect_rx,
         }
@@ -426,6 +467,17 @@ impl Actor {
             }
             SessionCommand::ListServers { reply } => {
                 let _ = reply.send(self.registry.profiles().to_vec());
+            }
+            SessionCommand::ListServerIcons { reply } => {
+                let icons = self
+                    .server_icons
+                    .iter()
+                    .map(|(server_id, entry)| ServerIconView {
+                        server_id: server_id.clone(),
+                        bytes: entry.bytes.clone(),
+                    })
+                    .collect();
+                let _ = reply.send(icons);
             }
             SessionCommand::State { reply } => {
                 let _ = reply.send(self.state.clone());
@@ -690,7 +742,7 @@ impl Actor {
                 );
             }
             SessionCommand::FetchIcon { icon_id, reply } => {
-                self.fetch_icon(icon_id, reply);
+                self.fetch_channel_icon(icon_id, reply);
             }
             SessionCommand::FetchAvatar { uid, reply } => match avatar_file_name(&uid) {
                 Ok(path) => self.fetch_server_image(&path, reply),
@@ -839,6 +891,15 @@ impl Actor {
         .map_err(SessionError::Storage)?;
         self.registry = registry;
         self.emit(SessionEvent::Servers(self.registry.profiles().to_vec()));
+        crate::channel_icons::remove_server(&self.store_path, &id);
+        if crate::server_icons::remove(&self.store_path, &mut self.server_icons, &id)
+            .unwrap_or(false)
+        {
+            self.emit(SessionEvent::ServerIconUpdated {
+                server_id: id,
+                bytes: None,
+            });
+        }
         Ok(())
     }
 
@@ -864,6 +925,24 @@ impl Actor {
         .map_err(SessionError::Storage)?;
         self.registry = registry;
         self.emit(SessionEvent::Servers(self.registry.profiles().to_vec()));
+        if profile.id != id {
+            crate::channel_icons::move_server(&self.store_path, &id, &profile.id);
+            if let Ok(Some(entry)) = crate::server_icons::move_entry(
+                &self.store_path,
+                &mut self.server_icons,
+                &id,
+                &profile.id,
+            ) {
+                self.emit(SessionEvent::ServerIconUpdated {
+                    server_id: id,
+                    bytes: None,
+                });
+                self.emit(SessionEvent::ServerIconUpdated {
+                    server_id: profile.id.clone(),
+                    bytes: Some(entry.bytes),
+                });
+            }
+        }
         Ok(profile)
     }
 
@@ -1074,12 +1153,34 @@ impl Actor {
                         message: err.to_string(),
                     });
                 }
+                let mut welcome_message = None;
+                if let Some(client) = self.client.clone() {
+                    let mut info = client.server_info();
+                    let need_fetch = info
+                        .as_ref()
+                        .is_none_or(|i| i.icon_id.is_none() || i.welcome_message.is_empty());
+                    if need_fetch && let Ok(fetched) = client.get_server_info().await {
+                        info = Some(fetched);
+                    }
+                    let icon_id = info.as_ref().and_then(|i| i.icon_id);
+                    if !reconnecting && let Some(info) = info.as_ref() {
+                        welcome_message = Self::build_welcome_message(
+                            &profile,
+                            &info.welcome_message,
+                            now_millis(),
+                        );
+                    }
+                    self.sync_server_icon(profile.id.clone(), icon_id);
+                }
                 self.maybe_announce_identity().await;
                 self.start_voice();
                 // 服务器端自己的标志在（重）连后是重置过的，把本地状态重新同步。
                 self.report_voice_flags().await;
                 self.emit_voice_state();
                 self.emit_history().await;
+                if let Some(welcome) = welcome_message {
+                    self.emit(SessionEvent::TextMessage(welcome));
+                }
                 Ok(())
             }
             Ok(Err(err)) => {
@@ -1614,6 +1715,38 @@ impl Actor {
         }
     }
 
+    fn build_welcome_message(
+        profile: &ServerProfile,
+        welcome_message: &str,
+        at: u64,
+    ) -> Option<TextMessageView> {
+        let trimmed = welcome_message.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        let normalized = crate::text_format::bbcode_to_markdown(trimmed);
+        let normalized = normalized.trim();
+        if normalized.is_empty() {
+            return None;
+        }
+        let label = profile.label.trim();
+        let from = if label.is_empty() {
+            profile.host.clone()
+        } else {
+            label.to_string()
+        };
+        Some(TextMessageView {
+            from,
+            from_uid: String::new(),
+            from_id: 0,
+            message: normalized.to_string(),
+            target_mode: 3,
+            target_id: 0,
+            peer_uid: String::new(),
+            at,
+        })
+    }
+
     async fn emit_history(&self) {
         let Some(server_id) = &self.active_server_id else {
             return;
@@ -1810,20 +1943,156 @@ impl Actor {
         self.emit_voice_state();
     }
 
-    fn fetch_icon(&mut self, icon_id: u32, reply: oneshot::Sender<Result<Vec<u8>, SessionError>>) {
+    fn fetch_remote_icon(
+        &mut self,
+        icon_id: u32,
+        reply: oneshot::Sender<Result<Vec<u8>, SessionError>>,
+    ) {
         if icon_id == 0 {
             let _ = reply.send(Err(SessionError::Transfer(
                 "icon id must be nonzero".into(),
             )));
             return;
         }
-        self.fetch_server_image(&tsclient_rs::icon_file_name(icon_id), reply);
+        self.enqueue_server_image(
+            &tsclient_rs::icon_file_name(icon_id),
+            reply,
+            ICON_PREEMPT_RETRIES,
+        );
+    }
+
+    fn fetch_channel_icon(
+        &mut self,
+        icon_id: u32,
+        reply: oneshot::Sender<Result<Vec<u8>, SessionError>>,
+    ) {
+        if icon_id == 0 {
+            let _ = reply.send(Err(SessionError::Transfer(
+                "icon id must be nonzero".into(),
+            )));
+            return;
+        }
+        let Some(server_id) = self.active_server_id.clone() else {
+            let _ = reply.send(Err(SessionError::NotConnected));
+            return;
+        };
+        if let Some(bytes) = crate::channel_icons::load_hit(&self.store_path, &server_id, icon_id) {
+            let _ = reply.send(Ok(bytes));
+            return;
+        }
+        let epoch = self.connection_epoch;
+        let key = (epoch, server_id.clone(), icon_id);
+        if let Some(waiters) = self.in_flight_channel_icons.get_mut(&key) {
+            waiters.push(reply);
+            return;
+        }
+        self.in_flight_channel_icons.insert(key, vec![reply]);
+        let (tx, rx) = oneshot::channel();
+        self.fetch_remote_icon(icon_id, tx);
+        let signals = self.signals.clone();
+        tokio::task::spawn_local(async move {
+            let result = match rx.await {
+                Ok(result) => result,
+                Err(_) => Err(SessionError::NotConnected),
+            };
+            let _ = signals.send(SessionSignal::ChannelIconFetched {
+                epoch,
+                server_id,
+                icon_id,
+                result,
+            });
+        });
+    }
+
+    fn clone_image_error(error: &SessionError) -> SessionError {
+        match error {
+            SessionError::Protocol(msg) => SessionError::Protocol(msg.clone()),
+            SessionError::Transfer(msg) => SessionError::Transfer(msg.clone()),
+            SessionError::Storage(msg) => SessionError::Storage(msg.clone()),
+            SessionError::Stream(msg) => SessionError::Stream(msg.clone()),
+            SessionError::Spawn(msg) => SessionError::Spawn(msg.clone()),
+            SessionError::Timeout => SessionError::Timeout,
+            SessionError::NotConnected => SessionError::NotConnected,
+            SessionError::Closed => SessionError::Closed,
+            SessionError::ChannelPasswordRequired => SessionError::ChannelPasswordRequired,
+            SessionError::NotInChannel => SessionError::NotInChannel,
+            other => SessionError::Transfer(other.to_string()),
+        }
+    }
+
+    fn sync_server_icon(&mut self, server_id: String, icon_id: Option<u32>) {
+        let Some(icon_id) = icon_id else {
+            return;
+        };
+        self.active_server_icon_id = Some(icon_id);
+        if icon_id == 0 {
+            self.fetching_server_icon = None;
+            match crate::server_icons::remove(&self.store_path, &mut self.server_icons, &server_id)
+            {
+                Ok(true) => {
+                    self.emit(SessionEvent::ServerIconUpdated {
+                        server_id,
+                        bytes: None,
+                    });
+                }
+                Ok(false) => {}
+                Err(error) => {
+                    self.emit(SessionEvent::Log {
+                        level: "warn".into(),
+                        message: format!("清理服务器图标缓存失败: {error}"),
+                    });
+                }
+            }
+            return;
+        }
+        if self
+            .server_icons
+            .get(&server_id)
+            .is_some_and(|entry| entry.icon_id == icon_id)
+        {
+            return;
+        }
+        if self
+            .fetching_server_icon
+            .as_ref()
+            .is_some_and(|(epoch, id, icon)| {
+                *epoch == self.connection_epoch && id == &server_id && *icon == icon_id
+            })
+        {
+            return;
+        }
+        let epoch = self.connection_epoch;
+        self.fetching_server_icon = Some((epoch, server_id.clone(), icon_id));
+        let (reply, rx) = oneshot::channel();
+        self.fetch_remote_icon(icon_id, reply);
+        let signals = self.signals.clone();
+        tokio::task::spawn_local(async move {
+            let result = match rx.await {
+                Ok(result) => result,
+                Err(_) => Err(SessionError::NotConnected),
+            };
+            let _ = signals.send(SessionSignal::ServerIconFetched {
+                epoch,
+                server_id,
+                icon_id,
+                result,
+            });
+        });
     }
 
     fn fetch_server_image(
         &mut self,
         remote_path: &str,
         reply: oneshot::Sender<Result<Vec<u8>, SessionError>>,
+    ) {
+        self.enqueue_server_image(remote_path, reply, 0);
+    }
+
+    fn enqueue_server_image(
+        &mut self,
+        remote_path: &str,
+        reply: oneshot::Sender<Result<Vec<u8>, SessionError>>,
+        preempt_retries: u8,
     ) {
         if self.pending_images.len() >= 32 {
             let _ = reply.send(Err(SessionError::Transfer(
@@ -1834,6 +2103,7 @@ impl Actor {
         self.pending_images.push_back(PendingImage {
             remote_path: remote_path.to_owned(),
             reply,
+            preempt_retries,
         });
     }
 
@@ -1860,9 +2130,12 @@ impl Actor {
                 return;
             }
         };
-        let path = pending.remote_path;
+        let remote_path = pending.remote_path;
+        let path = remote_path.clone();
         self.active_image = Some(ActiveImage {
+            remote_path,
             reply: pending.reply,
+            preempt_retries: pending.preempt_retries,
             negotiation: Box::pin(async move {
                 let info = tokio::time::timeout(
                     Duration::from_secs(5),
@@ -1884,9 +2157,17 @@ impl Actor {
 
     fn interrupt_active_image(&mut self) {
         if let Some(active) = self.active_image.take() {
-            let _ = active.reply.send(Err(SessionError::Transfer(
-                "image negotiation interrupted".into(),
-            )));
+            if active.preempt_retries > 0 {
+                self.pending_images.push_back(PendingImage {
+                    remote_path: active.remote_path,
+                    reply: active.reply,
+                    preempt_retries: active.preempt_retries - 1,
+                });
+            } else {
+                let _ = active.reply.send(Err(SessionError::Transfer(
+                    "image negotiation interrupted".into(),
+                )));
+            }
         }
     }
 
@@ -2208,6 +2489,105 @@ impl Actor {
                 if epoch == self.connection_epoch {
                     self.auto_reconnect = false;
                     self.on_connection_lost(message, false).await;
+                }
+            }
+            SessionSignal::ServerInfoUpdated { epoch, icon_id } => {
+                if epoch == self.connection_epoch
+                    && let Some(server_id) = self.active_server_id.clone()
+                {
+                    self.sync_server_icon(server_id, icon_id);
+                }
+            }
+            SessionSignal::ServerIconFetched {
+                epoch,
+                server_id,
+                icon_id,
+                result,
+            } => {
+                if epoch != self.connection_epoch
+                    || self.active_server_id.as_deref() != Some(server_id.as_str())
+                    || self.active_server_icon_id != Some(icon_id)
+                {
+                    return;
+                }
+                self.fetching_server_icon = None;
+                match result {
+                    Ok(bytes) => {
+                        if let Err(error) = crate::server_icons::save(
+                            &self.store_path,
+                            &mut self.server_icons,
+                            &server_id,
+                            icon_id,
+                            bytes.clone(),
+                        ) {
+                            self.emit(SessionEvent::Log {
+                                level: "warn".into(),
+                                message: format!("保存服务器图标缓存失败: {error}"),
+                            });
+                        }
+                        self.emit(SessionEvent::ServerIconUpdated {
+                            server_id,
+                            bytes: Some(bytes),
+                        });
+                    }
+                    Err(error) => {
+                        if !matches!(error, SessionError::NotConnected) {
+                            self.emit(SessionEvent::Log {
+                                level: "warn".into(),
+                                message: format!("获取服务器图标 {icon_id} 失败: {error}"),
+                            });
+                        }
+                    }
+                }
+            }
+            SessionSignal::ChannelIconFetched {
+                epoch,
+                server_id,
+                icon_id,
+                result,
+            } => {
+                let Some(waiters) =
+                    self.in_flight_channel_icons
+                        .remove(&(epoch, server_id.clone(), icon_id))
+                else {
+                    return;
+                };
+                if epoch != self.connection_epoch
+                    || self.active_server_id.as_deref() != Some(server_id.as_str())
+                {
+                    for reply in waiters {
+                        let _ = reply.send(Err(SessionError::NotConnected));
+                    }
+                    return;
+                }
+                match result {
+                    Ok(bytes) => {
+                        if let Err(error) = crate::channel_icons::save(
+                            &self.store_path,
+                            &server_id,
+                            icon_id,
+                            &bytes,
+                        ) {
+                            self.emit(SessionEvent::Log {
+                                level: "warn".into(),
+                                message: format!("保存频道图标缓存失败: {error}"),
+                            });
+                        }
+                        for reply in waiters {
+                            let _ = reply.send(Ok(bytes.clone()));
+                        }
+                    }
+                    Err(error) => {
+                        if !matches!(error, SessionError::NotConnected) {
+                            self.emit(SessionEvent::Log {
+                                level: "warn".into(),
+                                message: format!("获取频道图标 {icon_id} 失败: {error}"),
+                            });
+                        }
+                        for reply in waiters {
+                            let _ = reply.send(Err(Self::clone_image_error(&error)));
+                        }
+                    }
                 }
             }
         }
@@ -2837,6 +3217,13 @@ impl Actor {
         for request in self.pending_images.drain(..) {
             let _ = request.reply.send(Err(SessionError::NotConnected));
         }
+        for (_, waiters) in self.in_flight_channel_icons.drain() {
+            for reply in waiters {
+                let _ = reply.send(Err(SessionError::NotConnected));
+            }
+        }
+        self.active_server_icon_id = None;
+        self.fetching_server_icon = None;
         self.audio_since = Instant::now();
         self.voice.set_meter_epoch(None);
         self.levels.set_epoch(None);
@@ -3832,6 +4219,20 @@ fn register_handlers(
         }
         if let ProtocolEvent::DirectorySnapshot(snapshot) = event {
             let _ = channel.send(SessionSignal::Snapshot { epoch, snapshot });
+        }
+    }));
+
+    let channel = signals.clone();
+    let live = Arc::clone(&current);
+    client.on_server_info_updated(Arc::new(move |event: ProtocolEvent| {
+        if live.load(Ordering::Relaxed) != epoch {
+            return;
+        }
+        if let ProtocolEvent::ServerInfoUpdated(info) = event {
+            let _ = channel.send(SessionSignal::ServerInfoUpdated {
+                epoch,
+                icon_id: info.icon_id,
+            });
         }
     }));
 
@@ -5504,5 +5905,285 @@ mod tests {
                 ("error".into(), "allowed actor error".into()),
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn server_icon_cache_dedupes_fetches_and_clears_on_zero_icon_id() {
+        tokio::task::LocalSet::new()
+            .run_until(async {
+                let temp = std::env::temp_dir().join(format!(
+                    "flspeak-actor-server-icon-{:x}",
+                    rand::random::<u64>()
+                ));
+                let _ = std::fs::create_dir_all(&temp);
+                let mut actor = audio_actor();
+                actor.store_path = temp.join("preferences.json");
+                let mut events = actor.events.subscribe();
+                actor.active_server_id = Some("127.0.0.1:9987".into());
+
+                // 模拟首次收到有效服务器图标 id 触发入队并完成下载
+                actor.sync_server_icon("127.0.0.1:9987".into(), Some(12345));
+                assert_eq!(
+                    actor.fetching_server_icon,
+                    Some((actor.connection_epoch, "127.0.0.1:9987".into(), 12345))
+                );
+                assert_eq!(actor.pending_images.len(), 1);
+                let pending = actor.pending_images.pop_front().unwrap();
+                assert_eq!(pending.remote_path, "/icon_12345");
+                let _ = pending.reply.send(Ok(vec![137, 80, 78, 71]));
+                let signal = actor.signal_rx.recv().await.unwrap();
+                actor.handle_signal(signal).await;
+
+                assert!(actor.fetching_server_icon.is_none());
+                assert_eq!(
+                    actor.server_icons.get("127.0.0.1:9987").map(|e| e.icon_id),
+                    Some(12345)
+                );
+
+                // 重复收到相同 icon_id 不重复入队
+                actor.sync_server_icon("127.0.0.1:9987".into(), Some(12345));
+                assert!(actor.pending_images.is_empty());
+
+                // 收到 None 时保留已有缓存
+                actor.sync_server_icon("127.0.0.1:9987".into(), None);
+                assert!(actor.server_icons.contains_key("127.0.0.1:9987"));
+
+                // 收到 Some(0) 时清除缓存并广播清除事件
+                actor
+                    .handle_signal(SessionSignal::ServerInfoUpdated {
+                        epoch: actor.connection_epoch,
+                        icon_id: Some(0),
+                    })
+                    .await;
+                assert!(!actor.server_icons.contains_key("127.0.0.1:9987"));
+                assert!(
+                    crate::server_icons::load(&actor.store_path, &["127.0.0.1:9987"]).is_empty()
+                );
+
+                let updates: Vec<(String, Option<Vec<u8>>)> =
+                    std::iter::from_fn(|| events.try_recv().ok())
+                        .filter_map(|ev| match ev {
+                            SessionEvent::ServerIconUpdated { server_id, bytes } => {
+                                Some((server_id, bytes))
+                            }
+                            _ => None,
+                        })
+                        .collect();
+                assert_eq!(
+                    updates,
+                    vec![
+                        ("127.0.0.1:9987".into(), Some(vec![137, 80, 78, 71])),
+                        ("127.0.0.1:9987".into(), None),
+                    ]
+                );
+
+                let _ = std::fs::remove_dir_all(&temp);
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn channel_icon_cache_dedupes_in_flight_and_serves_disk_hits_per_server() {
+        tokio::task::LocalSet::new()
+            .run_until(async {
+                let temp = std::env::temp_dir().join(format!(
+                    "flspeak-actor-channel-icon-{:x}",
+                    rand::random::<u64>()
+                ));
+                let _ = std::fs::create_dir_all(&temp);
+                let mut actor = audio_actor();
+                actor.store_path = temp.join("preferences.json");
+                actor.active_server_id = Some("a.example:9987".into());
+
+                // 未命中时并发请求同一 (server_id, icon_id) 只入队一次
+                let (reply_a, rx_a) = oneshot::channel();
+                let (reply_b, rx_b) = oneshot::channel();
+                actor.fetch_channel_icon(777, reply_a);
+                actor.fetch_channel_icon(777, reply_b);
+                assert_eq!(actor.pending_images.len(), 1);
+                let pending = actor.pending_images.pop_front().unwrap();
+                assert_eq!(pending.remote_path, "/icon_777");
+                let _ = pending.reply.send(Ok(vec![1, 2, 3, 4]));
+                let signal = actor.signal_rx.recv().await.unwrap();
+                actor.handle_signal(signal).await;
+
+                assert_eq!(rx_a.await.unwrap().unwrap(), vec![1, 2, 3, 4]);
+                assert_eq!(rx_b.await.unwrap().unwrap(), vec![1, 2, 3, 4]);
+
+                // 同服再次请求直接命中磁盘缓存，不再入队
+                let (reply_hit, rx_hit) = oneshot::channel();
+                actor.fetch_channel_icon(777, reply_hit);
+                assert!(actor.pending_images.is_empty());
+                assert_eq!(rx_hit.await.unwrap().unwrap(), vec![1, 2, 3, 4]);
+
+                // 切服后相同 icon_id 不串图，重新入队拉取
+                actor.active_server_id = Some("b.example:9987".into());
+                let (reply_other, rx_other) = oneshot::channel();
+                actor.fetch_channel_icon(777, reply_other);
+                assert_eq!(actor.pending_images.len(), 1);
+                let pending_other = actor.pending_images.pop_front().unwrap();
+                let _ = pending_other.reply.send(Ok(vec![9, 9, 9]));
+                let signal_other = actor.signal_rx.recv().await.unwrap();
+                actor.handle_signal(signal_other).await;
+                assert_eq!(rx_other.await.unwrap().unwrap(), vec![9, 9, 9]);
+
+                let _ = std::fs::remove_dir_all(&temp);
+            })
+            .await;
+    }
+
+    #[test]
+    fn build_welcome_message_uses_label_or_host_and_skips_blank() {
+        let labeled = ServerProfile {
+            id: "ts.example.com:9987".into(),
+            label: " My Community ".into(),
+            host: "ts.example.com".into(),
+            port: 9987,
+            server_password: None,
+            default_channel: None,
+            default_channel_password: None,
+        };
+        let message = Actor::build_welcome_message(&labeled, "  Welcome to TS!  ", 42).unwrap();
+        assert_eq!(message.from, "My Community");
+        assert_eq!(message.from_uid, "");
+        assert_eq!(message.from_id, 0);
+        assert_eq!(message.message, "Welcome to TS!");
+        assert_eq!(message.target_mode, 3);
+        assert_eq!(message.target_id, 0);
+        assert_eq!(message.at, 42);
+
+        let unlabeled = ServerProfile {
+            label: "   ".into(),
+            ..labeled.clone()
+        };
+        let fallback = Actor::build_welcome_message(&unlabeled, "Hello", 99).unwrap();
+        assert_eq!(fallback.from, "ts.example.com");
+
+        assert!(Actor::build_welcome_message(&labeled, "  \n\t ", 100).is_none());
+        assert!(Actor::build_welcome_message(&labeled, "[center]   [/center]", 101).is_none());
+
+        let bbcode_welcome = concat!(
+            "[COLOR=#ff55ff][I]Welcome notice[/I][/COLOR] ",
+            "Portal [URL]https://portal.example.com/[/URL] ",
+            "[COLOR=#FFD700][B]Client guide[/B] ",
+            "[URL=https://docs.example.com/guide]Open guide [/URL][/COLOR]",
+        );
+        let converted = Actor::build_welcome_message(&labeled, bbcode_welcome, 102).unwrap();
+        assert_eq!(
+            converted.message,
+            concat!(
+                r##"<color hex="#ff55ff">*Welcome notice*</color> "##,
+                "Portal [https://portal.example.com/](https://portal.example.com/) ",
+                r##"<color hex="#ffd700">**Client guide** "##,
+                "[Open guide ](https://docs.example.com/guide)</color>",
+            )
+        );
+    }
+
+    struct StallFirstFtInit {
+        started: Arc<tokio::sync::Notify>,
+        calls: Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    impl tsclient_rs::CommandMiddleware for StallFirstFtInit {
+        fn wrap(&self, _: TestCommandHandler) -> TestCommandHandler {
+            let started = Arc::clone(&self.started);
+            let calls = Arc::clone(&self.calls);
+            Arc::new(move |command| {
+                let started = Arc::clone(&started);
+                let calls = Arc::clone(&calls);
+                Box::pin(async move {
+                    if command.starts_with("ftinitdownload ")
+                        && calls.fetch_add(1, Ordering::SeqCst) == 0
+                    {
+                        started.notify_one();
+                        tokio::time::sleep(Duration::from_millis(300)).await;
+                    }
+                    Err(tsclient_rs::Error::ServerError {
+                        id: "2568".into(),
+                        server_message: "denied".into(),
+                        extra_message: None,
+                    })
+                })
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn icon_negotiation_requeues_when_preempted_by_control_command() {
+        tokio::task::LocalSet::new()
+            .run_until(async {
+                let started = Arc::new(tokio::sync::Notify::new());
+                let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+                let client = Client::new(
+                    tsclient_rs::generateIdentity(0),
+                    "127.0.0.1:9987".into(),
+                    "test".into(),
+                    tsclient_rs::ClientOptions {
+                        command_middleware: vec![Box::new(StallFirstFtInit {
+                            started: Arc::clone(&started),
+                            calls: Arc::clone(&calls),
+                        })],
+                        ..Default::default()
+                    },
+                );
+                client.mark_connected();
+                let temp = std::env::temp_dir().join(format!(
+                    "flspeak-actor-icon-requeue-{:x}",
+                    rand::random::<u64>()
+                ));
+                let _ = std::fs::create_dir_all(&temp);
+                let mut actor = audio_actor();
+                actor.store_path = temp.join("preferences.json");
+                actor.client = Some(Arc::new(client));
+                actor.active_server_id = Some("127.0.0.1:9987".into());
+                actor.transfer_target = Some(ServerTarget {
+                    host: "127.0.0.1".into(),
+                    port: 9987,
+                });
+                let (commands, rx) = mpsc::unbounded_channel();
+                let task = tokio::task::spawn_local(async move {
+                    actor.run(rx).await;
+                });
+
+                let (reply, result) = oneshot::channel();
+                commands
+                    .send(SessionCommand::FetchIcon {
+                        icon_id: 777,
+                        reply,
+                    })
+                    .unwrap();
+                started.notified().await;
+
+                // 控制命令抢占后，图标协商被重新入队而不是直接失败。
+                let (ptt_reply, ptt_rx) = oneshot::channel();
+                commands
+                    .send(SessionCommand::SetPttMode {
+                        enabled: true,
+                        reply: ptt_reply,
+                    })
+                    .unwrap();
+                tokio::time::timeout(Duration::from_millis(100), ptt_rx)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .unwrap();
+
+                let icon_err = tokio::time::timeout(Duration::from_secs(1), result)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .unwrap_err();
+                assert!(
+                    matches!(icon_err, SessionError::Protocol(ref msg) if msg.contains("denied")),
+                    "expected second attempt protocol error after requeue, got {icon_err:?}"
+                );
+                assert_eq!(calls.load(Ordering::SeqCst), 2);
+
+                commands.send(SessionCommand::Shutdown).unwrap();
+                task.await.unwrap();
+                let _ = std::fs::remove_dir_all(&temp);
+            })
+            .await;
     }
 }

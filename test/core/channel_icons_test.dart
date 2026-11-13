@@ -66,4 +66,36 @@ void main() {
     core.requests[1].complete(Uint8List.fromList([2]));
     expect(await container.read(channelIconProvider(42).future), [2]);
   });
+
+  test('retries transient queue-full and interrupted errors without retrying permanent failures', () {
+    expect(
+      isTransientChannelIconError(StateError('image request queue is full')),
+      isTrue,
+    );
+    expect(
+      isTransientChannelIconError(StateError('image negotiation interrupted')),
+      isTrue,
+    );
+    expect(
+      isTransientChannelIconError(
+        StateError('download ended with 2078 bytes missing'),
+      ),
+      isFalse,
+    );
+    expect(
+      channelIconRetryDelay(0, StateError('image request queue is full')),
+      const Duration(milliseconds: 300),
+    );
+    expect(
+      channelIconRetryDelay(5, StateError('image request queue is full')),
+      isNull,
+    );
+    expect(
+      channelIconRetryDelay(
+        0,
+        StateError('download ended with 2078 bytes missing'),
+      ),
+      isNull,
+    );
+  });
 }

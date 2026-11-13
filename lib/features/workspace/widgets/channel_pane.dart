@@ -98,6 +98,11 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
       if (!context.mounted) {
         return;
       }
+      if (ref.read(selectedChannelProvider)?.channelId == channel.id) {
+        ref
+            .read(sessionViewProvider.notifier)
+            .selectChatScope(ChatScope.channel);
+      }
       // 抽屉不属于路由栈：加入频道后先收起抽屉，再到外壳切回工作区。
       // 桌面没有打开中的抽屉，这一步是空操作。
       Scaffold.maybeOf(context)?.closeDrawer();

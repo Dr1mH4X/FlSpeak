@@ -1,6 +1,17 @@
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        Checkbox,
+        Chip,
+        Divider,
+        FilledButton,
+        IconButton,
+        LinearProgressIndicator,
+        OutlinedButton,
+        Switch,
+        TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/providers.dart';
@@ -29,10 +40,13 @@ class ServerBadge extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = context.scheme;
-    final icon = ref.watch(
+    final choice = ref.watch(
       preferencesProvider.select(
-        (preferences) => preferences.serverIcons[id] ?? ServerIcon.community,
+        (preferences) => preferences.serverIcons[id] ?? ServerIconChoice.auto,
       ),
+    );
+    final serverBytes = ref.watch(
+      sessionViewProvider.select((view) => view.serverIconBytes[id]),
     );
     return ExcludeSemantics(
       child: SizedBox.square(
@@ -46,10 +60,11 @@ class ServerBadge extends ConsumerWidget {
               color: selected
                   ? scheme.primaryContainer
                   : scheme.surfaceContainerHigh,
-              child: Icon(
-                icon.icon,
-                size: size * 0.5,
-                color: selected
+              child: ServerIconGlyph(
+                choice: choice,
+                serverIconBytes: serverBytes,
+                size: size,
+                fallbackColor: selected
                     ? scheme.onPrimaryContainer
                     : scheme.onSurfaceVariant,
               ),
@@ -67,6 +82,52 @@ class ServerBadge extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class ServerIconGlyph extends StatelessWidget {
+  const ServerIconGlyph({
+    required this.choice,
+    required this.size,
+    required this.fallbackColor,
+    this.serverIconBytes,
+    this.useAutoGlyph = false,
+    super.key,
+  });
+
+  final ServerIconChoice choice;
+  final Uint8List? serverIconBytes;
+  final double size;
+  final Color fallbackColor;
+  final bool useAutoGlyph;
+
+  @override
+  Widget build(BuildContext context) {
+    final fallback = Icon(
+      useAutoGlyph ? choice.pickerIcon : choice.fallbackPreset.icon,
+      size: size * 0.5,
+      color: fallbackColor,
+    );
+    final bytes = choice.isAuto ? serverIconBytes : null;
+    if (bytes == null) return fallback;
+    final imageSize = size * 0.55;
+    final cacheExtent = (imageSize * MediaQuery.devicePixelRatioOf(context))
+        .round()
+        .clamp(1, 256);
+    return Image.memory(
+      bytes,
+      width: imageSize,
+      height: imageSize,
+      fit: BoxFit.contain,
+      cacheWidth: cacheExtent,
+      cacheHeight: cacheExtent,
+      excludeFromSemantics: true,
+      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+        if (wasSynchronouslyLoaded || frame != null) return child;
+        return fallback;
+      },
+      errorBuilder: (context, error, stackTrace) => fallback,
     );
   }
 }

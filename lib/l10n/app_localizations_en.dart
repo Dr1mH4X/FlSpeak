@@ -513,6 +513,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get serverIconChange => 'Change icon';
 
   @override
+  String get serverIconAuto => 'Server icon';
+
+  @override
   String get serverIconCommunity => 'Community';
 
   @override

@@ -17,6 +17,7 @@ import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
 import '../../../widgets/expressive_frame.dart';
+import '../../../widgets/monogram.dart';
 import '../../../widgets/prism.dart';
 import '../../../widgets/server_icon_picker.dart';
 
@@ -123,7 +124,7 @@ class _AddServerForm extends ConsumerStatefulWidget {
 }
 
 class _AddServerFormState extends ConsumerState<_AddServerForm> {
-  ServerIcon _icon = ServerIcon.community;
+  ServerIconChoice _icon = ServerIconChoice.auto;
   final _address = TextEditingController();
   final _label = TextEditingController();
   final _addressFocus = FocusNode();
@@ -142,7 +143,7 @@ class _AddServerFormState extends ConsumerState<_AddServerForm> {
       _label.text = server.label;
       _icon =
           ref.read(preferencesProvider).serverIcons[server.id] ??
-          ServerIcon.community;
+          ServerIconChoice.auto;
     }
   }
 
@@ -274,7 +275,15 @@ class _AddServerFormState extends ConsumerState<_AddServerForm> {
           children: [
             ExpressiveFrame(
               size: 44,
-              child: Icon(_icon.icon, color: context.scheme.onPrimaryContainer),
+              child: ServerIconGlyph(
+                choice: _icon,
+                serverIconBytes: widget.server == null
+                    ? null
+                    : view.serverIconBytes[widget.server!.id],
+                size: 44,
+                useAutoGlyph: true,
+                fallbackColor: context.scheme.onPrimaryContainer,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -284,7 +293,13 @@ class _AddServerFormState extends ConsumerState<_AddServerForm> {
               onPressed: _submitting
                   ? null
                   : () async {
-                      final icon = await showServerIconPicker(context, _icon);
+                      final icon = await showServerIconPicker(
+                        context,
+                        _icon,
+                        serverIconBytes: widget.server == null
+                            ? null
+                            : view.serverIconBytes[widget.server!.id],
+                      );
                       if (icon != null && mounted) setState(() => _icon = icon);
                     },
               child: Text(l10n.serverIconChange),

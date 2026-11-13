@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart'
     hide
         ButtonStyle,
+        Checkbox,
+        Chip,
+        Divider,
         FilledButton,
         IconButton,
+        LinearProgressIndicator,
         OutlinedButton,
         Switch,
         TextButton;
@@ -16,6 +20,7 @@ import '../../l10n/app_localizations.dart';
 import '../../theme/app_motion.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common.dart';
+import '../../widgets/monogram.dart';
 import '../../widgets/prism.dart';
 import '../../widgets/window_header.dart';
 import '../settings/widgets/image_host_dialog.dart';
@@ -268,7 +273,15 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
       case _MainTab.chat:
         return ChatPane(
           avatarBuilder: (message) =>
-              SessionMemberAvatar(uid: message.fromUid, nickname: message.from),
+              message.scope == ChatScope.server &&
+                  message.fromId == 0 &&
+                  message.fromUid.isEmpty &&
+                  view.activeServerId != null
+              ? ServerBadge(id: view.activeServerId!, size: AvatarSize.medium)
+              : SessionMemberAvatar(
+                  uid: message.fromUid,
+                  nickname: message.from,
+                ),
           key: ValueKey(channel.id),
           channelName: channelDisplayName(channel),
           messages: view.visibleMessages(channelId: channel.id),

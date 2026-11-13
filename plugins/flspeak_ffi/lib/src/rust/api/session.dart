@@ -9,7 +9,7 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'session.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `runtime`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 /// 抓取第三方图片 URL。myTS 的 `ts.file.myts` 附件不经过这里。
 Future<Uint8List> fetchImage({required String url}) =>
@@ -123,6 +123,8 @@ abstract class CoreSession implements RustOpaqueInterface {
     required String path,
     String? password,
   });
+
+  Future<List<ServerIconView>> listServerIcons();
 
   Future<List<ServerProfileView>> listServers();
 
@@ -544,6 +546,10 @@ sealed class CoreEvent with _$CoreEvent {
       CoreEvent_State;
   const factory CoreEvent.servers({required List<ServerProfileView> profiles}) =
       CoreEvent_Servers;
+  const factory CoreEvent.serverIconUpdated({
+    required String serverId,
+    Uint8List? bytes,
+  }) = CoreEvent_ServerIconUpdated;
   const factory CoreEvent.snapshot({
     required List<ChannelView> channels,
     required List<ClientView> clients,
@@ -885,6 +891,24 @@ sealed class PublisherSignal with _$PublisherSignal {
     String? mid,
     int? mLine,
   }) = PublisherSignal_IceCandidate;
+}
+
+class ServerIconView {
+  final String serverId;
+  final Uint8List bytes;
+
+  const ServerIconView({required this.serverId, required this.bytes});
+
+  @override
+  int get hashCode => serverId.hashCode ^ bytes.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ServerIconView &&
+          runtimeType == other.runtimeType &&
+          serverId == other.serverId &&
+          bytes == other.bytes;
 }
 
 class ServerProfileView {

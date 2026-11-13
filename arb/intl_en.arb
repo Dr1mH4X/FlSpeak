@@ -227,6 +227,7 @@
   "appearancePreview": "Appearance",
   "serverIconTitle": "Choose server icon",
   "serverIconChange": "Change icon",
+  "serverIconAuto": "Server icon",
   "serverIconCommunity": "Community",
   "serverIconGaming": "Gaming",
   "serverIconMusic": "Music",

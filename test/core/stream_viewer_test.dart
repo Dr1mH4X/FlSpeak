@@ -26,6 +26,9 @@ class _FakeCoreSession extends Fake implements CoreSession {
   Future<List<ServerProfileView>> listServers() async => const [];
 
   @override
+  Future<List<ServerIconView>> listServerIcons() async => const [];
+
+  @override
   Future<void> joinStream({
     required String streamId,
     required int sourceClid,

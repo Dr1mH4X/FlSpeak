@@ -13,10 +13,10 @@ use server::ServerProfile as ServerProfileCore;
 use session::{
     AudioDeviceView as CoreAudioDeviceView, BotCommandView as CoreBotCommandView,
     ChannelView as CoreChannelView, ClientType as CoreClientType, ClientView as CoreClientView,
-    PublisherSignal as CorePublisherSignal, SessionError, SessionEvent, SessionHandle,
-    SessionState as SessionStateCore, StreamEndReason as CoreStreamEndReason,
-    StreamView as CoreStreamView, TextMessageView as CoreTextMessage,
-    TransferDirection as SessionTransferDirection,
+    PublisherSignal as CorePublisherSignal, ServerIconView as CoreServerIconView, SessionError,
+    SessionEvent, SessionHandle, SessionState as SessionStateCore,
+    StreamEndReason as CoreStreamEndReason, StreamView as CoreStreamView,
+    TextMessageView as CoreTextMessage, TransferDirection as SessionTransferDirection,
 };
 use tokio::runtime::{Builder, Runtime};
 
@@ -28,6 +28,12 @@ pub struct ServerProfileView {
     pub label: String,
     pub host: String,
     pub port: u16,
+}
+
+#[derive(Debug, Clone)]
+pub struct ServerIconView {
+    pub server_id: String,
+    pub bytes: Vec<u8>,
 }
 
 #[derive(Debug, Clone)]
@@ -192,6 +198,10 @@ pub enum CoreEvent {
     },
     Servers {
         profiles: Vec<ServerProfileView>,
+    },
+    ServerIconUpdated {
+        server_id: String,
+        bytes: Option<Vec<u8>>,
     },
     Snapshot {
         channels: Vec<ChannelView>,
@@ -425,6 +435,11 @@ impl CoreSession {
     pub async fn list_servers(&self) -> Result<Vec<ServerProfileView>, CoreError> {
         let profiles = self.handle.list_servers().await?;
         Ok(profiles.into_iter().map(ServerProfileView::from).collect())
+    }
+
+    pub async fn list_server_icons(&self) -> Result<Vec<ServerIconView>, CoreError> {
+        let icons = self.handle.list_server_icons().await?;
+        Ok(icons.into_iter().map(ServerIconView::from).collect())
     }
 
     /// 录入服务器。地址在这里解析并登记，连接目标只能来自档案。
@@ -857,6 +872,15 @@ impl From<ServerProfileCore> for ServerProfileView {
     }
 }
 
+impl From<CoreServerIconView> for ServerIconView {
+    fn from(view: CoreServerIconView) -> Self {
+        Self {
+            server_id: view.server_id,
+            bytes: view.bytes,
+        }
+    }
+}
+
 impl From<CoreChannelView> for ChannelView {
     fn from(view: CoreChannelView) -> Self {
         Self {
@@ -1053,6 +1077,9 @@ impl From<SessionEvent> for CoreEvent {
             SessionEvent::Servers(profiles) => CoreEvent::Servers {
                 profiles: profiles.into_iter().map(ServerProfileView::from).collect(),
             },
+            SessionEvent::ServerIconUpdated { server_id, bytes } => {
+                CoreEvent::ServerIconUpdated { server_id, bytes }
+            }
             SessionEvent::Snapshot { channels, clients } => CoreEvent::Snapshot {
                 channels: channels.into_iter().map(ChannelView::from).collect(),
                 clients: clients.into_iter().map(ClientView::from).collect(),

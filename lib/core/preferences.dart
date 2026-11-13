@@ -231,7 +231,7 @@ class SessionPreferences {
   final double? streamViewerHeight;
 
   final VoiceMeterSource voiceMeterSource;
-  final Map<String, ServerIcon> serverIcons;
+  final Map<String, ServerIconChoice> serverIcons;
   final ScreenShareResolutionPreset screenShareResolution;
   final ScreenShareFrameRatePreset screenShareFrameRate;
   final ScreenShareCodecPreference screenShareCodec;
@@ -248,7 +248,7 @@ class SessionPreferences {
     Object? channelPanelWidth = _unset,
     Object? streamViewerHeight = _unset,
     VoiceMeterSource? voiceMeterSource,
-    Map<String, ServerIcon>? serverIcons,
+    Map<String, ServerIconChoice>? serverIcons,
     ScreenShareResolutionPreset? screenShareResolution,
     ScreenShareFrameRatePreset? screenShareFrameRate,
     ScreenShareCodecPreference? screenShareCodec,
@@ -281,7 +281,7 @@ class SessionPreferences {
   );
 
   Map<String, Object?> toJson() => {
-    'schemaVersion': 4,
+    'schemaVersion': 5,
     'nickname': nickname,
     'lastConnected': {
       for (final entry in lastConnected.entries)
@@ -318,11 +318,13 @@ class SessionPreferences {
       }
     }
     final rawIcons = ui['serverIcons'];
-    final serverIcons = <String, ServerIcon>{};
+    final serverIcons = <String, ServerIconChoice>{};
     if (rawIcons is Map) {
       for (final entry in rawIcons.entries) {
         if (entry.key is String && entry.value is String) {
-          serverIcons[entry.key as String] = ServerIcon.fromId(entry.value);
+          serverIcons[entry.key as String] = ServerIconChoice.fromId(
+            entry.value,
+          );
         }
       }
     }

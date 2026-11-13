@@ -227,6 +227,7 @@
   "appearancePreview": "外观",
   "serverIconTitle": "选择服务器图标",
   "serverIconChange": "更换图标",
+  "serverIconAuto": "跟随服务器",
   "serverIconCommunity": "社区",
   "serverIconGaming": "游戏",
   "serverIconMusic": "音乐",

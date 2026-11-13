@@ -8,6 +8,7 @@
 //! `Client::send_voice`；音频帧本身不进入这条事件流。
 
 mod actor;
+mod channel_icons;
 mod downloads;
 mod events;
 mod image_upload;
@@ -16,6 +17,7 @@ pub mod logging;
 mod network;
 pub use network::NetworkTelemetry;
 mod proxy;
+mod server_icons;
 pub mod settings;
 mod store;
 mod streams;
@@ -167,6 +169,12 @@ pub enum TransferDirection {
     Download,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ServerIconView {
+    pub server_id: String,
+    pub bytes: Vec<u8>,
+}
+
 #[derive(Debug, Clone)]
 pub enum SessionEvent {
     Network(NetworkTelemetry),
@@ -175,6 +183,10 @@ pub enum SessionEvent {
         connection_epoch: u64,
     },
     Servers(Vec<ServerProfile>),
+    ServerIconUpdated {
+        server_id: String,
+        bytes: Option<Vec<u8>>,
+    },
     Snapshot {
         channels: Vec<ChannelView>,
         clients: Vec<ClientView>,
@@ -315,6 +327,9 @@ pub enum SessionCommand {
     },
     ListServers {
         reply: oneshot::Sender<Vec<ServerProfile>>,
+    },
+    ListServerIcons {
+        reply: oneshot::Sender<Vec<ServerIconView>>,
     },
     State {
         reply: oneshot::Sender<SessionState>,
@@ -720,6 +735,12 @@ impl SessionHandle {
     pub async fn list_servers(&self) -> Result<Vec<ServerProfile>, SessionError> {
         let (reply, rx) = oneshot::channel();
         self.send(SessionCommand::ListServers { reply })?;
+        rx.await.map_err(|_| SessionError::Closed)
+    }
+
+    pub async fn list_server_icons(&self) -> Result<Vec<ServerIconView>, SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::ListServerIcons { reply })?;
         rx.await.map_err(|_| SessionError::Closed)
     }
 

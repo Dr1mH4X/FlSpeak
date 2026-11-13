@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../l10n/app_localizations.dart';
@@ -68,11 +70,12 @@ class SessionView {
   const SessionView({
     this.state = const CoreSessionState.disconnected(),
     this.servers = const <ServerProfileView>[],
+    this.serverIconBytes = const <String, Uint8List>{},
     this.channels = const <ChannelView>[],
     this.clients = const <ClientView>[],
     this.messages = const <ChatMessage>[],
     this.activeServerId,
-    this.chatScope = ChatScope.channel,
+    this.chatScope = ChatScope.server,
     this.directRecipientUid,
     this.directRecipientId,
     this.unreadScopes = const <ChatScope>{},
@@ -108,6 +111,7 @@ class SessionView {
   /// 网络遥测面板是否固定为常开；只在当前连接内有效。
   final bool networkPanelPinned;
   final List<ServerProfileView> servers;
+  final Map<String, Uint8List> serverIconBytes;
   final List<ChannelView> channels;
   final List<ClientView> clients;
   final List<ChatMessage> messages;
@@ -344,6 +348,7 @@ class SessionView {
     Object? watchingStreamId = _unset,
     CoreSessionState? state,
     List<ServerProfileView>? servers,
+    Map<String, Uint8List>? serverIconBytes,
     List<ChannelView>? channels,
     List<ClientView>? clients,
     List<ChatMessage>? messages,
@@ -380,6 +385,7 @@ class SessionView {
         : watchingStreamId as String?,
     state: state ?? this.state,
     servers: servers ?? this.servers,
+    serverIconBytes: serverIconBytes ?? this.serverIconBytes,
     channels: channels ?? this.channels,
     clients: clients ?? this.clients,
     messages: messages ?? this.messages,

@@ -158,6 +158,8 @@ class _Core extends Fake implements CoreSession {
   @override
   Future<List<ServerProfileView>> listServers() async => [];
   @override
+  Future<List<ServerIconView>> listServerIcons() async => const [];
+  @override
   Future<void> sendText({
     required int targetMode,
     required int targetId,
@@ -937,7 +939,7 @@ void main() {
     );
     final view = container.read(sessionViewProvider);
     expect(view.directRecipientUid, isNull);
-    expect(view.chatScope, ChatScope.channel);
+    expect(view.chatScope, ChatScope.server);
     expect(await controller.sendMessage('offline'), isFalse);
   });
 
@@ -1328,4 +1330,72 @@ void main() {
       expect(core.requestSnapshotCalls, 0);
     },
   );
+
+  test('serverIconUpdated populates and clears serverIconBytes', () async {
+    final events = StreamController<CoreEvent>.broadcast(sync: true);
+    final core = _Core(events);
+    final container = ProviderContainer(
+      overrides: [coreSessionProvider.overrideWithValue(core)],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await events.close();
+    });
+
+    container.read(sessionViewProvider);
+    final bytes = Uint8List.fromList([137, 80, 78, 71]);
+    events.add(CoreEvent.serverIconUpdated(serverId: 's1:9987', bytes: bytes));
+    expect(
+      container.read(sessionViewProvider).serverIconBytes['s1:9987'],
+      bytes,
+    );
+
+    events.add(
+      const CoreEvent.serverIconUpdated(serverId: 's1:9987', bytes: null),
+    );
+    expect(
+      container
+          .read(sessionViewProvider)
+          .serverIconBytes
+          .containsKey('s1:9987'),
+      isFalse,
+    );
+  });
+
+  test('connecting defaults to server chat scope and shows welcome message without marking unread', () async {
+    final events = StreamController<CoreEvent>.broadcast(sync: true);
+    final core = _Core(events);
+    final container = ProviderContainer(
+      overrides: [coreSessionProvider.overrideWithValue(core)],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await events.close();
+    });
+
+    container.read(sessionViewProvider);
+    events.add(
+      const CoreEvent.state(
+        state: CoreSessionState.connected(clientId: 1, channelId: 7),
+      ),
+    );
+    events.add(
+      const CoreEvent.textMessage(
+        from: 'My Server',
+        fromUid: '',
+        fromId: 0,
+        message: 'Welcome aboard',
+        targetMode: 3,
+        targetId: 0,
+        peerUid: '',
+        at: 100,
+      ),
+    );
+
+    final view = container.read(sessionViewProvider);
+    expect(view.chatScope, ChatScope.server);
+    expect(view.unreadScopes, isEmpty);
+    expect(view.visibleMessages(channelId: 7).single.text, 'Welcome aboard');
+    expect(view.visibleMessages(channelId: 7).single.from, 'My Server');
+  });
 }

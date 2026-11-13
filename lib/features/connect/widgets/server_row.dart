@@ -94,8 +94,15 @@ class _ServerRowState extends ConsumerState<ServerRow> {
                     ref
                         .read(preferencesProvider)
                         .serverIcons[widget.profile.id] ??
-                    ServerIcon.community;
-                final icon = await showServerIconPicker(context, current);
+                    ServerIconChoice.auto;
+                final iconBytes = ref
+                    .read(sessionViewProvider)
+                    .serverIconBytes[widget.profile.id];
+                final icon = await showServerIconPicker(
+                  context,
+                  current,
+                  serverIconBytes: iconBytes,
+                );
                 if (mounted && icon != null) {
                   ref
                       .read(preferencesProvider.notifier)

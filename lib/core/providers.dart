@@ -121,6 +121,7 @@ class SessionController extends Notifier<SessionView> {
   VoiceLevels _latestLevels = VoiceLevels.silent;
   int _pendingActions = 0;
   int _serversRevision = 0;
+  int _serverIconsRevision = 0;
   String? _connectingServerId;
   bool _awaitingDisconnect = false;
   bool _samplingNetwork = false;
@@ -144,6 +145,7 @@ class SessionController extends Notifier<SessionView> {
     // 初始档案在 spawn 时就广播过一次，广播通道不补发给订阅者；订阅后主动拉一遍，
     // 否则打开应用时已保存的服务器列表要等下一次增删才会出现。
     unawaited(_loadServers(session));
+    unawaited(_loadServerIcons(session));
     return const SessionView();
   }
 
@@ -156,6 +158,24 @@ class SessionController extends Notifier<SessionView> {
       }
     } on CoreError catch (error) {
       if (ref.mounted && revision == _serversRevision) {
+        _notifyCoreError(error);
+      }
+    }
+  }
+
+  Future<void> _loadServerIcons(CoreSession session) async {
+    final revision = _serverIconsRevision;
+    try {
+      final icons = await session.listServerIcons();
+      if (ref.mounted && revision == _serverIconsRevision) {
+        state = state.copyWith(
+          serverIconBytes: Map.unmodifiable({
+            for (final icon in icons) icon.serverId: icon.bytes,
+          }),
+        );
+      }
+    } on CoreError catch (error) {
+      if (ref.mounted && revision == _serverIconsRevision) {
         _notifyCoreError(error);
       }
     }
@@ -933,7 +953,7 @@ class SessionController extends Notifier<SessionView> {
             speaking: const {},
             selfSpeaking: false,
             identityUpgradeTarget: null,
-            chatScope: ChatScope.channel,
+            chatScope: ChatScope.server,
             directRecipientUid: null,
             directRecipientId: null,
             activeFileDownloads: const {},
@@ -951,7 +971,7 @@ class SessionController extends Notifier<SessionView> {
             streams: const [],
             watchingStreamId: null,
             messages: const [],
-            chatScope: ChatScope.channel,
+            chatScope: ChatScope.server,
             directRecipientUid: null,
             directRecipientId: null,
             unreadScopes: const {},
@@ -978,6 +998,9 @@ class SessionController extends Notifier<SessionView> {
             activeServerId: _awaitingDisconnect || current.connected
                 ? current.activeServerId
                 : _connectingServerId ?? current.activeServerId,
+            chatScope: next is CoreSessionState_Connected && !current.connected
+                ? ChatScope.server
+                : current.chatScope,
             connectionEpoch:
                 next is CoreSessionState_Connected && !current.connected
                 ? current.connectionEpoch + 1
@@ -990,6 +1013,15 @@ class SessionController extends Notifier<SessionView> {
       case CoreEvent_Servers(:final profiles):
         _serversRevision++;
         state = current.copyWith(servers: profiles);
+      case CoreEvent_ServerIconUpdated(:final serverId, :final bytes):
+        _serverIconsRevision++;
+        final next = {...current.serverIconBytes};
+        if (bytes != null) {
+          next[serverId] = bytes;
+        } else {
+          next.remove(serverId);
+        }
+        state = current.copyWith(serverIconBytes: Map.unmodifiable(next));
       case CoreEvent_Snapshot(:final channels, :final clients):
         state = current.copyWith(
           channels: channels,
@@ -1458,7 +1490,7 @@ class PreferencesController extends Notifier<SessionPreferences> {
     unawaited(syncLogLevel(level.talkerLevel, rustLevelId: level.id));
   }
 
-  void setServerIcon(String serverId, ServerIcon icon) {
+  void setServerIcon(String serverId, ServerIconChoice icon) {
     _update(
       state.copyWith(
         serverIcons: Map.unmodifiable({...state.serverIcons, serverId: icon}),

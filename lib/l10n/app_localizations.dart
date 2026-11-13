@@ -1034,6 +1034,12 @@ abstract class AppLocalizations {
   /// **'Change icon'**
   String get serverIconChange;
 
+  /// No description provided for @serverIconAuto.
+  ///
+  /// In en, this message translates to:
+  /// **'Server icon'**
+  String get serverIconAuto;
+
   /// No description provided for @serverIconCommunity.
   ///
   /// In en, this message translates to:

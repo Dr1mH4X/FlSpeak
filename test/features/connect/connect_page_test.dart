@@ -65,6 +65,8 @@ class _SwitchingCore extends _FakeCore {
   @override
   Future<List<ServerProfileView>> listServers() async => _switchServers;
   @override
+  Future<List<ServerIconView>> listServerIcons() async => const [];
+  @override
   Future<void> disconnect() {
     calls.add('disconnect');
     return disconnected.future;

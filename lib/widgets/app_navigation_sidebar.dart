@@ -7,7 +7,18 @@ import 'dart:math' as math;
 import 'dart:ui' show lerpDouble;
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        Checkbox,
+        Chip,
+        Divider,
+        FilledButton,
+        IconButton,
+        LinearProgressIndicator,
+        OutlinedButton,
+        Switch,
+        TextButton;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -20,7 +31,7 @@ import '../router.dart';
 import '../theme/app_theme.dart';
 import 'common.dart';
 import 'monogram.dart';
-import 'prism.dart' hide Divider;
+import 'prism.dart';
 import 'server_icon_picker.dart';
 import 'window_header.dart';
 
@@ -148,8 +159,15 @@ class _AppNavigationSidebarState extends ConsumerState<AppNavigationSidebar>
   Future<void> _changeServerIcon(ServerProfileView server) async {
     final current =
         ref.read(preferencesProvider).serverIcons[server.id] ??
-        ServerIcon.community;
-    final icon = await showServerIconPicker(context, current);
+        ServerIconChoice.auto;
+    final serverIconBytes = ref
+        .read(sessionViewProvider)
+        .serverIconBytes[server.id];
+    final icon = await showServerIconPicker(
+      context,
+      current,
+      serverIconBytes: serverIconBytes,
+    );
     if (context.mounted && icon != null) {
       ref.read(preferencesProvider.notifier).setServerIcon(server.id, icon);
     }
@@ -448,11 +466,7 @@ class _SidebarPane extends StatelessWidget {
               horizontal: math.max(6.0, sideInset + 2),
               vertical: 4,
             ),
-            child: Divider(
-              height: 1,
-              thickness: 1,
-              color: scheme.outlineVariant.withValues(alpha: 0.4),
-            ),
+            child: const Divider(height: 1, thickness: 1),
           ),
 
           // 5. 服务器列表（中间滚动区）

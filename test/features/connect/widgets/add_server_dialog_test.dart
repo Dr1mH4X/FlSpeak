@@ -40,6 +40,8 @@ class _Core extends Fake implements CoreSession {
   @override
   Future<List<ServerProfileView>> listServers() async => [_original];
   @override
+  Future<List<ServerIconView>> listServerIcons() async => const [];
+  @override
   Future<ServerProfileView> updateServer({
     required String id,
     required String label,
@@ -70,7 +72,9 @@ Future<ProviderContainer> _mount(WidgetTester tester, _Core core) async {
         PreferencesStore.inMemory(
           preferences: SessionPreferences(
             nickname: 'Test',
-            serverIcons: {_original.id: ServerIcon.gaming},
+            serverIcons: {
+              _original.id: ServerIconChoice.preset(ServerIcon.gaming),
+            },
             lastConnected: {_original.id: DateTime(2026)},
           ),
         ),
@@ -150,7 +154,7 @@ void main() {
         final preferences = container.read(preferencesProvider);
         expect(
           preferences.serverIcons['new.example.com:9999'],
-          ServerIcon.gaming,
+          ServerIconChoice.preset(ServerIcon.gaming),
         );
         expect(preferences.serverIcons.containsKey(_original.id), isFalse);
         expect(

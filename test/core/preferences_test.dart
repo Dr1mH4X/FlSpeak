@@ -95,21 +95,40 @@ void main() {
       final store = await PreferencesStore.load(path);
       await store.save(
         store.current.copyWith(
-          serverIcons: const {
-            'server-a': ServerIcon.gaming,
-            'server-b': ServerIcon.music,
+          serverIcons: {
+            'server-a': ServerIconChoice.preset(ServerIcon.gaming),
+            'server-b': ServerIconChoice.preset(ServerIcon.music),
+            'server-c': ServerIconChoice.auto,
           },
         ),
       );
       final reopened = await PreferencesStore.load(path);
       expect(reopened.current.serverIcons, {
-        'server-a': ServerIcon.gaming,
-        'server-b': ServerIcon.music,
+        'server-a': ServerIconChoice.preset(ServerIcon.gaming),
+        'server-b': ServerIconChoice.preset(ServerIcon.music),
+        'server-c': ServerIconChoice.auto,
       });
       expect(
         SessionPreferences.fromJson({'nickname': 'test'}).serverIcons,
         isEmpty,
       );
+
+      final explicit = SessionPreferences.fromJson({
+        'schemaVersion': 5,
+        'nickname': 'test',
+        'serverIcons': {
+          'explicit-community': 'community',
+          'explicit-gaming': 'gaming',
+          'explicit-auto': 'auto',
+          'unknown-value': 'non-existent',
+        },
+      });
+      expect(explicit.serverIcons, {
+        'explicit-community': ServerIconChoice.preset(ServerIcon.community),
+        'explicit-gaming': ServerIconChoice.preset(ServerIcon.gaming),
+        'explicit-auto': ServerIconChoice.auto,
+        'unknown-value': ServerIconChoice.auto,
+      });
     },
   );
 

@@ -25,6 +25,7 @@ import 'package:flspeak/features/workspace/widgets/channel_pane.dart';
 import 'package:flspeak/features/workspace/widgets/chat_pane.dart';
 import 'package:flspeak/features/workspace/workspace_page.dart';
 import 'package:flspeak/features/workspace/workspace_state.dart';
+import 'package:flspeak/widgets/monogram.dart';
 import 'package:flspeak/widgets/prism.dart';
 
 class _Core extends Fake implements CoreSession {
@@ -304,6 +305,10 @@ class _Session extends SessionController {
 
   void publishStreams(List<StreamView> streams, {String? watching}) {
     state = state.copyWith(streams: streams, watchingStreamId: watching);
+  }
+
+  void publishMessages(List<ChatMessage> messages) {
+    state = state.copyWith(messages: messages);
   }
 }
 
@@ -765,5 +770,75 @@ void main() {
     await tester.pumpAndSettle();
     expect(core.stoppedShares, 1);
     expect(container.read(streamPublisherProvider).isActive, isFalse);
+  });
+
+  testWidgets('初始进入服务器聊天展示带 ServerBadge 的欢迎消息，点击频道后切到频道聊天', (tester) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final container = ProviderContainer(
+      overrides: [
+        coreSessionProvider.overrideWithValue(_Core()),
+        sessionViewProvider.overrideWith(_Session.new),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    // 给 _Session 注入一条服务器欢迎消息
+    (container.read(sessionViewProvider.notifier) as _Session).publishMessages([
+      ChatMessage(
+        from: 'My Community',
+        fromUid: '',
+        fromId: 0,
+        text: 'Welcome to the server',
+        at: DateTime(2026, 1, 1, 12, 0),
+        scope: ChatScope.server,
+        targetId: 0,
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            ...AppLocalizations.localizationsDelegates,
+            PrismUiLocalizationsDelegate(),
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
+          home: const Scaffold(
+            body: Row(
+              children: [
+                SizedBox(width: 280, child: ChannelPanel()),
+                Expanded(child: WorkspacePage()),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(container.read(sessionViewProvider).chatScope, ChatScope.server);
+    expect(find.text('Welcome to the server'), findsOneWidget);
+    expect(find.text('My Community'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(ChatPane),
+        matching: find.byType(ServerBadge),
+      ),
+      findsOneWidget,
+    );
+
+    // 点击频道树中的频道，聊天范围应切换到频道视图
+    await tester.tap(find.text('Studio'));
+    await tester.pumpAndSettle();
+    expect(container.read(sessionViewProvider).chatScope, ChatScope.channel);
   });
 }
