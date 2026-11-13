@@ -190,9 +190,14 @@ impl SettingsManager {
         // 规范化 UI 设置（例如空昵称自动回退为默认昵称）
         settings.ui.normalize_nickname();
 
-        // 统一保持最新的 schema 版本
-        if settings.schema_version < 4 {
-            settings.schema_version = 4;
+        // 统一保持最新的 schema 版本并迁移存量配置
+        if settings.schema_version < 5 {
+            for value in settings.ui.server_icons.values_mut() {
+                if value == "community" {
+                    *value = "auto".to_string();
+                }
+            }
+            settings.schema_version = 5;
         }
 
         // 迁移或规范化后写盘一次，固化格式
@@ -266,7 +271,7 @@ mod tests {
         std::fs::write(&path, legacy_json).unwrap();
 
         let settings = SettingsManager::load_and_migrate(&path).unwrap();
-        assert_eq!(settings.schema_version, 4);
+        assert_eq!(settings.schema_version, 5);
         assert_eq!(settings.ui.nickname, "TestUser");
         assert_eq!(settings.ui.theme, "dark");
         assert_eq!(settings.ui.motion, "off");
@@ -390,6 +395,61 @@ mod tests {
         std::fs::write(&path, empty_nick_json).unwrap();
         let loaded = SettingsManager::load_and_migrate(&path).unwrap();
         assert_eq!(loaded.ui.nickname, UiSettings::DEFAULT_NICKNAME);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn v4_server_icons_migrate_default_community_to_auto_once() {
+        let dir = std::env::temp_dir().join(format!(
+            "flspeak-settings-icons-{:x}",
+            rand::random::<u64>()
+        ));
+        let path = dir.join("settings.json");
+        let _ = std::fs::create_dir_all(&dir);
+
+        let v4_json = r#"{
+            "schemaVersion": 4,
+            "network": { "servers": [] },
+            "audio": { "vadThreshold": 0.015, "vadHangoverFrames": 15, "pttMode": false, "inputDeviceId": null, "outputDeviceId": null },
+            "ui": {
+                "nickname": "User",
+                "serverIcons": {
+                    "a:9987": "community",
+                    "b:9987": "gaming"
+                }
+            }
+        }"#;
+        std::fs::write(&path, v4_json).unwrap();
+        let migrated = SettingsManager::load_and_migrate(&path).unwrap();
+        assert_eq!(migrated.schema_version, 5);
+        assert_eq!(
+            migrated.ui.server_icons.get("a:9987").map(String::as_str),
+            Some("auto")
+        );
+        assert_eq!(
+            migrated.ui.server_icons.get("b:9987").map(String::as_str),
+            Some("gaming")
+        );
+
+        // v5 之后用户主动选回 "community" 时必须保留。
+        let v5_json = r#"{
+            "schemaVersion": 5,
+            "network": { "servers": [] },
+            "audio": { "vadThreshold": 0.015, "vadHangoverFrames": 15, "pttMode": false, "inputDeviceId": null, "outputDeviceId": null },
+            "ui": {
+                "nickname": "User",
+                "serverIcons": {
+                    "a:9987": "community"
+                }
+            }
+        }"#;
+        std::fs::write(&path, v5_json).unwrap();
+        let reloaded = SettingsManager::load_and_migrate(&path).unwrap();
+        assert_eq!(
+            reloaded.ui.server_icons.get("a:9987").map(String::as_str),
+            Some("community")
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }

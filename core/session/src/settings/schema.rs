@@ -26,7 +26,7 @@ pub struct AppSettings {
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
-            schema_version: 4,
+            schema_version: 5,
             network: NetworkSettings::default(),
             audio: AudioSettings::default(),
             ui: UiSettings::default(),
