@@ -101,6 +101,24 @@ class _Core extends Fake implements CoreSession {
 
   int accessCalls = 0;
   int memberGroupsCalls = 0;
+  int moveCalls = 0;
+  int requestSnapshotCalls = 0;
+
+  @override
+  Future<void> moveToChannel({
+    required int clientId,
+    required int channelId,
+    String? password,
+  }) async {
+    if (fail) throw const CoreError.connection(message: 'move rejected');
+    moveCalls++;
+  }
+
+  @override
+  Future<void> requestSnapshot() async {
+    if (fail) throw const CoreError.connection(message: 'snapshot rejected');
+    requestSnapshotCalls++;
+  }
 
   @override
   Future<AccessView> access() async {
@@ -115,6 +133,24 @@ class _Core extends Fake implements CoreSession {
   }) async {
     memberGroupsCalls++;
     return const [];
+  }
+
+  final queriedPeers = <int>[];
+  final fetchedBotCommands = <({int targetClid, String targetUid})>[];
+
+  @override
+  Future<void> queryPeerIdentity({required int targetClid}) async {
+    if (fail) throw const CoreError.connection(message: 'query rejected');
+    queriedPeers.add(targetClid);
+  }
+
+  @override
+  Future<void> fetchBotCommands({
+    required int targetClid,
+    required String targetUid,
+  }) async {
+    if (fail) throw const CoreError.connection(message: 'commands rejected');
+    fetchedBotCommands.add((targetClid: targetClid, targetUid: targetUid));
   }
 
   @override
@@ -470,6 +506,35 @@ void main() {
     expect(core.calls, ['disconnect']);
     expect(container.read(sessionViewProvider).activeServerId, 'server-a');
   });
+
+  test(
+    'connect failure records failureSeq and emits a single formatted notice',
+    () async {
+      final events = StreamController<CoreEvent>.broadcast(sync: true);
+      final core = _SwitchCore(events);
+      final container = ProviderContainer(
+        overrides: [coreSessionProvider.overrideWithValue(core)],
+      );
+      addTearDown(() async {
+        container.dispose();
+        await events.close();
+      });
+      container.read(sessionViewProvider);
+      final connecting = container
+          .read(sessionViewProvider.notifier)
+          .connect(id: 'server-b', nickname: 'Me');
+      core.disconnectReply.complete();
+      await Future<void>.value();
+      core.connectReply.completeError(
+        const CoreError.connection(message: '连接超时'),
+      );
+      expect(await connecting, isFalse);
+      expect(container.read(sessionViewProvider).failureSeq, 1);
+      final notices = container.read(noticeCenterProvider);
+      expect(notices, hasLength(1));
+      expect(notices.single.message, '连接失败：连接超时');
+    },
+  );
 
   test('an operation failure preserves a connected snapshot and does not report a connection failure', () async {
     final events = StreamController<CoreEvent>.broadcast(sync: true);
@@ -1133,6 +1198,134 @@ void main() {
       expect(view.visibleMessages(channelId: 7).map((item) => item.text), [
         'channel talk',
       ]);
+    },
+  );
+
+  test('direct recipient probes peer identity, fetches slash commands, and preserves metadata across move and update events', () async {
+    final events = StreamController<CoreEvent>.broadcast(sync: true);
+    final core = _Core(events);
+    final container = ProviderContainer(
+      overrides: [coreSessionProvider.overrideWithValue(core)],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await events.close();
+    });
+
+    final controller = container.read(sessionViewProvider.notifier);
+    events.add(
+      const CoreEvent.state(
+        state: CoreSessionState.connected(clientId: 1, channelId: 5),
+      ),
+    );
+    events.add(
+      const CoreEvent.snapshot(
+        channels: [
+          ChannelView(id: 5, parentId: 0, name: 'Lobby', description: ''),
+        ],
+        clients: [
+          ClientView(id: 1, nickname: 'Self', uid: 'self', channelId: 5),
+          ClientView(id: 9, nickname: 'MusicBot', uid: 'bot-uid', channelId: 5),
+        ],
+      ),
+    );
+
+    // 初次打开未识别节点的私信窗，自动发起单播 queryPeerIdentity。
+    controller.selectDirectRecipient('bot-uid', clientId: 9);
+    await Future<void>.delayed(Duration.zero);
+    expect(core.queriedPeers, [9]);
+    expect(core.fetchedBotCommands, isEmpty);
+
+    // 收到包含 chat:slash_commands 能力的快照后，自动拉取命令列表。
+    events.add(
+      const CoreEvent.snapshot(
+        channels: [
+          ChannelView(id: 5, parentId: 0, name: 'Lobby', description: ''),
+        ],
+        clients: [
+          ClientView(id: 1, nickname: 'Self', uid: 'self', channelId: 5),
+          ClientView(
+            id: 9,
+            nickname: 'MusicBot',
+            uid: 'bot-uid',
+            channelId: 5,
+            clientType: ClientType.bot,
+            appName: 'MusicBot',
+            appVersion: '1.2.0',
+            capabilities: ['chat:slash_commands'],
+          ),
+        ],
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(core.fetchedBotCommands, [(targetClid: 9, targetUid: 'bot-uid')]);
+
+    // 命令列表就绪后，ClientMoved 与 ClientUpdated 不丢失身份与命令缓存。
+    const playCmd = BotCommandView(
+      name: 'play',
+      args: '<song>',
+      desc: 'Play song',
+    );
+    events.add(
+      const CoreEvent.snapshot(
+        channels: [
+          ChannelView(id: 5, parentId: 0, name: 'Lobby', description: ''),
+        ],
+        clients: [
+          ClientView(id: 1, nickname: 'Self', uid: 'self', channelId: 5),
+          ClientView(
+            id: 9,
+            nickname: 'MusicBot',
+            uid: 'bot-uid',
+            channelId: 5,
+            clientType: ClientType.bot,
+            appName: 'MusicBot',
+            appVersion: '1.2.0',
+            capabilities: ['chat:slash_commands'],
+            botCommands: [playCmd],
+          ),
+        ],
+      ),
+    );
+    events.add(const CoreEvent.clientMoved(id: 9, channelId: 8));
+    events.add(const CoreEvent.clientUpdated(id: 9, inputMuted: true));
+
+    final bot = container
+        .read(sessionViewProvider)
+        .clients
+        .singleWhere((c) => c.id == 9);
+    expect(bot.channelId, 8);
+    expect(bot.inputMuted, isTrue);
+    expect(bot.clientType, ClientType.bot);
+    expect(bot.appName, 'MusicBot');
+    expect(bot.appVersion, '1.2.0');
+    expect(bot.capabilities, ['chat:slash_commands']);
+    expect(bot.botCommands, [playCmd]);
+  });
+
+  test(
+    'joinChannel moves without triggering a redundant requestSnapshot',
+    () async {
+      final events = StreamController<CoreEvent>.broadcast(sync: true);
+      final core = _Core(events);
+      final container = ProviderContainer(
+        overrides: [coreSessionProvider.overrideWithValue(core)],
+      );
+      addTearDown(() async {
+        container.dispose();
+        await events.close();
+      });
+
+      final controller = container.read(sessionViewProvider.notifier);
+      events.add(
+        const CoreEvent.state(
+          state: CoreSessionState.connected(clientId: 1, channelId: 5),
+        ),
+      );
+
+      expect(await controller.joinChannel(8), isTrue);
+      expect(core.moveCalls, 1);
+      expect(core.requestSnapshotCalls, 0);
     },
   );
 }

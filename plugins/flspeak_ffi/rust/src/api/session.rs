@@ -11,11 +11,12 @@ use flutter_rust_bridge::frb;
 use proto::ConnectError;
 use server::ServerProfile as ServerProfileCore;
 use session::{
-    AudioDeviceView as CoreAudioDeviceView, ChannelView as CoreChannelView,
-    ClientView as CoreClientView, PublisherSignal as CorePublisherSignal, SessionError,
-    SessionEvent, SessionHandle, SessionState as SessionStateCore,
-    StreamEndReason as CoreStreamEndReason, StreamView as CoreStreamView,
-    TextMessageView as CoreTextMessage, TransferDirection as SessionTransferDirection,
+    AudioDeviceView as CoreAudioDeviceView, BotCommandView as CoreBotCommandView,
+    ChannelView as CoreChannelView, ClientType as CoreClientType, ClientView as CoreClientView,
+    PublisherSignal as CorePublisherSignal, SessionError, SessionEvent, SessionHandle,
+    SessionState as SessionStateCore, StreamEndReason as CoreStreamEndReason,
+    StreamView as CoreStreamView, TextMessageView as CoreTextMessage,
+    TransferDirection as SessionTransferDirection,
 };
 use tokio::runtime::{Builder, Runtime};
 
@@ -42,6 +43,23 @@ pub struct ChannelView {
     pub password_protected: Option<bool>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ClientType {
+    #[default]
+    Standard,
+    FlSpeak,
+    Bot,
+    Custom,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BotCommandView {
+    pub name: String,
+    pub args: String,
+    pub desc: String,
+}
+
+#[frb]
 #[derive(Debug, Clone)]
 pub struct ClientView {
     pub id: i32,
@@ -56,6 +74,13 @@ pub struct ClientView {
     pub away: Option<bool>,
     /// 离开时留下的说明文字。
     pub away_message: Option<String>,
+    #[frb(default = "ClientType.standard")]
+    pub client_type: ClientType,
+    pub app_name: Option<String>,
+    pub app_version: Option<String>,
+    #[frb(default = "const []")]
+    pub capabilities: Vec<String>,
+    pub bot_commands: Option<Vec<BotCommandView>>,
 }
 
 #[derive(Debug, Clone)]
@@ -747,6 +772,21 @@ impl CoreSession {
         Ok(self.handle.kick_stream_viewer(viewer_clid).await?)
     }
 
+    pub async fn query_peer_identity(&self, target_clid: i32) -> Result<(), CoreError> {
+        Ok(self.handle.query_peer_identity(target_clid).await?)
+    }
+
+    pub async fn fetch_bot_commands(
+        &self,
+        target_clid: i32,
+        target_uid: String,
+    ) -> Result<(), CoreError> {
+        Ok(self
+            .handle
+            .fetch_bot_commands(target_clid, target_uid)
+            .await?)
+    }
+
     pub async fn shutdown(&self) -> Result<(), CoreError> {
         Ok(self.handle.shutdown().await?)
     }
@@ -834,6 +874,27 @@ impl From<CoreChannelView> for ChannelView {
     }
 }
 
+impl From<CoreClientType> for ClientType {
+    fn from(kind: CoreClientType) -> Self {
+        match kind {
+            CoreClientType::Standard => ClientType::Standard,
+            CoreClientType::FlSpeak => ClientType::FlSpeak,
+            CoreClientType::Bot => ClientType::Bot,
+            CoreClientType::Custom => ClientType::Custom,
+        }
+    }
+}
+
+impl From<CoreBotCommandView> for BotCommandView {
+    fn from(cmd: CoreBotCommandView) -> Self {
+        Self {
+            name: cmd.name,
+            args: cmd.args,
+            desc: cmd.desc,
+        }
+    }
+}
+
 impl From<CoreClientView> for ClientView {
     fn from(view: CoreClientView) -> Self {
         Self {
@@ -845,6 +906,13 @@ impl From<CoreClientView> for ClientView {
             output_muted: view.output_muted,
             away: view.away,
             away_message: view.away_message,
+            client_type: view.client_type.into(),
+            app_name: view.app_name,
+            app_version: view.app_version,
+            capabilities: view.capabilities,
+            bot_commands: view
+                .bot_commands
+                .map(|cmds| cmds.into_iter().map(BotCommandView::from).collect()),
         }
     }
 }

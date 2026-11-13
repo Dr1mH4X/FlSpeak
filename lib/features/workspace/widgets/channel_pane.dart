@@ -66,6 +66,7 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
       ref
           .read(selectedChannelProvider.notifier)
           .select(channel.id, serverId: view.activeServerId);
+      ref.read(sessionViewProvider.notifier).selectChatScope(ChatScope.channel);
       widget.onChannelSelected?.call();
     }
 
@@ -244,6 +245,11 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
       );
     }
 
+    final selectedMember = ref.watch(selectedMemberProvider);
+    final hasSelectedMember =
+        selectedMember != null &&
+        selectedMember.serverId == view.activeServerId;
+
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
       itemCount: rows.length,
@@ -254,7 +260,7 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
             _ChannelTile(
               channel: channel,
               depth: depth,
-              selected: channel.id == activeId,
+              selected: !hasSelectedMember && channel.id == activeId,
               onTap: () => onTap(channel),
               onJoin: () => onJoin(channel),
               canJoin: _canJoin(view, channel),
@@ -263,6 +269,10 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
           _MemberRow(:final client, :final depth) => _MemberTile(
             client: client,
             depth: depth,
+            selected:
+                hasSelectedMember &&
+                selectedMember.clientId == client.id &&
+                selectedMember.uid == client.uid,
             // 服务器不回显自己的声音，自己说话由 SelfSpeaking 事件单独表达。
             speaking:
                 view.speaking.contains(client.id) ||
@@ -519,18 +529,23 @@ class _MemberTile extends StatelessWidget {
     required this.client,
     required this.depth,
     required this.speaking,
+    required this.selected,
     this.stream,
   });
 
   final ClientView client;
   final int depth;
   final bool speaking;
+  final bool selected;
   final StreamView? stream;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
+    final foreground = selected
+        ? scheme.onPrimaryContainer
+        : scheme.onSurfaceVariant;
     final avatar = SessionMemberAvatar(
       uid: client.uid,
       nickname: client.nickname,
@@ -540,11 +555,11 @@ class _MemberTile extends StatelessWidget {
     );
 
     return Padding(
-      padding: EdgeInsets.only(left: 40.0 + (depth - 1) * 16.0, right: 14),
+      padding: EdgeInsets.only(left: 32.0 + (depth - 1) * 16.0, right: 6),
       child: ClientActionsButton(
         client: client,
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: Row(
             children: [
               // 头像本身用光环表达说话；读屏靠外层标签拿到同一个状态。
@@ -552,17 +567,39 @@ class _MemberTile extends StatelessWidget {
                   ? Semantics(label: l10n.memberSpeaking, child: avatar)
                   : avatar,
               const SizedBox(width: 8),
-              Expanded(
+              Flexible(
                 child: Text(
                   client.nickname,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: context.texts.bodySmall?.copyWith(
                     fontSize: 13,
-                    color: scheme.onSurfaceVariant,
+                    color: foreground,
                   ),
                 ),
               ),
+              if (client.clientType == ClientType.bot) ...[
+                const SizedBox(width: 4),
+                Semantics(
+                  label: l10n.clientTypeBot,
+                  child: Icon(
+                    Icons.smart_toy_rounded,
+                    size: 13,
+                    color: scheme.tertiary,
+                  ),
+                ),
+              ] else if (client.clientType == ClientType.flSpeak) ...[
+                const SizedBox(width: 4),
+                Semantics(
+                  label: l10n.clientTypeFlSpeak,
+                  child: Icon(
+                    Icons.electric_bolt_rounded,
+                    size: 13,
+                    color: scheme.primary,
+                  ),
+                ),
+              ],
+              const Spacer(),
               if (stream != null)
                 _MemberFlag(
                   label: l10n.streamSharing,

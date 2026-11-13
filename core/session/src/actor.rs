@@ -18,14 +18,15 @@ use tokio::io::{AsyncRead, ReadBuf};
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
 use tsclient_rs::{
     AbortSignal, ChannelInfo, Client, ClientInfo, Event as ProtocolEvent, FileDownloadInfo, Logger,
+    PluginCommandEvent, PluginCommandTarget,
 };
 
 use crate::store::{self, identity_path};
 use crate::streams::{self, StreamCoordinator, StreamEndReason};
 use crate::{
-    AudioDeviceView, AudioDevicesView, ChannelView, ClientView, SessionCommand, SessionError,
-    SessionEvent, SessionState, SettingsManager, TextMessageView, TransferDirection,
-    VoiceStateView,
+    AudioDeviceView, AudioDevicesView, BotCommandView, ChannelView, ClientType, ClientView,
+    SessionCommand, SessionError, SessionEvent, SessionState, SettingsManager, TextMessageView,
+    TransferDirection, VoiceStateView,
 };
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(8);
@@ -52,6 +53,48 @@ const COMMAND_NOT_FOUND: &str = "256";
 const STREAM_PROBE_TIMEOUT_MS: u64 = 5_000;
 const CONNECTION_INFO_REPLY_INTERVAL: Duration = Duration::from_secs(1);
 const NETWORK_SAMPLE_ERROR_LOG_INTERVAL: Duration = Duration::from_secs(30);
+
+const IDENTITY_PLUGIN: &str = "tsclient:identity";
+const COMMANDS_PLUGIN: &str = "tsclient:commands";
+const ANNOUNCE_ACK_COOLDOWN: Duration = Duration::from_secs(10);
+const QUERY_ACK_COOLDOWN: Duration = Duration::from_secs(5);
+const SELF_ANNOUNCE_DEBOUNCE: Duration = Duration::from_secs(2);
+const MAX_IDENTITY_FIELD_CHARS: usize = 32;
+const MAX_CAPABILITIES: usize = 16;
+const MAX_BOT_COMMANDS: usize = 16;
+const MAX_COMMAND_NAME_CHARS: usize = 24;
+const MAX_COMMAND_ARGS_CHARS: usize = 32;
+const MAX_COMMAND_DESC_CHARS: usize = 64;
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct IdentityPayload {
+    v: u8,
+    action: String,
+    #[serde(default)]
+    client_type: String,
+    #[serde(default)]
+    app_name: String,
+    #[serde(default)]
+    app_version: String,
+    #[serde(default)]
+    capabilities: Vec<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct CommandsPayload {
+    v: u8,
+    action: String,
+    #[serde(default)]
+    commands: Vec<BotCommandView>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CachedPeerIdentity {
+    client_type: ClientType,
+    app_name: String,
+    app_version: String,
+    capabilities: Vec<String>,
+}
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct ChannelMetadata {
@@ -82,15 +125,25 @@ pub(crate) enum SessionSignal {
         epoch: u64,
         message: TextMessageView,
     },
+    ClientJoined {
+        epoch: u64,
+        client: ClientView,
+    },
     ClientMoved {
         epoch: u64,
         id: i32,
         channel_id: u64,
     },
-    /// 目录快照（0.2.1 起目录一变就发）：携带最新的成员状态，含静音标志。
+    /// 目录快照（0.2.1 起目录一变就发）：携带完整频道与成员快照。
     Snapshot {
         epoch: u64,
-        clients: Vec<ClientView>,
+        snapshot: tsclient_rs::DirectorySnapshot,
+    },
+    /// 成员状态或服务器组变更：用于检测本端 `server_groups` 变化。
+    ClientUpdated {
+        epoch: u64,
+        id: i32,
+        server_groups: Vec<String>,
     },
     Disconnected {
         epoch: u64,
@@ -103,6 +156,10 @@ pub(crate) enum SessionSignal {
     ClientLeft {
         epoch: u64,
         id: i32,
+    },
+    PluginCommand {
+        epoch: u64,
+        event: PluginCommandEvent,
     },
     /// TS6 屏幕共享相关的原始通知，一条通知可能带多行。
     StreamNotification {
@@ -175,6 +232,11 @@ pub(crate) struct Actor {
     audio_enabled: bool,
     last_snapshot: Option<(Vec<ChannelView>, Vec<ClientView>)>,
     channel_codecs: HashMap<u64, i32>,
+    channel_list_allowed: Option<bool>,
+    channel_meta_allowed: Option<bool>,
+    client_list_allowed: Option<bool>,
+    subscribed_all_channels: bool,
+    self_server_groups: Vec<String>,
     channel_tools: crate::channel_tools::ChannelTools,
     current_codec: i32,
     ever_connected: bool,
@@ -190,6 +252,11 @@ pub(crate) struct Actor {
     network_monitor: Option<crate::network::NetworkMonitor>,
     last_connection_info_reply: Option<Instant>,
     last_network_sample_error: Option<Instant>,
+    peer_identities: HashMap<String, CachedPeerIdentity>,
+    peer_commands: HashMap<String, Vec<BotCommandView>>,
+    commands_fetching: HashSet<String>,
+    ack_cooldowns: HashMap<String, Instant>,
+    last_announce_time: Option<Instant>,
     pending_images: VecDeque<PendingImage>,
     active_image: Option<ActiveImage>,
     disconnect_tx: watch::Sender<u64>,
@@ -244,6 +311,11 @@ impl Actor {
             audio_enabled,
             last_snapshot: None,
             channel_codecs: HashMap::new(),
+            channel_list_allowed: None,
+            channel_meta_allowed: None,
+            client_list_allowed: None,
+            subscribed_all_channels: false,
+            self_server_groups: Vec::new(),
             channel_tools: Default::default(),
             current_codec: VOICE_CODEC,
             ever_connected: false,
@@ -258,6 +330,11 @@ impl Actor {
             network_monitor: None,
             last_connection_info_reply: None,
             last_network_sample_error: None,
+            peer_identities: HashMap::new(),
+            peer_commands: HashMap::new(),
+            commands_fetching: HashSet::new(),
+            ack_cooldowns: HashMap::new(),
+            last_announce_time: None,
             pending_images: VecDeque::new(),
             active_image: None,
             disconnect_tx,
@@ -416,7 +493,14 @@ impl Actor {
             } => {
                 let result = self.move_to_channel(client_id, channel_id, password).await;
                 if result.is_ok() {
+                    if self.self_client_id == Some(client_id) && self.self_channel_id != channel_id
+                    {
+                        self.reset_directory_permissions();
+                    }
                     let _ = self.refresh_snapshot(true).await;
+                    if self.self_client_id == Some(client_id) && channel_id != 0 {
+                        self.maybe_announce_identity().await;
+                    }
                 }
                 let _ = reply.send(result);
             }
@@ -430,6 +514,7 @@ impl Actor {
                 let _ = reply.send(self.list_clients().await);
             }
             SessionCommand::RequestSnapshot { reply } => {
+                self.reset_directory_permissions();
                 let _ = reply.send(self.refresh_snapshot(true).await);
             }
             SessionCommand::SampleNetwork { reply } => {
@@ -721,6 +806,16 @@ impl Actor {
             SessionCommand::KickStreamViewer { viewer_clid, reply } => {
                 let _ = reply.send(self.kick_stream_viewer(viewer_clid).await);
             }
+            SessionCommand::QueryPeerIdentity { target_clid, reply } => {
+                let _ = reply.send(self.query_peer_identity(target_clid).await);
+            }
+            SessionCommand::FetchBotCommands {
+                target_clid,
+                target_uid,
+                reply,
+            } => {
+                let _ = reply.send(self.fetch_bot_commands(target_clid, &target_uid).await);
+            }
         }
         true
     }
@@ -793,10 +888,16 @@ impl Actor {
         let profile = match self.registry.require(id) {
             Ok(profile) => profile.clone(),
             Err(err) => {
-                self.emit(SessionEvent::Denied {
-                    message: err.to_string(),
+                self.emit(SessionEvent::Log {
+                    level: "warn".into(),
+                    message: format!(
+                        "connect denied: id={id} reconnecting={reconnecting} error={err}"
+                    ),
                 });
                 if reconnecting {
+                    self.emit(SessionEvent::Denied {
+                        message: err.to_string(),
+                    });
                     self.schedule_reconnect();
                 }
                 return Err(err.into());
@@ -810,12 +911,23 @@ impl Actor {
         let resolved = match proto::resolve_target(&profile, &proto::DnsSrvResolver).await {
             Ok(resolved) => resolved,
             Err(err) => {
-                if matches!(err, ConnectError::Address(_) | ConnectError::Blocked { .. }) {
-                    self.emit(SessionEvent::Denied {
-                        message: err.to_string(),
-                    });
-                }
+                self.emit(SessionEvent::Log {
+                    level: "warn".into(),
+                    message: format!(
+                        "connect prepare failed: host={}:{} reconnecting={reconnecting} error={err}",
+                        profile.host, profile.port
+                    ),
+                });
                 if reconnecting {
+                    if matches!(err, ConnectError::Address(_) | ConnectError::Blocked { .. }) {
+                        self.emit(SessionEvent::Denied {
+                            message: err.to_string(),
+                        });
+                    } else {
+                        self.emit(SessionEvent::Failed {
+                            message: err.to_string(),
+                        });
+                    }
                     self.schedule_reconnect();
                 }
                 return Err(err.into());
@@ -830,6 +942,45 @@ impl Actor {
                 ),
             });
         }
+        if !server::is_ip_literal(&resolved.target.host) {
+            match tokio::time::timeout(
+                Duration::from_secs(2),
+                tokio::net::lookup_host((resolved.target.host.as_str(), resolved.target.port)),
+            )
+            .await
+            {
+                Ok(Ok(addrs)) => {
+                    let list: Vec<String> = addrs.map(|addr| addr.to_string()).collect();
+                    self.emit(SessionEvent::Log {
+                        level: "info".into(),
+                        message: format!(
+                            "DNS {}:{} -> [{}]",
+                            resolved.target.host,
+                            resolved.target.port,
+                            list.join(", ")
+                        ),
+                    });
+                }
+                Ok(Err(err)) => {
+                    self.emit(SessionEvent::Log {
+                        level: "warn".into(),
+                        message: format!(
+                            "DNS {}:{} lookup failed: {err}",
+                            resolved.target.host, resolved.target.port
+                        ),
+                    });
+                }
+                Err(_) => {
+                    self.emit(SessionEvent::Log {
+                        level: "warn".into(),
+                        message: format!(
+                            "DNS {}:{} lookup timed out",
+                            resolved.target.host, resolved.target.port
+                        ),
+                    });
+                }
+            }
+        }
         let mut client = match proto::client(
             identity,
             &profile,
@@ -839,18 +990,32 @@ impl Actor {
         ) {
             Ok(client) => client,
             Err(err) => {
-                if matches!(err, ConnectError::Address(_) | ConnectError::Blocked { .. }) {
-                    self.emit(SessionEvent::Denied {
-                        message: err.to_string(),
-                    });
-                }
+                self.emit(SessionEvent::Log {
+                    level: "warn".into(),
+                    message: format!(
+                        "connect prepare failed: target={}:{} via_srv={} reconnecting={reconnecting} error={err}",
+                        resolved.target.host, resolved.target.port, resolved.via_srv
+                    ),
+                });
                 if reconnecting {
+                    if matches!(err, ConnectError::Address(_) | ConnectError::Blocked { .. }) {
+                        self.emit(SessionEvent::Denied {
+                            message: err.to_string(),
+                        });
+                    } else {
+                        self.emit(SessionEvent::Failed {
+                            message: err.to_string(),
+                        });
+                    }
                     self.schedule_reconnect();
                 }
                 return Err(err.into());
             }
         };
 
+        self.reset_directory_permissions();
+        self.subscribed_all_channels = false;
+        self.self_server_groups.clear();
         self.connection_epoch = self.connection_epoch.wrapping_add(1);
         self.epoch.store(self.connection_epoch, Ordering::SeqCst);
         let _ = self.disconnect_tx.send(self.connection_epoch);
@@ -905,6 +1070,11 @@ impl Actor {
                 self.subscribe_all_channels().await;
                 if let Some(client) = self.client.clone() {
                     self.wait_for_welcome_directory(&client).await;
+                    if let Some(snapshot) = client.directory_snapshot()
+                        && let Some(me) = snapshot.clients.iter().find(|c| c.id == client_id)
+                    {
+                        self.self_server_groups = Self::normalize_server_groups(&me.server_groups);
+                    }
                 }
                 if let Err(err) = self.refresh_snapshot(true).await {
                     self.emit(SessionEvent::Log {
@@ -912,6 +1082,7 @@ impl Actor {
                         message: err.to_string(),
                     });
                 }
+                self.maybe_announce_identity().await;
                 self.start_voice();
                 // 服务器端自己的标志在（重）连后是重置过的，把本地状态重新同步。
                 self.report_voice_flags().await;
@@ -923,13 +1094,19 @@ impl Actor {
                 self.invalidate_handlers();
                 let _ = client.disconnect().await;
                 self.consecutive_timeouts = 0;
+                self.emit(SessionEvent::Log {
+                    level: "warn".into(),
+                    message: format!(
+                        "connect failed: target={}:{} via_srv={} reconnecting={reconnecting} error={err}",
+                        resolved.target.host, resolved.target.port, resolved.via_srv
+                    ),
+                });
                 if !reconnecting {
                     self.set_state(SessionState::Disconnected);
-                }
-                self.emit(SessionEvent::Failed {
-                    message: err.to_string(),
-                });
-                if reconnecting {
+                } else {
+                    self.emit(SessionEvent::Failed {
+                        message: err.to_string(),
+                    });
                     self.schedule_reconnect();
                 }
                 Err(err)
@@ -938,12 +1115,23 @@ impl Actor {
                 self.invalidate_handlers();
                 let _ = client.disconnect().await;
                 self.consecutive_timeouts = self.consecutive_timeouts.saturating_add(1);
+                self.emit(SessionEvent::Log {
+                    level: "warn".into(),
+                    message: format!(
+                        "connect timed out ({}s): target={}:{} via_srv={} reconnecting={reconnecting}",
+                        CONNECT_TIMEOUT.as_secs(),
+                        resolved.target.host,
+                        resolved.target.port,
+                        resolved.via_srv
+                    ),
+                });
                 if !reconnecting {
                     self.set_state(SessionState::Disconnected);
+                } else {
+                    self.emit(SessionEvent::Failed {
+                        message: SessionError::Timeout.to_string(),
+                    });
                 }
-                self.emit(SessionEvent::Failed {
-                    message: SessionError::Timeout.to_string(),
-                });
                 if self.consecutive_timeouts >= IDENTITY_TIMEOUTS_BEFORE_UPGRADE {
                     self.start_identity_upgrade().await;
                 } else if reconnecting {
@@ -1028,7 +1216,7 @@ impl Actor {
 
     async fn list_channels(&mut self) -> Result<Vec<ChannelView>, SessionError> {
         let client = self.connected()?;
-        let directory = self.read_channel_directory(&client).await?;
+        let directory = self.read_channel_directory(&client, false).await?;
         if let Some(err) = directory.metadata_error {
             self.emit(SessionEvent::Log {
                 level: "warn".into(),
@@ -1052,9 +1240,12 @@ impl Actor {
         Ok(crate::text_format::bbcode_to_markdown(&desc))
     }
 
-    async fn list_clients(&self) -> Result<Vec<ClientView>, SessionError> {
+    async fn list_clients(&mut self) -> Result<Vec<ClientView>, SessionError> {
         let client = self.connected()?;
-        self.read_clients(&client).await
+        let (mut rows, _) = self.read_clients(&client).await?;
+        self.enrich_clients(&mut rows);
+        rows.sort_by_key(|client| client.id);
+        Ok(rows)
     }
 
     /// 成员列表 = clientlist 与欢迎目录快照的合并，再保证自己这一行可信。
@@ -1062,24 +1253,46 @@ impl Actor {
     /// 部分 TS6 服务器的 clientlist 行缺 `cid`（解析成 0），而欢迎目录的
     /// `channelclientlist` 行频道是准的；反过来目录可能漏掉后来进出的成员。
     /// 两边按 id 合并：clientlist 的标志新，目录的频道准。
-    async fn read_clients(&self, client: &Arc<Client>) -> Result<Vec<ClientView>, SessionError> {
+    /// 返回 `(成员列表, 是否仅来自内存目录快照)`。
+    async fn read_clients(
+        &mut self,
+        client: &Arc<Client>,
+    ) -> Result<(Vec<ClientView>, bool), SessionError> {
+        let directory = client.directory_snapshot().map(|snapshot| snapshot.clients);
+        if self.client_list_allowed == Some(false) {
+            let Some(directory) = directory else {
+                return Err(SessionError::Protocol("成员目录尚未就绪".into()));
+            };
+            let mut rows: Vec<ClientView> = directory.into_iter().map(ClientView::from).collect();
+            self.ensure_self_row(client, &mut rows).await;
+            return Ok((rows, true));
+        }
+
         let listed = tsclient_rs::listClients(client).await;
-        let directory = client
-            .directory_snapshot()
-            .map(|snapshot| snapshot.clients)
-            .unwrap_or_default();
-        let mut rows = match listed {
-            Ok(listed) => merged_clients(listed, directory),
+        let (mut rows, from_directory_only) = match listed {
+            Ok(listed) => {
+                self.client_list_allowed = Some(true);
+                (merged_clients(listed, directory.unwrap_or_default()), false)
+            }
             Err(err) => {
-                // 目录还没同步完（None 或空）时同样拿不到成员，回退到原错误。
-                if directory.is_empty() {
-                    return Err(protocol_error(err));
+                if is_permission_denied(&err) {
+                    self.client_list_allowed = Some(false);
+                    let Some(directory) = directory else {
+                        return Err(protocol_error(err));
+                    };
+                    (directory.into_iter().map(ClientView::from).collect(), true)
+                } else {
+                    let directory = directory.unwrap_or_default();
+                    // 目录还没同步完（None 或空）时同样拿不到成员，回退到原错误。
+                    if directory.is_empty() {
+                        return Err(protocol_error(err));
+                    }
+                    (directory.into_iter().map(ClientView::from).collect(), true)
                 }
-                directory.into_iter().map(ClientView::from).collect()
             }
         };
         self.ensure_self_row(client, &mut rows).await;
-        Ok(rows)
+        Ok((rows, from_directory_only))
     }
 
     /// 自身行修补：本地已知频道时无网补齐；首次未知用 `whoami` 学习。
@@ -1148,6 +1361,11 @@ impl Actor {
                 .get("client_away_message")
                 .filter(|value| !value.is_empty())
                 .map(|value| unescape_text(value)),
+            client_type: ClientType::FlSpeak,
+            app_name: Some("FlSpeak".into()),
+            app_version: Some(env!("CARGO_PKG_VERSION").into()),
+            capabilities: self_capabilities(),
+            bot_commands: None,
         };
         match rows.iter_mut().find(|row| row.id == self_id) {
             Some(row) => *row = view,
@@ -1180,6 +1398,11 @@ impl Actor {
                 output_muted: Some(self.voice_state.deafened),
                 away: Some(self.voice_state.away),
                 away_message: None,
+                client_type: ClientType::FlSpeak,
+                app_name: Some("FlSpeak".into()),
+                app_version: Some(env!("CARGO_PKG_VERSION").into()),
+                capabilities: self_capabilities(),
+                bot_commands: None,
             }),
         }
     }
@@ -1188,10 +1411,9 @@ impl Actor {
         let Some(client) = self.client.clone() else {
             return Ok(());
         };
-        let previous = self.last_snapshot.clone();
         let mut failures = Vec::new();
 
-        let channels = match self.read_channel_directory(&client).await {
+        let incoming_channels = match self.read_channel_directory(&client, true).await {
             Ok(directory) => {
                 if let Some(err) = directory.metadata_error {
                     self.emit(SessionEvent::Log {
@@ -1199,28 +1421,19 @@ impl Actor {
                         message: format!("读取频道标志失败: {err}"),
                     });
                 }
-                if let Some(codecs) = directory.codecs {
-                    self.channel_codecs = codecs;
-                }
-                directory.channels
+                Some((directory.channels, directory.codecs.unwrap_or_default()))
             }
             Err(err) => {
                 failures.push(format!("频道目录: {err}"));
-                previous
-                    .as_ref()
-                    .map(|(channels, _)| channels.clone())
-                    .unwrap_or_default()
+                None
             }
         };
 
-        let clients = match self.read_clients(&client).await {
-            Ok(clients) => clients,
+        let incoming_clients = match self.read_clients(&client).await {
+            Ok((clients, from_directory_only)) => Some((clients, from_directory_only)),
             Err(err) => {
                 failures.push(format!("成员列表: {err}"));
-                previous
-                    .as_ref()
-                    .map(|(_, clients)| clients.clone())
-                    .unwrap_or_default()
+                None
             }
         };
 
@@ -1233,6 +1446,8 @@ impl Actor {
                 message: format!("刷新部分目录失败: {failure}"),
             });
         }
+
+        let (channels, clients) = self.prepare_merged_snapshot(incoming_channels, incoming_clients);
 
         let mut self_codec = self.channel_codecs.get(&self.self_channel_id).copied();
         if self_codec.is_none() && self.self_channel_id != 0 {
@@ -1261,30 +1476,26 @@ impl Actor {
             }
         }
 
-        let changed = force
-            || self
-                .last_snapshot
-                .as_ref()
-                .is_none_or(|(old_channels, old_clients)| {
-                    old_channels != &channels || old_clients != &clients
-                });
-        if changed {
-            self.last_snapshot = Some((channels.clone(), clients.clone()));
-            self.emit(SessionEvent::Snapshot { channels, clients });
-        }
+        self.commit_snapshot(channels, clients, force);
         self.sync_stream_channel().await;
         Ok(())
     }
 
-    async fn subscribe_all_channels(&self) {
+    async fn subscribe_all_channels(&mut self) {
         let Ok(client) = self.connected() else {
             return;
         };
-        if let Err(err) = client.exec_command("channelsubscribeall", 5_000).await {
-            self.emit(SessionEvent::Log {
-                level: "warn".into(),
-                message: format!("订阅全部频道失败，将只接收当前订阅范围内的成员事件: {err}"),
-            });
+        match client.exec_command("channelsubscribeall", 5_000).await {
+            Ok(()) => {
+                self.subscribed_all_channels = true;
+            }
+            Err(err) => {
+                self.subscribed_all_channels = false;
+                self.emit(SessionEvent::Log {
+                    level: "warn".into(),
+                    message: format!("订阅全部频道失败，将只接收当前订阅范围内的成员事件: {err}"),
+                });
+            }
         }
     }
 
@@ -1298,48 +1509,68 @@ impl Actor {
         .await;
     }
 
-    async fn read_channel_directory(
-        &mut self,
-        client: &Client,
-    ) -> Result<ChannelDirectory, SessionError> {
-        // 复用已有目录请求采样，避免额外探测占用语音发送所在的 actor。
-        let started = Instant::now();
-        let result = tsclient_rs::listChannels(client).await;
+    fn record_network_probe(&mut self, started: Instant, reached: bool) {
         if let Some(monitor) = &mut self.network_monitor {
-            // 权限拒绝也是服务器的有效回复，不能当作网络丢失。
-            let reached = matches!(&result, Ok(_) | Err(tsclient_rs::Error::ServerError { .. }));
             let round_trip_ms = reached.then(|| started.elapsed().as_secs_f64() * 1_000.0);
             let telemetry = monitor.record(round_trip_ms, now_millis());
             self.emit(SessionEvent::Network(telemetry));
         }
-        let (channels, explicit_list_worked) = match result {
-            Ok(channels) => (channels, true),
+    }
+
+    async fn read_channel_directory(
+        &mut self,
+        client: &Client,
+        probe_whoami_on_skip: bool,
+    ) -> Result<ChannelDirectory, SessionError> {
+        if self.channel_list_allowed == Some(false) {
+            if probe_whoami_on_skip && self.network_monitor.is_some() {
+                let started = Instant::now();
+                let probe = client.exec_command_with_response("whoami", 5_000).await;
+                let reached = matches!(&probe, Ok(_) | Err(tsclient_rs::Error::ServerError { .. }));
+                self.record_network_probe(started, reached);
+            }
+            let Some(snapshot) = client
+                .directory_snapshot()
+                .filter(|snapshot| !snapshot.channels.is_empty())
+            else {
+                return Err(SessionError::Protocol("频道目录尚未就绪".into()));
+            };
+            return Ok(directory_from_channels(snapshot.channels, None));
+        }
+
+        // 复用已有目录请求采样，避免额外探测占用语音发送所在的 actor。
+        let started = Instant::now();
+        let result = tsclient_rs::listChannels(client).await;
+        // 权限拒绝也是服务器的有效回复，不能当作网络丢失。
+        let reached = matches!(&result, Ok(_) | Err(tsclient_rs::Error::ServerError { .. }));
+        self.record_network_probe(started, reached);
+
+        let channels = match result {
+            Ok(channels) => {
+                self.channel_list_allowed = Some(true);
+                channels
+            }
             Err(err) => {
+                if is_permission_denied(&err) {
+                    self.channel_list_allowed = Some(false);
+                }
                 let Some(snapshot) = client
                     .directory_snapshot()
                     .filter(|snapshot| !snapshot.channels.is_empty())
                 else {
                     return Err(protocol_error(err));
                 };
-                (snapshot.channels, false)
+                return Ok(directory_from_channels(snapshot.channels, None));
             }
         };
-        if !explicit_list_worked {
-            let codecs: HashMap<u64, i32> = channels
-                .iter()
-                .filter_map(|channel| channel.codec.map(|codec| (channel.id, codec)))
-                .collect();
-            return Ok(ChannelDirectory {
-                channels: channels
-                    .into_iter()
-                    .map(|channel| channel_view(channel, None))
-                    .collect(),
-                codecs: (!codecs.is_empty()).then_some(codecs),
-                metadata_error: None,
-            });
+
+        if self.channel_meta_allowed == Some(false) {
+            return Ok(directory_from_channels(channels, None));
         }
+
         match fetch_channel_metadata(client).await {
             Ok(metadata) => {
+                self.channel_meta_allowed = Some(true);
                 let mut codecs: HashMap<u64, i32> = metadata
                     .iter()
                     .filter_map(|(id, channel)| channel.codec.map(|codec| (*id, codec)))
@@ -1362,18 +1593,15 @@ impl Actor {
                 })
             }
             Err(err) => {
-                let codecs: HashMap<u64, i32> = channels
-                    .iter()
-                    .filter_map(|channel| channel.codec.map(|codec| (channel.id, codec)))
-                    .collect();
-                Ok(ChannelDirectory {
-                    channels: channels
-                        .into_iter()
-                        .map(|channel| channel_view(channel, None))
-                        .collect(),
-                    codecs: (!codecs.is_empty()).then_some(codecs),
-                    metadata_error: Some(err.to_string()),
-                })
+                if is_permission_denied(&err) {
+                    self.channel_meta_allowed = Some(false);
+                    Ok(directory_from_channels(channels, None))
+                } else {
+                    Ok(directory_from_channels(
+                        channels,
+                        Some(protocol_error(err).to_string()),
+                    ))
+                }
             }
         }
     }
@@ -1855,6 +2083,13 @@ impl Actor {
                 }
                 self.emit(SessionEvent::TextMessage(message));
             }
+            SessionSignal::ClientJoined { epoch, mut client } => {
+                if epoch != self.connection_epoch {
+                    return;
+                }
+                self.enrich_client(&mut client);
+                self.emit(SessionEvent::ClientJoined(client));
+            }
             SessionSignal::ClientMoved {
                 epoch,
                 id,
@@ -1879,6 +2114,16 @@ impl Actor {
                 if epoch == self.connection_epoch {
                     let events = self.streams.client_left(id);
                     self.emit_all(events);
+                }
+            }
+            SessionSignal::PluginCommand { epoch, event } => {
+                if epoch != self.connection_epoch {
+                    return;
+                }
+                if event.name == IDENTITY_PLUGIN {
+                    self.handle_identity_event(event).await;
+                } else if event.name == COMMANDS_PLUGIN {
+                    self.handle_commands_event(event);
                 }
             }
             SessionSignal::StreamNotification { epoch, name, items } => {
@@ -1946,25 +2191,19 @@ impl Actor {
                 }
                 pending.store(false, Ordering::Relaxed);
             }
-            SessionSignal::Snapshot { epoch, clients } => {
-                if epoch != self.connection_epoch {
-                    return;
+            SessionSignal::Snapshot { epoch, snapshot } => {
+                if epoch == self.connection_epoch {
+                    self.handle_directory_snapshot(snapshot);
                 }
-                // 只有成员状态真的变了才转发；频道元数据仍由周期性的
-                // refresh_snapshot 维护，这里只替换成员并同步基线。
-                let Some((channels, previous)) = self.last_snapshot.clone() else {
-                    return;
-                };
-                // TS6 服务器推给自己的行永远缺频道，用会话状态补齐再比较。
-                let mut clients = clients;
-                self.patch_self_row(&mut clients);
-                if previous == clients {
-                    return;
+            }
+            SessionSignal::ClientUpdated {
+                epoch,
+                id,
+                server_groups,
+            } => {
+                if epoch == self.connection_epoch && self.self_client_id == Some(id) {
+                    self.sync_self_server_groups(&server_groups);
                 }
-                if let Some((_, old_clients)) = self.last_snapshot.as_mut() {
-                    *old_clients = clients.clone();
-                }
-                self.emit(SessionEvent::Snapshot { channels, clients });
             }
             SessionSignal::Disconnected { epoch, message } => {
                 if epoch == self.connection_epoch {
@@ -2132,6 +2371,7 @@ impl Actor {
         if self.self_channel_id == channel_id {
             return;
         }
+        self.reset_directory_permissions();
         let mut codec = self.channel_codecs.get(&channel_id).copied();
         if codec.is_none()
             && channel_id != 0
@@ -2151,6 +2391,9 @@ impl Actor {
             }
         }
         self.apply_self_channel(channel_id, codec);
+        if channel_id != 0 {
+            self.maybe_announce_identity().await;
+        }
     }
 
     /// 流目录与本地推流都跟随自己所在的频道。频道变了就作废旧目录、退出观看流并停止推流，再在新频道里发现。
@@ -2643,9 +2886,257 @@ impl Actor {
         self.transfer_target = None;
         self.last_connection_info_reply = None;
         self.last_network_sample_error = None;
+        self.peer_identities.clear();
+        self.peer_commands.clear();
+        self.commands_fetching.clear();
+        self.ack_cooldowns.clear();
+        self.last_announce_time = None;
+        self.reset_directory_permissions();
+        self.subscribed_all_channels = false;
+        self.self_server_groups.clear();
         self.connection_epoch = self.connection_epoch.wrapping_add(1);
         self.epoch.store(self.connection_epoch, Ordering::SeqCst);
         let _ = self.disconnect_tx.send(self.connection_epoch);
+    }
+
+    fn enrich_clients(&self, clients: &mut [ClientView]) {
+        for client in clients {
+            self.enrich_client(client);
+        }
+    }
+
+    fn enrich_client(&self, client: &mut ClientView) {
+        if Some(client.id) == self.self_client_id {
+            client.client_type = ClientType::FlSpeak;
+            client.app_name = Some("FlSpeak".into());
+            client.app_version = Some(env!("CARGO_PKG_VERSION").into());
+            client.capabilities = self_capabilities();
+            client.bot_commands = None;
+            return;
+        }
+        if client.uid.is_empty() {
+            return;
+        }
+        if let Some(identity) = self.peer_identities.get(&client.uid) {
+            client.client_type = identity.client_type;
+            client.app_name = Some(identity.app_name.clone());
+            client.app_version = Some(identity.app_version.clone());
+            client.capabilities = identity.capabilities.clone();
+        }
+        if let Some(commands) = self.peer_commands.get(&client.uid) {
+            client.bot_commands = Some(commands.clone());
+        }
+    }
+
+    fn sync_peer_metadata_to_snapshot(&mut self) {
+        let Some((channels, mut clients)) = self.last_snapshot.clone() else {
+            return;
+        };
+        self.enrich_clients(&mut clients);
+        if self
+            .last_snapshot
+            .as_ref()
+            .is_some_and(|(_, old_clients)| old_clients == &clients)
+        {
+            return;
+        }
+        self.last_snapshot = Some((channels.clone(), clients.clone()));
+        self.emit(SessionEvent::Snapshot { channels, clients });
+    }
+
+    fn resolve_peer_uid(&self, invoker_id: i32, invoker_uid: &str) -> String {
+        if !invoker_uid.is_empty() {
+            return invoker_uid.to_string();
+        }
+        self.last_snapshot
+            .as_ref()
+            .and_then(|(_, clients)| {
+                clients
+                    .iter()
+                    .find(|client| client.id == invoker_id && !client.uid.is_empty())
+                    .map(|client| client.uid.clone())
+            })
+            .or_else(|| {
+                self.client
+                    .as_ref()?
+                    .directory_snapshot()?
+                    .clients
+                    .into_iter()
+                    .find(|client| client.id == invoker_id && !client.uid.is_empty())
+                    .map(|client| client.uid)
+            })
+            .unwrap_or_default()
+    }
+
+    async fn maybe_announce_identity(&mut self) {
+        if self.self_channel_id == 0 {
+            return;
+        }
+        let Some(client) = self.client.clone() else {
+            return;
+        };
+        let now = Instant::now();
+        if let Some(last) = self.last_announce_time
+            && now.duration_since(last) < SELF_ANNOUNCE_DEBOUNCE
+        {
+            return;
+        }
+        self.last_announce_time = Some(now);
+        let payload = IdentityPayload {
+            v: 1,
+            action: "announce".into(),
+            client_type: "flspeak".into(),
+            app_name: "FlSpeak".into(),
+            app_version: env!("CARGO_PKG_VERSION").into(),
+            capabilities: self_capabilities(),
+        };
+        if let Ok(data) = serde_json::to_string(&payload) {
+            let _ = tsclient_rs::send_plugin_command(
+                &client,
+                IDENTITY_PLUGIN,
+                &data,
+                PluginCommandTarget::CurrentChannel,
+                None,
+            )
+            .await;
+        }
+    }
+
+    fn should_reply_identity_ack(
+        &mut self,
+        cooldown_key: &str,
+        action: &str,
+        now: Instant,
+    ) -> bool {
+        let cooldown = match action {
+            "announce" => ANNOUNCE_ACK_COOLDOWN,
+            "query" => QUERY_ACK_COOLDOWN,
+            _ => return false,
+        };
+        if let Some(last) = self.ack_cooldowns.get(cooldown_key)
+            && now.duration_since(*last) < cooldown
+        {
+            return false;
+        }
+        self.ack_cooldowns.insert(cooldown_key.to_string(), now);
+        true
+    }
+
+    async fn handle_identity_event(&mut self, event: PluginCommandEvent) {
+        let Ok(payload) = serde_json::from_str::<IdentityPayload>(&event.data) else {
+            return;
+        };
+        if self.self_client_id == Some(event.invoker_id) {
+            return;
+        }
+
+        let peer_uid = self.resolve_peer_uid(event.invoker_id, &event.invoker_uid);
+        if !peer_uid.is_empty() && !payload.client_type.is_empty() {
+            let cached = sanitize_identity_payload(&payload);
+            self.peer_identities.insert(peer_uid.clone(), cached);
+            self.sync_peer_metadata_to_snapshot();
+        }
+
+        let cooldown_key = if !peer_uid.is_empty() {
+            peer_uid
+        } else {
+            event.invoker_id.to_string()
+        };
+        if !self.should_reply_identity_ack(&cooldown_key, &payload.action, Instant::now()) {
+            return;
+        }
+
+        if let Some(client) = self.client.clone() {
+            let reply = IdentityPayload {
+                v: 1,
+                action: "announce_ack".into(),
+                client_type: "flspeak".into(),
+                app_name: "FlSpeak".into(),
+                app_version: env!("CARGO_PKG_VERSION").into(),
+                capabilities: self_capabilities(),
+            };
+            if let Ok(data) = serde_json::to_string(&reply) {
+                let _ = tsclient_rs::send_plugin_command(
+                    &client,
+                    IDENTITY_PLUGIN,
+                    &data,
+                    PluginCommandTarget::Client,
+                    Some(event.invoker_id),
+                )
+                .await;
+            }
+        }
+    }
+
+    async fn query_peer_identity(&mut self, target_clid: i32) -> Result<(), SessionError> {
+        let client = self.connected()?;
+        let req = serde_json::json!({
+            "v": 1,
+            "action": "query"
+        });
+        tsclient_rs::send_plugin_command(
+            &client,
+            IDENTITY_PLUGIN,
+            &req.to_string(),
+            PluginCommandTarget::Client,
+            Some(target_clid),
+        )
+        .await
+        .map_err(protocol_error)
+    }
+
+    fn handle_commands_event(&mut self, event: PluginCommandEvent) {
+        let Ok(payload) = serde_json::from_str::<CommandsPayload>(&event.data) else {
+            return;
+        };
+        if payload.action != "list_ack" || self.self_client_id == Some(event.invoker_id) {
+            return;
+        }
+        let peer_uid = self.resolve_peer_uid(event.invoker_id, &event.invoker_uid);
+        if peer_uid.is_empty() {
+            return;
+        }
+        self.commands_fetching.remove(&peer_uid);
+        let sanitized = sanitize_bot_commands(payload.commands);
+        self.peer_commands.insert(peer_uid, sanitized);
+        self.sync_peer_metadata_to_snapshot();
+    }
+
+    async fn fetch_bot_commands(
+        &mut self,
+        target_clid: i32,
+        target_uid: &str,
+    ) -> Result<(), SessionError> {
+        if target_uid.is_empty()
+            || self.peer_commands.contains_key(target_uid)
+            || !self.commands_fetching.insert(target_uid.to_string())
+        {
+            return Ok(());
+        }
+        let client = match self.connected() {
+            Ok(client) => client,
+            Err(err) => {
+                self.commands_fetching.remove(target_uid);
+                return Err(err);
+            }
+        };
+        let req = serde_json::json!({
+            "v": 1,
+            "action": "list_req"
+        });
+        let result = tsclient_rs::send_plugin_command(
+            &client,
+            COMMANDS_PLUGIN,
+            &req.to_string(),
+            PluginCommandTarget::Client,
+            Some(target_clid),
+        )
+        .await
+        .map_err(protocol_error);
+        if result.is_err() {
+            self.commands_fetching.remove(target_uid);
+        }
+        result
     }
 
     fn set_state(&mut self, state: SessionState) {
@@ -2658,6 +3149,124 @@ impl Actor {
             state,
             connection_epoch: self.connection_epoch,
         });
+    }
+
+    fn reset_directory_permissions(&mut self) {
+        self.channel_list_allowed = None;
+        self.channel_meta_allowed = None;
+        self.client_list_allowed = None;
+    }
+
+    fn normalize_server_groups(groups: &[String]) -> Vec<String> {
+        let mut normalized: Vec<String> =
+            groups.iter().filter(|g| !g.is_empty()).cloned().collect();
+        normalized.sort();
+        normalized.dedup();
+        normalized
+    }
+
+    fn sync_self_server_groups(&mut self, groups: &[String]) {
+        let normalized = Self::normalize_server_groups(groups);
+        if self.self_server_groups != normalized {
+            self.self_server_groups = normalized;
+            self.reset_directory_permissions();
+        }
+    }
+
+    fn handle_directory_snapshot(&mut self, snapshot: tsclient_rs::DirectorySnapshot) {
+        if let Some(self_id) = self.self_client_id
+            && let Some(me) = snapshot.clients.iter().find(|c| c.id == self_id)
+        {
+            self.sync_self_server_groups(&me.server_groups);
+        }
+        let incoming_codecs: HashMap<u64, i32> = snapshot
+            .channels
+            .iter()
+            .filter_map(|channel| channel.codec.map(|codec| (channel.id, codec)))
+            .collect();
+        let incoming_channels: Vec<ChannelView> = snapshot
+            .channels
+            .into_iter()
+            .map(|channel| channel_view(channel, None))
+            .collect();
+        let incoming_clients: Vec<ClientView> =
+            snapshot.clients.into_iter().map(ClientView::from).collect();
+        let (channels, clients) = self.prepare_merged_snapshot(
+            Some((incoming_channels, incoming_codecs)),
+            Some((incoming_clients, true)),
+        );
+        if self.self_channel_id != 0
+            && let Some(codec) = self.channel_codecs.get(&self.self_channel_id).copied()
+            && codec != self.current_codec
+        {
+            self.apply_channel_codec(Some(codec));
+        }
+        self.commit_snapshot(channels, clients, false);
+    }
+
+    fn prepare_merged_snapshot(
+        &mut self,
+        incoming_channels: Option<(Vec<ChannelView>, HashMap<u64, i32>)>,
+        incoming_clients: Option<(Vec<ClientView>, bool)>,
+    ) -> (Vec<ChannelView>, Vec<ClientView>) {
+        let (prev_channels, prev_clients) = self
+            .last_snapshot
+            .as_ref()
+            .map(|(channels, clients)| (channels.as_slice(), clients.as_slice()))
+            .unwrap_or((&[], &[]));
+
+        let channels = match incoming_channels {
+            Some((raw_channels, raw_codecs)) => {
+                let (merged_channels, merged_codecs) = merge_channels(
+                    raw_channels,
+                    raw_codecs,
+                    prev_channels,
+                    &self.channel_codecs,
+                );
+                self.channel_codecs = merged_codecs;
+                merged_channels
+            }
+            None => prev_channels.to_vec(),
+        };
+
+        let mut clients = match incoming_clients {
+            Some((raw_clients, from_directory_only)) => {
+                let prune_departed = !from_directory_only
+                    || self.subscribed_all_channels
+                    || self.client_list_allowed == Some(false);
+                merge_clients(
+                    raw_clients,
+                    prev_clients,
+                    prune_departed,
+                    self.self_channel_id,
+                )
+            }
+            None => prev_clients.to_vec(),
+        };
+        // TS6 服务器推给自己的行永远缺频道，用会话状态补齐后再统一补充身份信息。
+        self.patch_self_row(&mut clients);
+        self.enrich_clients(&mut clients);
+        clients.sort_by_key(|client| client.id);
+        (channels, clients)
+    }
+
+    fn commit_snapshot(
+        &mut self,
+        channels: Vec<ChannelView>,
+        clients: Vec<ClientView>,
+        force: bool,
+    ) {
+        let changed = force
+            || self
+                .last_snapshot
+                .as_ref()
+                .is_none_or(|(old_channels, old_clients)| {
+                    old_channels != &channels || old_clients != &clients
+                });
+        if changed {
+            self.last_snapshot = Some((channels.clone(), clients.clone()));
+            self.emit(SessionEvent::Snapshot { channels, clients });
+        }
     }
 
     fn emit_voice_state(&self) {
@@ -2690,12 +3299,116 @@ fn reconnect_delay(attempt: u32) -> Duration {
 
 async fn fetch_channel_metadata(
     client: &Client,
-) -> Result<HashMap<u64, ChannelMetadata>, SessionError> {
+) -> Result<HashMap<u64, ChannelMetadata>, tsclient_rs::Error> {
     let rows = client
         .exec_command_with_response("channellist -flags -codec", 5_000)
-        .await
-        .map_err(protocol_error)?;
+        .await?;
     Ok(parse_channel_metadata(&rows))
+}
+
+fn is_permission_denied(err: &tsclient_rs::Error) -> bool {
+    matches!(err, tsclient_rs::Error::ServerError { id, .. } if id == "2568")
+}
+
+fn directory_from_channels(
+    channels: Vec<ChannelInfo>,
+    metadata_error: Option<String>,
+) -> ChannelDirectory {
+    let codecs: HashMap<u64, i32> = channels
+        .iter()
+        .filter_map(|channel| channel.codec.map(|codec| (channel.id, codec)))
+        .collect();
+    ChannelDirectory {
+        channels: channels
+            .into_iter()
+            .map(|channel| channel_view(channel, None))
+            .collect(),
+        codecs: (!codecs.is_empty()).then_some(codecs),
+        metadata_error,
+    }
+}
+
+fn merge_channels(
+    incoming_channels: Vec<ChannelView>,
+    incoming_codecs: HashMap<u64, i32>,
+    previous_channels: &[ChannelView],
+    existing_codecs: &HashMap<u64, i32>,
+) -> (Vec<ChannelView>, HashMap<u64, i32>) {
+    let prev_by_id: HashMap<u64, &ChannelView> = previous_channels
+        .iter()
+        .map(|channel| (channel.id, channel))
+        .collect();
+    let mut merged_channels = Vec::with_capacity(incoming_channels.len());
+    let mut merged_codecs = HashMap::new();
+
+    for mut channel in incoming_channels {
+        if let Some(prev) = prev_by_id.get(&channel.id) {
+            channel.order = channel.order.or(prev.order);
+            channel.icon_id = channel.icon_id.or(prev.icon_id);
+            channel.max_clients = channel.max_clients.or(prev.max_clients);
+            channel.max_clients_limited = channel.max_clients_limited.or(prev.max_clients_limited);
+            channel.password_protected = channel.password_protected.or(prev.password_protected);
+        }
+        if let Some(codec) = incoming_codecs
+            .get(&channel.id)
+            .copied()
+            .or_else(|| existing_codecs.get(&channel.id).copied())
+        {
+            merged_codecs.insert(channel.id, codec);
+        }
+        merged_channels.push(channel);
+    }
+
+    (merged_channels, merged_codecs)
+}
+
+fn merge_clients(
+    incoming_clients: Vec<ClientView>,
+    previous_clients: &[ClientView],
+    prune_departed: bool,
+    self_channel_id: u64,
+) -> Vec<ClientView> {
+    let prev_by_id: HashMap<i32, &ClientView> = previous_clients
+        .iter()
+        .map(|client| (client.id, client))
+        .collect();
+    let mut merged = Vec::with_capacity(incoming_clients.len());
+    let mut seen = HashSet::with_capacity(incoming_clients.len());
+
+    for mut client in incoming_clients {
+        seen.insert(client.id);
+        if let Some(prev) = prev_by_id.get(&client.id) {
+            if client.nickname.is_empty() && !prev.nickname.is_empty() {
+                client.nickname = prev.nickname.clone();
+            }
+            if client.uid.is_empty() && !prev.uid.is_empty() {
+                client.uid = prev.uid.clone();
+            }
+            if client.channel_id == 0 && prev.channel_id != 0 {
+                client.channel_id = prev.channel_id;
+            }
+            client.input_muted = client.input_muted.or(prev.input_muted);
+            client.output_muted = client.output_muted.or(prev.output_muted);
+            client.away = client.away.or(prev.away);
+            if client.away != Some(false) {
+                client.away_message = client.away_message.or_else(|| prev.away_message.clone());
+            }
+        }
+        merged.push(client);
+    }
+
+    if !prune_departed {
+        for prev in previous_clients {
+            if !seen.contains(&prev.id)
+                && prev.channel_id != self_channel_id
+                && prev.channel_id != 0
+            {
+                merged.push(prev.clone());
+            }
+        }
+    }
+
+    merged
 }
 
 fn parse_channel_metadata(rows: &[HashMap<String, String>]) -> HashMap<u64, ChannelMetadata> {
@@ -2964,7 +3677,11 @@ fn emit(events: &broadcast::Sender<SessionEvent>, event: SessionEvent) {
             "error" => tracing::error!(target: "session", "{message}"),
             "warn" => tracing::warn!(target: "session", "{message}"),
             "debug" => tracing::debug!(target: "session", "{message}"),
+            "trace" => tracing::trace!(target: "session", "{message}"),
             _ => tracing::info!(target: "session", "{message}"),
+        }
+        if matches!(level.as_str(), "debug" | "trace") {
+            return;
         }
     }
     // 没有订阅者时事件直接丢弃，actor 不因此停下。
@@ -3063,14 +3780,28 @@ fn register_handlers(
         }
     }));
 
-    let channel = events.clone();
+    let channel = signals.clone();
     let live = Arc::clone(&current);
     client.on_client_enter(Arc::new(move |event: ProtocolEvent| {
         if live.load(Ordering::Relaxed) != epoch {
             return;
         }
         if let ProtocolEvent::ClientEnter(info) = event {
-            emit(&channel, SessionEvent::ClientJoined(ClientView::from(info)));
+            let _ = channel.send(SessionSignal::ClientJoined {
+                epoch,
+                client: ClientView::from(info),
+            });
+        }
+    }));
+
+    let channel = signals.clone();
+    let live = Arc::clone(&current);
+    client.on_plugin_command(Arc::new(move |event: ProtocolEvent| {
+        if live.load(Ordering::Relaxed) != epoch {
+            return;
+        }
+        if let ProtocolEvent::PluginCommand(event) = event {
+            let _ = channel.send(SessionSignal::PluginCommand { epoch, event });
         }
     }));
 
@@ -3088,6 +3819,7 @@ fn register_handlers(
     }));
 
     let channel = events.clone();
+    let updated = signals.clone();
     let live = Arc::clone(&current);
     client.on_client_updated(Arc::new(move |event: ProtocolEvent| {
         if live.load(Ordering::Relaxed) != epoch {
@@ -3104,6 +3836,11 @@ fn register_handlers(
                     away_message: info.away_message,
                 },
             );
+            let _ = updated.send(SessionSignal::ClientUpdated {
+                epoch,
+                id: info.id,
+                server_groups: info.server_groups,
+            });
         }
     }));
 
@@ -3137,10 +3874,7 @@ fn register_handlers(
             return;
         }
         if let ProtocolEvent::DirectorySnapshot(snapshot) = event {
-            let _ = channel.send(SessionSignal::Snapshot {
-                epoch,
-                clients: snapshot.clients.into_iter().map(ClientView::from).collect(),
-            });
+            let _ = channel.send(SessionSignal::Snapshot { epoch, snapshot });
         }
     }));
 
@@ -3216,6 +3950,49 @@ fn register_handlers(
     }));
 }
 
+fn self_capabilities() -> Vec<String> {
+    Vec::new()
+}
+
+fn truncate_chars(s: &str, max_chars: usize) -> String {
+    s.chars().take(max_chars).collect()
+}
+
+fn sanitize_identity_payload(payload: &IdentityPayload) -> CachedPeerIdentity {
+    let client_type = match payload.client_type.as_str() {
+        "flspeak" => ClientType::FlSpeak,
+        "bot" => ClientType::Bot,
+        _ => ClientType::Custom,
+    };
+    let app_name = truncate_chars(&payload.app_name, MAX_IDENTITY_FIELD_CHARS);
+    let app_version = truncate_chars(&payload.app_version, MAX_IDENTITY_FIELD_CHARS);
+    let capabilities = payload
+        .capabilities
+        .iter()
+        .take(MAX_CAPABILITIES)
+        .map(|cap| truncate_chars(cap, MAX_IDENTITY_FIELD_CHARS))
+        .collect();
+    CachedPeerIdentity {
+        client_type,
+        app_name,
+        app_version,
+        capabilities,
+    }
+}
+
+fn sanitize_bot_commands(commands: Vec<BotCommandView>) -> Vec<BotCommandView> {
+    commands
+        .into_iter()
+        .take(MAX_BOT_COMMANDS)
+        .map(|mut cmd| {
+            cmd.name = truncate_chars(&cmd.name, MAX_COMMAND_NAME_CHARS);
+            cmd.args = truncate_chars(&cmd.args, MAX_COMMAND_ARGS_CHARS);
+            cmd.desc = truncate_chars(&cmd.desc, MAX_COMMAND_DESC_CHARS);
+            cmd
+        })
+        .collect()
+}
+
 impl From<ClientInfo> for ClientView {
     fn from(info: ClientInfo) -> Self {
         Self {
@@ -3227,6 +4004,11 @@ impl From<ClientInfo> for ClientView {
             output_muted: info.output_muted,
             away: info.away,
             away_message: info.away_message,
+            client_type: ClientType::Standard,
+            app_name: None,
+            app_version: None,
+            capabilities: Vec::new(),
+            bot_commands: None,
         }
     }
 }
@@ -3241,7 +4023,11 @@ impl EventLogger {
             "error" => tracing::error!(target: "tsclient", message = message),
             "warn" => tracing::warn!(target: "tsclient", message = message),
             "debug" => tracing::debug!(target: "tsclient", message = message),
+            "trace" => tracing::trace!(target: "tsclient", message = message),
             _ => tracing::info!(target: "tsclient", message = message),
+        }
+        if matches!(level, "debug" | "trace") {
+            return;
         }
         let _ = self.events.send(SessionEvent::Log {
             level: level.to_string(),
@@ -3753,6 +4539,11 @@ mod tests {
                     output_muted: None,
                     away: None,
                     away_message: None,
+                    client_type: ClientType::FlSpeak,
+                    app_name: Some("FlSpeak".into()),
+                    app_version: Some("0.1.12".into()),
+                    capabilities: Vec::new(),
+                    bot_commands: None,
                 },
                 ClientView {
                     id: 9,
@@ -3763,6 +4554,11 @@ mod tests {
                     output_muted: None,
                     away: None,
                     away_message: None,
+                    client_type: ClientType::Standard,
+                    app_name: None,
+                    app_version: None,
+                    capabilities: Vec::new(),
+                    bot_commands: None,
                 },
             ],
         ));
@@ -4076,5 +4872,689 @@ mod tests {
         let fallback = channel_view(channel, None);
         assert_eq!(fallback.order, Some(1));
         assert_eq!(fallback.password_protected, None);
+    }
+
+    #[test]
+    fn bot_command_view_deserializes_with_default_args_and_desc() {
+        let json = r#"{"v":1,"action":"list_ack","commands":[{"name":"ping"},{"name":"play","args":"<song>","desc":"Play song"}]}"#;
+        let payload: CommandsPayload = serde_json::from_str(json).expect("deserialize commands");
+        assert_eq!(payload.commands.len(), 2);
+        assert_eq!(
+            payload.commands[0],
+            BotCommandView {
+                name: "ping".into(),
+                args: String::new(),
+                desc: String::new(),
+            }
+        );
+        assert_eq!(
+            payload.commands[1],
+            BotCommandView {
+                name: "play".into(),
+                args: "<song>".into(),
+                desc: "Play song".into(),
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn identity_event_truncates_fields_ignores_self_and_updates_snapshot() {
+        let mut actor = audio_actor();
+        actor.self_client_id = Some(7);
+        actor.last_snapshot = Some((
+            Vec::new(),
+            vec![
+                ClientView::from(ClientInfo {
+                    id: 7,
+                    nickname: "Self".into(),
+                    uid: "self-uid".into(),
+                    ..client_info(7, 5, "Self")
+                }),
+                ClientView::from(ClientInfo {
+                    id: 12,
+                    nickname: "MusicBot".into(),
+                    uid: "bot-uid".into(),
+                    ..client_info(12, 5, "MusicBot")
+                }),
+            ],
+        ));
+        let mut events = actor.events.subscribe();
+
+        // 自身广播回显直接忽略，不写入缓存也不触发回复。
+        actor
+            .handle_identity_event(PluginCommandEvent {
+                name: IDENTITY_PLUGIN.into(),
+                data: r#"{"v":1,"action":"announce","client_type":"bot","app_name":"FakeSelf","app_version":"9.9"}"#.into(),
+                invoker_id: 7,
+                invoker_name: "Self".into(),
+                invoker_uid: "self-uid".into(),
+            })
+            .await;
+        assert!(!actor.peer_identities.contains_key("self-uid"));
+        assert!(!actor.ack_cooldowns.contains_key("self-uid"));
+        assert!(events.try_recv().is_err());
+
+        // 对端宣告超长字段与过多 capability 时按上限截断，并同步刷新内存快照。
+        let long_name = "B".repeat(50);
+        let long_ver = "1".repeat(40);
+        let caps: Vec<String> = (0..20)
+            .map(|i| format!("cap-{i:02}-{}", "x".repeat(40)))
+            .collect();
+        let data = serde_json::json!({
+            "v": 1,
+            "action": "announce_ack",
+            "client_type": "bot",
+            "app_name": long_name,
+            "app_version": long_ver,
+            "capabilities": caps,
+        })
+        .to_string();
+
+        actor
+            .handle_identity_event(PluginCommandEvent {
+                name: IDENTITY_PLUGIN.into(),
+                data,
+                invoker_id: 12,
+                invoker_name: "MusicBot".into(),
+                invoker_uid: "bot-uid".into(),
+            })
+            .await;
+
+        let Some(SessionEvent::Snapshot { clients, .. }) = events.try_recv().ok() else {
+            panic!("expected Snapshot event after identity update");
+        };
+        let bot = clients.iter().find(|c| c.id == 12).expect("bot row");
+        assert_eq!(bot.client_type, ClientType::Bot);
+        assert_eq!(bot.app_name.as_deref().map(str::len), Some(32));
+        assert_eq!(bot.app_version.as_deref().map(str::len), Some(32));
+        assert_eq!(bot.capabilities.len(), 16);
+        assert!(bot.capabilities.iter().all(|c| c.chars().count() <= 32));
+    }
+
+    #[test]
+    fn identity_reply_cooldown_throttles_announce_and_query_per_uid() {
+        let mut actor = audio_actor();
+        let t0 = Instant::now();
+
+        assert!(actor.should_reply_identity_ack("peer-a", "announce", t0));
+        assert!(!actor.should_reply_identity_ack(
+            "peer-a",
+            "announce",
+            t0 + Duration::from_secs(9)
+        ));
+        assert!(actor.should_reply_identity_ack(
+            "peer-a",
+            "announce",
+            t0 + Duration::from_secs(10)
+        ));
+
+        let t1 = t0 + Duration::from_secs(20);
+        assert!(actor.should_reply_identity_ack("peer-b", "query", t1));
+        assert!(!actor.should_reply_identity_ack("peer-b", "query", t1 + Duration::from_secs(4)));
+        assert!(actor.should_reply_identity_ack("peer-b", "query", t1 + Duration::from_secs(5)));
+
+        assert!(!actor.should_reply_identity_ack("peer-c", "announce_ack", t1));
+    }
+
+    #[tokio::test]
+    async fn commands_event_truncates_fields_clears_inflight_and_updates_snapshot() {
+        let mut actor = audio_actor();
+        actor.self_client_id = Some(7);
+        actor.last_snapshot = Some((
+            Vec::new(),
+            vec![ClientView::from(ClientInfo {
+                id: 12,
+                nickname: "MusicBot".into(),
+                uid: "bot-uid".into(),
+                ..client_info(12, 5, "MusicBot")
+            })],
+        ));
+        actor.commands_fetching.insert("bot-uid".into());
+
+        // 请求仍在途中时，重复调用 fetch_bot_commands 直接幂等跳过。
+        assert!(actor.fetch_bot_commands(12, "bot-uid").await.is_ok());
+
+        let mut events = actor.events.subscribe();
+        let raw_commands: Vec<serde_json::Value> = (0..20)
+            .map(|i| {
+                serde_json::json!({
+                    "name": format!("cmd_{i:02}_{}", "n".repeat(30)),
+                    "args": "a".repeat(45),
+                    "desc": "转化说明".repeat(25),
+                })
+            })
+            .collect();
+        let payload = serde_json::json!({
+            "v": 1,
+            "action": "list_ack",
+            "commands": raw_commands,
+        })
+        .to_string();
+
+        actor.handle_commands_event(PluginCommandEvent {
+            name: COMMANDS_PLUGIN.into(),
+            data: payload,
+            invoker_id: 12,
+            invoker_name: "MusicBot".into(),
+            invoker_uid: "bot-uid".into(),
+        });
+
+        assert!(!actor.commands_fetching.contains("bot-uid"));
+        let cached = actor.peer_commands.get("bot-uid").expect("cached commands");
+        assert_eq!(cached.len(), 16);
+        assert!(cached.iter().all(|c| c.name.chars().count() <= 24));
+        assert!(cached.iter().all(|c| c.args.chars().count() <= 32));
+        assert!(cached.iter().all(|c| c.desc.chars().count() <= 64));
+
+        let Some(SessionEvent::Snapshot { clients, .. }) = events.try_recv().ok() else {
+            panic!("expected Snapshot event after commands update");
+        };
+        let bot = clients.iter().find(|c| c.id == 12).expect("bot row");
+        assert_eq!(bot.bot_commands.as_ref().map(Vec::len), Some(16));
+
+        // 命中本地缓存时 fetch_bot_commands 直接返回 Ok(())，跳过网络请求。
+        assert!(actor.fetch_bot_commands(12, "bot-uid").await.is_ok());
+        assert!(!actor.commands_fetching.contains("bot-uid"));
+    }
+
+    #[test]
+    fn invalidate_handlers_resets_open_protocol_caches_and_cooldowns() {
+        let mut actor = audio_actor();
+        actor.peer_identities.insert(
+            "bot-uid".into(),
+            CachedPeerIdentity {
+                client_type: ClientType::Bot,
+                app_name: "Bot".into(),
+                app_version: "1.0".into(),
+                capabilities: vec!["chat:slash_commands".into()],
+            },
+        );
+        actor.peer_commands.insert("bot-uid".into(), Vec::new());
+        actor.commands_fetching.insert("other-uid".into());
+        actor.ack_cooldowns.insert("bot-uid".into(), Instant::now());
+        actor.last_announce_time = Some(Instant::now());
+
+        actor.invalidate_handlers();
+
+        assert!(actor.peer_identities.is_empty());
+        assert!(actor.peer_commands.is_empty());
+        assert!(actor.commands_fetching.is_empty());
+        assert!(actor.ack_cooldowns.is_empty());
+        assert!(actor.last_announce_time.is_none());
+        assert!(actor.channel_list_allowed.is_none());
+        assert!(actor.channel_meta_allowed.is_none());
+        assert!(actor.client_list_allowed.is_none());
+        assert!(!actor.subscribed_all_channels);
+        assert!(actor.self_server_groups.is_empty());
+    }
+
+    fn channel_info(id: u64, parent_id: u64, order: u64, name: &str) -> ChannelInfo {
+        ChannelInfo {
+            id,
+            parent_id,
+            order,
+            name: name.to_string(),
+            description: String::new(),
+            password_protected: None,
+            max_clients: None,
+            max_clients_limited: None,
+            codec: None,
+            icon_id: None,
+        }
+    }
+
+    #[test]
+    fn directory_snapshot_merges_channels_codecs_and_skips_unchanged_diff() {
+        let mut actor = audio_actor();
+        actor.self_client_id = Some(1);
+        actor.self_channel_id = 5;
+        actor.subscribed_all_channels = true;
+        actor.peer_identities.insert(
+            "peer-uid".into(),
+            CachedPeerIdentity {
+                client_type: ClientType::FlSpeak,
+                app_name: "FlSpeak".into(),
+                app_version: "0.1.12".into(),
+                capabilities: vec!["chat".into()],
+            },
+        );
+        actor.channel_codecs.insert(5, 4);
+        actor.channel_codecs.insert(99, 5);
+        actor.last_snapshot = Some((
+            vec![
+                ChannelView {
+                    icon_id: Some(77),
+                    id: 5,
+                    parent_id: 0,
+                    order: Some(0),
+                    name: "Lobby".into(),
+                    description: String::new(),
+                    max_clients: Some(12),
+                    max_clients_limited: Some(true),
+                    password_protected: Some(true),
+                },
+                ChannelView {
+                    icon_id: None,
+                    id: 99,
+                    parent_id: 0,
+                    order: Some(5),
+                    name: "Deleted".into(),
+                    description: String::new(),
+                    max_clients: None,
+                    max_clients_limited: None,
+                    password_protected: None,
+                },
+            ],
+            vec![
+                ClientView {
+                    id: 1,
+                    nickname: "Self".into(),
+                    uid: "self-uid".into(),
+                    channel_id: 5,
+                    input_muted: None,
+                    output_muted: None,
+                    away: None,
+                    away_message: None,
+                    client_type: ClientType::FlSpeak,
+                    app_name: Some("FlSpeak".into()),
+                    app_version: Some(env!("CARGO_PKG_VERSION").into()),
+                    capabilities: Vec::new(),
+                    bot_commands: None,
+                },
+                ClientView {
+                    id: 2,
+                    nickname: "Peer".into(),
+                    uid: "peer-uid".into(),
+                    channel_id: 5,
+                    input_muted: Some(false),
+                    output_muted: Some(false),
+                    away: Some(false),
+                    away_message: None,
+                    client_type: ClientType::FlSpeak,
+                    app_name: Some("FlSpeak".into()),
+                    app_version: Some("0.1.12".into()),
+                    capabilities: vec!["chat".into()],
+                    bot_commands: None,
+                },
+            ],
+        ));
+        let mut events = actor.events.subscribe();
+
+        // 等价的 DirectorySnapshot（可选元数据为 None，TS6 自身 cid=0）：合并后无差异，不发事件。
+        actor.handle_directory_snapshot(tsclient_rs::DirectorySnapshot {
+            channels: vec![channel_info(5, 0, 0, "Lobby")],
+            clients: vec![
+                ClientInfo {
+                    uid: "self-uid".into(),
+                    ..client_info(1, 0, "Self")
+                },
+                ClientInfo {
+                    uid: "peer-uid".into(),
+                    input_muted: Some(false),
+                    output_muted: Some(false),
+                    away: Some(false),
+                    ..client_info(2, 5, "Peer")
+                },
+            ],
+            truncated: false,
+        });
+        assert!(events.try_recv().is_ok()); // 频道 99 被删除，触发一次更新
+        assert!(!actor.channel_codecs.contains_key(&99));
+        assert_eq!(actor.channel_codecs.get(&5), Some(&4));
+
+        // 再次推送完全相同的快照，命中 Diff 跳过广播。
+        actor.handle_directory_snapshot(tsclient_rs::DirectorySnapshot {
+            channels: vec![channel_info(5, 0, 0, "Lobby")],
+            clients: vec![
+                ClientInfo {
+                    uid: "self-uid".into(),
+                    ..client_info(1, 0, "Self")
+                },
+                ClientInfo {
+                    uid: "peer-uid".into(),
+                    input_muted: Some(false),
+                    output_muted: Some(false),
+                    away: Some(false),
+                    ..client_info(2, 5, "Peer")
+                },
+            ],
+            truncated: false,
+        });
+        assert!(events.try_recv().is_err());
+
+        // 频道改名 + 新建频道 + 保留既有 Some 扩展字段 + 保留 peer identity。
+        actor.handle_directory_snapshot(tsclient_rs::DirectorySnapshot {
+            channels: vec![
+                channel_info(5, 0, 0, "Main Lobby"),
+                ChannelInfo {
+                    codec: Some(5),
+                    password_protected: Some(true),
+                    ..channel_info(8, 5, 0, "Sub")
+                },
+            ],
+            clients: vec![
+                ClientInfo {
+                    uid: "self-uid".into(),
+                    ..client_info(1, 0, "Self")
+                },
+                ClientInfo {
+                    uid: "peer-uid".into(),
+                    input_muted: Some(true),
+                    ..client_info(2, 5, "Peer")
+                },
+            ],
+            truncated: false,
+        });
+        let Some(SessionEvent::Snapshot { channels, clients }) = events.try_recv().ok() else {
+            panic!("expected Snapshot event after real change");
+        };
+        assert_eq!(channels.len(), 2);
+        assert_eq!(channels[0].name, "Main Lobby");
+        assert_eq!(channels[0].icon_id, Some(77));
+        assert_eq!(channels[0].max_clients, Some(12));
+        assert_eq!(channels[0].max_clients_limited, Some(true));
+        assert_eq!(channels[0].password_protected, Some(true));
+        assert_eq!(channels[1].id, 8);
+        assert_eq!(channels[1].password_protected, Some(true));
+        assert_eq!(actor.channel_codecs.get(&8), Some(&5));
+        let self_row = clients.iter().find(|c| c.id == 1).unwrap();
+        assert_eq!(self_row.channel_id, 5);
+        let peer_row = clients.iter().find(|c| c.id == 2).unwrap();
+        assert_eq!(peer_row.input_muted, Some(true));
+        assert_eq!(peer_row.app_name.as_deref(), Some("FlSpeak"));
+    }
+
+    #[test]
+    fn directory_snapshot_preserves_unsubscribed_channels_only_when_clientlist_active() {
+        let mut actor = audio_actor();
+        actor.self_client_id = Some(1);
+        actor.self_channel_id = 5;
+        actor.subscribed_all_channels = false;
+        actor.client_list_allowed = Some(true);
+        actor.last_snapshot = Some((
+            vec![
+                ChannelView {
+                    icon_id: None,
+                    id: 5,
+                    parent_id: 0,
+                    order: Some(0),
+                    name: "Current".into(),
+                    description: String::new(),
+                    max_clients: None,
+                    max_clients_limited: None,
+                    password_protected: None,
+                },
+                ChannelView {
+                    icon_id: None,
+                    id: 9,
+                    parent_id: 0,
+                    order: Some(5),
+                    name: "Other".into(),
+                    description: String::new(),
+                    max_clients: None,
+                    max_clients_limited: None,
+                    password_protected: None,
+                },
+            ],
+            vec![
+                ClientView::from(client_info(1, 5, "Self")),
+                ClientView::from(client_info(2, 5, "LeftCurrent")),
+                ClientView::from(client_info(3, 9, "UnsubscribedPeer")),
+            ],
+        ));
+
+        // channelsubscribeall 失败但 clientlist 可用时：当前频道离场者裁剪，未订阅频道成员保留。
+        actor.handle_directory_snapshot(tsclient_rs::DirectorySnapshot {
+            channels: vec![
+                channel_info(5, 0, 0, "Current"),
+                channel_info(9, 0, 5, "Other"),
+            ],
+            clients: vec![client_info(1, 5, "Self")],
+            truncated: false,
+        });
+        let (_, clients) = actor.last_snapshot.as_ref().unwrap();
+        assert_eq!(clients.iter().map(|c| c.id).collect::<Vec<_>>(), vec![1, 3]);
+
+        // 当 clientlist 被禁用时，按目录快照裁剪所有不在快照里的成员。
+        actor.client_list_allowed = Some(false);
+        actor.handle_directory_snapshot(tsclient_rs::DirectorySnapshot {
+            channels: vec![
+                channel_info(5, 0, 0, "Current"),
+                channel_info(9, 0, 5, "Other"),
+            ],
+            clients: vec![client_info(1, 5, "Self")],
+            truncated: false,
+        });
+        let (_, clients) = actor.last_snapshot.as_ref().unwrap();
+        assert_eq!(clients.iter().map(|c| c.id).collect::<Vec<_>>(), vec![1]);
+    }
+
+    struct SelectiveErrorMiddleware {
+        calls: Arc<std::sync::Mutex<Vec<String>>>,
+        deny_prefixes: Vec<&'static str>,
+    }
+
+    impl tsclient_rs::CommandMiddleware for SelectiveErrorMiddleware {
+        fn wrap(&self, _: TestCommandHandler) -> TestCommandHandler {
+            let calls = Arc::clone(&self.calls);
+            let deny_prefixes = self.deny_prefixes.clone();
+            Arc::new(move |command| {
+                calls.lock().unwrap().push(command.clone());
+                let denied = deny_prefixes
+                    .iter()
+                    .any(|prefix| command.starts_with(prefix));
+                Box::pin(async move {
+                    if denied {
+                        Err(tsclient_rs::Error::ServerError {
+                            id: "2568".into(),
+                            server_message: "insufficient client permissions".into(),
+                            extra_message: None,
+                        })
+                    } else {
+                        // 用 ServerError 模拟服务器已应答但无数据行的探针，避免 5s 超时等待。
+                        Err(tsclient_rs::Error::ServerError {
+                            id: "0".into(),
+                            server_message: "ok".into(),
+                            extra_message: None,
+                        })
+                    }
+                })
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn permission_flags_skip_repeated_2568_queries_and_whoami_keeps_rtt_alive() {
+        tokio::task::LocalSet::new()
+            .run_until(async {
+                let calls = Arc::new(std::sync::Mutex::new(Vec::new()));
+                let client = Client::new(
+                    tsclient_rs::generateIdentity(0),
+                    "127.0.0.1:9987".into(),
+                    "test".into(),
+                    tsclient_rs::ClientOptions {
+                        command_middleware: vec![Box::new(SelectiveErrorMiddleware {
+                            calls: Arc::clone(&calls),
+                            deny_prefixes: vec!["channellist ", "clientlist "],
+                        })],
+                        ..Default::default()
+                    },
+                );
+                client.mark_connected();
+                let mut actor = audio_actor();
+                actor.client = Some(Arc::new(client));
+                actor.self_client_id = Some(1);
+                actor.network_monitor = Some(crate::network::NetworkMonitor::new());
+                let mut events = actor.events.subscribe();
+
+                // 首次拉取：channellist 与 clientlist 均被 2568 拒绝并独立标为 Some(false)。
+                let client_ref = actor.client.clone().unwrap();
+                let _ = actor.read_channel_directory(&client_ref, true).await;
+                let _ = actor.read_clients(&client_ref).await;
+                assert_eq!(actor.channel_list_allowed, Some(false));
+                assert_eq!(actor.client_list_allowed, Some(false));
+                assert_eq!(actor.channel_meta_allowed, None);
+
+                // 清空记录，第二次轮询应跳过 channellist/clientlist，改用 whoami 测 RTT。
+                calls.lock().unwrap().clear();
+                let _ = actor.read_channel_directory(&client_ref, true).await;
+                let _ = actor.read_clients(&client_ref).await;
+                let second_round = calls.lock().unwrap().clone();
+                assert_eq!(second_round.len(), 1);
+                assert!(second_round[0].starts_with("whoami"));
+
+                let mut network_events = Vec::new();
+                let mut warn_logs = Vec::new();
+                while let Ok(ev) = events.try_recv() {
+                    match ev {
+                        SessionEvent::Network(t) => network_events.push(t),
+                        SessionEvent::Log { level, message } if level == "warn" => {
+                            warn_logs.push(message);
+                        }
+                        _ => {}
+                    }
+                }
+                assert!(warn_logs.is_empty());
+                assert_eq!(network_events.len(), 2);
+                assert_eq!(network_events[1].probes_sent, 2);
+                assert_eq!(network_events[1].probes_failed, 0);
+                assert!(network_events[1].round_trip_ms.is_some());
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn dynamic_reset_triggers_clear_permission_flags() {
+        let mut actor = audio_actor();
+        actor.self_client_id = Some(7);
+        actor.self_channel_id = 5;
+        actor.self_server_groups = vec!["6".into()];
+
+        // 1. 切换频道重置权限标志。
+        actor.channel_list_allowed = Some(false);
+        actor.channel_meta_allowed = Some(false);
+        actor.client_list_allowed = Some(false);
+        actor.on_self_moved(9).await;
+        assert_eq!(actor.channel_list_allowed, None);
+        assert_eq!(actor.channel_meta_allowed, None);
+        assert_eq!(actor.client_list_allowed, None);
+
+        // 2. ClientUpdated 服务器组不变时不重置；变化时重置（顺序不同但集合相同也不重置）。
+        actor.channel_list_allowed = Some(false);
+        actor.channel_meta_allowed = Some(false);
+        actor.client_list_allowed = Some(false);
+        actor.self_server_groups = vec!["6".into(), "8".into()];
+        actor
+            .handle_signal(SessionSignal::ClientUpdated {
+                epoch: actor.connection_epoch,
+                id: 7,
+                server_groups: vec!["8".into(), "6".into()],
+            })
+            .await;
+        assert_eq!(actor.channel_list_allowed, Some(false));
+
+        actor
+            .handle_signal(SessionSignal::ClientUpdated {
+                epoch: actor.connection_epoch,
+                id: 7,
+                server_groups: vec!["6".into(), "7".into(), "8".into()],
+            })
+            .await;
+        assert_eq!(actor.channel_list_allowed, None);
+        assert_eq!(actor.channel_meta_allowed, None);
+        assert_eq!(actor.client_list_allowed, None);
+
+        // 3. DirectorySnapshot 检测到自身 server_groups 变化时也重置。
+        actor.channel_list_allowed = Some(false);
+        actor.channel_meta_allowed = Some(false);
+        actor.client_list_allowed = Some(false);
+        actor
+            .handle_signal(SessionSignal::Snapshot {
+                epoch: actor.connection_epoch,
+                snapshot: tsclient_rs::DirectorySnapshot {
+                    channels: Vec::new(),
+                    clients: vec![ClientInfo {
+                        server_groups: vec!["6".into()],
+                        ..client_info(7, 9, "Self")
+                    }],
+                    truncated: false,
+                },
+            })
+            .await;
+        assert_eq!(actor.channel_list_allowed, None);
+        assert_eq!(actor.channel_meta_allowed, None);
+        assert_eq!(actor.client_list_allowed, None);
+
+        // 4. RequestSnapshot 命令重置权限标志。
+        actor.channel_list_allowed = Some(false);
+        actor.channel_meta_allowed = Some(false);
+        actor.client_list_allowed = Some(false);
+        let (reply, rx) = oneshot::channel();
+        assert!(
+            actor
+                .handle(SessionCommand::RequestSnapshot { reply })
+                .await
+        );
+        assert!(rx.await.unwrap().is_ok());
+        assert_eq!(actor.channel_list_allowed, None);
+        assert_eq!(actor.channel_meta_allowed, None);
+        assert_eq!(actor.client_list_allowed, None);
+    }
+
+    #[test]
+    fn debug_and_trace_logs_do_not_cross_ffi_broadcast_channel() {
+        let (events, mut rx) = broadcast::channel(16);
+        let logger = EventLogger {
+            events: events.clone(),
+        };
+
+        logger.log("debug", "suppressed tsclient debug");
+        logger.log("trace", "suppressed tsclient trace");
+        emit(
+            &events,
+            SessionEvent::Log {
+                level: "debug".into(),
+                message: "suppressed actor debug".into(),
+            },
+        );
+        emit(
+            &events,
+            SessionEvent::Log {
+                level: "trace".into(),
+                message: "suppressed actor trace".into(),
+            },
+        );
+        assert!(rx.try_recv().is_err());
+
+        logger.log("info", "allowed tsclient info");
+        emit(
+            &events,
+            SessionEvent::Log {
+                level: "warn".into(),
+                message: "allowed actor warn".into(),
+            },
+        );
+        emit(
+            &events,
+            SessionEvent::Log {
+                level: "error".into(),
+                message: "allowed actor error".into(),
+            },
+        );
+
+        let received: Vec<(String, String)> = std::iter::from_fn(|| rx.try_recv().ok())
+            .filter_map(|ev| match ev {
+                SessionEvent::Log { level, message } => Some((level, message)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            received,
+            vec![
+                ("info".into(), "allowed tsclient info".into()),
+                ("warn".into(), "allowed actor warn".into()),
+                ("error".into(), "allowed actor error".into()),
+            ]
+        );
     }
 }

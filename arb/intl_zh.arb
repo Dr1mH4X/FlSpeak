@@ -210,7 +210,7 @@
   "membersTitle": "频道成员",
   "memberDetails": "用户详情",
   "memberNickname": "昵称",
-  "memberUid": "唯一标识（UID）",
+  "memberUid": "唯一标识",
   "memberChannel": "所在频道",
   "memberUnavailable": "该用户已离线",
   "serverEdit": "编辑服务器",
@@ -437,5 +437,8 @@
   "settingsScreenShareCodecH264": "H.264 优先（硬件编解码加速）",
   "settingsScreenShareDegradation": "弱网降级策略",
   "settingsScreenShareDegradationResolution": "保持清晰度（优先降低帧率）",
-  "settingsScreenShareDegradationFramerate": "保持流畅度（优先降低分辨率）"
+  "settingsScreenShareDegradationFramerate": "保持流畅度（优先降低分辨率）",
+  "clientTypeBot": "机器人",
+  "clientTypeFlSpeak": "FlSpeak 客户端",
+  "memberClientSoftware": "客户端"
 }

@@ -97,6 +97,24 @@ pub struct ChannelView {
     pub password_protected: Option<bool>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum ClientType {
+    #[default]
+    Standard,
+    FlSpeak,
+    Bot,
+    Custom,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BotCommandView {
+    pub name: String,
+    #[serde(default)]
+    pub args: String,
+    #[serde(default)]
+    pub desc: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClientView {
     pub id: i32,
@@ -111,6 +129,11 @@ pub struct ClientView {
     pub away: Option<bool>,
     /// 离开时留下的说明文字。
     pub away_message: Option<String>,
+    pub client_type: ClientType,
+    pub app_name: Option<String>,
+    pub app_version: Option<String>,
+    pub capabilities: Vec<String>,
+    pub bot_commands: Option<Vec<BotCommandView>>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -483,6 +506,15 @@ pub enum SessionCommand {
     },
     KickStreamViewer {
         viewer_clid: i32,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
+    QueryPeerIdentity {
+        target_clid: i32,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
+    FetchBotCommands {
+        target_clid: i32,
+        target_uid: String,
         reply: oneshot::Sender<Result<(), SessionError>>,
     },
     Shutdown,
@@ -1092,6 +1124,26 @@ impl SessionHandle {
     pub async fn fetch_avatar(&self, uid: String) -> Result<Vec<u8>, SessionError> {
         let (reply, rx) = oneshot::channel();
         self.send(SessionCommand::FetchAvatar { uid, reply })?;
+        rx.await.map_err(|_| SessionError::Closed)?
+    }
+
+    pub async fn query_peer_identity(&self, target_clid: i32) -> Result<(), SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::QueryPeerIdentity { target_clid, reply })?;
+        rx.await.map_err(|_| SessionError::Closed)?
+    }
+
+    pub async fn fetch_bot_commands(
+        &self,
+        target_clid: i32,
+        target_uid: String,
+    ) -> Result<(), SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::FetchBotCommands {
+            target_clid,
+            target_uid,
+            reply,
+        })?;
         rx.await.map_err(|_| SessionError::Closed)?
     }
 

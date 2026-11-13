@@ -9,7 +9,7 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'session.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `runtime`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 /// 抓取第三方图片 URL。myTS 的 `ts.file.myts` 附件不经过这里。
 Future<Uint8List> fetchImage({required String url}) =>
@@ -86,6 +86,11 @@ abstract class CoreSession implements RustOpaqueInterface {
 
   Future<Uint8List> fetchAvatar({required String uid});
 
+  Future<void> fetchBotCommands({
+    required int targetClid,
+    required String targetUid,
+  });
+
   Future<Uint8List> fetchIcon({required int iconId});
 
   Future<void> joinStream({required String streamId, required int sourceClid});
@@ -135,6 +140,8 @@ abstract class CoreSession implements RustOpaqueInterface {
       );
 
   Future<void> poke({required int clientId, required String message});
+
+  Future<void> queryPeerIdentity({required int targetClid});
 
   /// 录入服务器。地址在这里解析并登记，连接目标只能来自档案。
   Future<ServerProfileView> registerServer({
@@ -311,6 +318,30 @@ class AudioDevicesView {
           outputs == other.outputs;
 }
 
+class BotCommandView {
+  final String name;
+  final String args;
+  final String desc;
+
+  const BotCommandView({
+    required this.name,
+    required this.args,
+    required this.desc,
+  });
+
+  @override
+  int get hashCode => name.hashCode ^ args.hashCode ^ desc.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BotCommandView &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          args == other.args &&
+          desc == other.desc;
+}
+
 class ChannelFileView {
   final String name;
   final String path;
@@ -390,6 +421,16 @@ class ChannelView {
           passwordProtected == other.passwordProtected;
 }
 
+enum ClientType {
+  standard,
+  flSpeak,
+  bot,
+  custom;
+
+  static Future<ClientType> default_() =>
+      RustLib.instance.api.crateApiSessionClientTypeDefault();
+}
+
 class ClientView {
   final int id;
   final String nickname;
@@ -407,6 +448,11 @@ class ClientView {
 
   /// 离开时留下的说明文字。
   final String? awayMessage;
+  final ClientType clientType;
+  final String? appName;
+  final String? appVersion;
+  final List<String> capabilities;
+  final List<BotCommandView>? botCommands;
 
   const ClientView({
     required this.id,
@@ -417,6 +463,11 @@ class ClientView {
     this.outputMuted,
     this.away,
     this.awayMessage,
+    this.clientType = ClientType.standard,
+    this.appName,
+    this.appVersion,
+    this.capabilities = const [],
+    this.botCommands,
   });
 
   @override
@@ -428,7 +479,12 @@ class ClientView {
       inputMuted.hashCode ^
       outputMuted.hashCode ^
       away.hashCode ^
-      awayMessage.hashCode;
+      awayMessage.hashCode ^
+      clientType.hashCode ^
+      appName.hashCode ^
+      appVersion.hashCode ^
+      capabilities.hashCode ^
+      botCommands.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -442,7 +498,12 @@ class ClientView {
           inputMuted == other.inputMuted &&
           outputMuted == other.outputMuted &&
           away == other.away &&
-          awayMessage == other.awayMessage;
+          awayMessage == other.awayMessage &&
+          clientType == other.clientType &&
+          appName == other.appName &&
+          appVersion == other.appVersion &&
+          capabilities == other.capabilities &&
+          botCommands == other.botCommands;
 }
 
 @freezed

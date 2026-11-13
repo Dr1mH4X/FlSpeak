@@ -30,6 +30,15 @@ class _Core extends Fake implements CoreSession {
   Future<AccessView> access() async => const AccessView();
 
   @override
+  Future<void> queryPeerIdentity({required int targetClid}) async {}
+
+  @override
+  Future<void> fetchBotCommands({
+    required int targetClid,
+    required String targetUid,
+  }) async {}
+
+  @override
   Future<void> joinStream({
     required String streamId,
     required int sourceClid,

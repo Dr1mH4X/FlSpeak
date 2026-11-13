@@ -5,10 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../router.dart';
+import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
 import '../../../widgets/press_feedback.dart';
-import 'member_details_dialog.dart';
+import '../workspace_state.dart';
 import 'member_permissions_dialog.dart';
 import 'kick_client_dialog.dart';
 
@@ -25,14 +26,52 @@ class ClientActionsButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final view = ref.watch(sessionViewProvider);
-    final details = Material(
-      type: MaterialType.transparency,
-      borderRadius: Radii.mediumAll,
-      clipBehavior: Clip.antiAlias,
-      child: AnimatedInkWell(
-        onTap: () => showMemberDetails(context, client),
-        borderRadius: Radii.mediumAll,
-        child: child,
+    final scheme = context.scheme;
+    final selectedMember = ref.watch(selectedMemberProvider);
+    final isSelected =
+        selectedMember != null &&
+        selectedMember.serverId == view.activeServerId &&
+        selectedMember.clientId == client.id &&
+        selectedMember.uid == client.uid;
+    final foreground = isSelected ? scheme.onPrimaryContainer : null;
+
+    final details = Semantics(
+      button: true,
+      selected: isSelected,
+      child: AnimatedContainer(
+        duration: MediaQuery.disableAnimationsOf(context)
+            ? Duration.zero
+            : Motion.effectsFast,
+        curve: Motion.effectsDefaultCurve,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: isSelected ? scheme.primaryContainer : Colors.transparent,
+          borderRadius: Radii.mediumAll,
+        ),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: Radii.mediumAll,
+          clipBehavior: Clip.antiAlias,
+          child: AnimatedInkWell(
+            onTap: () {
+              ref
+                  .read(selectedMemberProvider.notifier)
+                  .select(client, serverId: view.activeServerId);
+              ref.read(routerProvider).go(AppRoutes.workspace);
+              Scaffold.maybeOf(context)?.closeDrawer();
+            },
+            borderRadius: Radii.mediumAll,
+            child: DefaultTextStyle.merge(
+              style: isSelected ? TextStyle(color: foreground) : null,
+              child: IconTheme.merge(
+                data: isSelected
+                    ? IconThemeData(color: foreground)
+                    : const IconThemeData(),
+                child: child,
+              ),
+            ),
+          ),
+        ),
       ),
     );
     if (client.id == view.selfClientId || client.uid.isEmpty) {
