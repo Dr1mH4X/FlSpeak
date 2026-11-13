@@ -208,7 +208,7 @@ class SessionController extends Notifier<SessionView> {
       if (!ref.mounted || _connectingServerId != id) return;
       attempted = true;
       await session.connect(id: id, nickname: nickname);
-    });
+    }, recordFailure: true);
     return connected && attempted;
   }
 
@@ -868,6 +868,7 @@ class SessionController extends Notifier<SessionView> {
   Future<bool> _run(
     Future<void> Function() action, {
     bool passwordPrompt = false,
+    bool recordFailure = false,
   }) async {
     if (!ref.mounted) return false;
     _pendingActions++;
@@ -878,7 +879,13 @@ class SessionController extends Notifier<SessionView> {
     } on CoreError catch (error) {
       if (passwordPrompt && error is CoreError_ChannelPasswordRequired) rethrow;
       if (ref.mounted) {
-        _notifyCoreError(error);
+        if (recordFailure) {
+          _notifyFailure(
+            describeCoreError(error, ref.read(_localizationsProvider)),
+          );
+        } else {
+          _notifyCoreError(error);
+        }
       }
       return false;
     } finally {

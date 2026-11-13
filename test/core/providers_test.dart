@@ -507,6 +507,35 @@ void main() {
     expect(container.read(sessionViewProvider).activeServerId, 'server-a');
   });
 
+  test(
+    'connect failure records failureSeq and emits a single formatted notice',
+    () async {
+      final events = StreamController<CoreEvent>.broadcast(sync: true);
+      final core = _SwitchCore(events);
+      final container = ProviderContainer(
+        overrides: [coreSessionProvider.overrideWithValue(core)],
+      );
+      addTearDown(() async {
+        container.dispose();
+        await events.close();
+      });
+      container.read(sessionViewProvider);
+      final connecting = container
+          .read(sessionViewProvider.notifier)
+          .connect(id: 'server-b', nickname: 'Me');
+      core.disconnectReply.complete();
+      await Future<void>.value();
+      core.connectReply.completeError(
+        const CoreError.connection(message: '连接超时'),
+      );
+      expect(await connecting, isFalse);
+      expect(container.read(sessionViewProvider).failureSeq, 1);
+      final notices = container.read(noticeCenterProvider);
+      expect(notices, hasLength(1));
+      expect(notices.single.message, '连接失败：连接超时');
+    },
+  );
+
   test('an operation failure preserves a connected snapshot and does not report a connection failure', () async {
     final events = StreamController<CoreEvent>.broadcast(sync: true);
     final container = ProviderContainer(

@@ -888,10 +888,16 @@ impl Actor {
         let profile = match self.registry.require(id) {
             Ok(profile) => profile.clone(),
             Err(err) => {
-                self.emit(SessionEvent::Denied {
-                    message: err.to_string(),
+                self.emit(SessionEvent::Log {
+                    level: "warn".into(),
+                    message: format!(
+                        "connect denied: id={id} reconnecting={reconnecting} error={err}"
+                    ),
                 });
                 if reconnecting {
+                    self.emit(SessionEvent::Denied {
+                        message: err.to_string(),
+                    });
                     self.schedule_reconnect();
                 }
                 return Err(err.into());
@@ -905,12 +911,23 @@ impl Actor {
         let resolved = match proto::resolve_target(&profile, &proto::DnsSrvResolver).await {
             Ok(resolved) => resolved,
             Err(err) => {
-                if matches!(err, ConnectError::Address(_) | ConnectError::Blocked { .. }) {
-                    self.emit(SessionEvent::Denied {
-                        message: err.to_string(),
-                    });
-                }
+                self.emit(SessionEvent::Log {
+                    level: "warn".into(),
+                    message: format!(
+                        "connect prepare failed: host={}:{} reconnecting={reconnecting} error={err}",
+                        profile.host, profile.port
+                    ),
+                });
                 if reconnecting {
+                    if matches!(err, ConnectError::Address(_) | ConnectError::Blocked { .. }) {
+                        self.emit(SessionEvent::Denied {
+                            message: err.to_string(),
+                        });
+                    } else {
+                        self.emit(SessionEvent::Failed {
+                            message: err.to_string(),
+                        });
+                    }
                     self.schedule_reconnect();
                 }
                 return Err(err.into());
@@ -925,6 +942,45 @@ impl Actor {
                 ),
             });
         }
+        if !server::is_ip_literal(&resolved.target.host) {
+            match tokio::time::timeout(
+                Duration::from_secs(2),
+                tokio::net::lookup_host((resolved.target.host.as_str(), resolved.target.port)),
+            )
+            .await
+            {
+                Ok(Ok(addrs)) => {
+                    let list: Vec<String> = addrs.map(|addr| addr.to_string()).collect();
+                    self.emit(SessionEvent::Log {
+                        level: "info".into(),
+                        message: format!(
+                            "DNS {}:{} -> [{}]",
+                            resolved.target.host,
+                            resolved.target.port,
+                            list.join(", ")
+                        ),
+                    });
+                }
+                Ok(Err(err)) => {
+                    self.emit(SessionEvent::Log {
+                        level: "warn".into(),
+                        message: format!(
+                            "DNS {}:{} lookup failed: {err}",
+                            resolved.target.host, resolved.target.port
+                        ),
+                    });
+                }
+                Err(_) => {
+                    self.emit(SessionEvent::Log {
+                        level: "warn".into(),
+                        message: format!(
+                            "DNS {}:{} lookup timed out",
+                            resolved.target.host, resolved.target.port
+                        ),
+                    });
+                }
+            }
+        }
         let mut client = match proto::client(
             identity,
             &profile,
@@ -934,12 +990,23 @@ impl Actor {
         ) {
             Ok(client) => client,
             Err(err) => {
-                if matches!(err, ConnectError::Address(_) | ConnectError::Blocked { .. }) {
-                    self.emit(SessionEvent::Denied {
-                        message: err.to_string(),
-                    });
-                }
+                self.emit(SessionEvent::Log {
+                    level: "warn".into(),
+                    message: format!(
+                        "connect prepare failed: target={}:{} via_srv={} reconnecting={reconnecting} error={err}",
+                        resolved.target.host, resolved.target.port, resolved.via_srv
+                    ),
+                });
                 if reconnecting {
+                    if matches!(err, ConnectError::Address(_) | ConnectError::Blocked { .. }) {
+                        self.emit(SessionEvent::Denied {
+                            message: err.to_string(),
+                        });
+                    } else {
+                        self.emit(SessionEvent::Failed {
+                            message: err.to_string(),
+                        });
+                    }
                     self.schedule_reconnect();
                 }
                 return Err(err.into());
@@ -1027,13 +1094,19 @@ impl Actor {
                 self.invalidate_handlers();
                 let _ = client.disconnect().await;
                 self.consecutive_timeouts = 0;
+                self.emit(SessionEvent::Log {
+                    level: "warn".into(),
+                    message: format!(
+                        "connect failed: target={}:{} via_srv={} reconnecting={reconnecting} error={err}",
+                        resolved.target.host, resolved.target.port, resolved.via_srv
+                    ),
+                });
                 if !reconnecting {
                     self.set_state(SessionState::Disconnected);
-                }
-                self.emit(SessionEvent::Failed {
-                    message: err.to_string(),
-                });
-                if reconnecting {
+                } else {
+                    self.emit(SessionEvent::Failed {
+                        message: err.to_string(),
+                    });
                     self.schedule_reconnect();
                 }
                 Err(err)
@@ -1042,12 +1115,23 @@ impl Actor {
                 self.invalidate_handlers();
                 let _ = client.disconnect().await;
                 self.consecutive_timeouts = self.consecutive_timeouts.saturating_add(1);
+                self.emit(SessionEvent::Log {
+                    level: "warn".into(),
+                    message: format!(
+                        "connect timed out ({}s): target={}:{} via_srv={} reconnecting={reconnecting}",
+                        CONNECT_TIMEOUT.as_secs(),
+                        resolved.target.host,
+                        resolved.target.port,
+                        resolved.via_srv
+                    ),
+                });
                 if !reconnecting {
                     self.set_state(SessionState::Disconnected);
+                } else {
+                    self.emit(SessionEvent::Failed {
+                        message: SessionError::Timeout.to_string(),
+                    });
                 }
-                self.emit(SessionEvent::Failed {
-                    message: SessionError::Timeout.to_string(),
-                });
                 if self.consecutive_timeouts >= IDENTITY_TIMEOUTS_BEFORE_UPGRADE {
                     self.start_identity_upgrade().await;
                 } else if reconnecting {
