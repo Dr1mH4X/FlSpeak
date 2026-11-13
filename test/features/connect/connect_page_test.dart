@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -657,4 +658,191 @@ void main() {
       expect(frame.loading, isTrue);
     },
   );
+
+  testWidgets('服务器空列表时仍显示圆形搜索按钮，同行左对齐于「服务器」右侧', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_FakeCore()),
+          sessionViewProvider.overrideWith(_EmptySessionController.new),
+        ],
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            ...AppLocalizations.localizationsDelegates,
+            PrismUiLocalizationsDelegate(),
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
+          home: const ConnectPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TextField), findsNothing);
+    final titleFinder = find.descendant(
+      of: find.byType(SingleChildScrollView),
+      matching: find.text('服务器'),
+    );
+    final searchFinder = find.bySemanticsLabel('搜索服务器');
+    final addFinder = find.descendant(
+      of: find.byType(SingleChildScrollView),
+      matching: find.text('添加服务器'),
+    );
+    expect(titleFinder, findsOneWidget);
+    expect(searchFinder, findsOneWidget);
+    expect(addFinder, findsOneWidget);
+
+    final titleRect = tester.getRect(titleFinder);
+    final searchRect = tester.getRect(searchFinder);
+    final addRect = tester.getRect(addFinder);
+
+    expect(searchRect.size, const Size(40, 40));
+    expect(searchRect.center.dy, closeTo(titleRect.center.dy, 4.0));
+    expect(searchRect.center.dy, closeTo(addRect.center.dy, 4.0));
+    expect(searchRect.left, greaterThan(titleRect.right));
+    expect(searchRect.right, lessThan(addRect.left));
+    expect(
+      searchRect.left - titleRect.right,
+      lessThan(addRect.left - searchRect.right),
+    );
+  });
+
+  testWidgets('搜索按钮点击展开、筛选、清空保持焦点、空失焦收起与 Esc 清空收起', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_FakeCore()),
+          sessionViewProvider.overrideWith(_TwoServersSessionController.new),
+        ],
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            ...AppLocalizations.localizationsDelegates,
+            PrismUiLocalizationsDelegate(),
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
+          home: const ConnectPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ServerRow), findsNWidgets(2));
+    expect(find.byType(TextField), findsNothing);
+
+    await tester.tap(find.bySemanticsLabel('搜索服务器'));
+    await tester.pumpAndSettle();
+
+    final fieldFinder = find.byType(TextField);
+    expect(fieldFinder, findsOneWidget);
+    expect(tester.getSize(fieldFinder).width, lessThanOrEqualTo(260));
+
+    await tester.enterText(fieldFinder, 'b.example');
+    await tester.pumpAndSettle();
+    expect(find.byType(ServerRow), findsOneWidget);
+
+    // 失焦但内容非空时保持展开，不丢失筛选输入。
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.byType(ServerRow), findsOneWidget);
+
+    // 点击清空按钮清空内容并恢复焦点，保持展开。
+    await tester.tap(find.bySemanticsLabel('清空搜索'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ServerRow), findsNWidgets(2));
+    expect(find.byType(TextField), findsOneWidget);
+    expect(tester.widget<TextField>(fieldFinder).focusNode?.hasFocus, isTrue);
+
+    // 内容为空且失焦时自动收起为圆形按钮。
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsNothing);
+    expect(find.bySemanticsLabel('搜索服务器'), findsOneWidget);
+
+    // 再次展开并输入文本，按 Esc 立即清空并收起。
+    await tester.tap(find.bySemanticsLabel('搜索服务器'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'nomatch');
+    await tester.pumpAndSettle();
+    expect(find.text('没有匹配的服务器'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsNothing);
+    expect(find.byType(ServerRow), findsNWidgets(2));
+  });
+
+  testWidgets('窄屏与 2 倍字号下展开搜索框不发生溢出', (tester) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_FakeCore()),
+          sessionViewProvider.overrideWith(_TwoServersSessionController.new),
+        ],
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('en'),
+          localizationsDelegates: const [
+            ...AppLocalizations.localizationsDelegates,
+            PrismUiLocalizationsDelegate(),
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(2.0)),
+            child: PrismRootScope(brightness: Brightness.light, child: child!),
+          ),
+          home: const ConnectPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.bySemanticsLabel('Search servers'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel('Search servers'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.text('Servers'), findsOneWidget);
+    expect(find.bySemanticsLabel('Add server'), findsOneWidget);
+  });
+}
+
+class _TwoServersSessionController extends SessionController {
+  @override
+  SessionView build() => const SessionView(
+    state: CoreSessionState.disconnected(),
+    servers: _switchServers,
+  );
+}
+
+class _EmptySessionController extends SessionController {
+  @override
+  SessionView build() =>
+      const SessionView(state: CoreSessionState.disconnected(), servers: []);
 }

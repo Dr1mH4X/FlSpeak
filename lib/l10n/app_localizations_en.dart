@@ -430,6 +430,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get serverSearchLabel => 'Search servers';
 
   @override
+  String get serverSearchClear => 'Clear search';
+
+  @override
   String get serverSearchEmpty => 'No matching servers';
 
   @override

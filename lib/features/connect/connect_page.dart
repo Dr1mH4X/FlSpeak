@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+import 'dart:ui' show lerpDouble;
+
 import 'package:flutter/material.dart'
     hide
         ButtonStyle,
@@ -6,6 +9,7 @@ import 'package:flutter/material.dart'
         OutlinedButton,
         Switch,
         TextButton;
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:go_router/go_router.dart';
@@ -14,6 +18,7 @@ import '../../core/models.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../router.dart';
+import '../../theme/app_motion.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_navigation_sidebar.dart';
 import '../../widgets/prism.dart';
@@ -364,8 +369,27 @@ class _ServerSection extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: Text(l10n.serversTitle, style: context.texts.titleLarge),
+              child: LayoutBuilder(
+                builder: (context, constraints) => Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        l10n.serversTitle,
+                        style: context.texts.titleLarge,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    _ServerSearchControl(
+                      maxRowWidth: constraints.maxWidth,
+                      onChanged: onSearch,
+                    ),
+                  ],
+                ),
+              ),
             ),
+            const SizedBox(width: 12),
             if (context.isCompact)
               ElasticButton(
                 child: IconButton.filled(
@@ -384,19 +408,6 @@ class _ServerSection extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 20),
-        if (hasServers) ...[
-          TextField(
-            onChanged: onSearch,
-            decoration: InputDecoration(
-              labelText: l10n.serverSearchLabel,
-              prefixIcon: const Icon(
-                Icons.search_rounded,
-                size: IconSizes.toolbar,
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-        ],
         if (!hasServers)
           _EmptyServers(onAdd: onAdd)
         else if (servers.isEmpty)
@@ -436,6 +447,258 @@ class _ServerSection extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+class _ServerSearchControl extends StatefulWidget {
+  const _ServerSearchControl({
+    required this.maxRowWidth,
+    required this.onChanged,
+  });
+
+  final double maxRowWidth;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_ServerSearchControl> createState() => _ServerSearchControlState();
+}
+
+class _ServerSearchControlState extends State<_ServerSearchControl>
+    with SingleTickerProviderStateMixin {
+  static const double _collapsedSize = 40.0;
+  static const double _expandedMaxWidth = 260.0;
+
+  bool _expanded = false;
+  bool _hasFocus = false;
+
+  late final TextEditingController _controller = TextEditingController()
+    ..addListener(_handleTextChanged);
+  late final FocusNode _focusNode = FocusNode(onKeyEvent: _handleKeyEvent)
+    ..addListener(_handleFocusChanged);
+  late final AnimationController _expandController = AnimationController(
+    vsync: this,
+    duration: Motion.spatialFast,
+    reverseDuration: Motion.effectsDefault,
+  );
+  late final Animation<double> _expandAnimation = CurvedAnimation(
+    parent: _expandController,
+    curve: Motion.spatialCurve,
+    reverseCurve: Motion.effectsDefaultCurve,
+  );
+
+  @override
+  void dispose() {
+    _expandController.dispose();
+    _focusNode.removeListener(_handleFocusChanged);
+    _focusNode.dispose();
+    _controller.removeListener(_handleTextChanged);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _animateExpand(bool expand) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    if (reduceMotion) {
+      _expandController.value = expand ? 1.0 : 0.0;
+    } else if (expand) {
+      _expandController.forward();
+    } else {
+      _expandController.reverse();
+    }
+  }
+
+  void _open() {
+    if (!_expanded) {
+      setState(() => _expanded = true);
+    }
+    _animateExpand(true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _expanded) {
+        _focusNode.requestFocus();
+      }
+    });
+  }
+
+  void _collapseAndClear() {
+    if (_controller.text.isNotEmpty) {
+      _controller.clear();
+      widget.onChanged('');
+    }
+    if (_expanded) {
+      setState(() => _expanded = false);
+    }
+    _animateExpand(false);
+    _focusNode.unfocus();
+  }
+
+  void _handleClear() {
+    _controller.clear();
+    widget.onChanged('');
+    _focusNode.requestFocus();
+  }
+
+  void _handleTextChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _handleFocusChanged() {
+    final focused = _focusNode.hasFocus;
+    if (_hasFocus != focused) {
+      setState(() => _hasFocus = focused);
+    }
+    if (!focused && _expanded && _controller.text.isEmpty) {
+      setState(() => _expanded = false);
+      _animateExpand(false);
+    }
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.escape &&
+        _expanded) {
+      _collapseAndClear();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final scheme = context.scheme;
+    final surfaceFill = context.raisedSurfaceColor;
+    final availableWidth = math.max(0.0, widget.maxRowWidth - 12);
+    final collapsedWidth = math.min(_collapsedSize, availableWidth);
+    final expandedWidth = math.min(
+      _expandedMaxWidth,
+      math.max(collapsedWidth, availableWidth * 0.65),
+    );
+
+    return AnimatedBuilder(
+      animation: _expandController,
+      builder: (context, _) {
+        if (!_expanded && _expandController.isDismissed) {
+          return SizedBox(
+            width: collapsedWidth,
+            height: _collapsedSize,
+            child: ElasticButton(
+              child: IconButton(
+                onPressed: _open,
+                style: ButtonStyle.from(
+                  backgroundColor: surfaceFill,
+                  foregroundColor: scheme.onSurface,
+                  fixedSize: Size.square(collapsedWidth),
+                  minimumSize: Size.square(collapsedWidth),
+                  padding: EdgeInsets.zero,
+                  iconSize: IconSizes.toolbar,
+                  shape: AppShape.full,
+                ),
+                icon: Icon(
+                  Icons.search_rounded,
+                  semanticLabel: l10n.serverSearchLabel,
+                ),
+              ),
+            ),
+          );
+        }
+
+        final currentWidth = lerpDouble(
+          collapsedWidth,
+          expandedWidth,
+          _expandAnimation.value,
+        )!.clamp(collapsedWidth, availableWidth);
+        final empty = _controller.text.isEmpty;
+
+        return DecoratedBox(
+          decoration: ShapeDecoration(
+            color: surfaceFill,
+            shape: RoundedSuperellipseBorder(
+              borderRadius: AppRadius.full,
+              side: _hasFocus
+                  ? BorderSide(color: scheme.primary, width: 2)
+                  : BorderSide.none,
+            ),
+          ),
+          child: ClipRSuperellipse(
+            borderRadius: AppRadius.full,
+            child: SizedBox(
+              width: currentWidth,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const NeverScrollableScrollPhysics(),
+                child: SizedBox(
+                  width: expandedWidth,
+                  child: TextField(
+                    controller: _controller,
+                    focusNode: _focusNode,
+                    maxLines: 1,
+                    textAlignVertical: TextAlignVertical.center,
+                    textInputAction: TextInputAction.search,
+                    onChanged: widget.onChanged,
+                    onTapOutside: (_) => _focusNode.unfocus(),
+                    style: context.texts.bodyMedium,
+                    decoration: InputDecoration(
+                      filled: false,
+                      hoverColor: Colors.transparent,
+                      isDense: true,
+                      constraints: const BoxConstraints(
+                        minHeight: _collapsedSize,
+                      ),
+                      hintText: l10n.serverSearchLabel,
+                      contentPadding: EdgeInsetsDirectional.fromSTEB(
+                        0,
+                        8,
+                        empty ? 16 : 0,
+                        8,
+                      ),
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      errorBorder: InputBorder.none,
+                      focusedErrorBorder: InputBorder.none,
+                      prefixIcon: Icon(
+                        Icons.search_rounded,
+                        size: IconSizes.toolbar,
+                        color: scheme.onSurface,
+                      ),
+                      prefixIconConstraints: const BoxConstraints.tightFor(
+                        width: _collapsedSize,
+                        height: _collapsedSize,
+                      ),
+                      suffixIcon: empty
+                          ? null
+                          : Padding(
+                              padding: const EdgeInsetsDirectional.only(end: 4),
+                              child: IconButton(
+                                onPressed: _handleClear,
+                                style: ButtonStyle.from(
+                                  foregroundColor: scheme.onSurfaceVariant,
+                                  fixedSize: const Size.square(32),
+                                  minimumSize: const Size.square(32),
+                                  padding: EdgeInsets.zero,
+                                  iconSize: IconSizes.medium,
+                                  shape: AppShape.full,
+                                ),
+                                icon: Icon(
+                                  Icons.close_rounded,
+                                  semanticLabel: l10n.serverSearchClear,
+                                ),
+                              ),
+                            ),
+                      suffixIconConstraints: const BoxConstraints(
+                        minHeight: _collapsedSize,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

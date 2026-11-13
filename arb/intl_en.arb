@@ -199,6 +199,7 @@
   "connectSubtitle": "Your communities, one conversation away.",
   "serverEmptyBody": "Add a server address to join your people in a channel.",
   "serverSearchLabel": "Search servers",
+  "serverSearchClear": "Clear search",
   "serverSearchEmpty": "No matching servers",
   "membersTitle": "Channel members",
   "memberDetails": "User details",

@@ -872,6 +872,12 @@ abstract class AppLocalizations {
   /// **'Search servers'**
   String get serverSearchLabel;
 
+  /// No description provided for @serverSearchClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear search'**
+  String get serverSearchClear;
+
   /// No description provided for @serverSearchEmpty.
   ///
   /// In en, this message translates to:

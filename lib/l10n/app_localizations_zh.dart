@@ -424,6 +424,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get serverSearchLabel => '搜索服务器';
 
   @override
+  String get serverSearchClear => '清空搜索';
+
+  @override
   String get serverSearchEmpty => '没有匹配的服务器';
 
   @override

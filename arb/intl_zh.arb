@@ -199,6 +199,7 @@
   "connectSubtitle": "加入熟悉的频道，让对话自然发生。",
   "serverEmptyBody": "添加服务器地址，和伙伴在同一个频道相聚。",
   "serverSearchLabel": "搜索服务器",
+  "serverSearchClear": "清空搜索",
   "serverSearchEmpty": "没有匹配的服务器",
   "membersTitle": "频道成员",
   "memberDetails": "用户详情",
