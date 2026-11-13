@@ -457,7 +457,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get memberNickname => '昵称';
 
   @override
-  String get memberUid => '唯一标识（UID）';
+  String get memberUid => '唯一标识';
 
   @override
   String get memberChannel => '所在频道';

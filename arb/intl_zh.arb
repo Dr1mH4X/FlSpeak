@@ -210,7 +210,7 @@
   "membersTitle": "频道成员",
   "memberDetails": "用户详情",
   "memberNickname": "昵称",
-  "memberUid": "唯一标识（UID）",
+  "memberUid": "唯一标识",
   "memberChannel": "所在频道",
   "memberUnavailable": "该用户已离线",
   "serverEdit": "编辑服务器",

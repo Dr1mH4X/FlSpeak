@@ -463,7 +463,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get memberNickname => 'Nickname';
 
   @override
-  String get memberUid => 'Unique ID (UID)';
+  String get memberUid => 'Unique ID';
 
   @override
   String get memberChannel => 'Channel';

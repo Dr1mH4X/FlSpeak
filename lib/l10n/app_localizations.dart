@@ -941,7 +941,7 @@ abstract class AppLocalizations {
   /// No description provided for @memberUid.
   ///
   /// In en, this message translates to:
-  /// **'Unique ID (UID)'**
+  /// **'Unique ID'**
   String get memberUid;
 
   /// No description provided for @memberChannel.

@@ -210,7 +210,7 @@
   "membersTitle": "Channel members",
   "memberDetails": "User details",
   "memberNickname": "Nickname",
-  "memberUid": "Unique ID (UID)",
+  "memberUid": "Unique ID",
   "memberChannel": "Channel",
   "memberUnavailable": "This user is offline",
   "serverEdit": "Edit server",
