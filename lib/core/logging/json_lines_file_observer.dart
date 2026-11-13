@@ -32,7 +32,7 @@ class JsonLinesFileObserver extends TalkerObserver {
   }) : _now = now ?? DateTime.now;
 
   final String logDir;
-  final LogLevel minimumLevel;
+  LogLevel minimumLevel;
   final DateTime Function() _now;
 
   static const int _retentionDays = 7;

@@ -47,6 +47,10 @@ Future<void> initLogging({required String logDir}) =>
 Future<void> shutdownLogging() =>
     RustLib.instance.api.crateApiSessionShutdownLogging();
 
+/// 运行期热更新后端日志筛选等级（debug / info / warning / error）。
+Future<void> setLogLevel({required String level}) =>
+    RustLib.instance.api.crateApiSessionSetLogLevel(level: level);
+
 /// 获取当前设置的完整 JSON 字符串。
 String getSettingsJson() =>
     RustLib.instance.api.crateApiSessionGetSettingsJson();

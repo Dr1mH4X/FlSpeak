@@ -39,6 +39,7 @@ Future<LoggingSetup> initLoggingPipeline({
   Directory? overrideLogDir,
   Future<void> Function(String logDir)? initRust,
   DateTime Function()? now,
+  LogLevel? minimumLevel,
 }) async {
   Directory? logDir;
   Object? error;
@@ -55,7 +56,8 @@ Future<LoggingSetup> initLoggingPipeline({
       await logDir.create(recursive: true);
       observer = JsonLinesFileObserver(
         logDir.path,
-        minimumLevel: kDebugMode ? LogLevel.debug : LogLevel.info,
+        minimumLevel:
+            minimumLevel ?? (kDebugMode ? LogLevel.debug : LogLevel.info),
         now: now,
       );
       unawaited(observer.pruneNow());
@@ -91,6 +93,29 @@ Future<LoggingSetup> initLoggingPipeline({
   );
 
   return LoggingSetup(logDir: logDir, error: error);
+}
+
+/// 运行期热切换前端日志筛选等级。
+void setFrontendLogLevel(LogLevel level) {
+  _fileObserver?.minimumLevel = level;
+}
+
+/// 同步前后端日志等级；测试可通过 [setRust] 注入替代的后端回调。
+Future<void> syncLogLevel(
+  LogLevel level, {
+  required String rustLevelId,
+  Future<void> Function(String level)? setRust,
+}) async {
+  setFrontendLogLevel(level);
+  try {
+    if (setRust != null) {
+      await setRust(rustLevelId);
+    } else if (isRustLibInitialized) {
+      await setLogLevel(level: rustLevelId);
+    }
+  } on Object catch (error) {
+    logError('同步后端日志等级失败', error: error);
+  }
 }
 
 /// 退出前把两边队列写完；只用于正常退出路径。

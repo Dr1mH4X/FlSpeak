@@ -1260,6 +1260,15 @@ pub fn shutdown_logging() -> Result<(), CoreError> {
     Ok(())
 }
 
+/// 运行期热更新后端日志筛选等级（debug / info / warning / error）。
+pub fn set_log_level(level: String) -> Result<(), CoreError> {
+    let parsed: session::logging::LogLevel = level.parse().map_err(|e| CoreError::Internal {
+        message: format!("set_log_level failed: {e}"),
+    })?;
+    session::logging::set_level(parsed);
+    Ok(())
+}
+
 /// 获取当前设置的完整 JSON 字符串。
 #[frb(sync)]
 pub fn get_settings_json() -> Result<String, CoreError> {
