@@ -13,7 +13,7 @@
  * Modified for FlSpeak (2026).
  */
 
-import { readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { resolve, relative, join, extname } from 'node:path'
 import { fromMarkdown } from 'mdast-util-from-markdown'
 import { gfmFromMarkdown } from 'mdast-util-gfm'
@@ -78,7 +78,10 @@ function collectMarkdownFiles(dir) {
   for (const entry of entries) {
     if (entry.isDirectory()) {
       if (IGNORE_DIRS.has(entry.name)) continue
-      results.push(...collectMarkdownFiles(join(dir, entry.name)))
+      const childDir = join(dir, entry.name)
+      // Skip git submodules (whose root contains a .git file or directory) so upstream READMEs are not linted.
+      if (existsSync(join(childDir, '.git'))) continue
+      results.push(...collectMarkdownFiles(childDir))
     } else if (entry.isFile() && extname(entry.name).toLowerCase() === '.md') {
       results.push(join(dir, entry.name))
     }
