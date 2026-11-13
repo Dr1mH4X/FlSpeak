@@ -97,7 +97,6 @@ Future<T?> showAppModal<T>(
   WidgetBuilder? footer,
 }) {
   final compact = context.isCompact;
-  final reduceMotion = MediaQuery.disableAnimationsOf(context);
   Widget panel(BuildContext context) => _ModalPanel(
     title: title,
     description: description,
@@ -111,13 +110,11 @@ Future<T?> showAppModal<T>(
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: false,
-      sheetAnimationStyle: reduceMotion
-          ? AnimationStyle.noAnimation
-          : const AnimationStyle(
-              duration: Motion.effectsSlow,
-              reverseDuration: Motion.effectsDefault,
-              curve: Motion.spatialCurve,
-            ),
+      sheetAnimationStyle: const AnimationStyle(
+        duration: Motion.effectsSlow,
+        reverseDuration: Motion.effectsDefault,
+        curve: Motion.spatialCurve,
+      ),
       // M3 scrim：scrim 色压 32%，亮暗主题各自成立。
       barrierColor: context.scheme.scrim.withValues(alpha: 0.32),
       constraints: BoxConstraints(
@@ -174,12 +171,10 @@ class _AppDialogRoute<T> extends DialogRoute<T> {
            to: Navigator.of(context, rootNavigator: true).context,
          ),
          traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
-         animationStyle: MediaQuery.disableAnimationsOf(context)
-             ? AnimationStyle.noAnimation
-             : const AnimationStyle(
-                 duration: Motion.effectsDefault,
-                 reverseDuration: Motion.effectsFast,
-               ),
+         animationStyle: const AnimationStyle(
+           duration: Motion.effectsDefault,
+           reverseDuration: Motion.effectsFast,
+         ),
        );
 
   @override
@@ -189,7 +184,6 @@ class _AppDialogRoute<T> extends DialogRoute<T> {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
-    if (MediaQuery.disableAnimationsOf(context)) return child;
     final progress = animation.drive(
       CurveTween(curve: Motion.effectsDefaultCurve),
     );

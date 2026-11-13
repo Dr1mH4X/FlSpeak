@@ -19,7 +19,6 @@ import 'package:flspeak/core/preferences.dart';
 import 'package:flspeak/core/update_check.dart';
 import 'package:flspeak/router.dart';
 import 'package:flspeak/widgets/app_navigation_sidebar.dart';
-import 'package:flspeak/widgets/notice_host.dart';
 import 'package:flspeak/widgets/update_dot.dart';
 
 class _PttSession extends SessionController {
@@ -230,57 +229,6 @@ void main() {
 
     expect(style.statusBarIconBrightness, Brightness.dark);
     expect(style.systemNavigationBarIconBrightness, Brightness.dark);
-  });
-
-  testWidgets('motion preference controls MediaQuery disableAnimations', (
-    tester,
-  ) async {
-    for (final (preference, platformDisable, expected) in [
-      (AppMotionPreference.system, false, false),
-      (AppMotionPreference.system, true, true),
-      (AppMotionPreference.on, true, false),
-      (AppMotionPreference.off, false, true),
-    ]) {
-      final container = ProviderContainer(
-        overrides: [
-          coreSessionProvider.overrideWithValue(_PttCore()),
-          appVersionProvider.overrideWithValue('0.1.0'),
-          storePathProvider.overrideWithValue(
-            '/tmp/flspeak-test/preferences.json',
-          ),
-          sessionViewProvider.overrideWith(_PttSession.new),
-          preferencesStoreProvider.overrideWithValue(
-            PreferencesStore.inMemory(
-              preferences: SessionPreferences(
-                nickname: 'Test',
-                motion: preference,
-              ),
-            ),
-          ),
-        ],
-      );
-      addTearDown(container.dispose);
-      tester.platformDispatcher.accessibilityFeaturesTestValue =
-          FakeAccessibilityFeatures(disableAnimations: platformDisable);
-      addTearDown(
-        tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
-      );
-
-      await tester.pumpWidget(
-        UncontrolledProviderScope(
-          container: container,
-          child: const TsClientApp(),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      final context = tester.element(find.byType(NoticeHost));
-      expect(
-        MediaQuery.disableAnimationsOf(context),
-        expected,
-        reason: 'preference=$preference, platform=$platformDisable',
-      );
-    }
   });
 
   testWidgets('logging initialization failure shows a startup notice', (

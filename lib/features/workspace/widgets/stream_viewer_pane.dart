@@ -230,9 +230,7 @@ class _StreamBanner extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
       child: AnimatedContainer(
         key: containerKey,
-        duration: MediaQuery.disableAnimationsOf(context)
-            ? Duration.zero
-            : Motion.effectsDefault,
+        duration: Motion.effectsDefault,
         curve: Motion.effectsDefaultCurve,
         decoration: BoxDecoration(
           color: scheme.surfaceContainerLow,

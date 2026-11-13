@@ -202,7 +202,6 @@ class _NetworkTelemetryPanelState extends ConsumerState<NetworkTelemetryPanel> {
       connected: connected,
       telemetry: network,
     );
-    final animate = !MediaQuery.disableAnimationsOf(context);
     final titleStyle = context.texts.titleMedium?.copyWith(
       fontSize: 17,
       fontWeight: FontWeight.w600,
@@ -226,9 +225,9 @@ class _NetworkTelemetryPanelState extends ConsumerState<NetworkTelemetryPanel> {
         padding: const EdgeInsets.fromLTRB(16, 8, 8, 12),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final traceWidth = animate
-                ? (constraints.maxWidth * 0.26).clamp(30.0, 64.0).toDouble()
-                : 0.0;
+            final traceWidth = (constraints.maxWidth * 0.26)
+                .clamp(30.0, 64.0)
+                .toDouble();
             final valueWidth = (constraints.maxWidth * 0.24)
                 .clamp(42.0, 64.0)
                 .toDouble();

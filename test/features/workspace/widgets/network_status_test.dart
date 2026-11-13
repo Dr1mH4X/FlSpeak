@@ -62,9 +62,8 @@ class _Controller extends SessionController {
 
 Future<void> _pumpStatus(
   WidgetTester tester,
-  ProviderContainer container, {
-  bool disableAnimations = false,
-}) async {
+  ProviderContainer container,
+) async {
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,
@@ -78,12 +77,9 @@ Future<void> _pumpStatus(
         supportedLocales: AppLocalizations.supportedLocales,
         builder: (context, child) =>
             PrismRootScope(brightness: Brightness.light, child: child!),
-        home: MediaQuery(
-          data: MediaQueryData(
-            size: const Size(800, 600),
-            disableAnimations: disableAnimations,
-          ),
-          child: const Scaffold(
+        home: const MediaQuery(
+          data: MediaQueryData(size: Size(800, 600)),
+          child: Scaffold(
             body: Align(
               alignment: Alignment.bottomLeft,
               child: SizedBox(width: 288, height: 600, child: ChannelPanel()),
@@ -325,27 +321,5 @@ void main() {
     final samplesAtClose = controller.samples;
     await tester.pump(const Duration(seconds: 6));
     expect(controller.samples, samplesAtClose);
-  });
-
-  testWidgets('reduced motion omits the signal ribbon', (tester) async {
-    final container = ProviderContainer(
-      overrides: [sessionViewProvider.overrideWith(_Controller.new)],
-    );
-    addTearDown(container.dispose);
-    await _pumpStatus(tester, container, disableAnimations: true);
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byIcon(Icons.wifi_rounded).first);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 250));
-
-    expect(find.text('网络状态'), findsOneWidget);
-    expect(
-      find.descendant(
-        of: find.byKey(const ValueKey('network-telemetry-panel')),
-        matching: find.byType(SignalRibbon),
-      ),
-      findsNothing,
-    );
   });
 }

@@ -138,9 +138,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
               children: [
                 Expanded(
                   child: AnimatedSwitcher(
-                    duration: MediaQuery.disableAnimationsOf(context)
-                        ? Duration.zero
-                        : Motion.effectsDefault,
+                    duration: Motion.effectsDefault,
                     switchInCurve: Motion.effectsDefaultCurve,
                     switchOutCurve: Motion.effectsDefaultCurve.flipped,
                     layoutBuilder: (current, previous) => Stack(

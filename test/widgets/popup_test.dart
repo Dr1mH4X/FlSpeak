@@ -16,7 +16,7 @@ import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/widgets/prism.dart';
 
 void main() {
-  Widget wrapPopupApp(Widget child, {bool disableAnimations = false}) {
+  Widget wrapPopupApp(Widget child) {
     return MaterialApp(
       theme: buildAppTheme(Brightness.light),
       localizationsDelegates: const [
@@ -25,19 +25,8 @@ void main() {
       ],
       supportedLocales: AppLocalizations.supportedLocales,
       locale: const Locale('zh'),
-      builder: (context, appChild) {
-        Widget rooted = PrismRootScope(
-          brightness: Brightness.light,
-          child: appChild!,
-        );
-        if (disableAnimations) {
-          rooted = MediaQuery(
-            data: MediaQuery.of(context).copyWith(disableAnimations: true),
-            child: rooted,
-          );
-        }
-        return rooted;
-      },
+      builder: (context, appChild) =>
+          PrismRootScope(brightness: Brightness.light, child: appChild!),
       home: Scaffold(body: child),
     );
   }
@@ -111,56 +100,5 @@ void main() {
 
     expect(selected, 'Choice 2');
     expect(find.text('Choice 2'), findsNothing);
-  });
-
-  testWidgets('PopupAnchor with disableAnimations settles menu cleanly', (
-    tester,
-  ) async {
-    String? selected;
-    await tester.pumpWidget(
-      wrapPopupApp(
-        disableAnimations: true,
-        Center(
-          child: PopupAnchor(
-            targetBuilder: (open) => FilledButton(
-              onPressed: open,
-              child: const Text('Open Reduced'),
-            ),
-            popupBuilder: (context) => PopupMenu(
-              items: [
-                PopupMenuItem(
-                  label: 'Item 1',
-                  checked: selected == 'Item 1',
-                  onPressed: () {
-                    selected = 'Item 1';
-                  },
-                ),
-                PopupMenuItem(
-                  label: 'Item 2',
-                  checked: selected == 'Item 2',
-                  onPressed: () {
-                    selected = 'Item 2';
-                  },
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Open Reduced'));
-    await tester.pump();
-    await tester.pumpAndSettle();
-
-    expect(find.text('Item 1'), findsOneWidget);
-    expect(find.text('Item 2'), findsOneWidget);
-
-    await tester.tap(find.text('Item 2'));
-    await tester.pumpAndSettle();
-
-    expect(selected, 'Item 2');
-    expect(find.text('Item 2'), findsNothing);
   });
 }

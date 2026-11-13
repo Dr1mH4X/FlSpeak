@@ -1384,13 +1384,6 @@ class PreferencesController extends Notifier<SessionPreferences> {
     _update(state.copyWith(theme: theme));
   }
 
-  void setMotion(AppMotionPreference motion) {
-    if (motion == state.motion) {
-      return;
-    }
-    _update(state.copyWith(motion: motion));
-  }
-
   /// `null` 表示清除按住说话快捷键。
   void setPttHotkey(int? keyId) {
     if (keyId == state.pttHotkey) {

@@ -390,9 +390,7 @@ class _ChannelTile extends StatelessWidget {
           button: true,
           selected: selected,
           child: AnimatedContainer(
-            duration: MediaQuery.disableAnimationsOf(context)
-                ? Duration.zero
-                : Motion.effectsFast,
+            duration: Motion.effectsFast,
             curve: Motion.effectsDefaultCurve,
             decoration: ShapeDecoration(
               color: selected ? scheme.primaryContainer : Colors.transparent,
@@ -737,7 +735,6 @@ class _UserFooterState extends ConsumerState<_UserFooter> {
     final channel = view.selfChannelId == null
         ? null
         : view.channelById(view.selfChannelId!);
-    final reduceMotion = MediaQuery.disableAnimationsOf(context);
     return Container(
       margin: const EdgeInsets.all(8),
       decoration: BoxDecoration(
@@ -750,7 +747,6 @@ class _UserFooterState extends ConsumerState<_UserFooter> {
         children: [
           _CardExtension(
             expanded: _expanded,
-            reduceMotion: reduceMotion,
             builder: (context) => Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -868,14 +864,9 @@ class _UserFooterState extends ConsumerState<_UserFooter> {
 
 /// 用户卡向上延伸的展开区：内容随高度因子被裁剪，关闭动画结束后才释放面板。
 class _CardExtension extends StatefulWidget {
-  const _CardExtension({
-    required this.expanded,
-    required this.reduceMotion,
-    required this.builder,
-  });
+  const _CardExtension({required this.expanded, required this.builder});
 
   final bool expanded;
-  final bool reduceMotion;
   final WidgetBuilder builder;
 
   @override
@@ -909,13 +900,6 @@ class _CardExtensionState extends State<_CardExtension>
   @override
   void didUpdateWidget(covariant _CardExtension oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.reduceMotion) {
-      _controller.stop();
-      if (_visible != widget.expanded) {
-        setState(() => _visible = widget.expanded);
-      }
-      return;
-    }
     if (widget.expanded) {
       if (!_visible) {
         setState(() => _visible = true);
@@ -938,9 +922,6 @@ class _CardExtensionState extends State<_CardExtension>
   Widget build(BuildContext context) {
     if (!_visible) {
       return const SizedBox.shrink();
-    }
-    if (widget.reduceMotion) {
-      return widget.builder(context);
     }
     return AnimatedBuilder(
       animation: _controller,
@@ -1000,9 +981,7 @@ class _IconToggle extends StatelessWidget {
           padding: EdgeInsets.zero,
         ),
         icon: AnimatedSwitcher(
-          duration: MediaQuery.disableAnimationsOf(context)
-              ? Duration.zero
-              : Motion.effectsFast,
+          duration: Motion.effectsFast,
           switchInCurve: Motion.effectsFastCurve,
           switchOutCurve: Motion.effectsFastCurve.flipped,
           transitionBuilder: (child, animation) => FadeTransition(

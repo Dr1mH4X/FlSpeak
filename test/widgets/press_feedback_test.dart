@@ -14,11 +14,7 @@ import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/widgets/prism.dart';
 
 void main() {
-  Widget wrapTheme(
-    Brightness brightness,
-    Widget child, {
-    bool disableAnimations = false,
-  }) {
+  Widget wrapTheme(Brightness brightness, Widget child) {
     return MaterialApp(
       theme: buildAppTheme(brightness),
       localizationsDelegates: const [
@@ -27,19 +23,8 @@ void main() {
       ],
       supportedLocales: AppLocalizations.supportedLocales,
       locale: const Locale('zh'),
-      builder: (context, appChild) {
-        Widget rooted = PrismRootScope(
-          brightness: brightness,
-          child: appChild!,
-        );
-        if (disableAnimations) {
-          rooted = MediaQuery(
-            data: MediaQuery.of(context).copyWith(disableAnimations: true),
-            child: rooted,
-          );
-        }
-        return rooted;
-      },
+      builder: (context, appChild) =>
+          PrismRootScope(brightness: brightness, child: appChild!),
       home: Scaffold(body: Center(child: child)),
     );
   }

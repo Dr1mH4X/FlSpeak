@@ -46,9 +46,7 @@ class ClientActionsButton extends ConsumerWidget {
       button: true,
       selected: isSelected,
       child: AnimatedContainer(
-        duration: MediaQuery.disableAnimationsOf(context)
-            ? Duration.zero
-            : Motion.effectsFast,
+        duration: Motion.effectsFast,
         curve: Motion.effectsDefaultCurve,
         decoration: ShapeDecoration(
           color: isSelected ? scheme.primaryContainer : Colors.transparent,

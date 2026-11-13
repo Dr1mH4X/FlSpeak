@@ -26,7 +26,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.connect,
         pageBuilder: (context, state) => _page(
-          context,
           state,
           ConnectPage(serverId: state.uri.queryParameters['server']),
         ),
@@ -34,7 +33,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.workspace,
         pageBuilder: (context, state) => _page(
-          context,
           state,
           const WorkspaceShell(
             location: AppRoutes.workspace,
@@ -44,8 +42,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: AppRoutes.settings,
-        pageBuilder: (context, state) =>
-            _page(context, state, const SettingsPage()),
+        pageBuilder: (context, state) => _page(state, const SettingsPage()),
       ),
     ],
   );
@@ -55,21 +52,13 @@ final routerProvider = Provider<GoRouter>((ref) {
 
 // go_router 的 material_ui.MaterialApp 与 SDK MaterialApp 是不同类型；
 // 显式提供页面，避免默认检测回退到 NoTransitionPage。
-CustomTransitionPage<void> _page(
-  BuildContext context,
-  GoRouterState state,
-  Widget child,
-) {
-  final reduceMotion = MediaQuery.disableAnimationsOf(context);
+CustomTransitionPage<void> _page(GoRouterState state, Widget child) {
   return CustomTransitionPage<void>(
     key: state.pageKey,
-    transitionDuration: reduceMotion ? Duration.zero : Motion.effectsDefault,
-    reverseTransitionDuration: reduceMotion
-        ? Duration.zero
-        : Motion.effectsFast,
+    transitionDuration: Motion.effectsDefault,
+    reverseTransitionDuration: Motion.effectsFast,
     child: child,
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
-      if (MediaQuery.disableAnimationsOf(context)) return child;
       final progress = animation.drive(
         CurveTween(curve: Motion.effectsDefaultCurve),
       );

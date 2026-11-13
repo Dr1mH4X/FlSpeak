@@ -126,14 +126,11 @@ class _PaneResizerState extends State<PaneResizer> {
     final size = _effectiveSize;
     final dragging = _dragging != null;
     final isHorizontal = widget.axis == Axis.horizontal;
-    final duration = MediaQuery.disableAnimationsOf(context)
-        ? Duration.zero
-        : Motion.effectsFast;
 
     final handleGrip = Center(
       child: AnimatedContainer(
         key: widget.gripKey,
-        duration: duration,
+        duration: Motion.effectsFast,
         curve: Motion.effectsDefaultCurve,
         width: isHorizontal
             ? (dragging ? 4.0 : 3.0)

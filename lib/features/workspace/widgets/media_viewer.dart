@@ -56,15 +56,12 @@ Future<void> showMediaViewer(
   if (urls.isEmpty) {
     return Future<void>.value();
   }
-  final disableAnimations = MediaQuery.disableAnimationsOf(context);
   return showGeneralDialog<void>(
     context: context,
     barrierDismissible: false,
     barrierColor: Colors.black,
     barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-    transitionDuration: disableAnimations
-        ? Duration.zero
-        : const Duration(milliseconds: 180),
+    transitionDuration: const Duration(milliseconds: 180),
     pageBuilder: (context, animation, secondaryAnimation) =>
         MediaViewer(urls: urls, initialIndex: initialIndex),
     transitionBuilder: (context, animation, secondaryAnimation, child) =>
@@ -101,11 +98,6 @@ class _MediaViewerState extends State<MediaViewer> {
 
   void _goTo(int index) {
     if (index < 0 || index >= widget.urls.length) {
-      return;
-    }
-    final disableAnimations = MediaQuery.disableAnimationsOf(context);
-    if (disableAnimations) {
-      _controller.jumpToPage(index);
       return;
     }
     _controller.animateToPage(

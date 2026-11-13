@@ -78,7 +78,7 @@ class _NoticeStackState extends State<_NoticeStack> {
       _listKey.currentState?.removeItem(
         index,
         (context, animation) => _item(context, notice, animation),
-        duration: _animationDuration(context),
+        duration: Motion.effectsFast,
       );
     }
 
@@ -88,17 +88,9 @@ class _NoticeStackState extends State<_NoticeStack> {
         continue;
       }
       _items.insert(index, notice);
-      _listKey.currentState?.insertItem(
-        index,
-        duration: _animationDuration(context),
-      );
+      _listKey.currentState?.insertItem(index, duration: Motion.effectsFast);
     }
   }
-
-  Duration _animationDuration(BuildContext context) =>
-      MediaQuery.disableAnimationsOf(context)
-      ? Duration.zero
-      : Motion.effectsFast;
 
   Widget _item(
     BuildContext context,

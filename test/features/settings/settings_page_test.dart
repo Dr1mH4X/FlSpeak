@@ -119,73 +119,6 @@ void main() {
     );
   }
 
-  testWidgets('picking motion preference updates provider state', (
-    tester,
-  ) async {
-    final container = ProviderContainer(
-      overrides: [
-        coreSessionProvider.overrideWithValue(_Core()),
-        sessionViewProvider.overrideWith(_Session.new),
-        storePathProvider.overrideWithValue(
-          '/tmp/flspeak-test/preferences.json',
-        ),
-        preferencesStoreProvider.overrideWithValue(
-          PreferencesStore.inMemory(
-            preferences: const SessionPreferences(nickname: 'Test'),
-          ),
-        ),
-      ],
-    );
-    addTearDown(container.dispose);
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp(
-          theme: buildAppTheme(Brightness.light),
-          locale: const Locale('zh'),
-          localizationsDelegates: const [
-            ...AppLocalizations.localizationsDelegates,
-            PrismUiLocalizationsDelegate(),
-          ],
-          supportedLocales: AppLocalizations.supportedLocales,
-          builder: (context, child) =>
-              PrismRootScope(brightness: Brightness.light, child: child!),
-          home: const SettingsPage(),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    // 先进入「外观」二级页面
-    final appearanceCategory = find.widgetWithText(SettingsTile, '外观');
-    await tester.ensureVisible(appearanceCategory);
-    await tester.tap(appearanceCategory);
-    await tester.pumpAndSettle();
-
-    final row = find.widgetWithText(
-      SettingsOptionsTile<AppMotionPreference>,
-      '动效',
-    );
-    await tester.ensureVisible(row);
-    await tester.tap(row);
-    await tester.pumpAndSettle();
-
-    // 弹出菜单中选择「关闭」
-    expect(find.byType(PopupMenu), findsOneWidget);
-    await tester.tap(find.text('关闭').last);
-    await tester.pumpAndSettle();
-
-    expect(container.read(preferencesProvider).motion, AppMotionPreference.off);
-
-    // 再次点击切回「开启」
-    await tester.tap(row);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('开启').last);
-    await tester.pumpAndSettle();
-
-    expect(container.read(preferencesProvider).motion, AppMotionPreference.on);
-  });
-
   testWidgets(
     'picking language preference updates provider state and displays in trailing',
     (tester) async {
@@ -716,7 +649,6 @@ void main() {
               preferences: const SessionPreferences(
                 nickname: 'Test',
                 locale: 'zh',
-                motion: AppMotionPreference.on,
               ),
             ),
           ),

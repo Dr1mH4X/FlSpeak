@@ -252,15 +252,11 @@ class _ChatPaneState extends State<ChatPane> {
         return;
       }
       final target = _scroll.position.maxScrollExtent;
-      if (MediaQuery.disableAnimationsOf(context)) {
-        _scroll.jumpTo(target);
-      } else {
-        await _scroll.animateTo(
-          target,
-          duration: Motion.effectsFast,
-          curve: Motion.effectsFastCurve,
-        );
-      }
+      await _scroll.animateTo(
+        target,
+        duration: Motion.effectsFast,
+        curve: Motion.effectsFastCurve,
+      );
       if (mounted && request == _scrollRequest) {
         _scrollingToEnd = false;
       }
@@ -1069,10 +1065,6 @@ class _MessageRowState extends State<_MessageRow>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (MediaQuery.disableAnimationsOf(context)) {
-      _controller.value = 1;
-      return;
-    }
     if (_controller.isDismissed) {
       _controller.forward();
     }
@@ -1158,9 +1150,6 @@ class _MessageRowState extends State<_MessageRow>
       ),
     );
 
-    if (MediaQuery.disableAnimationsOf(context)) {
-      return row;
-    }
     return FadeTransition(
       opacity: _curve,
       child: SlideTransition(

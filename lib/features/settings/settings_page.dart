@@ -223,17 +223,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ),
             generateSection(
               items: [
-                SettingsOptionsTile<AppMotionPreference>(
-                  icon: Icons.animation_rounded,
-                  title: l10n.settingsMotion,
-                  options: AppMotionPreference.values,
-                  value: preferences.motion,
-                  textBuilder: (motion) => _motionLabel(l10n, motion),
-                  onChanged: (motion) {
-                    if (!mounted) return;
-                    ref.read(preferencesProvider.notifier).setMotion(motion);
-                  },
-                ),
                 SettingsOptionsTile<VoiceMeterSource>(
                   icon: Icons.graphic_eq_rounded,
                   title: l10n.settingsVoiceMeter,
@@ -467,7 +456,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       (SettingsCategory.about, _) => const ValueKey<String>('about'),
     };
     final Color pageColor = context.pageColor;
-    final bool disableAnimations = MediaQuery.disableAnimationsOf(context);
     final double rtlSign = Directionality.of(context) == TextDirection.rtl
         ? -1.0
         : 1.0;
@@ -500,9 +488,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         Expanded(
           child: ClipRect(
             child: AnimatedSwitcher(
-              duration: disableAnimations
-                  ? Duration.zero
-                  : _settingsTransitionDuration,
+              duration: _settingsTransitionDuration,
               switchInCurve: _settingsPushCurve,
               switchOutCurve: _settingsPushCurve.flipped,
               layoutBuilder: (currentChild, previousChildren) => Stack(
@@ -767,13 +753,6 @@ String _voiceMeterLabel(AppLocalizations l10n, VoiceMeterSource source) =>
     switch (source) {
       VoiceMeterSource.microphone => l10n.settingsVoiceMeterMic,
       VoiceMeterSource.received => l10n.settingsVoiceMeterReceived,
-    };
-
-String _motionLabel(AppLocalizations l10n, AppMotionPreference motion) =>
-    switch (motion) {
-      AppMotionPreference.system => l10n.settingsMotionSystem,
-      AppMotionPreference.on => l10n.settingsMotionOn,
-      AppMotionPreference.off => l10n.settingsMotionOff,
     };
 
 String _screenShareResolutionLabel(

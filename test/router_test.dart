@@ -30,7 +30,6 @@ class _Session extends SessionController {
 
 Future<GoRouter> _mount(
   WidgetTester tester, {
-  bool reduceMotion = false,
   SessionView sessionView = const SessionView(),
 }) async {
   tester.view.physicalSize = const Size(1280, 800);
@@ -58,11 +57,8 @@ Future<GoRouter> _mount(
           PrismUiLocalizationsDelegate(),
         ],
         supportedLocales: AppLocalizations.supportedLocales,
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context)
-              .copyWith(disableAnimations: reduceMotion),
-          child: PrismRootScope(brightness: Brightness.light, child: child!),
-        ),
+        builder: (context, child) =>
+            PrismRootScope(brightness: Brightness.light, child: child!),
       ),
     ),
   );
@@ -85,15 +81,6 @@ void main() {
     expect(route.animation!.value, inExclusiveRange(0.0, 1.0));
     await tester.pumpAndSettle();
     expect(find.byType(SettingsPage), findsNothing);
-  });
-
-  testWidgets('减少动态效果时导航直接显示最终内容', (tester) async {
-    final router = await _mount(tester, reduceMotion: true);
-    unawaited(router.push<void>(AppRoutes.settings));
-    await tester.pumpAndSettle();
-    final route = ModalRoute.of(tester.element(find.byType(SettingsPage)))!;
-    expect(route.transitionDuration, Duration.zero);
-    expect(route.animation!.value, 1);
   });
 
   testWidgets('从连接页侧栏进入设置后，一级菜单点击返回能回到连接页而非连接丢失页', (tester) async {

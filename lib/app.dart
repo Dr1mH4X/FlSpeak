@@ -171,28 +171,16 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
       darkTheme: buildAppTheme(Brightness.dark),
       themeAnimationDuration: Duration.zero,
       builder: (context, child) {
-        final systemDisableAnimations = MediaQuery.disableAnimationsOf(context);
-        final disableAnimations = switch (preferences.motion) {
-          AppMotionPreference.system => systemDisableAnimations,
-          AppMotionPreference.on => false,
-          AppMotionPreference.off => true,
-        };
         final theme = Theme.of(context);
-        return MediaQuery(
-          data: MediaQuery.of(context)
-              .copyWith(disableAnimations: disableAnimations),
-          child: PrismRootScope(
-            brightness: theme.brightness,
-            platform: theme.platform,
-            child: AnnotatedRegion<SystemUiOverlayStyle>(
-              value: appSystemUiOverlayStyle(theme),
-              child: _WindowBackgroundSync(
-                child: _StartupLoggingNotice(
-                  child: _StartupUpdateNotice(
-                    child: _WindowFrame(
-                      child: child ?? const SizedBox.shrink(),
-                    ),
-                  ),
+        return PrismRootScope(
+          brightness: theme.brightness,
+          platform: theme.platform,
+          child: AnnotatedRegion<SystemUiOverlayStyle>(
+            value: appSystemUiOverlayStyle(theme),
+            child: _WindowBackgroundSync(
+              child: _StartupLoggingNotice(
+                child: _StartupUpdateNotice(
+                  child: _WindowFrame(child: child ?? const SizedBox.shrink()),
                 ),
               ),
             ),

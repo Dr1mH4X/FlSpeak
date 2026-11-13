@@ -43,13 +43,11 @@
 | 开关控件（设置列表与权限开关） | `Switch`（`plugins/prism_ui`） | 采用 `52×32 dp` 轨道与胶囊滑块，支持点击与水平拖拽切换；开启 `LiquidGlassScope` 时按压与跨中点切换会抬升滑块并切换为 `LiquidGlassStyle.lens` 透镜态，`200 ms` 后回落；键盘聚焦显示外扩 2 dp 焦点环（`focusRingSide`）。 |
 | 桌面端系统窗口控制按钮 | 系统原生高亮 | 保留固定方形交互区与纯悬停/按下明暗着色，不参与弹性形变。 |
 
-当 `MediaQuery.disableAnimationsOf(context)` 为真时，`PressSurface`、`ElasticButton`、`Switch` 与 `PopupAnchor` 自动遵循 `plugins/prism_ui` 的无障碍降级策略。
-
 ## 设置节与列表行规范
 
 设置模块统一通过 `generateSection`、`generateGroup`、`ListHeader`、`ListFooter`、`ListItem`（`lib/features/settings/widgets/settings_section.dart` 与 `lib/features/settings/widgets/list_item.dart`）与 `ListRow` 组织：
 
 - **节结构与间距**：`ListHeader` 使用 `headline` 字阶并可右侧挂载 36 dp 高度的 `TonalButtonSize.section` 操作组；`ListFooter` 使用 `footnote` 字阶（`onSurfaceVariant`）置于卡片下方。
 - **行几何**：`ListRow` 在行高内对 `leading`、标题/副标题列与 `trailing`（如 `Switch` 与收紧 `minimumSize: Size.zero` 的 `OptionsValueButton`）执行纵轴居中对齐，`PopupMenu` 展开后的内部选项行与设置项共享 `plugins/prism_ui` 列表规范。
-- **子页面过渡与材质隔离**：设置多级钻取（概览页与二/三级子页切换）为每个页面槽位绑定独立 `ValueKey` 与本地 `Material(type: MaterialType.transparency)` 边界（顶栏 `_SettingsTopBar` 独立承载于其上），采用双向水平推入/拉回转场（进入新页自右侧推入，返回自左侧退回并揭开上一级，默认 `300 ms` 临界阻尼弹簧，减弱动效时退化为瞬时切换）。
+- **子页面过渡与材质隔离**：设置多级钻取（概览页与二/三级子页切换）为每个页面槽位绑定独立 `ValueKey` 与本地 `Material(type: MaterialType.transparency)` 边界（顶栏 `_SettingsTopBar` 独立承载于其上），采用双向水平推入/拉回转场（进入新页自右侧推入，返回自左侧退回并揭开上一级，采用 `300 ms` 临界阻尼弹簧）。
 - **行内容与分组位置**：前置图标统一为 `24 dp` 裸图标（无额外背景框）；分组内每行经 `ItemPositionScope` 感知首/中/尾/单项位置，中间插入 1 物理像素高的 `14% onSurface` 分隔线。

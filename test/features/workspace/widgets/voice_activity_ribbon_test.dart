@@ -33,9 +33,8 @@ class _Session extends SessionController {
 Future<ProviderContainer> _mount(
   WidgetTester tester,
   Stream<VoiceLevels> levels,
-  Key boundaryKey, {
-  bool reduceMotion = false,
-}) async {
+  Key boundaryKey,
+) async {
   final container = ProviderContainer(
     overrides: [
       sessionViewProvider.overrideWith(_Session.new),
@@ -51,16 +50,13 @@ Future<ProviderContainer> _mount(
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.red)
               .copyWith(primary: const Color(0xFFFF0000)),
         ),
-        home: MediaQuery(
-          data: MediaQueryData(disableAnimations: reduceMotion),
-          child: Center(
-            child: RepaintBoundary(
-              key: boundaryKey,
-              child: const SizedBox(
-                width: 200,
-                height: 48,
-                child: VoiceActivityRibbon(),
-              ),
+        home: Center(
+          child: RepaintBoundary(
+            key: boundaryKey,
+            child: const SizedBox(
+              width: 200,
+              height: 48,
+              child: VoiceActivityRibbon(),
             ),
           ),
         ),
@@ -116,23 +112,16 @@ void main() {
     expect(await _peakPixels(tester, boundaryKey), 0);
   });
 
-  for (final reduceMotion in [false, true]) {
-    testWidgets('峰值在收到后的第一帧可见，减少动效=$reduceMotion', (tester) async {
-      final levels = StreamController<VoiceLevels>.broadcast(sync: true);
-      addTearDown(levels.close);
-      const boundaryKey = ValueKey('meter');
-      await _mount(
-        tester,
-        levels.stream,
-        boundaryKey,
-        reduceMotion: reduceMotion,
-      );
-      expect(await _peakPixels(tester, boundaryKey), 0);
-      levels.add(const VoiceLevels(mic: 1));
-      await tester.pump();
-      expect(await _peakPixels(tester, boundaryKey), greaterThan(4));
-    });
-  }
+  testWidgets('峰值在收到后的第一帧可见', (tester) async {
+    final levels = StreamController<VoiceLevels>.broadcast(sync: true);
+    addTearDown(levels.close);
+    const boundaryKey = ValueKey('meter');
+    await _mount(tester, levels.stream, boundaryKey);
+    expect(await _peakPixels(tester, boundaryKey), 0);
+    levels.add(const VoiceLevels(mic: 1));
+    await tester.pump();
+    expect(await _peakPixels(tester, boundaryKey), greaterThan(4));
+  });
 
   testWidgets('切换声源或断开连接立即清空历史，不保留旧峰值', (tester) async {
     final levels = StreamController<VoiceLevels>.broadcast(sync: true);

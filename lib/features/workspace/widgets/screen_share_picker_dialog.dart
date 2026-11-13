@@ -390,9 +390,7 @@ class _SourceCard extends StatelessWidget {
       selected: selected,
       label: source.name,
       child: AnimatedContainer(
-        duration: MediaQuery.disableAnimationsOf(context)
-            ? Duration.zero
-            : Motion.effectsFast,
+        duration: Motion.effectsFast,
         curve: Motion.effectsDefaultCurve,
         decoration: ShapeDecoration(color: fill, shape: shape),
         child: ClipRSuperellipse(

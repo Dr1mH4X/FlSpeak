@@ -121,9 +121,7 @@ class _IdentityDialogContentState extends State<_IdentityDialogContent> {
         shape: AppShape.xl,
       ),
       child: AnimatedSwitcher(
-        duration: MediaQuery.disableAnimationsOf(context)
-            ? Duration.zero
-            : Motion.effectsFast,
+        duration: Motion.effectsFast,
         switchInCurve: Motion.effectsFastCurve,
         switchOutCurve: Motion.effectsFastCurve.flipped,
         child: _editing
