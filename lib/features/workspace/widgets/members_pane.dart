@@ -1,21 +1,13 @@
-import 'package:flutter/material.dart'
-    hide
-        ButtonStyle,
-        FilledButton,
-        IconButton,
-        OutlinedButton,
-        Switch,
-        TextButton;
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models.dart';
-import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
-import '../../../widgets/prism.dart';
 import '../workspace_state.dart';
 import 'client_actions.dart';
 import 'member_avatar.dart';
+import 'member_status_flags.dart';
 
 class MembersPane extends ConsumerWidget {
   const MembersPane({required this.view, required this.channelId, super.key});
@@ -27,7 +19,6 @@ class MembersPane extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
-    final controller = ref.read(sessionViewProvider.notifier);
     final selectedMember = ref.watch(selectedMemberProvider);
     final members = view.clients
         .where((client) => client.channelId == channelId)
@@ -115,42 +106,17 @@ class MembersPane extends ConsumerWidget {
                             ],
                           ),
                         ),
-                        if (view.streamForClient(member.id) case final stream?)
-                          IconButton(
-                            key: ValueKey('member-stream-${member.id}'),
-                            style: ButtonStyle.from(
-                              padding: const EdgeInsets.all(4),
-                              minimumSize: const Size.square(32),
-                            ),
-                            onPressed: () {
-                              if (view.watchingStreamId == stream.id) {
-                                controller.leaveStream(stream.id);
-                              } else {
-                                controller.watchStream(stream);
-                              }
-                            },
-                            icon: Icon(
-                              Icons.screen_share_rounded,
-                              size: IconSizes.small,
-                              color: isSelected
-                                  ? scheme.onPrimaryContainer
-                                  : (view.watchingStreamId == stream.id
-                                        ? scheme.primary
-                                        : scheme.onSurfaceVariant),
-                              semanticLabel: view.watchingStreamId == stream.id
-                                  ? l10n.streamStopWatching
-                                  : l10n.streamWatchScreen,
-                            ),
-                          ),
-                        if (member.inputMuted ?? false)
-                          Icon(
-                            Icons.mic_off_rounded,
-                            size: IconSizes.small,
-                            color: isSelected
-                                ? scheme.onPrimaryContainer
-                                : scheme.onSurfaceVariant,
-                            semanticLabel: l10n.memberMicMuted,
-                          ),
+                        MemberStatusFlags(
+                          client: member,
+                          sharingScreen:
+                              view.streamForClient(member.id) != null,
+                          foregroundColor: isSelected
+                              ? scheme.onPrimaryContainer
+                              : null,
+                          streamKey: view.streamForClient(member.id) != null
+                              ? ValueKey('member-stream-${member.id}')
+                              : null,
+                        ),
                       ],
                     ),
                   ),

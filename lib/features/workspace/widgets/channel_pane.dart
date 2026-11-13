@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart'
     hide
         ButtonStyle,
+        Divider,
         FilledButton,
         IconButton,
         OutlinedButton,
@@ -28,6 +29,7 @@ import '../workspace_state.dart';
 import 'channel_password_dialog.dart';
 import 'client_actions.dart';
 import 'member_avatar.dart';
+import 'member_status_flags.dart';
 import 'network_status.dart';
 import 'screen_share_picker_dialog.dart';
 import 'voice_activity_ribbon.dart';
@@ -571,93 +573,48 @@ class _MemberTile extends StatelessWidget {
                   ? Semantics(label: l10n.memberSpeaking, child: avatar)
                   : avatar,
               const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  client.nickname,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: context.texts.bodySmall?.copyWith(
-                    fontSize: 13,
-                    color: foreground,
-                  ),
+              Expanded(
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        client.nickname,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: context.texts.bodySmall?.copyWith(
+                          fontSize: 13,
+                          color: foreground,
+                        ),
+                      ),
+                    ),
+                    if (client.clientType == ClientType.bot) ...[
+                      const SizedBox(width: 4),
+                      Semantics(
+                        label: l10n.clientTypeBot,
+                        child: Icon(
+                          Icons.smart_toy_rounded,
+                          size: 13,
+                          color: scheme.tertiary,
+                        ),
+                      ),
+                    ] else if (client.clientType == ClientType.flSpeak) ...[
+                      const SizedBox(width: 4),
+                      Semantics(
+                        label: l10n.clientTypeFlSpeak,
+                        child: Icon(
+                          Icons.electric_bolt_rounded,
+                          size: 13,
+                          color: scheme.primary,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-              if (client.clientType == ClientType.bot) ...[
-                const SizedBox(width: 4),
-                Semantics(
-                  label: l10n.clientTypeBot,
-                  child: Icon(
-                    Icons.smart_toy_rounded,
-                    size: 13,
-                    color: scheme.tertiary,
-                  ),
-                ),
-              ] else if (client.clientType == ClientType.flSpeak) ...[
-                const SizedBox(width: 4),
-                Semantics(
-                  label: l10n.clientTypeFlSpeak,
-                  child: Icon(
-                    Icons.electric_bolt_rounded,
-                    size: 13,
-                    color: scheme.primary,
-                  ),
-                ),
-              ],
-              const Spacer(),
-              if (stream != null)
-                _MemberFlag(
-                  label: l10n.streamSharing,
-                  icon: Icons.screen_share_rounded,
-                  color: scheme.primary,
-                ),
-              // 服务器回显的设备状态：快照没带标志（null）时不显示。
-              if (client.inputMuted ?? false)
-                _MemberFlag(
-                  label: l10n.memberMicMuted,
-                  icon: Icons.mic_off_rounded,
-                ),
-              if (client.outputMuted ?? false)
-                _MemberFlag(
-                  label: l10n.memberSpeakerMuted,
-                  icon: Icons.volume_off_rounded,
-                ),
-              if (client.away ?? false)
-                _MemberFlag(
-                  label: switch (client.awayMessage) {
-                    null || '' => l10n.memberAway,
-                    final message => l10n.memberAwayWith(message),
-                  },
-                  icon: Icons.schedule_rounded,
-                  color: scheme.primary,
-                ),
+              MemberStatusFlags(client: client, sharingScreen: stream != null),
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// 成员行尾的状态标志：与其他成员昵称保持间距。
-class _MemberFlag extends StatelessWidget {
-  const _MemberFlag({required this.label, required this.icon, this.color});
-
-  final String label;
-  final IconData icon;
-
-  /// 静音类标志缺省用 error，离开这类中性状态换主色。
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    return Padding(
-      padding: const EdgeInsets.only(left: 6),
-      child: Icon(
-        icon,
-        size: IconSizes.state,
-        color: color ?? scheme.error,
-        semanticLabel: label,
       ),
     );
   }
@@ -735,128 +692,123 @@ class _UserFooterState extends ConsumerState<_UserFooter> {
     final channel = view.selfChannelId == null
         ? null
         : view.channelById(view.selfChannelId!);
-    return Container(
-      margin: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainer,
-        borderRadius: Radii.largeAll,
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _CardExtension(
-            expanded: _expanded,
-            builder: (context) => Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                NetworkTelemetryPanel(onClose: _closeNetwork),
-                Divider(
-                  height: 1,
-                  indent: 12,
-                  endIndent: 12,
-                  color: scheme.outlineVariant,
-                ),
-              ],
-            ),
-          ),
-          if (view.connected || view.reconnecting)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(4, 8, 4, 4),
-              child: Row(
+    return Padding(
+      padding: const EdgeInsets.all(8),
+      child: SurfaceCard(
+        shape: AppShape.md,
+        clip: true,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _CardExtension(
+              expanded: _expanded,
+              builder: (context) => Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Expanded(
-                    child: NetworkStatus(
-                      view: view,
-                      expanded: _expanded,
-                      onToggle: _toggleNetwork,
-                      channelLabel: channel == null
-                          ? (view.activeServer?.label ?? l10n.appName)
-                          : channelDisplayName(channel),
-                    ),
+                  NetworkTelemetryPanel(onClose: _closeNetwork),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 12),
+                    child: Divider(height: 1, thickness: 1),
                   ),
-                  if (view.connected && view.selfChannelId != null)
-                    _IconToggle(
-                      key: const ValueKey('voice-screen-share-toggle'),
-                      label: widget.sharingScreen
-                          ? l10n.streamStopShare
-                          : l10n.streamStartShare,
-                      icon: widget.sharingScreen
-                          ? Icons.stop_screen_share_rounded
-                          : Icons.screen_share_rounded,
-                      active: widget.sharingScreen,
-                      onTap: widget.onToggleScreenShare,
-                    ),
-                  if (widget.onDisconnect != null)
-                    IconButton.filled(
-                      onPressed: view.busy ? null : widget.onDisconnect,
-                      style: ButtonStyle.from(
-                        backgroundColor: scheme.error,
-                        foregroundColor: scheme.onError,
-                      ),
-                      icon: Icon(
-                        Icons.call_end_rounded,
-                        size: IconSizes.toolbar,
-                        semanticLabel: l10n.serverDisconnect,
-                      ),
-                    ),
                 ],
               ),
             ),
-          if (view.connected || view.reconnecting)
-            Divider(
-              height: 1,
-              indent: 12,
-              endIndent: 12,
-              color: scheme.outlineVariant,
-            ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 8, 4, 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: scheme.primaryContainer.withValues(alpha: 0.28),
-                      borderRadius: Radii.mediumAll,
+            if (view.connected || view.reconnecting)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 8, 4, 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: NetworkStatus(
+                        view: view,
+                        expanded: _expanded,
+                        onToggle: _toggleNetwork,
+                        channelLabel: channel == null
+                            ? (view.activeServer?.label ?? l10n.appName)
+                            : channelDisplayName(channel),
+                      ),
                     ),
-                    child: const SizedBox(
-                      height: 40,
-                      child: VoiceActivityRibbon(),
+                    if (view.connected && view.selfChannelId != null)
+                      _IconToggle(
+                        key: const ValueKey('voice-screen-share-toggle'),
+                        label: widget.sharingScreen
+                            ? l10n.streamStopShare
+                            : l10n.streamStartShare,
+                        icon: widget.sharingScreen
+                            ? Icons.stop_screen_share_rounded
+                            : Icons.screen_share_rounded,
+                        active: widget.sharingScreen,
+                        onTap: widget.onToggleScreenShare,
+                      ),
+                    if (widget.onDisconnect != null)
+                      IconButton.filled(
+                        onPressed: view.busy ? null : widget.onDisconnect,
+                        style: ButtonStyle.from(
+                          backgroundColor: scheme.error,
+                          foregroundColor: scheme.onError,
+                        ),
+                        icon: Icon(
+                          Icons.call_end_rounded,
+                          size: IconSizes.toolbar,
+                          semanticLabel: l10n.serverDisconnect,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            if (view.connected || view.reconnecting)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12),
+                child: Divider(height: 1, thickness: 1),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 4, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: scheme.primaryContainer.withValues(alpha: 0.28),
+                        borderRadius: Radii.mediumAll,
+                      ),
+                      child: const SizedBox(
+                        height: 40,
+                        child: VoiceActivityRibbon(),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 6),
-                _IconToggle(
-                  label: widget.muted ? l10n.voiceUnmute : l10n.voiceMute,
-                  icon: widget.muted
-                      ? Icons.mic_off_rounded
-                      : Icons.mic_rounded,
-                  active: widget.muted,
-                  onTap: widget.onToggleMute,
-                ),
-                _IconToggle(
-                  label: widget.deafened
-                      ? l10n.voiceUndeafen
-                      : l10n.voiceDeafen,
-                  icon: widget.deafened
-                      ? Icons.headset_off_rounded
-                      : Icons.headphones_rounded,
-                  active: widget.deafened,
-                  onTap: widget.onToggleDeafen,
-                ),
-                _IconToggle(
-                  label: widget.away ? l10n.voiceUnaway : l10n.voiceAway,
-                  icon: Icons.schedule_rounded,
-                  active: widget.away,
-                  activeContainer: scheme.primaryContainer,
-                  activeOnContainer: scheme.onPrimaryContainer,
-                  onTap: widget.onToggleAway,
-                ),
-              ],
+                  const SizedBox(width: 6),
+                  _IconToggle(
+                    label: widget.muted ? l10n.voiceUnmute : l10n.voiceMute,
+                    icon: widget.muted
+                        ? Icons.mic_off_rounded
+                        : Icons.mic_rounded,
+                    active: widget.muted,
+                    onTap: widget.onToggleMute,
+                  ),
+                  _IconToggle(
+                    label: widget.deafened
+                        ? l10n.voiceUndeafen
+                        : l10n.voiceDeafen,
+                    icon: widget.deafened
+                        ? Icons.headset_off_rounded
+                        : Icons.headphones_rounded,
+                    active: widget.deafened,
+                    onTap: widget.onToggleDeafen,
+                  ),
+                  _IconToggle(
+                    label: widget.away ? l10n.voiceUnaway : l10n.voiceAway,
+                    icon: Icons.schedule_rounded,
+                    active: widget.away,
+                    activeContainer: scheme.primaryContainer,
+                    activeOnContainer: scheme.onPrimaryContainer,
+                    onTap: widget.onToggleAway,
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
