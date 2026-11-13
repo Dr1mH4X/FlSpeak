@@ -249,7 +249,11 @@ fn split_oversized_block(block: &str, max_escaped_bytes: usize) -> Vec<String> {
 /// 4. `[u]...[/u]` 转为 `<u>...</u>`，保留给前端内联下划线渲染。
 /// 5. 其余冷门标签平滑剥离。
 pub fn bbcode_to_markdown(raw: &str) -> String {
-    let mut text = Cow::Borrowed(raw);
+    let mut text = if raw.contains('\r') {
+        Cow::Owned(raw.replace("\r\n", "\n").replace('\r', "\n"))
+    } else {
+        Cow::Borrowed(raw)
+    };
 
     // 1. [hr] -> ---
     text = Cow::Owned(replace_tag_simple(&text, "[hr]", "---"));
@@ -311,6 +315,41 @@ fn replace_tag_simple(source: &str, target: &str, replacement: &str) -> String {
     result
 }
 
+fn append_wrapped_lines(
+    result: &mut String,
+    content: &str,
+    open: &str,
+    close: &str,
+    trim_horizontal_whitespace: bool,
+) {
+    for (idx, line) in content.split('\n').enumerate() {
+        if idx > 0 {
+            result.push('\n');
+        }
+        if trim_horizontal_whitespace {
+            let trimmed_start = line.trim_start_matches([' ', '\t']);
+            let leading = &line[..line.len() - trimmed_start.len()];
+            let core = trimmed_start.trim_end_matches([' ', '\t']);
+            let trailing = &trimmed_start[core.len()..];
+            if core.is_empty() {
+                result.push_str(line);
+            } else {
+                result.push_str(leading);
+                result.push_str(open);
+                result.push_str(core);
+                result.push_str(close);
+                result.push_str(trailing);
+            }
+        } else if line.trim().is_empty() {
+            result.push_str(line);
+        } else {
+            result.push_str(open);
+            result.push_str(line);
+            result.push_str(close);
+        }
+    }
+}
+
 fn replace_paired_tag(
     source: &str,
     tag: &str,
@@ -319,6 +358,7 @@ fn replace_paired_tag(
 ) -> String {
     let open_pattern = format!("[{tag}]");
     let close_pattern = format!("[/{tag}]");
+    let trim_horizontal_whitespace = matches!(tag, "b" | "i" | "s");
     let lower = source.to_lowercase();
     let mut result = String::with_capacity(source.len());
     let mut idx = 0;
@@ -331,9 +371,13 @@ fn replace_paired_tag(
 
             if let Some(close_rel) = lower[content_start..].find(&close_pattern) {
                 let close_pos = content_start + close_rel;
-                result.push_str(open_replacement);
-                result.push_str(&source[content_start..close_pos]);
-                result.push_str(close_replacement);
+                append_wrapped_lines(
+                    &mut result,
+                    &source[content_start..close_pos],
+                    open_replacement,
+                    close_replacement,
+                    trim_horizontal_whitespace,
+                );
                 idx = close_pos + close_pattern.len();
             } else {
                 result.push_str(&source[open_pos..content_start]);
@@ -505,8 +549,13 @@ fn transform_color_tag(source: &str) -> String {
                     let transformed_inner = transform_color_tag(inner);
 
                     if let Some(hex) = normalize_color_hex(raw_val) {
-                        result
-                            .push_str(&format!("<color hex=\"{hex}\">{transformed_inner}</color>"));
+                        append_wrapped_lines(
+                            &mut result,
+                            &transformed_inner,
+                            &format!("<color hex=\"{hex}\">"),
+                            "</color>",
+                            false,
+                        );
                     } else {
                         result.push_str(&transformed_inner);
                     }
@@ -838,5 +887,26 @@ mod tests {
         assert!(md.contains("> Quote line"));
         assert!(md.contains("- Item 1"));
         assert!(md.contains("- Item 2"));
+    }
+
+    #[test]
+    fn bbcode_to_markdown_preserves_newlines_and_handles_multiline_tags() {
+        let raw = concat!(
+            "[color=#0055ff]Header line\r\n\r\nSub line[/color]\r\n",
+            "First line\r",
+            "[b]Bold with trailing space [/b]and [color=#00aa00]1. !cmd [arg] [/color]\n",
+            "2. !next",
+        );
+        let md = bbcode_to_markdown(raw);
+        assert_eq!(
+            md,
+            concat!(
+                "<color hex=\"#0055ff\">Header line</color>\n\n",
+                "<color hex=\"#0055ff\">Sub line</color>\n",
+                "First line\n",
+                "**Bold with trailing space** and <color hex=\"#00aa00\">1. !cmd [arg] </color>\n",
+                "2. !next",
+            )
+        );
     }
 }

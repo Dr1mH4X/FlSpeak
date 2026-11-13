@@ -1,8 +1,12 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
@@ -121,14 +125,34 @@ int _int(Object? value) {
   return 0;
 }
 
+/// 在系统默认浏览器中打开消息里的 http/https 链接。
+Future<bool> openMessageUrl(String url) async {
+  if (kIsWeb) {
+    return false;
+  }
+  final uri = Uri.tryParse(url.trim());
+  if (uri == null ||
+      !uri.hasScheme ||
+      (uri.scheme != 'http' && uri.scheme != 'https') ||
+      uri.host.isEmpty) {
+    return false;
+  }
+  try {
+    return await launchUrl(uri, mode: LaunchMode.externalApplication);
+  } on Exception {
+    return false;
+  }
+}
+
 /// 渲染消息与频道内容：纯标准 Markdown + TS6 官方附件占位。
 ///
 /// 前端解耦：不处理任何 BBCode 转换，只接收由 Rust 后端归一化后的标准 Markdown。
-class MessageContent extends StatelessWidget {
+class MessageContent extends StatefulWidget {
   const MessageContent({
     required this.text,
     required this.style,
     this.onImageTap,
+    this.onLinkTap,
     super.key,
   });
 
@@ -138,8 +162,69 @@ class MessageContent extends StatelessWidget {
   /// 点击正文图片时把 URL 交给上层（例如打开全屏浏览）。
   final ValueChanged<String>? onImageTap;
 
+  /// 点击正文链接时的回调；未传入时调用系统默认浏览器打开。
+  final ValueChanged<String>? onLinkTap;
+
+  @override
+  State<MessageContent> createState() => _MessageContentState();
+}
+
+class _MessageContentState extends State<MessageContent> {
+  final List<TapGestureRecognizer> _recognizers = [];
+
+  @override
+  void didUpdateWidget(covariant MessageContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.text != oldWidget.text ||
+        widget.onLinkTap != oldWidget.onLinkTap) {
+      _disposeRecognizers();
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposeRecognizers();
+    super.dispose();
+  }
+
+  void _disposeRecognizers() {
+    if (_recognizers.isEmpty) {
+      return;
+    }
+    for (final recognizer in _recognizers) {
+      recognizer.dispose();
+    }
+    _recognizers.clear();
+  }
+
+  void _handleLinkTap(String href) {
+    final trimmed = href.trim();
+    if (trimmed.isEmpty) {
+      return;
+    }
+    final onLinkTap = widget.onLinkTap;
+    if (onLinkTap != null) {
+      onLinkTap(trimmed);
+      return;
+    }
+    unawaited(openMessageUrl(trimmed));
+  }
+
+  GestureRecognizer? _createLinkRecognizer(String? href) {
+    final trimmed = href?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      return null;
+    }
+    final recognizer = TapGestureRecognizer()
+      ..onTap = () => _handleLinkTap(trimmed);
+    _recognizers.add(recognizer);
+    return recognizer;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final text = widget.text;
+    final style = widget.style;
     final attachment = parseTs6Attachment(text);
     if (attachment != null) {
       return _AttachmentCard(attachment: attachment, style: style);
@@ -147,21 +232,22 @@ class MessageContent extends StatelessWidget {
 
     final standaloneImage = parseImageUrl(text);
     if (standaloneImage != null) {
-      return _UrlImage(url: standaloneImage, onTap: onImageTap);
+      return _UrlImage(url: standaloneImage, onTap: widget.onImageTap);
     }
 
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final codeBackgroundColor = scheme.surfaceContainerHighest;
 
     final sheet = MarkdownStyleSheet.fromTheme(theme).copyWith(
       p: style,
       code: style.copyWith(
         fontFamily: 'monospace',
-        backgroundColor: scheme.surfaceContainerHighest,
+        backgroundColor: codeBackgroundColor,
         fontSize: (style.fontSize ?? 14) - 1,
       ),
       codeblockDecoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest,
+        color: codeBackgroundColor,
         borderRadius: BorderRadius.circular(Radii.small),
       ),
       blockquoteDecoration: BoxDecoration(
@@ -186,14 +272,28 @@ class MessageContent extends StatelessWidget {
     return MarkdownBody(
       data: text,
       selectable: true,
+      softLineBreak: true,
       styleSheet: sheet,
       inlineSyntaxes: [ColorInlineSyntax(), UnderlineInlineSyntax()],
       builders: {
-        'color': ColorElementBuilder(),
-        'u': UnderlineElementBuilder(),
+        'color': ColorElementBuilder(
+          linkColor: scheme.primary,
+          codeBackgroundColor: codeBackgroundColor,
+          createLinkRecognizer: _createLinkRecognizer,
+        ),
+        'u': UnderlineElementBuilder(
+          linkColor: scheme.primary,
+          codeBackgroundColor: codeBackgroundColor,
+          createLinkRecognizer: _createLinkRecognizer,
+        ),
+      },
+      onTapLink: (linkText, href, title) {
+        if (href != null && href.isNotEmpty) {
+          _handleLinkTap(href);
+        }
       },
       imageBuilder: (uri, title, alt) {
-        return _UrlImage(url: uri.toString(), onTap: onImageTap);
+        return _UrlImage(url: uri.toString(), onTap: widget.onImageTap);
       },
     );
   }
@@ -234,6 +334,16 @@ class UnderlineInlineSyntax extends md.InlineSyntax {
 
 /// 渲染带颜色的内联文本。
 class ColorElementBuilder extends MarkdownElementBuilder {
+  ColorElementBuilder({
+    this.linkColor,
+    this.codeBackgroundColor,
+    this.createLinkRecognizer,
+  });
+
+  final Color? linkColor;
+  final Color? codeBackgroundColor;
+  final GestureRecognizer? Function(String? href)? createLinkRecognizer;
+
   @override
   Widget visitElementAfterWithContext(
     BuildContext context,
@@ -243,16 +353,34 @@ class ColorElementBuilder extends MarkdownElementBuilder {
   ) {
     final hex = element.attributes['hex'] ?? '';
     final color = _parseHexColor(hex);
-    final targetStyle = (parentStyle ?? const TextStyle()).copyWith(
-      color: color,
+    final baseStyle = parentStyle ?? const TextStyle();
+    final targetStyle = color == null
+        ? baseStyle
+        : baseStyle.copyWith(color: color, decorationColor: color);
+    final spans = _buildInlineSpans(
+      element,
+      targetStyle,
+      hasExplicitColor: color != null,
+      linkColor: linkColor,
+      codeBackgroundColor: codeBackgroundColor,
+      createLinkRecognizer: createLinkRecognizer,
     );
-    final spans = _buildInlineSpans(element, targetStyle);
     return Text.rich(TextSpan(children: spans));
   }
 }
 
 /// 渲染带下划线的内联文本。
 class UnderlineElementBuilder extends MarkdownElementBuilder {
+  UnderlineElementBuilder({
+    this.linkColor,
+    this.codeBackgroundColor,
+    this.createLinkRecognizer,
+  });
+
+  final Color? linkColor;
+  final Color? codeBackgroundColor;
+  final GestureRecognizer? Function(String? href)? createLinkRecognizer;
+
   @override
   Widget visitElementAfterWithContext(
     BuildContext context,
@@ -260,20 +388,41 @@ class UnderlineElementBuilder extends MarkdownElementBuilder {
     TextStyle? preferredStyle,
     TextStyle? parentStyle,
   ) {
-    final targetStyle = (parentStyle ?? const TextStyle()).copyWith(
+    final baseStyle = parentStyle ?? const TextStyle();
+    final targetStyle = baseStyle.copyWith(
       decoration: TextDecoration.underline,
+      decorationColor: baseStyle.color,
     );
-    final spans = _buildInlineSpans(element, targetStyle);
+    final spans = _buildInlineSpans(
+      element,
+      targetStyle,
+      hasExplicitColor: false,
+      linkColor: linkColor,
+      codeBackgroundColor: codeBackgroundColor,
+      createLinkRecognizer: createLinkRecognizer,
+    );
     return Text.rich(TextSpan(children: spans));
   }
 }
 
-List<InlineSpan> _buildInlineSpans(md.Node node, TextStyle style) {
+List<InlineSpan> _buildInlineSpans(
+  md.Node node,
+  TextStyle style, {
+  required bool hasExplicitColor,
+  Color? linkColor,
+  Color? codeBackgroundColor,
+  GestureRecognizer? linkRecognizer,
+  GestureRecognizer? Function(String? href)? createLinkRecognizer,
+}) {
   if (node is md.Text) {
-    return [TextSpan(text: node.text, style: style)];
+    return [
+      TextSpan(text: node.text, style: style, recognizer: linkRecognizer),
+    ];
   }
   if (node is md.Element) {
     var childStyle = style;
+    var childHasExplicitColor = hasExplicitColor;
+    var childRecognizer = linkRecognizer;
     switch (node.tag) {
       case 'strong':
       case 'b':
@@ -282,23 +431,71 @@ List<InlineSpan> _buildInlineSpans(md.Node node, TextStyle style) {
       case 'i':
         childStyle = childStyle.copyWith(fontStyle: FontStyle.italic);
       case 'u':
-        childStyle = childStyle.copyWith(decoration: TextDecoration.underline);
+        childStyle = childStyle.copyWith(
+          decoration: TextDecoration.underline,
+          decorationColor: childStyle.color,
+        );
       case 'del':
       case 's':
         childStyle = childStyle.copyWith(
           decoration: TextDecoration.lineThrough,
+          decorationColor: childStyle.color,
         );
       case 'color':
         final color = _parseHexColor(node.attributes['hex'] ?? '');
         if (color != null) {
-          childStyle = childStyle.copyWith(color: color);
+          childStyle = childStyle.copyWith(
+            color: color,
+            decorationColor: color,
+          );
+          childHasExplicitColor = true;
         }
+      case 'code':
+        childStyle = childStyle.copyWith(
+          fontFamily: 'monospace',
+          backgroundColor: codeBackgroundColor,
+          fontSize: (childStyle.fontSize ?? 14) - 1,
+        );
+      case 'br':
+        return [
+          TextSpan(text: '\n', style: childStyle, recognizer: childRecognizer),
+        ];
+      case 'a':
+        final effectiveColor = childHasExplicitColor
+            ? childStyle.color
+            : (linkColor ?? childStyle.color);
+        childStyle = childStyle.copyWith(
+          color: effectiveColor,
+          decoration: TextDecoration.underline,
+          decorationColor: effectiveColor,
+        );
+        childRecognizer =
+            createLinkRecognizer?.call(node.attributes['href']) ??
+            childRecognizer;
     }
     final children = node.children;
     if (children != null && children.isNotEmpty) {
-      return children.expand((c) => _buildInlineSpans(c, childStyle)).toList();
+      return children
+          .expand(
+            (c) => _buildInlineSpans(
+              c,
+              childStyle,
+              hasExplicitColor: childHasExplicitColor,
+              linkColor: linkColor,
+              codeBackgroundColor: codeBackgroundColor,
+              linkRecognizer: childRecognizer,
+              createLinkRecognizer: createLinkRecognizer,
+            ),
+          )
+          .toList();
     }
-    return [TextSpan(text: node.textContent, style: childStyle)];
+    return [
+      TextSpan(
+        text: node.textContent,
+        style: childStyle,
+        recognizer: childRecognizer,
+      ),
+    ];
   }
   return const [];
 }
