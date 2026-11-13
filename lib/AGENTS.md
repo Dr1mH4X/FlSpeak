@@ -2,6 +2,7 @@
 
 这些规则补充根 [AGENTS.md](../AGENTS.md)，只覆盖 `lib/`。
 
+- UI 控件、表面层级与交互反馈优先经 [lib/widgets/prism.dart](widgets/prism.dart) 使用 `plugins/prism_ui` 原语（缺口导出在桥接文件补充），不在页面或公共组件中手写同名替代控件或回退到冲突的 Material 组件，规格见 [../docs/subsystems/ui-design.md](../docs/subsystems/ui-design.md)。
 - `SessionController` 消费唯一的 `CoreEvent` 流，并收敛成不可变 `SessionView`；页面只读 `sessionViewProvider`，不要各自保存会话状态。
 - UI 只发语义化命令：添加服务器、连接、切换频道、发消息、静音、设备选择。不把协议字段、地址校验或音频处理写进 widget。
 - 服务器地址输入只接受 IP、域名或 `localhost`（可带端口）；裸昵称在 UI 先拒绝，官方主机边界仍由 Rust 的最终出口处理。

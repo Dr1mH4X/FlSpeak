@@ -1,6 +1,14 @@
 # Flutter 界面设计规范
 
-本文定义 FlSpeak Flutter 客户端的视觉表面层级、超椭圆圆角、排版字阶、按压反馈与设置列表规格。
+本文定义 FlSpeak Flutter 客户端的组件选型边界、视觉表面层级、超椭圆圆角、排版字阶、按压反馈与设置列表规格。
+
+## 组件选型与 Prism 优先
+
+所有 Flutter 界面均通过 [lib/widgets/prism.dart](../../lib/widgets/prism.dart) 优先使用子模块 `plugins/prism_ui` 提供的原生原语（包括 `FilledButton`、`OutlinedButton`、`TextButton`、`IconButton`、`TonalButton`、`TonalButtonGroup`、`Switch`、`Checkbox`、`Chip`、`SegmentedControl`、`PopupMenu`、`ListRow`、`ListHeader`、`ListFooter`、`LinearProgressIndicator`、`SurfaceScope`、`CardSurface`、`PressSurface`、`ElasticButton`、`LiquidGlass` 等）。
+
+- **优先桥接复用**：`plugins/prism_ui` 已具备的控件、表面容器或视觉效果（含子模块已导出但尚未经过 `lib/widgets/prism.dart` 转出的模块），在 [lib/widgets/prism.dart](../../lib/widgets/prism.dart) 补充导出与主题适配后直接复用，不在 `lib/` 手写替代实现，也不回退到同名 `package:flutter/material.dart` 控件。
+- **隐藏冲突控件**：UI 文件同时引入 `package:flutter/material.dart` 时，`hide` 与 `lib/widgets/prism.dart` 同名冲突的 Material 控件与样式类型，确保按钮、开关、进度条、菜单与表单控件统一走 `prism_ui`。
+- **自定义组件边界**：`lib/widgets/` 与 `lib/features/` 仅承接业务插槽装配、桌面窗口宿主交互或 `prism_ui` 未覆盖的专项视觉组件（如自定义标识徽章与连接动效框架）。
 
 ## Surface 层级与边界
 

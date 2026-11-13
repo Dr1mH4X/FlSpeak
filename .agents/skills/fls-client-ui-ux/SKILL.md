@@ -13,6 +13,7 @@ description: 设计、修改或审查 Flutter 界面与交互时使用：核对�
 - [docs/defensive-patterns/ui.md](../../../docs/defensive-patterns/ui.md)
 - [docs/subsystems/ui-design.md](../../../docs/subsystems/ui-design.md)
 - [lib/AGENTS.md](../../../lib/AGENTS.md)
+- [lib/widgets/AGENTS.md](../../../lib/widgets/AGENTS.md)
 - [lib/theme/AGENTS.md](../../../lib/theme/AGENTS.md)
 - [arb/intl_zh.arb](../../../arb/intl_zh.arb)
 - [arb/intl_en.arb](../../../arb/intl_en.arb)
@@ -23,7 +24,7 @@ description: 设计、修改或审查 Flutter 界面与交互时使用：核对�
 2. **核对规则**：按 [docs/defensive-patterns/README.md](../../../docs/defensive-patterns/README.md) 的映射表打开对应文档，逐条核对本次改动。判据以文档为准，本技能不重述。
 3. **实现与生成**：
    - 若改动了 `arb/` 文件，运行 `flutter gen-l10n` 更新本地化生成代码，不手改 `lib/l10n/**`。
-   - 布局与样式优先复用 `context.scheme`、`context.texts` 与标准尺寸常量，确保亮暗主题表现一致。
+   - 控件、布局与样式优先经 [lib/widgets/prism.dart](../../../lib/widgets/prism.dart) 选用 `plugins/prism_ui` 原语，并复用 `context.scheme`、`context.texts` 与标准尺寸常量，确保亮暗主题与交互反馈表现一致。
 4. **验证与回归检查**：
    - 运行格式化与静态代码分析。
    - 针对修改的界面与组件运行定向测试。
@@ -51,5 +52,5 @@ flutter test test/features/...
 列出：
 - 受影响的页面或组件路径。
 - 新增或调整的 ARB 词条（若有）。
-- 按 [docs/defensive-patterns/ui.md](../../../docs/defensive-patterns/ui.md) 的检查项逐条给出核对结果。
+- 按 [docs/defensive-patterns/ui.md](../../../docs/defensive-patterns/ui.md) 的检查项逐条给出核对结果（含是否优先复用 `prism_ui` 原语并隐藏同名 Material 控件）。
 - 本地静态分析与单测通过情况。

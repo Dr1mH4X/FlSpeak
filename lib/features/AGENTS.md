@@ -10,6 +10,7 @@
 
 ## 规则与约束
 
+- 界面控件与交互反馈优先经 [lib/widgets/prism.dart](../widgets/prism.dart) 使用 `prism_ui` 组件并遵守 [Flutter 界面文案与操作按钮约束](../../docs/defensive-patterns/ui.md)，不在特性页手写重复的按钮、开关、卡片表面或回退到冲突的 Material 控件。
 - 特性模块之间保持低耦合，通过 `lib/core/` 提供的全局状态和导航进行解耦。
 - 特性组件只向底层发送语义化动作（如 `connectServer`, `switchChannel`, `sendMessage`），不在组件内处理协议原始字段。
 - 所有展示文案必须通过 `AppLocalizations.of(context)` 获取。

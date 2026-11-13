@@ -6,7 +6,7 @@
 
 - **凭规则核对，不凭记忆审查**：审查 diff 之前，必须先将修改文件映射到 [README.md](README.md) 的「你在改什么 | 动手前必读」映射表，打开对应的规则文档逐条核对；凭模糊记忆判断 diff 是违规漏入主干的根源。
 - **阻断性审查项**：
-  1. **UI 与文案**：禁止引入 Tooltip 与 `tooltip:`；按钮文案自明时禁止追加解释；禁止向界面外溢底层技术细节（如采样、限流、内部状态）；所有用户可见文案走 `arb/`。
+  1. **UI 与文案**：优先经 `lib/widgets/prism.dart` 使用 `prism_ui` 原语并 `hide` 冲突 Material 控件，禁止无故手写同名替代控件；禁止引入 Tooltip 与 `tooltip:`；按钮文案自明时禁止追加解释；禁止向界面外溢底层技术细节（如采样、限流、内部状态）；所有用户可见文案走 `arb/`。
   2. **连接边界**：官方主机校验唯一归属 `core/proto` 的 `FORBIDDEN_HOST_SUFFIXES`，不在其他模块重复审查；禁止向 `named.myteamspeak.com` 发起查询。
   3. **架构与线程**：音频帧绝不过桥；tsclient-rs 协议调用绝不脱离 `core/session` 的 Actor 串行队列并发执行。
   4. **时序与并发**：严禁用 `Future.delayed`、`microtask`、`sleep` 掩盖竞态或等待状态变更；时序不承载正确性。
