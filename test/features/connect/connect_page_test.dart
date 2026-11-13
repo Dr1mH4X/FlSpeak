@@ -17,6 +17,7 @@ import 'package:flspeak/router.dart';
 import 'package:flspeak/features/connect/connect_page.dart';
 import 'package:flspeak/features/connect/widgets/identity_card.dart';
 import 'package:flspeak/features/connect/widgets/server_row.dart';
+import 'package:flspeak/widgets/prism.dart';
 
 class _FakeCore extends Fake implements CoreSession {
   @override
@@ -107,8 +108,13 @@ void main() {
             child: MaterialApp.router(
               theme: buildAppTheme(Brightness.light),
               locale: const Locale('en'),
-              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              localizationsDelegates: const [
+                ...AppLocalizations.localizationsDelegates,
+                PrismUiLocalizationsDelegate(),
+              ],
               supportedLocales: AppLocalizations.supportedLocales,
+              builder: (context, child) =>
+                  PrismRootScope(brightness: Brightness.light, child: child!),
               routerConfig: router,
             ),
           ),
@@ -183,12 +189,18 @@ void main() {
               child: MaterialApp(
                 theme: buildAppTheme(Brightness.light),
                 locale: Locale(locale),
-                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                localizationsDelegates: const [
+                  ...AppLocalizations.localizationsDelegates,
+                  PrismUiLocalizationsDelegate(),
+                ],
                 supportedLocales: AppLocalizations.supportedLocales,
                 builder: (context, child) => MediaQuery(
                   data: MediaQuery.of(context)
                       .copyWith(textScaler: TextScaler.linear(scale)),
-                  child: child!,
+                  child: PrismRootScope(
+                    brightness: Brightness.light,
+                    child: child!,
+                  ),
                 ),
                 home: const ConnectPage(),
               ),
@@ -222,11 +234,17 @@ void main() {
           coreSessionProvider.overrideWithValue(_FakeCore()),
           sessionViewProvider.overrideWith(_TestSessionController.new),
         ],
-        child: const MaterialApp(
-          locale: Locale('zh'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            ...AppLocalizations.localizationsDelegates,
+            PrismUiLocalizationsDelegate(),
+          ],
           supportedLocales: AppLocalizations.supportedLocales,
-          home: ConnectPage(),
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
+          home: const ConnectPage(),
         ),
       ),
     );
@@ -256,11 +274,17 @@ void main() {
           coreSessionProvider.overrideWithValue(_FakeCore()),
           sessionViewProvider.overrideWith(_TestSessionController.new),
         ],
-        child: const MaterialApp(
-          locale: Locale('zh'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            ...AppLocalizations.localizationsDelegates,
+            PrismUiLocalizationsDelegate(),
+          ],
           supportedLocales: AppLocalizations.supportedLocales,
-          home: ConnectPage(),
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
+          home: const ConnectPage(),
         ),
       ),
     );
@@ -283,11 +307,17 @@ void main() {
           coreSessionProvider.overrideWithValue(_FakeCore()),
           sessionViewProvider.overrideWith(_TestSessionController.new),
         ],
-        child: const MaterialApp(
-          locale: Locale('zh'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            ...AppLocalizations.localizationsDelegates,
+            PrismUiLocalizationsDelegate(),
+          ],
           supportedLocales: AppLocalizations.supportedLocales,
-          home: ConnectPage(),
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
+          home: const ConnectPage(),
         ),
       ),
     );
@@ -331,11 +361,17 @@ void main() {
           sessionViewProvider.overrideWith(_TestSessionController.new),
           preferencesStoreProvider.overrideWithValue(store),
         ],
-        child: const MaterialApp(
-          locale: Locale('zh'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            ...AppLocalizations.localizationsDelegates,
+            PrismUiLocalizationsDelegate(),
+          ],
           supportedLocales: AppLocalizations.supportedLocales,
-          home: ConnectPage(),
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
+          home: const ConnectPage(),
         ),
       ),
     );
@@ -379,11 +415,17 @@ void main() {
           sessionViewProvider.overrideWith(_TestSessionController.new),
           preferencesStoreProvider.overrideWithValue(store),
         ],
-        child: const MaterialApp(
-          locale: Locale('zh'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            ...AppLocalizations.localizationsDelegates,
+            PrismUiLocalizationsDelegate(),
+          ],
           supportedLocales: AppLocalizations.supportedLocales,
-          home: ConnectPage(),
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
+          home: const ConnectPage(),
         ),
       ),
     );
@@ -428,8 +470,13 @@ void main() {
         child: MaterialApp(
           theme: buildAppTheme(Brightness.light),
           locale: const Locale('zh'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: const [
+            ...AppLocalizations.localizationsDelegates,
+            PrismUiLocalizationsDelegate(),
+          ],
           supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
           home: const ConnectPage(),
         ),
       ),
@@ -464,8 +511,13 @@ void main() {
         child: MaterialApp(
           theme: buildAppTheme(Brightness.light),
           locale: const Locale('zh'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: const [
+            ...AppLocalizations.localizationsDelegates,
+            PrismUiLocalizationsDelegate(),
+          ],
           supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
           home: const ConnectPage(),
         ),
       ),
@@ -480,5 +532,74 @@ void main() {
 
     final menuLeft = tester.getTopLeft(find.byType(MenuItemButton).first).dx;
     expect(menuLeft, greaterThan(rowRect.center.dx));
+  });
+
+  testWidgets('主页在浅色与深色模式下使用 pageColor 底板与 xl 超椭圆卡片对比', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    for (final brightness in Brightness.values) {
+      final theme = buildAppTheme(brightness);
+      final pageColor = surfaceColorFor(SurfaceLevel.page, theme.colorScheme);
+      final cardColor = surfaceColorFor(SurfaceLevel.card, theme.colorScheme);
+      expect(cardColor, isNot(pageColor));
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            coreSessionProvider.overrideWithValue(_FakeCore()),
+            sessionViewProvider.overrideWith(_TestSessionController.new),
+          ],
+          child: MaterialApp(
+            theme: theme,
+            locale: const Locale('zh'),
+            localizationsDelegates: const [
+              ...AppLocalizations.localizationsDelegates,
+              PrismUiLocalizationsDelegate(),
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) =>
+                PrismRootScope(brightness: brightness, child: child!),
+            home: const ConnectPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+      expect(scaffold.backgroundColor, pageColor);
+
+      final pageCanvas = tester.widget<Material>(
+        find
+            .descendant(
+              of: find.byType(ConnectPage),
+              matching: find.byWidgetPredicate(
+                (w) => w is Material && w.color == pageColor,
+              ),
+            )
+            .first,
+      );
+      expect(pageCanvas.color, pageColor);
+
+      final cards = tester
+          .widgetList<SurfaceCard>(find.byType(SurfaceCard))
+          .toList();
+      expect(cards, isNotEmpty);
+      for (final card in cards) {
+        final box = tester.widget<DecoratedBox>(
+          find
+              .descendant(
+                of: find.byWidget(card),
+                matching: find.byType(DecoratedBox),
+              )
+              .first,
+        );
+        final decoration = box.decoration as ShapeDecoration;
+        expect(decoration.color, cardColor);
+        expect(decoration.shape, AppShape.xl);
+      }
+    }
   });
 }

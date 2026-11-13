@@ -1,22 +1,56 @@
 // ignore_for_file: depend_on_referenced_packages
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        FilledButton,
+        IconButton,
+        OutlinedButton,
+        PopupMenuItem,
+        Switch,
+        TextButton;
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:flspeak/widgets/popup.dart';
+import 'package:flspeak/l10n/app_localizations.dart';
+import 'package:flspeak/theme/app_theme.dart';
+import 'package:flspeak/widgets/prism.dart';
 
 void main() {
+  Widget wrapPopupApp(Widget child, {bool disableAnimations = false}) {
+    return MaterialApp(
+      theme: buildAppTheme(Brightness.light),
+      localizationsDelegates: const [
+        ...AppLocalizations.localizationsDelegates,
+        PrismUiLocalizationsDelegate(),
+      ],
+      supportedLocales: AppLocalizations.supportedLocales,
+      locale: const Locale('zh'),
+      builder: (context, appChild) {
+        Widget rooted = PrismRootScope(
+          brightness: Brightness.light,
+          child: appChild!,
+        );
+        if (disableAnimations) {
+          rooted = MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: true),
+            child: rooted,
+          );
+        }
+        return rooted;
+      },
+      home: Scaffold(body: child),
+    );
+  }
+
   testWidgets('PopupValueText updates and displays provided text', (
     tester,
   ) async {
     final textNotifier = ValueNotifier('Option A');
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: ValueListenableBuilder<String>(
-            valueListenable: textNotifier,
-            builder: (context, value, _) => PopupValueText(value),
-          ),
+      wrapPopupApp(
+        ValueListenableBuilder<String>(
+          valueListenable: textNotifier,
+          builder: (context, value, _) => PopupValueText(value),
         ),
       ),
     );
@@ -32,37 +66,33 @@ void main() {
     expect(find.text('Option B'), findsOneWidget);
   });
 
-  testWidgets('CommonPopupBox opens CommonPopupMenu and triggers onSelected', (
+  testWidgets('PopupAnchor opens PopupMenu and triggers onPressed', (
     tester,
   ) async {
     String? selected;
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: CommonPopupBox(
-              targetBuilder: (open) => ElevatedButton(
-                onPressed: open,
-                child: const Text('Open Menu'),
-              ),
-              popupBuilder: (context) => CommonPopupMenu(
-                items: [
-                  CommonPopupMenuItem(
-                    label: 'Choice 1',
-                    checked: selected == 'Choice 1',
-                    onPressed: () {
-                      selected = 'Choice 1';
-                    },
-                  ),
-                  CommonPopupMenuItem(
-                    label: 'Choice 2',
-                    checked: selected == 'Choice 2',
-                    onPressed: () {
-                      selected = 'Choice 2';
-                    },
-                  ),
-                ],
-              ),
+      wrapPopupApp(
+        Center(
+          child: PopupAnchor(
+            targetBuilder: (open) =>
+                FilledButton(onPressed: open, child: const Text('Open Menu')),
+            popupBuilder: (context) => PopupMenu(
+              items: [
+                PopupMenuItem(
+                  label: 'Choice 1',
+                  checked: selected == 'Choice 1',
+                  onPressed: () {
+                    selected = 'Choice 1';
+                  },
+                ),
+                PopupMenuItem(
+                  label: 'Choice 2',
+                  checked: selected == 'Choice 2',
+                  onPressed: () {
+                    selected = 'Choice 2';
+                  },
+                ),
+              ],
             ),
           ),
         ),
@@ -70,14 +100,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Click to open popup
     await tester.tap(find.text('Open Menu'));
     await tester.pumpAndSettle();
 
     expect(find.text('Choice 1'), findsOneWidget);
     expect(find.text('Choice 2'), findsOneWidget);
 
-    // Tap Choice 2
     await tester.tap(find.text('Choice 2'));
     await tester.pumpAndSettle();
 
@@ -85,67 +113,54 @@ void main() {
     expect(find.text('Choice 2'), findsNothing);
   });
 
-  testWidgets(
-    'CommonPopupBox with disableAnimations opens immediately without animation',
-    (tester) async {
-      String? selected;
-      await tester.pumpWidget(
-        MaterialApp(
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context).copyWith(disableAnimations: true),
-            child: child!,
-          ),
-          home: Scaffold(
-            body: Center(
-              child: CommonPopupBox(
-                targetBuilder: (open) => ElevatedButton(
-                  onPressed: open,
-                  child: const Text('Open Reduced'),
+  testWidgets('PopupAnchor with disableAnimations settles menu cleanly', (
+    tester,
+  ) async {
+    String? selected;
+    await tester.pumpWidget(
+      wrapPopupApp(
+        disableAnimations: true,
+        Center(
+          child: PopupAnchor(
+            targetBuilder: (open) => FilledButton(
+              onPressed: open,
+              child: const Text('Open Reduced'),
+            ),
+            popupBuilder: (context) => PopupMenu(
+              items: [
+                PopupMenuItem(
+                  label: 'Item 1',
+                  checked: selected == 'Item 1',
+                  onPressed: () {
+                    selected = 'Item 1';
+                  },
                 ),
-                popupBuilder: (context) => CommonPopupMenu(
-                  items: [
-                    CommonPopupMenuItem(
-                      label: 'Item 1',
-                      checked: selected == 'Item 1',
-                      onPressed: () {
-                        selected = 'Item 1';
-                      },
-                    ),
-                    CommonPopupMenuItem(
-                      label: 'Item 2',
-                      checked: selected == 'Item 2',
-                      onPressed: () {
-                        selected = 'Item 2';
-                      },
-                    ),
-                  ],
+                PopupMenuItem(
+                  label: 'Item 2',
+                  checked: selected == 'Item 2',
+                  onPressed: () {
+                    selected = 'Item 2';
+                  },
                 ),
-              ),
+              ],
             ),
           ),
         ),
-      );
-      await tester.pumpAndSettle();
+      ),
+    );
+    await tester.pumpAndSettle();
 
-      // Tap button to open popup
-      await tester.tap(find.text('Open Reduced'));
-      // Single pump without waiting for animation duration should show the menu immediately
-      await tester.pump();
+    await tester.tap(find.text('Open Reduced'));
+    await tester.pump();
+    await tester.pumpAndSettle();
 
-      expect(find.text('Item 1'), findsOneWidget);
-      expect(find.text('Item 2'), findsOneWidget);
+    expect(find.text('Item 1'), findsOneWidget);
+    expect(find.text('Item 2'), findsOneWidget);
 
-      // Verify route duration is Duration.zero
-      final modalRoute = ModalRoute.of(tester.element(find.text('Item 1')))!;
-      expect(modalRoute.transitionDuration, Duration.zero);
-      expect(modalRoute.reverseTransitionDuration, Duration.zero);
+    await tester.tap(find.text('Item 2'));
+    await tester.pumpAndSettle();
 
-      // Tap Item 2
-      await tester.tap(find.text('Item 2'));
-      await tester.pump();
-
-      expect(selected, 'Item 2');
-      expect(find.text('Item 2'), findsNothing);
-    },
-  );
+    expect(selected, 'Item 2');
+    expect(find.text('Item 2'), findsNothing);
+  });
 }

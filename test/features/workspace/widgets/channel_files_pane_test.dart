@@ -4,7 +4,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide LinearProgressIndicator;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
@@ -14,6 +14,7 @@ import 'package:flspeak/core/models.dart';
 import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
 import 'package:flspeak/features/workspace/widgets/channel_files_pane.dart';
+import 'package:flspeak/widgets/prism.dart';
 
 class _Core extends Fake implements CoreSession {
   final paths = <String>[];

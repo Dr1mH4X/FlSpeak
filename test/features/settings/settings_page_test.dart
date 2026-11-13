@@ -1,22 +1,30 @@
 // ignore_for_file: depend_on_referenced_packages
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        FilledButton,
+        IconButton,
+        OutlinedButton,
+        PopupMenuItem,
+        Switch,
+        TextButton;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:flspeak/core/directory_launcher.dart';
 import 'package:flspeak/core/models.dart';
 import 'package:flspeak/core/preferences.dart';
 import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/core/update_check.dart';
+import 'package:flspeak/features/settings/settings_page.dart';
+import 'package:flspeak/features/settings/widgets/settings_section.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
 import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/widgets/app_navigation_sidebar.dart';
+import 'package:flspeak/widgets/prism.dart';
 import 'package:flspeak/widgets/update_dot.dart';
-import 'package:flspeak/features/settings/settings_page.dart';
-import 'package:flspeak/features/settings/widgets/settings_section.dart';
 
 class _Core extends Fake implements CoreSession {}
 
@@ -65,8 +73,13 @@ void main() {
             child: MaterialApp(
               theme: buildAppTheme(Brightness.light),
               locale: const Locale('zh'),
-              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              localizationsDelegates: const [
+                ...AppLocalizations.localizationsDelegates,
+                PrismUiLocalizationsDelegate(),
+              ],
               supportedLocales: AppLocalizations.supportedLocales,
+              builder: (context, child) =>
+                  PrismRootScope(brightness: Brightness.light, child: child!),
               home: ValueListenableBuilder<bool>(
                 valueListenable: visible,
                 builder: (_, show, child) =>
@@ -86,7 +99,9 @@ void main() {
         }
 
         final row = find.widgetWithText(
-          language ? SettingsOptionsTile<String?> : SettingsTile,
+          language
+              ? SettingsOptionsTile<String?>
+              : SettingsOptionsTile<VoiceMeterSource>,
           language ? '语言' : '音频显示',
         );
         await tester.ensureVisible(row);
@@ -128,8 +143,13 @@ void main() {
         child: MaterialApp(
           theme: buildAppTheme(Brightness.light),
           locale: const Locale('zh'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: const [
+            ...AppLocalizations.localizationsDelegates,
+            PrismUiLocalizationsDelegate(),
+          ],
           supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
           home: const SettingsPage(),
         ),
       ),
@@ -142,12 +162,16 @@ void main() {
     await tester.tap(appearanceCategory);
     await tester.pumpAndSettle();
 
-    final row = find.widgetWithText(SettingsTile, '动效');
+    final row = find.widgetWithText(
+      SettingsOptionsTile<AppMotionPreference>,
+      '动效',
+    );
     await tester.ensureVisible(row);
     await tester.tap(row);
     await tester.pumpAndSettle();
 
-    // 弹层中选择「关闭」
+    // 弹出菜单中选择「关闭」
+    expect(find.byType(PopupMenu), findsOneWidget);
     await tester.tap(find.text('关闭').last);
     await tester.pumpAndSettle();
 
@@ -169,6 +193,8 @@ void main() {
         overrides: [
           coreSessionProvider.overrideWithValue(_Core()),
           sessionViewProvider.overrideWith(_Session.new),
+          updateProvider.overrideWith(_Update.new),
+          appVersionProvider.overrideWithValue('0.1.0'),
           storePathProvider.overrideWithValue(
             '/tmp/flspeak-test/preferences.json',
           ),
@@ -189,8 +215,13 @@ void main() {
           child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
             locale: const Locale('zh'),
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: const [
+              ...AppLocalizations.localizationsDelegates,
+              PrismUiLocalizationsDelegate(),
+            ],
             supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) =>
+                PrismRootScope(brightness: Brightness.light, child: child!),
             home: const SettingsPage(),
           ),
         ),
@@ -228,6 +259,8 @@ void main() {
         overrides: [
           coreSessionProvider.overrideWithValue(_Core()),
           sessionViewProvider.overrideWith(_Session.new),
+          updateProvider.overrideWith(_Update.new),
+          appVersionProvider.overrideWithValue('0.1.0'),
           storePathProvider.overrideWithValue(
             '/tmp/flspeak-test/preferences.json',
           ),
@@ -245,8 +278,13 @@ void main() {
           child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
             locale: const Locale('zh'),
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: const [
+              ...AppLocalizations.localizationsDelegates,
+              PrismUiLocalizationsDelegate(),
+            ],
             supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) =>
+                PrismRootScope(brightness: Brightness.light, child: child!),
             home: const SettingsPage(),
           ),
         ),
@@ -304,7 +342,7 @@ void main() {
       // 返回一级菜单后重新见到各个大类入口（语音和屏幕共享已降级至通用下）
       expect(find.widgetWithText(SettingsTile, '外观'), findsOneWidget);
       expect(find.widgetWithText(SettingsTile, '通用'), findsOneWidget);
-      expect(find.widgetWithText(SettingsTile, '数据'), findsOneWidget);
+      expect(find.widgetWithText(SettingsTile, '数据'), findsNothing);
       expect(find.widgetWithText(SettingsTile, '关于'), findsOneWidget);
       expect(find.widgetWithText(SettingsTile, '语音'), findsNothing);
       expect(find.widgetWithText(SettingsTile, '屏幕共享'), findsNothing);
@@ -318,6 +356,8 @@ void main() {
         overrides: [
           coreSessionProvider.overrideWithValue(_Core()),
           sessionViewProvider.overrideWith(_Session.new),
+          updateProvider.overrideWith(_Update.new),
+          appVersionProvider.overrideWithValue('0.1.0'),
           storePathProvider.overrideWithValue(
             '/tmp/flspeak-test/preferences.json',
           ),
@@ -343,62 +383,52 @@ void main() {
           child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
             locale: const Locale('zh'),
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: const [
+              ...AppLocalizations.localizationsDelegates,
+              PrismUiLocalizationsDelegate(),
+            ],
             supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) =>
+                PrismRootScope(brightness: Brightness.light, child: child!),
             home: const SettingsPage(),
           ),
         ),
       );
       await tester.pumpAndSettle();
 
-      // 窄屏下侧栏隐藏
+      // 窄屏下侧栏隐藏且不再显示「数据」分类
       expect(find.byType(AppNavigationSidebar), findsNothing);
+      expect(find.widgetWithText(SettingsTile, '数据'), findsNothing);
 
-      // 点击数据大类进入二级数据页面
-      final dataCategory = find.widgetWithText(SettingsTile, '数据');
-      await tester.ensureVisible(dataCategory);
-      await tester.tap(dataCategory);
+      // 点击通用大类进入二级通用页面
+      final generalCategory = find.widgetWithText(SettingsTile, '通用');
+      await tester.ensureVisible(generalCategory);
+      await tester.tap(generalCategory);
       await tester.pumpAndSettle();
 
-      // 二级页面已呈现并包含返回按钮与数据目录/日志目录
+      // 二级页面已呈现并包含返回按钮与通用选项
       expect(find.byIcon(Icons.arrow_back_rounded), findsOneWidget);
-      expect(find.widgetWithText(SettingsTile, '数据目录'), findsOneWidget);
-      expect(find.widgetWithText(SettingsTile, '日志目录'), findsOneWidget);
-      expect(find.text('/tmp/flspeak-test/preferences.json'), findsNothing);
-      expect(find.text('/tmp/flspeak-test'), findsNothing);
-      expect(find.text('/tmp/flspeak-test/logs'), findsNothing);
+      expect(find.widgetWithText(SettingsTile, '语音'), findsOneWidget);
+      expect(find.widgetWithText(SettingsTile, '自动检查更新'), findsOneWidget);
+      expect(
+        find.widgetWithText(SettingsOptionsTile<AppLogLevel>, '日志等级'),
+        findsOneWidget,
+      );
     },
   );
 
   testWidgets(
-    'data settings category copies directory path on tile tap and opens directory on trailing button tap',
+    'general settings toggles auto check update and switches log level via popup',
     (tester) async {
-      final openedDirectories = <String>[];
-      final copiedTexts = <String>[];
-
-      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-        SystemChannels.platform,
-        (call) async {
-          if (call.method == 'Clipboard.setData') {
-            final text = (call.arguments as Map)['text'] as String?;
-            if (text != null) copiedTexts.add(text);
-          }
-          return null;
-        },
-      );
-
       final container = ProviderContainer(
         overrides: [
           coreSessionProvider.overrideWithValue(_Core()),
           sessionViewProvider.overrideWith(_Session.new),
+          updateProvider.overrideWith(_Update.new),
+          appVersionProvider.overrideWithValue('0.1.0'),
           storePathProvider.overrideWithValue(
             '/tmp/flspeak-test/preferences.json',
           ),
-          logPathProvider.overrideWithValue('/tmp/flspeak-test/custom-logs'),
-          directoryLauncherProvider.overrideWithValue((path) async {
-            openedDirectories.add(path);
-            return true;
-          }),
           preferencesStoreProvider.overrideWithValue(
             PreferencesStore.inMemory(
               preferences: const SessionPreferences(nickname: 'Test'),
@@ -407,12 +437,6 @@ void main() {
         ],
       );
       addTearDown(container.dispose);
-      addTearDown(() {
-        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-          SystemChannels.platform,
-          null,
-        );
-      });
 
       await tester.pumpWidget(
         UncontrolledProviderScope(
@@ -420,43 +444,57 @@ void main() {
           child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
             locale: const Locale('zh'),
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: const [
+              ...AppLocalizations.localizationsDelegates,
+              PrismUiLocalizationsDelegate(),
+            ],
             supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) =>
+                PrismRootScope(brightness: Brightness.light, child: child!),
             home: const SettingsPage(),
           ),
         ),
       );
       await tester.pumpAndSettle();
 
-      // 点击进入数据页
-      final dataCategory = find.widgetWithText(SettingsTile, '数据');
-      await tester.tap(dataCategory);
+      final generalCategory = find.widgetWithText(SettingsTile, '通用');
+      await tester.tap(generalCategory);
       await tester.pumpAndSettle();
 
-      // 1. 点击数据目录卡片 -> 复制数据目录路径
-      final dataTile = find.widgetWithText(SettingsTile, '数据目录');
-      await tester.tap(dataTile);
+      // 自动检查更新默认开启，切换后更新偏好
+      expect(container.read(preferencesProvider).autoCheckUpdate, isTrue);
+      final autoUpdateTile = find.widgetWithText(SettingsTile, '自动检查更新');
+      await tester.ensureVisible(autoUpdateTile);
+      await tester.tap(autoUpdateTile);
       await tester.pumpAndSettle();
-      expect(copiedTexts, contains('/tmp/flspeak-test'));
+      expect(container.read(preferencesProvider).autoCheckUpdate, isFalse);
 
-      // 2. 点击日志目录卡片 -> 复制日志目录路径
-      final logTile = find.widgetWithText(SettingsTile, '日志目录');
-      await tester.tap(logTile);
+      // 日志等级通过 popup 菜单切换
+      final logLevelTile = find.widgetWithText(
+        SettingsOptionsTile<AppLogLevel>,
+        '日志等级',
+      );
+      await tester.ensureVisible(logLevelTile);
+      expect(
+        find.descendant(
+          of: logLevelTile,
+          matching: find.text(AppLogLevel.defaultForBuild.id),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(logLevelTile);
       await tester.pumpAndSettle();
-      expect(copiedTexts, contains('/tmp/flspeak-test/custom-logs'));
 
-      // 3. 点击数据目录右侧打开按钮 -> 调用 directoryLauncher
-      final openButtons = find.byIcon(Icons.folder_open_rounded);
-      expect(openButtons, findsNWidgets(2));
+      expect(find.text('debug'), findsWidgets);
+      expect(find.text('info'), findsWidgets);
+      expect(find.text('warning'), findsWidgets);
+      expect(find.text('error'), findsWidgets);
 
-      await tester.tap(openButtons.first);
+      await tester.tap(find.text('warning').last);
       await tester.pumpAndSettle();
-      expect(openedDirectories, contains('/tmp/flspeak-test'));
-
-      // 4. 点击日志目录右侧打开按钮 -> 调用 directoryLauncher
-      await tester.tap(openButtons.last);
-      await tester.pumpAndSettle();
-      expect(openedDirectories, contains('/tmp/flspeak-test/custom-logs'));
+      expect(container.read(preferencesProvider).logLevel, AppLogLevel.warning);
+      expect(find.byType(Tooltip), findsNothing);
     },
   );
 
@@ -467,6 +505,8 @@ void main() {
         overrides: [
           coreSessionProvider.overrideWithValue(_Core()),
           sessionViewProvider.overrideWith(_Session.new),
+          updateProvider.overrideWith(_Update.new),
+          appVersionProvider.overrideWithValue('0.1.0'),
           storePathProvider.overrideWithValue(
             '/tmp/flspeak-test/preferences.json',
           ),
@@ -485,8 +525,13 @@ void main() {
           child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
             locale: const Locale('zh'),
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: const [
+              ...AppLocalizations.localizationsDelegates,
+              PrismUiLocalizationsDelegate(),
+            ],
             supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) =>
+                PrismRootScope(brightness: Brightness.light, child: child!),
             home: const SettingsPage(),
           ),
         ),
@@ -506,24 +551,32 @@ void main() {
 
       expect(find.byType(Tooltip), findsNothing);
 
-      final resolutionRow = find.widgetWithText(SettingsTile, '默认分辨率');
+      final resolutionRow = find.widgetWithText(
+        SettingsOptionsTile<ScreenShareResolutionPreset>,
+        '默认分辨率',
+      );
       await tester.tap(resolutionRow);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('720p (1280×720)').last);
+      expect(find.byType(PopupMenu), findsOneWidget);
+      await tester.tap(find.text('720p').last);
       await tester.pumpAndSettle();
       expect(
         container.read(preferencesProvider).screenShareResolution,
         ScreenShareResolutionPreset.p720,
       );
 
-      final codecRow = find.widgetWithText(SettingsTile, '视频编码与硬件加速');
+      final codecRow = find.widgetWithText(
+        SettingsOptionsTile<ScreenShareCodecPreference>,
+        '视频编码与硬件加速',
+      );
       await tester.tap(codecRow);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('H.264 优先（硬件编解码加速）').last);
+      expect(find.byType(PopupMenu), findsOneWidget);
+      await tester.tap(find.text('VP8 优先').last);
       await tester.pumpAndSettle();
       expect(
         container.read(preferencesProvider).screenShareCodec,
-        ScreenShareCodecPreference.h264,
+        ScreenShareCodecPreference.vp8,
       );
     },
   );
@@ -535,6 +588,8 @@ void main() {
         overrides: [
           coreSessionProvider.overrideWithValue(_Core()),
           sessionViewProvider.overrideWith(_Session.new),
+          updateProvider.overrideWith(_Update.new),
+          appVersionProvider.overrideWithValue('0.1.0'),
           storePathProvider.overrideWithValue(
             '/tmp/flspeak-test/preferences.json',
           ),
@@ -553,8 +608,13 @@ void main() {
           child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
             locale: const Locale('zh'),
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: const [
+              ...AppLocalizations.localizationsDelegates,
+              PrismUiLocalizationsDelegate(),
+            ],
             supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) =>
+                PrismRootScope(brightness: Brightness.light, child: child!),
             home: const SettingsPage(),
           ),
         ),
@@ -621,8 +681,13 @@ void main() {
         child: MaterialApp(
           theme: buildAppTheme(Brightness.light),
           locale: const Locale('zh'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: const [
+            ...AppLocalizations.localizationsDelegates,
+            PrismUiLocalizationsDelegate(),
+          ],
           supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
           home: const SettingsPage(),
         ),
       ),
@@ -633,4 +698,116 @@ void main() {
     expect(find.bySemanticsLabel(RegExp('有新版本 0.2.0')), findsOneWidget);
     semantics.dispose();
   });
+
+  testWidgets(
+    'settings subpage push and back use directional horizontal slide transitions without InkSparkle',
+    (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_Core()),
+          sessionViewProvider.overrideWith(_Session.new),
+          updateProvider.overrideWith(_Update.new),
+          appVersionProvider.overrideWithValue('0.1.0'),
+          storePathProvider.overrideWithValue(
+            '/tmp/flspeak-test/preferences.json',
+          ),
+          preferencesStoreProvider.overrideWithValue(
+            PreferencesStore.inMemory(
+              preferences: const SessionPreferences(
+                nickname: 'Test',
+                locale: 'zh',
+                motion: AppMotionPreference.on,
+              ),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            locale: const Locale('zh'),
+            localizationsDelegates: const [
+              ...AppLocalizations.localizationsDelegates,
+              PrismUiLocalizationsDelegate(),
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) =>
+                PrismRootScope(brightness: Brightness.light, child: child!),
+            home: const SettingsPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 概览页单行普通项与语言 Popup 项高度严格一致
+      final baseX = tester
+          .renderObject<RenderBox>(
+            find.byKey(const ValueKey<String>('overview')),
+          )
+          .localToGlobal(Offset.zero)
+          .dx;
+      final overviewHeights = tester
+          .renderObjectList<RenderBox>(find.byType(ListRow))
+          .map((box) => box.size.height)
+          .toList();
+      expect(overviewHeights.every((h) => h >= 48.0), isTrue);
+
+      // 进入通用二级页：通用页自右侧滑入（正向 dx > baseX）
+      await tester.tap(find.widgetWithText(SettingsTile, '通用'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 40));
+
+      final incomingGeneralBox = tester.renderObject<RenderBox>(
+        find.byKey(const ValueKey<String>('general')),
+      );
+      expect(
+        incomingGeneralBox.localToGlobal(Offset.zero).dx,
+        greaterThan(baseX),
+      );
+      await tester.pumpAndSettle();
+
+      // 通用页使用 Switch 且行高一致
+      expect(find.byType(Switch), findsOneWidget);
+      final generalHeights = tester
+          .renderObjectList<RenderBox>(find.byType(ListRow))
+          .map((box) => box.size.height)
+          .toList();
+      expect(generalHeights.every((h) => h >= 48.0), isTrue);
+
+      // 返回概览页：被揭开的概览页从左侧回位（dx < baseX），退出中的通用页向右滑出（dx > baseX）
+      await tester.tap(find.byIcon(Icons.arrow_back_rounded));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 40));
+
+      final revealedOverviewBox = tester.renderObject<RenderBox>(
+        find.byKey(const ValueKey<String>('overview')),
+      );
+      final exitingGeneralBox = tester.renderObject<RenderBox>(
+        find.byKey(const ValueKey<String>('general')),
+      );
+      expect(
+        revealedOverviewBox.localToGlobal(Offset.zero).dx,
+        lessThan(baseX),
+      );
+      expect(
+        exitingGeneralBox.localToGlobal(Offset.zero).dx,
+        greaterThan(baseX),
+      );
+      await tester.pumpAndSettle();
+
+      // 进入关于二级页并验证无 InkSparkle 污染
+      await tester.tap(find.widgetWithText(SettingsTile, '关于'));
+      await tester.pumpAndSettle();
+      for (final ink in tester.widgetList<InkWell>(find.byType(InkWell))) {
+        expect(ink.splashFactory, NoSplash.splashFactory);
+      }
+      await tester.tap(find.byIcon(Icons.arrow_back_rounded));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey<String>('overview')), findsOneWidget);
+    },
+  );
 }

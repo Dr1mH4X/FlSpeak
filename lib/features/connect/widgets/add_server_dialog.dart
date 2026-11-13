@@ -1,16 +1,24 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        FilledButton,
+        IconButton,
+        OutlinedButton,
+        Switch,
+        TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../../../core/models.dart';
-import '../../../core/server_icon.dart';
-import '../../../widgets/server_icon_picker.dart';
-import '../../../widgets/expressive_frame.dart';
 import '../../../core/providers.dart';
+import '../../../core/server_icon.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
+import '../../../widgets/expressive_frame.dart';
+import '../../../widgets/prism.dart';
+import '../../../widgets/server_icon_picker.dart';
 
 /// 添加服务器：只收 IP/域名与备注名；官方基础设施的最终边界由 Rust 决定。
 ///
@@ -42,56 +50,60 @@ Future<ServerProfileView?> showAddServerDialog(
             spacing: 8,
             runSpacing: 8,
             children: [
-              TextButton(
-                onPressed: busy ? null : () => Navigator.of(context).pop(),
-                child: Text(l10n.commonCancel),
+              ElasticButton(
+                child: TextButton(
+                  onPressed: busy ? null : () => Navigator.of(context).pop(),
+                  child: Text(l10n.commonCancel),
+                ),
               ),
-              FilledButton(
-                onPressed: busy ? null : () => formKey.currentState?.submit(),
-                child: AnimatedSwitcher(
-                  duration: MediaQuery.disableAnimationsOf(context)
-                      ? Duration.zero
-                      : Motion.effectsFast,
-                  switchInCurve: Motion.effectsFastCurve,
-                  switchOutCurve: Motion.effectsFastCurve.flipped,
-                  child: busy
-                      ? Row(
-                          key: const ValueKey('busy'),
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            SizedBox.square(
-                              dimension: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: scheme.onPrimary,
+              ElasticButton(
+                child: FilledButton(
+                  onPressed: busy ? null : () => formKey.currentState?.submit(),
+                  child: AnimatedSwitcher(
+                    duration: MediaQuery.disableAnimationsOf(context)
+                        ? Duration.zero
+                        : Motion.effectsFast,
+                    switchInCurve: Motion.effectsFastCurve,
+                    switchOutCurve: Motion.effectsFastCurve.flipped,
+                    child: busy
+                        ? Row(
+                            key: const ValueKey('busy'),
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox.square(
+                                dimension: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: scheme.onPrimary,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              server == null
-                                  ? l10n.serverAddAndConnecting
-                                  : l10n.serverSaving,
-                            ),
-                          ],
-                        )
-                      : Row(
-                          key: const ValueKey('idle'),
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              server == null
-                                  ? l10n.serverAddAndConnect
-                                  : l10n.commonSave,
-                            ),
-                            const SizedBox(width: 8),
-                            Icon(
-                              server == null
-                                  ? Icons.arrow_forward_rounded
-                                  : Icons.check_rounded,
-                              size: IconSizes.small,
-                            ),
-                          ],
-                        ),
+                              const SizedBox(width: 8),
+                              Text(
+                                server == null
+                                    ? l10n.serverAddAndConnecting
+                                    : l10n.serverSaving,
+                              ),
+                            ],
+                          )
+                        : Row(
+                            key: const ValueKey('idle'),
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                server == null
+                                    ? l10n.serverAddAndConnect
+                                    : l10n.commonSave,
+                              ),
+                              const SizedBox(width: 8),
+                              Icon(
+                                server == null
+                                    ? Icons.arrow_forward_rounded
+                                    : Icons.check_rounded,
+                                size: IconSizes.small,
+                              ),
+                            ],
+                          ),
+                  ),
                 ),
               ),
             ],

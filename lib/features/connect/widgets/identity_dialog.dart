@@ -1,4 +1,11 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        FilledButton,
+        IconButton,
+        OutlinedButton,
+        Switch,
+        TextButton;
 import 'package:flutter/services.dart';
 
 import '../../../l10n/app_localizations.dart';
@@ -6,6 +13,7 @@ import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
 import '../../../widgets/monogram.dart';
+import '../../../widgets/prism.dart';
 
 /// 管理身份。后端只有单一身份，所以这一步的实际内容就是改昵称：
 /// 点铅笔就地编辑，回车或勾保存，避免再套一层「编辑」对话框。
@@ -24,12 +32,14 @@ Future<void> showIdentityDialog(
       nickname: nickname,
       onRename: onRename,
     ),
-    footer: (context) => FilledButton(
-      onPressed: () {
-        contentKey.currentState?.commitIfEditing();
-        Navigator.of(context).pop();
-      },
-      child: Text(AppLocalizations.of(context).commonDone),
+    footer: (context) => ElasticButton(
+      child: FilledButton(
+        onPressed: () {
+          contentKey.currentState?.commitIfEditing();
+          Navigator.of(context).pop();
+        },
+        child: Text(AppLocalizations.of(context).commonDone),
+      ),
     ),
   );
 }
@@ -106,11 +116,9 @@ class _IdentityDialogContentState extends State<_IdentityDialogContent> {
 
     return Container(
       padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        // 不透明 container 对：透明度叠底在暗色下发闷，正文对比也随底色漂。
-        color: scheme.secondaryContainer,
-        borderRadius: Radii.xxlAll,
-        border: Border.all(color: scheme.outlineVariant),
+      decoration: ShapeDecoration(
+        color: surfaceColorFor(SurfaceLevel.block, scheme),
+        shape: AppShape.xl,
       ),
       child: AnimatedSwitcher(
         duration: MediaQuery.disableAnimationsOf(context)
@@ -184,8 +192,8 @@ class _IdentityDialogContentState extends State<_IdentityDialogContent> {
         IconButton(
           onPressed: _startEditing,
           iconSize: IconSizes.small,
-          color: scheme.onSurfaceVariant,
-          style: IconButton.styleFrom(
+          style: ButtonStyle.from(
+            foregroundColor: scheme.onSurfaceVariant,
             minimumSize: const Size(Sizes.touch, Sizes.touch),
             maximumSize: const Size(Sizes.touch, Sizes.touch),
             padding: EdgeInsets.zero,
@@ -230,8 +238,8 @@ class _IdentityDialogContentState extends State<_IdentityDialogContent> {
         IconButton(
           onPressed: _commit,
           iconSize: IconSizes.small,
-          color: scheme.primary,
-          style: IconButton.styleFrom(
+          style: ButtonStyle.from(
+            foregroundColor: scheme.primary,
             minimumSize: const Size(Sizes.touch, Sizes.touch),
             maximumSize: const Size(Sizes.touch, Sizes.touch),
             padding: EdgeInsets.zero,
@@ -241,8 +249,8 @@ class _IdentityDialogContentState extends State<_IdentityDialogContent> {
         IconButton(
           onPressed: _cancelEditing,
           iconSize: IconSizes.small,
-          color: scheme.onSurfaceVariant,
-          style: IconButton.styleFrom(
+          style: ButtonStyle.from(
+            foregroundColor: scheme.onSurfaceVariant,
             minimumSize: const Size(Sizes.touch, Sizes.touch),
             maximumSize: const Size(Sizes.touch, Sizes.touch),
             padding: EdgeInsets.zero,

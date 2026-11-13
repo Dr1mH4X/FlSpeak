@@ -1,7 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        FilledButton,
+        IconButton,
+        OutlinedButton,
+        Switch,
+        TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
@@ -12,10 +19,10 @@ import '../../../core/stream_publisher.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
-import '../../../widgets/common.dart';
 import '../../../widgets/channel_icon.dart';
+import '../../../widgets/common.dart';
 import '../../../widgets/monogram.dart';
-import '../../../widgets/press_feedback.dart';
+import '../../../widgets/prism.dart';
 import '../../../widgets/window_header.dart';
 import '../workspace_state.dart';
 import 'channel_password_dialog.dart';
@@ -387,16 +394,15 @@ class _ChannelTile extends StatelessWidget {
                 ? Duration.zero
                 : Motion.effectsFast,
             curve: Motion.effectsDefaultCurve,
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
+            decoration: ShapeDecoration(
               color: selected ? scheme.primaryContainer : Colors.transparent,
-              borderRadius: Radii.mediumAll,
+              shape: AppShape.md,
             ),
-            child: Material(
-              color: Colors.transparent,
+            child: ClipRSuperellipse(
+              borderRadius: AppRadius.md,
               child: AnimatedInkWell(
                 onTap: onTap,
-                borderRadius: Radii.mediumAll,
+                customBorder: AppShape.md,
                 child: SizedBox(
                   height: 48,
                   child: Padding(
@@ -788,7 +794,7 @@ class _UserFooterState extends ConsumerState<_UserFooter> {
                   if (widget.onDisconnect != null)
                     IconButton.filled(
                       onPressed: view.busy ? null : widget.onDisconnect,
-                      style: IconButton.styleFrom(
+                      style: ButtonStyle.from(
                         backgroundColor: scheme.error,
                         foregroundColor: scheme.onError,
                       ),
@@ -982,45 +988,35 @@ class _IconToggle extends StatelessWidget {
       label: label,
       button: true,
       toggled: active,
-      child: AnimatedInkWell(
-        onTap: onTap,
-        customBorder: const CircleBorder(),
-        child: SizedBox(
-          width: Sizes.touch,
-          height: Sizes.touch,
-          child: Center(
-            child: AnimatedContainer(
-              width: 36,
-              height: 36,
-              duration: MediaQuery.disableAnimationsOf(context)
-                  ? Duration.zero
-                  : Motion.effectsFast,
-              curve: Motion.effectsDefaultCurve,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: active ? activeBackground : Colors.transparent,
-              ),
-              child: AnimatedSwitcher(
-                duration: MediaQuery.disableAnimationsOf(context)
-                    ? Duration.zero
-                    : Motion.effectsFast,
-                switchInCurve: Motion.effectsFastCurve,
-                switchOutCurve: Motion.effectsFastCurve.flipped,
-                transitionBuilder: (child, animation) => FadeTransition(
-                  opacity: animation,
-                  child: ScaleTransition(
-                    scale: animation.drive(Tween(begin: 0.8, end: 1.0)),
-                    child: child,
-                  ),
-                ),
-                child: Icon(
-                  icon,
-                  key: ValueKey(icon),
-                  size: IconSizes.toolbar,
-                  color: active ? activeForeground : scheme.onSurfaceVariant,
-                ),
-              ),
+      child: IconButton(
+        onPressed: onTap,
+        isSelected: active,
+        style: ButtonStyle.from(
+          backgroundColor: active ? activeBackground : Colors.transparent,
+          foregroundColor: active ? activeForeground : scheme.onSurfaceVariant,
+          shape: AppShape.circle,
+          minimumSize: const Size(36, 36),
+          maximumSize: const Size(36, 36),
+          padding: EdgeInsets.zero,
+        ),
+        icon: AnimatedSwitcher(
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : Motion.effectsFast,
+          switchInCurve: Motion.effectsFastCurve,
+          switchOutCurve: Motion.effectsFastCurve.flipped,
+          transitionBuilder: (child, animation) => FadeTransition(
+            opacity: animation,
+            child: ScaleTransition(
+              scale: animation.drive(Tween(begin: 0.8, end: 1.0)),
+              child: child,
             ),
+          ),
+          child: Icon(
+            icon,
+            key: ValueKey(icon),
+            size: IconSizes.toolbar,
+            color: active ? activeForeground : scheme.onSurfaceVariant,
           ),
         ),
       ),

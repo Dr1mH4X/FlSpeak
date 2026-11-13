@@ -16,6 +16,7 @@ import 'package:flspeak/features/settings/settings_page.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
 import 'package:flspeak/router.dart';
 import 'package:flspeak/theme/app_theme.dart';
+import 'package:flspeak/widgets/prism.dart';
 
 class _Core extends Fake implements CoreSession {}
 
@@ -52,12 +53,15 @@ Future<GoRouter> _mount(
         routerConfig: router,
         theme: buildAppTheme(Brightness.light),
         locale: const Locale('zh'),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: const [
+          ...AppLocalizations.localizationsDelegates,
+          PrismUiLocalizationsDelegate(),
+        ],
         supportedLocales: AppLocalizations.supportedLocales,
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context)
               .copyWith(disableAnimations: reduceMotion),
-          child: child!,
+          child: PrismRootScope(brightness: Brightness.light, child: child!),
         ),
       ),
     ),

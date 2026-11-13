@@ -16,8 +16,11 @@ import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/core/models.dart';
 import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/core/preferences.dart';
+import 'package:flspeak/core/update_check.dart';
 import 'package:flspeak/router.dart';
+import 'package:flspeak/widgets/app_navigation_sidebar.dart';
 import 'package:flspeak/widgets/notice_host.dart';
+import 'package:flspeak/widgets/update_dot.dart';
 
 class _PttSession extends SessionController {
   final presses = <bool>[];
@@ -241,6 +244,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           coreSessionProvider.overrideWithValue(_PttCore()),
+          appVersionProvider.overrideWithValue('0.1.0'),
           storePathProvider.overrideWithValue(
             '/tmp/flspeak-test/preferences.json',
           ),
@@ -312,4 +316,195 @@ void main() {
 
     expect(find.text('文件日志不可用，应用将继续以控制台日志运行。'), findsOneWidget);
   });
+
+  testWidgets(
+    'checks updates on startup when enabled, shows notice once, and does not recheck on about page',
+    (tester) async {
+      var checkCalls = 0;
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_PttCore()),
+          appVersionProvider.overrideWithValue('0.1.0'),
+          storePathProvider.overrideWithValue(
+            '/tmp/flspeak-test/preferences.json',
+          ),
+          sessionViewProvider.overrideWith(_PttSession.new),
+          startupUpdateCheckEnabledProvider.overrideWithValue(true),
+          updateCheckClientProvider.overrideWithValue(() async {
+            checkCalls++;
+            return const UpdateStateView(
+              available: true,
+              latestVersion: '0.2.0',
+              releaseUrl:
+                  'https://github.com/Dr1mH4X/FlSpeak/releases/tag/v0.2.0',
+            );
+          }),
+          preferencesStoreProvider.overrideWithValue(
+            PreferencesStore.inMemory(
+              preferences: const SessionPreferences(
+                nickname: 'Test',
+                locale: 'zh',
+                autoCheckUpdate: true,
+              ),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const TsClientApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(checkCalls, 1);
+      expect(find.text('有新版本 0.2.0'), findsOneWidget);
+
+      container.read(routerProvider).go(AppRoutes.settings);
+      await tester.pumpAndSettle();
+
+      final aboutCategory = find.text('关于');
+      await tester.ensureVisible(aboutCategory);
+      await tester.tap(aboutCategory);
+      await tester.pumpAndSettle();
+
+      expect(checkCalls, 1);
+      expect(find.byType(UpdateDot), findsOneWidget);
+    },
+  );
+
+  testWidgets('skips startup update check when autoCheckUpdate is disabled', (
+    tester,
+  ) async {
+    var checkCalls = 0;
+    final container = ProviderContainer(
+      overrides: [
+        coreSessionProvider.overrideWithValue(_PttCore()),
+        storePathProvider.overrideWithValue(
+          '/tmp/flspeak-test/preferences.json',
+        ),
+        sessionViewProvider.overrideWith(_PttSession.new),
+        startupUpdateCheckEnabledProvider.overrideWithValue(true),
+        updateCheckClientProvider.overrideWithValue(() async {
+          checkCalls++;
+          return const UpdateStateView(available: true, latestVersion: '0.2.0');
+        }),
+        preferencesStoreProvider.overrideWithValue(
+          PreferencesStore.inMemory(
+            preferences: const SessionPreferences(
+              nickname: 'Test',
+              locale: 'zh',
+              autoCheckUpdate: false,
+            ),
+          ),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const TsClientApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(checkCalls, 0);
+    expect(find.text('有新版本 0.2.0'), findsNothing);
+  });
+
+  testWidgets(
+    'clicking settings back button from a secondary menu preserves sidebar and top-bar colors across every frame',
+    (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_PttCore()),
+          appVersionProvider.overrideWithValue('0.1.0'),
+          storePathProvider.overrideWithValue(
+            '/tmp/flspeak-test/preferences.json',
+          ),
+          sessionViewProvider.overrideWith(_PttSession.new),
+          preferencesStoreProvider.overrideWithValue(
+            PreferencesStore.inMemory(
+              preferences: const SessionPreferences(
+                nickname: 'Test',
+                locale: 'zh',
+                theme: AppThemePreference.light,
+              ),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const TsClientApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
+      expect(app.themeAnimationDuration, Duration.zero);
+
+      container.read(routerProvider).go(AppRoutes.settings);
+      await tester.pumpAndSettle();
+
+      Material sidebarMaterial() => tester.widget<Material>(
+        find
+            .descendant(
+              of: find.byType(AppNavigationSidebar),
+              matching: find.byType(Material),
+            )
+            .first,
+      );
+
+      final baselineSidebarColor = sidebarMaterial().color;
+      final baselineTheme = Theme.of(
+        tester.element(find.byType(AppNavigationSidebar)),
+      );
+
+      final generalCategory = find.text('通用');
+      await tester.ensureVisible(generalCategory);
+      await tester.tap(generalCategory);
+      await tester.pumpAndSettle();
+
+      final backButton = find.byIcon(Icons.arrow_back_rounded);
+      expect(backButton, findsOneWidget);
+      final topBarTitleColor = tester
+          .widget<Text>(find.text('通用').first)
+          .style
+          ?.color;
+
+      await tester.tap(backButton);
+      for (final step in [
+        Duration.zero,
+        const Duration(milliseconds: 16),
+        const Duration(milliseconds: 40),
+        const Duration(milliseconds: 100),
+      ]) {
+        await tester.pump(step);
+        expect(sidebarMaterial().color, baselineSidebarColor);
+        expect(
+          identical(
+            Theme.of(tester.element(find.byType(AppNavigationSidebar))),
+            baselineTheme,
+          ),
+          isTrue,
+        );
+        expect(
+          tester.widget<Text>(find.text('设置').first).style?.color,
+          topBarTitleColor,
+        );
+      }
+      await tester.pumpAndSettle();
+      expect(sidebarMaterial().color, baselineSidebarColor);
+      expect(find.byKey(const ValueKey<String>('overview')), findsOneWidget);
+    },
+  );
 }

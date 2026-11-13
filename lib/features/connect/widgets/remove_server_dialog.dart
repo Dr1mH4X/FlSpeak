@@ -1,10 +1,18 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        FilledButton,
+        IconButton,
+        OutlinedButton,
+        Switch,
+        TextButton;
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
 import '../../../widgets/monogram.dart';
+import '../../../widgets/prism.dart';
 
 /// 移除档案需要确认。地址重新录入成本不低，但历史消息不受影响，
 /// 所以确认文案要说清「只从列表消失」。
@@ -27,17 +35,21 @@ Future<bool> showRemoveServerDialog(
           spacing: 8,
           runSpacing: 8,
           children: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: Text(l10n.commonCancel),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: scheme.error,
-                foregroundColor: scheme.onError,
+            ElasticButton(
+              child: TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: Text(l10n.commonCancel),
               ),
-              onPressed: () => Navigator.of(context).pop(true),
-              child: Text(l10n.serverRemove),
+            ),
+            ElasticButton(
+              child: FilledButton(
+                style: ButtonStyle.from(
+                  backgroundColor: scheme.error,
+                  foregroundColor: scheme.onError,
+                ),
+                onPressed: () => Navigator.of(context).pop(true),
+                child: Text(l10n.serverRemove),
+              ),
             ),
           ],
         ),

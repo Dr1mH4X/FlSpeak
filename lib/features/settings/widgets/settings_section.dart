@@ -1,55 +1,20 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Checkbox, Switch;
 
 import '../../../theme/app_theme.dart';
-import '../../../widgets/common.dart';
-import '../../../widgets/popup.dart';
+import '../../../widgets/prism.dart';
+import 'list_item.dart';
 
-enum ItemPosition {
-  start,
-  middle,
-  end,
-  single;
-
-  static ItemPosition get(int index, int length) {
-    if (length <= 1) return ItemPosition.single;
-    if (index == 0) return ItemPosition.start;
-    if (index == length - 1) return ItemPosition.end;
-    return ItemPosition.middle;
-  }
-}
-
-class ItemPositionScope extends InheritedWidget {
-  const ItemPositionScope({
-    required this.position,
-    required super.child,
-    super.key,
-  });
-
-  final ItemPosition position;
-
-  static ItemPositionScope? maybeOf(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<ItemPositionScope>();
-
-  @override
-  bool updateShouldNotify(ItemPositionScope oldWidget) =>
-      position != oldWidget.position;
-}
-
-Widget generateGroup(Iterable<Widget> items) {
-  final list = items.toList(growable: false);
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      for (var index = 0; index < list.length; index++) ...[
-        if (index > 0) const _ListRowDivider(),
-        ItemPositionScope(
-          position: ItemPosition.get(index, list.length),
-          child: list[index],
-        ),
-      ],
-    ],
-  );
-}
+export '../../../widgets/prism.dart'
+    show
+        DecorationListItem,
+        ItemPosition,
+        ItemPositionProvider,
+        ListFooter,
+        ListHeader,
+        ListRow,
+        ListRowAlignment,
+        generateGroup;
+export 'list_item.dart';
 
 Widget generateSection({
   String? title,
@@ -61,60 +26,29 @@ Widget generateSection({
   if (list.isEmpty) return const SizedBox.shrink();
 
   return Padding(
-    padding: const EdgeInsets.only(bottom: 24),
+    padding: const EdgeInsets.only(bottom: 16),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (title != null || actions.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-            child: Row(
-              children: [
-                if (title != null)
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                  ),
-                if (actions.isNotEmpty) ...actions,
-              ],
-            ),
+          ListHeader(
+            title: title ?? '',
+            trailing: actions.isNotEmpty
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: 6,
+                    children: actions,
+                  )
+                : null,
           ),
-        Material(
-          color: Colors.transparent,
-          child: HairlineCard(clip: true, child: generateGroup(list)),
-        ),
-        if (footer != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-            child: Text(footer, style: const TextStyle(fontSize: 12)),
-          ),
+        generateGroup(list),
+        if (footer != null) ListFooter(text: footer),
       ],
     ),
   );
 }
 
-class _ListRowDivider extends StatelessWidget {
-  const _ListRowDivider();
-
-  @override
-  Widget build(BuildContext context) {
-    return Divider(
-      height: 1,
-      thickness: 1,
-      indent: 64,
-      endIndent: 16,
-      color: hairlineSide(context).color,
-    );
-  }
-}
-
-/// 标准设置行组件，支持在卡片组内自动感知 [ItemPosition]。
+/// 标准设置行组件，基于 [DecorationListItem] 对齐行高、裸图标与 Ink+Hover 交互。
 class SettingsTile extends StatelessWidget {
   const SettingsTile({
     required this.title,
@@ -143,101 +77,74 @@ class SettingsTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    final texts = context.texts;
+    final scheme = Theme.of(context).colorScheme;
     final foreground = destructive
         ? scheme.error
         : (selected ? scheme.primary : scheme.onSurface);
-    final secondary = scheme.onSurfaceVariant;
 
     final Widget? leadingWidget =
         leading ??
         (icon != null
-            ? Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: destructive
-                      ? scheme.errorContainer
-                      : (selected
-                            ? scheme.primaryContainer
-                            : scheme.secondaryContainer.withValues(alpha: 0.6)),
-                  borderRadius: Radii.mediumAll,
-                ),
-                child: Icon(
-                  icon,
-                  size: IconSizes.toolbar,
-                  color: destructive
-                      ? scheme.onErrorContainer
-                      : (selected
-                            ? scheme.onPrimaryContainer
-                            : scheme.onSecondaryContainer),
-                ),
+            ? Icon(
+                icon,
+                size: IconSizes.standard,
+                color: destructive
+                    ? scheme.error
+                    : (selected ? scheme.primary : scheme.onSurfaceVariant),
               )
             : null);
 
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            if (leadingWidget != null) ...[
-              leadingWidget,
-              const SizedBox(width: 14),
-            ],
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: texts.titleMedium?.copyWith(
-                      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                      color: foreground,
-                      fontSize: 15,
-                    ),
-                  ),
-                  if (subtitle != null) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: texts.bodySmall?.copyWith(
-                        color: subtitleColor ?? secondary,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            if (badge != null) ...[const SizedBox(width: 8), badge!],
-            if (trailing != null) ...[
-              const SizedBox(width: 8),
-              trailing!,
-            ] else if (onTap != null) ...[
-              const SizedBox(width: 8),
-              Icon(
+    final Widget? resolvedTrailing =
+        trailing ??
+        (onTap != null
+            ? Icon(
                 Icons.chevron_right_rounded,
                 size: IconSizes.medium,
-                color: secondary.withValues(alpha: 0.7),
-              ),
-            ],
-          ],
-        ),
+                color: scheme.onSurfaceVariant,
+              )
+            : null);
+
+    final bool hasCompactTrailing = trailing is Switch || trailing is Checkbox;
+
+    return DecorationListItem(
+      leading: leadingWidget,
+      title: Row(
+        children: [
+          Flexible(
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyle.subheadline
+                  .of(context)
+                  .copyWith(color: foreground),
+            ),
+          ),
+          if (badge != null) ...[const SizedBox(width: 8), badge!],
+        ],
       ),
+      subtitle: subtitle == null
+          ? null
+          : Text(
+              subtitle!,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyle.footnote
+                  .of(context)
+                  .copyWith(color: subtitleColor ?? scheme.onSurfaceVariant),
+            ),
+      trailing: resolvedTrailing,
+      contentPadding: hasCompactTrailing
+          ? const EdgeInsets.only(left: 16, right: 8)
+          : const EdgeInsets.symmetric(horizontal: 16),
+      isSelected: selected,
+      onPressed: onTap,
     );
   }
 }
 
-/// 带弹出菜单和取值切换动效的选项设置行（移植自 FlClash ListItem.options）。
-class SettingsOptionsTile<T> extends StatefulWidget {
+/// 在列表行右侧用当前值按钮呼出弹出菜单的选择设置项，复用 [ListItem.options]。
+class SettingsOptionsTile<T> extends StatelessWidget {
   const SettingsOptionsTile({
     required this.title,
     this.icon,
@@ -258,38 +165,25 @@ class SettingsOptionsTile<T> extends StatefulWidget {
   final ValueChanged<T> onChanged;
 
   @override
-  State<SettingsOptionsTile<T>> createState() => _SettingsOptionsTileState<T>();
-}
-
-class _SettingsOptionsTileState<T> extends State<SettingsOptionsTile<T>> {
-  PopupOpen? _openMenu;
-
-  @override
   Widget build(BuildContext context) {
-    return SettingsTile(
-      title: widget.title,
-      icon: widget.icon,
-      leading: widget.leading,
-      onTap: () => _openMenu?.call(),
-      trailing: CommonPopupBox(
-        targetBuilder: (open) {
-          _openMenu = open;
-          return OptionsValueButton(
-            label: widget.textBuilder(widget.value),
-            onPressed: open,
-          );
-        },
-        popupBuilder: (_) => CommonPopupMenu(
-          items: [
-            for (final option in widget.options)
-              CommonPopupMenuItem(
-                label: widget.textBuilder(option),
-                checked: option == widget.value,
-                onPressed: () => widget.onChanged(option),
-              ),
-          ],
-        ),
-      ),
+    final scheme = Theme.of(context).colorScheme;
+    final resolvedLeading =
+        leading ??
+        (icon != null
+            ? Icon(
+                icon,
+                size: IconSizes.standard,
+                color: scheme.onSurfaceVariant,
+              )
+            : null);
+
+    return ListItem<T>.options(
+      leading: resolvedLeading,
+      title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+      options: options,
+      value: value,
+      textBuilder: textBuilder,
+      onChanged: onChanged,
     );
   }
 }

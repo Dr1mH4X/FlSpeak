@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flspeak_ffi/flspeak_ffi.dart' show isRustLibInitialized;
+import 'package:flspeak_ffi/flspeak_ffi.dart' show UpdateStateView;
 
 import 'core/global_hotkey.dart';
 import 'core/logging/logger.dart';
@@ -19,8 +19,7 @@ import 'l10n/app_localizations.dart';
 import 'router.dart';
 import 'theme/app_theme.dart';
 import 'widgets/notice_host.dart';
-import 'widgets/theme_cross_fade.dart';
-import 'widgets/view_scope.dart';
+import 'widgets/prism.dart';
 import 'widgets/window_header.dart';
 
 class TsClientApp extends ConsumerStatefulWidget {
@@ -58,7 +57,8 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
       (previous, keyId) => unawaited(_syncRegistration(keyId)),
       fireImmediately: true,
     );
-    if (isRustLibInitialized) {
+    if (ref.read(startupUpdateCheckEnabledProvider) &&
+        ref.read(preferencesProvider).autoCheckUpdate) {
       unawaited(ref.read(updateProvider.notifier).refresh());
     }
   }
@@ -156,7 +156,10 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
     return MaterialApp.router(
       debugShowCheckedModeBanner: false,
       onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      localizationsDelegates: const [
+        ...AppLocalizations.localizationsDelegates,
+        PrismUiLocalizationsDelegate(),
+      ],
       supportedLocales: AppLocalizations.supportedLocales,
       locale: preferences.locale == null ? null : Locale(preferences.locale!),
       themeMode: switch (preferences.theme) {
@@ -166,6 +169,7 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
       },
       theme: buildAppTheme(Brightness.light),
       darkTheme: buildAppTheme(Brightness.dark),
+      themeAnimationDuration: Duration.zero,
       builder: (context, child) {
         final systemDisableAnimations = MediaQuery.disableAnimationsOf(context);
         final disableAnimations = switch (preferences.motion) {
@@ -173,15 +177,22 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
           AppMotionPreference.on => false,
           AppMotionPreference.off => true,
         };
+        final theme = Theme.of(context);
         return MediaQuery(
           data: MediaQuery.of(context)
               .copyWith(disableAnimations: disableAnimations),
-          child: ThemeCrossFade(
+          child: PrismRootScope(
+            brightness: theme.brightness,
+            platform: theme.platform,
             child: AnnotatedRegion<SystemUiOverlayStyle>(
-              value: appSystemUiOverlayStyle(Theme.of(context)),
+              value: appSystemUiOverlayStyle(theme),
               child: _WindowBackgroundSync(
                 child: _StartupLoggingNotice(
-                  child: _WindowFrame(child: child ?? const SizedBox.shrink()),
+                  child: _StartupUpdateNotice(
+                    child: _WindowFrame(
+                      child: child ?? const SizedBox.shrink(),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -229,7 +240,7 @@ class _WindowBackgroundSyncState extends State<_WindowBackgroundSync> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final color = Theme.of(context).colorScheme.surface;
+    final color = context.pageColor;
     if (color == _reported) {
       return;
     }
@@ -265,6 +276,54 @@ class _StartupLoggingNoticeState extends ConsumerState<_StartupLoggingNotice> {
       ref
           .read(noticeCenterProvider.notifier)
           .show(AppLocalizations.of(context).loggingUnavailable);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
+/// 自动检查更新发现新版本时，通过 NoticeCenter 提示一次。
+class _StartupUpdateNotice extends ConsumerStatefulWidget {
+  const _StartupUpdateNotice({required this.child});
+
+  final Widget child;
+
+  @override
+  ConsumerState<_StartupUpdateNotice> createState() =>
+      _StartupUpdateNoticeState();
+}
+
+class _StartupUpdateNoticeState extends ConsumerState<_StartupUpdateNotice> {
+  String? _notifiedVersion;
+
+  @override
+  void initState() {
+    super.initState();
+    ref.listenManual<UpdateStateView>(
+      updateProvider,
+      (previous, next) => _maybeNotify(next),
+      fireImmediately: true,
+    );
+  }
+
+  void _maybeNotify(UpdateStateView state) {
+    final version = state.latestVersion;
+    if (!ref.read(preferencesProvider).autoCheckUpdate ||
+        !state.available ||
+        version == null ||
+        version == _notifiedVersion) {
+      return;
+    }
+    _notifiedVersion = version;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref
+          .read(noticeCenterProvider.notifier)
+          .show(
+            AppLocalizations.of(context).updateAvailableBadge(version),
+            tone: NoticeTone.info,
+          );
     });
   }
 

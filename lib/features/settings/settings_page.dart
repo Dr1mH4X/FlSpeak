@@ -1,13 +1,11 @@
 import 'dart:async';
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide IconButton, Switch, TextButton;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:path/path.dart' as p;
 
-import '../../core/directory_launcher.dart';
 import '../../core/global_hotkey.dart';
 import '../../core/hotkey_codes.dart';
 import '../../core/models.dart';
@@ -20,6 +18,7 @@ import '../../router.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_navigation_sidebar.dart';
 import '../../widgets/common.dart';
+import '../../widgets/prism.dart';
 import '../../widgets/update_dot.dart';
 import '../../widgets/window_header.dart';
 import 'settings_state.dart';
@@ -30,9 +29,19 @@ import 'widgets/ptt_hotkey_recorder.dart';
 import 'widgets/settings_dialogs.dart';
 import 'widgets/settings_section.dart';
 
-enum SettingsCategory { appearance, general, data, about }
+enum SettingsCategory { appearance, general, about }
 
 enum GeneralSubcategory { voice, screenShare }
+
+const _settingsTransitionDuration = Duration(milliseconds: 300);
+const _coveredSlideFactor = 0.3;
+const _coveredDimAlpha = 0.1;
+final Curve _settingsPushCurve = SpringCurve(
+  SpringDescription.withDurationAndBounce(
+    duration: _settingsTransitionDuration,
+  ),
+  seconds: 0.3,
+);
 
 /// 设置项页面：左侧全局导航侧边栏，右侧为多级菜单设计（二级/三级占满内容区）。
 class SettingsPage extends ConsumerStatefulWidget {
@@ -45,14 +54,36 @@ class SettingsPage extends ConsumerStatefulWidget {
 class _SettingsPageState extends ConsumerState<SettingsPage> {
   SettingsCategory? _activeCategory;
   GeneralSubcategory? _activeGeneralSubcategory;
+  int _navDirection = 1;
+
+  void _enterCategory(SettingsCategory category) {
+    setState(() {
+      _navDirection = 1;
+      _activeCategory = category;
+      _activeGeneralSubcategory = null;
+    });
+  }
+
+  void _enterGeneralSubcategory(GeneralSubcategory subcategory) {
+    setState(() {
+      _navDirection = 1;
+      _activeGeneralSubcategory = subcategory;
+    });
+  }
 
   void _back() {
     if (_activeGeneralSubcategory != null) {
-      setState(() => _activeGeneralSubcategory = null);
+      setState(() {
+        _navDirection = -1;
+        _activeGeneralSubcategory = null;
+      });
       return;
     }
     if (_activeCategory != null) {
-      setState(() => _activeCategory = null);
+      setState(() {
+        _navDirection = -1;
+        _activeCategory = null;
+      });
       return;
     }
     final router = GoRouter.maybeOf(context);
@@ -64,107 +95,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       final view = ref.read(sessionViewProvider);
       router.go(view.connected ? AppRoutes.workspace : AppRoutes.connect);
     }
-  }
-
-  Future<void> _pickMotion(AppMotionPreference current) async {
-    final l10n = AppLocalizations.of(context);
-    final motion = await showSettingsOptions<AppMotionPreference>(
-      context,
-      title: l10n.settingsMotion,
-      options: AppMotionPreference.values,
-      current: current,
-      labelBuilder: (context, value) => _motionLabel(l10n, value),
-    );
-    if (!mounted || motion == null) {
-      return;
-    }
-    ref.read(preferencesProvider.notifier).setMotion(motion);
-  }
-
-  Future<void> _pickVoiceMeter(VoiceMeterSource current) async {
-    final l10n = AppLocalizations.of(context);
-    final source = await showSettingsOptions<VoiceMeterSource>(
-      context,
-      title: l10n.settingsVoiceMeter,
-      options: VoiceMeterSource.values,
-      current: current,
-      labelBuilder: (context, value) => _voiceMeterLabel(l10n, value),
-    );
-    if (!mounted || source == null) {
-      return;
-    }
-    ref.read(preferencesProvider.notifier).setVoiceMeterSource(source);
-  }
-
-  Future<void> _pickScreenShareResolution(
-    ScreenShareResolutionPreset current,
-  ) async {
-    final l10n = AppLocalizations.of(context);
-    final preset = await showSettingsOptions<ScreenShareResolutionPreset>(
-      context,
-      title: l10n.settingsScreenShareResolution,
-      options: ScreenShareResolutionPreset.values,
-      current: current,
-      labelBuilder: (context, value) =>
-          _screenShareResolutionLabel(l10n, value),
-    );
-    if (!mounted || preset == null) {
-      return;
-    }
-    ref.read(preferencesProvider.notifier).setScreenShareResolution(preset);
-  }
-
-  Future<void> _pickScreenShareFrameRate(
-    ScreenShareFrameRatePreset current,
-  ) async {
-    final l10n = AppLocalizations.of(context);
-    final preset = await showSettingsOptions<ScreenShareFrameRatePreset>(
-      context,
-      title: l10n.settingsScreenShareFrameRate,
-      options: ScreenShareFrameRatePreset.values,
-      current: current,
-      labelBuilder: (context, value) => _screenShareFrameRateLabel(l10n, value),
-    );
-    if (!mounted || preset == null) {
-      return;
-    }
-    ref.read(preferencesProvider.notifier).setScreenShareFrameRate(preset);
-  }
-
-  Future<void> _pickScreenShareCodec(ScreenShareCodecPreference current) async {
-    final l10n = AppLocalizations.of(context);
-    final codec = await showSettingsOptions<ScreenShareCodecPreference>(
-      context,
-      title: l10n.settingsScreenShareCodec,
-      options: ScreenShareCodecPreference.values,
-      current: current,
-      labelBuilder: (context, value) => _screenShareCodecLabel(l10n, value),
-    );
-    if (!mounted || codec == null) {
-      return;
-    }
-    ref.read(preferencesProvider.notifier).setScreenShareCodec(codec);
-  }
-
-  Future<void> _pickScreenShareDegradation(
-    ScreenShareDegradationPreference current,
-  ) async {
-    final l10n = AppLocalizations.of(context);
-    final degradation =
-        await showSettingsOptions<ScreenShareDegradationPreference>(
-          context,
-          title: l10n.settingsScreenShareDegradation,
-          options: ScreenShareDegradationPreference.values,
-          current: current,
-          labelBuilder: (context, value) =>
-              _screenShareDegradationLabel(l10n, value),
-        );
-    if (!mounted || degradation == null) {
-      return;
-    }
-    ref
-        .read(preferencesProvider.notifier)
-        .setScreenShareDegradation(degradation);
   }
 
   Future<void> _pickAudioDevice({
@@ -202,23 +132,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     }
   }
 
-  Future<void> _copyPath(String path) async {
-    final l10n = AppLocalizations.of(context);
-    await Clipboard.setData(ClipboardData(text: path));
-    if (!mounted) return;
-    ref
-        .read(noticeCenterProvider.notifier)
-        .show(l10n.commonCopied, tone: NoticeTone.info);
-  }
-
-  Future<void> _openOrCopyDirectory(String path) async {
-    final launcher = ref.read(directoryLauncherProvider);
-    final opened = await launcher(path);
-    if (!opened && mounted) {
-      await _copyPath(path);
-    }
-  }
-
   Future<void> _pickPttHotkey() async {
     if (ref.read(pttHotkeyRecordingProvider)) return;
     await pickPttHotkey(context, ref);
@@ -232,8 +145,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final update = ref.watch(updateProvider);
     final latestVersion = update.available ? update.latestVersion : null;
     final audioSelection = ref.watch(audioSelectionProvider);
-    final storePath = ref.watch(storePathProvider);
-    final logPath = ref.watch(logPathProvider);
     final compact = context.isCompact;
 
     final pttHotkeyKey = preferences.pttHotkey == null
@@ -249,7 +160,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       null => switch (_activeCategory) {
         SettingsCategory.appearance => l10n.settingsTheme,
         SettingsCategory.general => l10n.settingsGeneral,
-        SettingsCategory.data => l10n.settingsData,
         SettingsCategory.about => l10n.settingsAbout,
         null => l10n.settingsTitle,
       },
@@ -275,20 +185,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             SettingsTile(
               icon: Icons.palette_outlined,
               title: l10n.settingsTheme,
-              onTap: () =>
-                  setState(() => _activeCategory = SettingsCategory.appearance),
+              onTap: () => _enterCategory(SettingsCategory.appearance),
             ),
             SettingsTile(
               icon: Icons.tune_rounded,
               title: l10n.settingsGeneral,
-              onTap: () =>
-                  setState(() => _activeCategory = SettingsCategory.general),
-            ),
-            SettingsTile(
-              icon: Icons.folder_outlined,
-              title: l10n.settingsData,
-              onTap: () =>
-                  setState(() => _activeCategory = SettingsCategory.data),
+              onTap: () => _enterCategory(SettingsCategory.general),
             ),
             SettingsTile(
               icon: Icons.info_outline_rounded,
@@ -298,8 +200,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   : UpdateDot(
                       semanticLabel: l10n.updateAvailableBadge(latestVersion),
                     ),
-              onTap: () =>
-                  setState(() => _activeCategory = SettingsCategory.about),
+              onTap: () => _enterCategory(SettingsCategory.about),
             ),
           ],
         ),
@@ -322,21 +223,29 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ),
             generateSection(
               items: [
-                SettingsTile(
+                SettingsOptionsTile<AppMotionPreference>(
                   icon: Icons.animation_rounded,
                   title: l10n.settingsMotion,
-                  subtitle: _motionLabel(l10n, preferences.motion),
-                  onTap: () => unawaited(_pickMotion(preferences.motion)),
+                  options: AppMotionPreference.values,
+                  value: preferences.motion,
+                  textBuilder: (motion) => _motionLabel(l10n, motion),
+                  onChanged: (motion) {
+                    if (!mounted) return;
+                    ref.read(preferencesProvider.notifier).setMotion(motion);
+                  },
                 ),
-                SettingsTile(
+                SettingsOptionsTile<VoiceMeterSource>(
                   icon: Icons.graphic_eq_rounded,
                   title: l10n.settingsVoiceMeter,
-                  subtitle: _voiceMeterLabel(
-                    l10n,
-                    preferences.voiceMeterSource,
-                  ),
-                  onTap: () =>
-                      unawaited(_pickVoiceMeter(preferences.voiceMeterSource)),
+                  options: VoiceMeterSource.values,
+                  value: preferences.voiceMeterSource,
+                  textBuilder: (source) => _voiceMeterLabel(l10n, source),
+                  onChanged: (source) {
+                    if (!mounted) return;
+                    ref
+                        .read(preferencesProvider.notifier)
+                        .setVoiceMeterSource(source);
+                  },
                 ),
               ],
             ),
@@ -352,23 +261,44 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   SettingsTile(
                     icon: Icons.headphones_outlined,
                     title: l10n.settingsVoice,
-                    onTap: () => setState(
-                      () =>
-                          _activeGeneralSubcategory = GeneralSubcategory.voice,
-                    ),
+                    onTap: () =>
+                        _enterGeneralSubcategory(GeneralSubcategory.voice),
                   ),
                   SettingsTile(
                     icon: Icons.screen_share_outlined,
                     title: l10n.settingsScreenShare,
-                    onTap: () => setState(
-                      () => _activeGeneralSubcategory =
-                          GeneralSubcategory.screenShare,
+                    onTap: () => _enterGeneralSubcategory(
+                      GeneralSubcategory.screenShare,
                     ),
                   ),
                   SettingsTile(
                     icon: Icons.cloud_upload_outlined,
                     title: l10n.imageHostTitle,
                     onTap: () => showImageHostSettings(context),
+                  ),
+                  SettingsTile(
+                    icon: Icons.update_rounded,
+                    title: l10n.settingsAutoCheckUpdate,
+                    trailing: Switch(
+                      value: preferences.autoCheckUpdate,
+                      onChanged: ref
+                          .read(preferencesProvider.notifier)
+                          .setAutoCheckUpdate,
+                    ),
+                    onTap: () => ref
+                        .read(preferencesProvider.notifier)
+                        .setAutoCheckUpdate(!preferences.autoCheckUpdate),
+                  ),
+                  SettingsOptionsTile<AppLogLevel>(
+                    icon: Icons.bug_report_outlined,
+                    title: l10n.settingsLogLevel,
+                    options: AppLogLevel.values,
+                    value: preferences.logLevel,
+                    textBuilder: (level) => level.id,
+                    onChanged: (level) {
+                      if (!mounted) return;
+                      ref.read(preferencesProvider.notifier).setLogLevel(level);
+                    },
                   ),
                 ],
               ),
@@ -450,60 +380,66 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   generateSection(
                     title: l10n.settingsScreenShareCapture,
                     items: [
-                      SettingsTile(
+                      SettingsOptionsTile<ScreenShareResolutionPreset>(
                         icon: Icons.hd_rounded,
                         title: l10n.settingsScreenShareResolution,
-                        subtitle: _screenShareResolutionLabel(
-                          l10n,
-                          preferences.screenShareResolution,
-                        ),
-                        onTap: () => unawaited(
-                          _pickScreenShareResolution(
-                            preferences.screenShareResolution,
-                          ),
-                        ),
+                        options: ScreenShareResolutionPreset.values,
+                        value: preferences.screenShareResolution,
+                        textBuilder: (preset) =>
+                            _screenShareResolutionLabel(l10n, preset),
+                        onChanged: (preset) {
+                          if (!mounted) return;
+                          ref
+                              .read(preferencesProvider.notifier)
+                              .setScreenShareResolution(preset);
+                        },
                       ),
-                      SettingsTile(
+                      SettingsOptionsTile<ScreenShareFrameRatePreset>(
                         icon: Icons.speed_rounded,
                         title: l10n.settingsScreenShareFrameRate,
-                        subtitle: _screenShareFrameRateLabel(
-                          l10n,
-                          preferences.screenShareFrameRate,
-                        ),
-                        onTap: () => unawaited(
-                          _pickScreenShareFrameRate(
-                            preferences.screenShareFrameRate,
-                          ),
-                        ),
+                        options: ScreenShareFrameRatePreset.values,
+                        value: preferences.screenShareFrameRate,
+                        textBuilder: (preset) =>
+                            _screenShareFrameRateLabel(l10n, preset),
+                        onChanged: (preset) {
+                          if (!mounted) return;
+                          ref
+                              .read(preferencesProvider.notifier)
+                              .setScreenShareFrameRate(preset);
+                        },
                       ),
                     ],
                   ),
                   generateSection(
                     title: l10n.settingsScreenShareEncoding,
                     items: [
-                      SettingsTile(
+                      SettingsOptionsTile<ScreenShareCodecPreference>(
                         icon: Icons.memory_rounded,
                         title: l10n.settingsScreenShareCodec,
-                        subtitle: _screenShareCodecLabel(
-                          l10n,
-                          preferences.screenShareCodec,
-                        ),
-                        onTap: () => unawaited(
-                          _pickScreenShareCodec(preferences.screenShareCodec),
-                        ),
+                        options: ScreenShareCodecPreference.values,
+                        value: preferences.screenShareCodec,
+                        textBuilder: (codec) =>
+                            _screenShareCodecLabel(l10n, codec),
+                        onChanged: (codec) {
+                          if (!mounted) return;
+                          ref
+                              .read(preferencesProvider.notifier)
+                              .setScreenShareCodec(codec);
+                        },
                       ),
-                      SettingsTile(
+                      SettingsOptionsTile<ScreenShareDegradationPreference>(
                         icon: Icons.network_check_rounded,
                         title: l10n.settingsScreenShareDegradation,
-                        subtitle: _screenShareDegradationLabel(
-                          l10n,
-                          preferences.screenShareDegradation,
-                        ),
-                        onTap: () => unawaited(
-                          _pickScreenShareDegradation(
-                            preferences.screenShareDegradation,
-                          ),
-                        ),
+                        options: ScreenShareDegradationPreference.values,
+                        value: preferences.screenShareDegradation,
+                        textBuilder: (degradation) =>
+                            _screenShareDegradationLabel(l10n, degradation),
+                        onChanged: (degradation) {
+                          if (!mounted) return;
+                          ref
+                              .read(preferencesProvider.notifier)
+                              .setScreenShareDegradation(degradation);
+                        },
                       ),
                     ],
                   ),
@@ -511,67 +447,114 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               );
           }
         }
-      case SettingsCategory.data:
-        final dataDirPath = p.dirname(storePath);
-        subPageContent = Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            generateSection(
-              items: [
-                SettingsTile(
-                  icon: Icons.folder_rounded,
-                  title: l10n.settingsDataPath,
-                  onTap: () => unawaited(_copyPath(dataDirPath)),
-                  trailing: IconButton(
-                    onPressed: () =>
-                        unawaited(_openOrCopyDirectory(dataDirPath)),
-                    icon: Icon(
-                      Icons.folder_open_rounded,
-                      size: IconSizes.medium,
-                      semanticLabel: l10n.commonOpenDirectory,
-                    ),
-                  ),
-                ),
-                SettingsTile(
-                  icon: Icons.article_rounded,
-                  title: l10n.settingsLogPath,
-                  onTap: () => unawaited(_copyPath(logPath)),
-                  trailing: IconButton(
-                    onPressed: () => unawaited(_openOrCopyDirectory(logPath)),
-                    icon: Icon(
-                      Icons.folder_open_rounded,
-                      size: IconSizes.medium,
-                      semanticLabel: l10n.commonOpenDirectory,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        );
       case SettingsCategory.about:
         subPageContent = const AboutCard();
       case null:
         subPageContent = const SizedBox.shrink();
     }
 
+    final ValueKey<String> pageKey = switch ((
+      _activeCategory,
+      _activeGeneralSubcategory,
+    )) {
+      (null, _) => const ValueKey<String>('overview'),
+      (SettingsCategory.appearance, _) => const ValueKey<String>('appearance'),
+      (SettingsCategory.general, null) => const ValueKey<String>('general'),
+      (SettingsCategory.general, GeneralSubcategory.voice) =>
+        const ValueKey<String>('general/voice'),
+      (SettingsCategory.general, GeneralSubcategory.screenShare) =>
+        const ValueKey<String>('general/screenShare'),
+      (SettingsCategory.about, _) => const ValueKey<String>('about'),
+    };
+    final Color pageColor = context.pageColor;
+    final bool disableAnimations = MediaQuery.disableAnimationsOf(context);
+    final double rtlSign = Directionality.of(context) == TextDirection.rtl
+        ? -1.0
+        : 1.0;
+
+    final Widget activePage = KeyedSubtree(
+      key: pageKey,
+      child: Material(
+        color: pageColor,
+        child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+            compact ? 16 : 32,
+            16,
+            compact ? 16 : 32,
+            40,
+          ),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720),
+              child: isSubPage ? subPageContent : overviewContent,
+            ),
+          ),
+        ),
+      ),
+    );
+
     final rightContent = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _SettingsTopBar(title: pageTitle, onBack: _back),
         Expanded(
-          child: SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(
-              compact ? 16 : 32,
-              16,
-              compact ? 16 : 32,
-              40,
-            ),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 720),
-                child: isSubPage ? subPageContent : overviewContent,
+          child: ClipRect(
+            child: AnimatedSwitcher(
+              duration: disableAnimations
+                  ? Duration.zero
+                  : _settingsTransitionDuration,
+              switchInCurve: _settingsPushCurve,
+              switchOutCurve: _settingsPushCurve.flipped,
+              layoutBuilder: (currentChild, previousChildren) => Stack(
+                fit: StackFit.expand,
+                children: _navDirection >= 0
+                    ? [...previousChildren, ?currentChild]
+                    : [?currentChild, ...previousChildren],
               ),
+              transitionBuilder: (child, animation) {
+                final isIncoming = child.key == pageKey;
+                final bool isCoverLayer =
+                    (_navDirection >= 0 && !isIncoming) ||
+                    (_navDirection < 0 && isIncoming);
+                final Offset beginOffset = isCoverLayer
+                    ? Offset(-_coveredSlideFactor * rtlSign, 0)
+                    : Offset(rtlSign, 0);
+                Widget animated = SlideTransition(
+                  position: Tween<Offset>(
+                    begin: beginOffset,
+                    end: Offset.zero,
+                  ).animate(animation),
+                  child: child,
+                );
+                if (isCoverLayer) {
+                  animated = AnimatedBuilder(
+                    animation: animation,
+                    builder: (context, inner) {
+                      final dim =
+                          _coveredDimAlpha *
+                          (1.0 - animation.value).clamp(0.0, 1.0);
+                      return Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          inner!,
+                          if (dim > 0)
+                            IgnorePointer(
+                              child: ColoredBox(
+                                color: Colors.black.withValues(alpha: dim),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                    child: animated,
+                  );
+                }
+                if (!isIncoming) {
+                  animated = IgnorePointer(child: animated);
+                }
+                return animated;
+              },
+              child: activePage,
             ),
           ),
         ),
@@ -606,17 +589,20 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             },
             child: Scaffold(
               backgroundColor: context.pageColor,
-              body: SafeArea(
-                top: compact,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (!compact)
-                      const AppNavigationSidebar(
-                        selectedDestination: AppNavDestination.settings,
-                      ),
-                    Expanded(child: rightContent),
-                  ],
+              body: SurfaceScope(
+                level: SurfaceLevel.page,
+                child: SafeArea(
+                  top: compact,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (!compact)
+                        const AppNavigationSidebar(
+                          selectedDestination: AppNavDestination.settings,
+                        ),
+                      Expanded(child: rightContent),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -635,39 +621,49 @@ class _SettingsTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: Sizes.header),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 880),
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(context.isCompact ? 8 : 12, 8, 16, 8),
-            child: Row(
-              children: [
-                IconButton(
-                  onPressed: onBack,
-                  iconSize: IconSizes.toolbar,
-                  icon: Icon(
-                    Icons.arrow_back_rounded,
-                    semanticLabel: MaterialLocalizations.of(context)
-                        .backButtonTooltip,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: WindowDragRegion(
-                    child: Semantics(
-                      header: true,
-                      child: Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: context.texts.titleLarge,
+    return Material(
+      type: MaterialType.transparency,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: Sizes.header),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 880),
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                context.isCompact ? 8 : 12,
+                8,
+                16,
+                8,
+              ),
+              child: Row(
+                children: [
+                  ElasticButton(
+                    child: IconButton(
+                      onPressed: onBack,
+                      iconSize: IconSizes.toolbar,
+                      icon: Icon(
+                        Icons.arrow_back_rounded,
+                        semanticLabel: MaterialLocalizations.of(context)
+                            .backButtonTooltip,
                       ),
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: WindowDragRegion(
+                      child: Semantics(
+                        header: true,
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyle.pageTitle.of(context),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

@@ -1,10 +1,18 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        FilledButton,
+        IconButton,
+        OutlinedButton,
+        Switch,
+        TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models.dart';
 import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/prism.dart';
 import '../workspace_state.dart';
 import 'client_actions.dart';
 import 'member_avatar.dart';
@@ -110,7 +118,10 @@ class MembersPane extends ConsumerWidget {
                         if (view.streamForClient(member.id) case final stream?)
                           IconButton(
                             key: ValueKey('member-stream-${member.id}'),
-                            visualDensity: VisualDensity.compact,
+                            style: ButtonStyle.from(
+                              padding: const EdgeInsets.all(4),
+                              minimumSize: const Size.square(32),
+                            ),
                             onPressed: () {
                               if (view.watchingStreamId == stream.id) {
                                 controller.leaveStream(stream.id);

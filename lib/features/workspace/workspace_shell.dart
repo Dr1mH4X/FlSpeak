@@ -91,7 +91,7 @@ class WorkspaceShell extends ConsumerWidget {
           width: math.min(compactWidth + Sizes.channelPanel, width - 24),
           backgroundColor: panelColor,
           surfaceTintColor: Colors.transparent,
-          shape: const RoundedRectangleBorder(
+          shape: const RoundedSuperellipseBorder(
             borderRadius: BorderRadius.horizontal(
               right: Radius.circular(Radii.xxxl),
             ),

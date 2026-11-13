@@ -1,5 +1,12 @@
 import 'package:flspeak_ffi/flspeak_ffi.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        FilledButton,
+        IconButton,
+        OutlinedButton,
+        Switch,
+        TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -10,6 +17,7 @@ import 'package:flspeak/features/workspace/widgets/channel_pane.dart';
 import 'package:flspeak/features/workspace/widgets/network_status.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
 import 'package:flspeak/theme/app_theme.dart';
+import 'package:flspeak/widgets/prism.dart';
 import 'package:flspeak/widgets/signal_ribbon.dart';
 
 NetworkTelemetry _sample({
@@ -63,8 +71,13 @@ Future<void> _pumpStatus(
       child: MaterialApp(
         theme: buildAppTheme(Brightness.light),
         locale: const Locale('zh'),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: const [
+          ...AppLocalizations.localizationsDelegates,
+          PrismUiLocalizationsDelegate(),
+        ],
         supportedLocales: AppLocalizations.supportedLocales,
+        builder: (context, child) =>
+            PrismRootScope(brightness: Brightness.light, child: child!),
         home: MediaQuery(
           data: MediaQueryData(
             size: const Size(800, 600),
@@ -114,7 +127,9 @@ void main() {
                 )
                 .first,
           )
-          .color;
+          .style
+          ?.foregroundColor
+          ?.resolve({});
       final label = tester.widget<Text>(find.text('语音已连接'));
       expect(iconColor(), label.style!.color);
       final green = iconColor();
@@ -279,8 +294,13 @@ void main() {
         child: MaterialApp(
           theme: buildAppTheme(Brightness.light),
           locale: const Locale('zh'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: const [
+            ...AppLocalizations.localizationsDelegates,
+            PrismUiLocalizationsDelegate(),
+          ],
           supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
           home: Scaffold(
             key: scaffoldKey,
             drawer: const Drawer(child: ChannelPanel()),

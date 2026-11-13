@@ -1,8 +1,16 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        FilledButton,
+        IconButton,
+        OutlinedButton,
+        Switch,
+        TextButton;
 
 import '../../../core/models.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/prism.dart';
 import '../../../widgets/remote_image.dart';
 import 'message_content.dart';
 
@@ -130,16 +138,18 @@ class _MediaViewerState extends State<MediaViewer> {
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Row(
                   children: [
-                    IconButton(
-                      onPressed: _close,
-                      style: IconButton.styleFrom(
-                        minimumSize: const Size(Sizes.touch, Sizes.touch),
-                        foregroundColor: _viewerForeground,
-                      ),
-                      icon: Icon(
-                        Icons.close_rounded,
-                        size: IconSizes.standard,
-                        semanticLabel: l10n.commonClose,
+                    ElasticButton(
+                      child: IconButton(
+                        onPressed: _close,
+                        style: ButtonStyle.from(
+                          minimumSize: const Size(Sizes.touch, Sizes.touch),
+                          foregroundColor: _viewerForeground,
+                        ),
+                        icon: Icon(
+                          Icons.close_rounded,
+                          size: IconSizes.standard,
+                          semanticLabel: l10n.commonClose,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 4),
@@ -253,14 +263,16 @@ class _ViewerNavButton extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: SizedBox.square(
         dimension: 48,
-        child: IconButton(
-          onPressed: onPressed,
-          padding: EdgeInsets.zero,
-          style: IconButton.styleFrom(
-            foregroundColor: _viewerForeground,
-            minimumSize: const Size(48, 48),
+        child: ElasticButton(
+          child: IconButton(
+            onPressed: onPressed,
+            padding: EdgeInsets.zero,
+            style: ButtonStyle.from(
+              foregroundColor: _viewerForeground,
+              minimumSize: const Size(48, 48),
+            ),
+            icon: Icon(icon, size: IconSizes.standard, semanticLabel: label),
           ),
-          icon: Icon(icon, size: IconSizes.standard, semanticLabel: label),
         ),
       ),
     );

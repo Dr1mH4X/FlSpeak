@@ -8,9 +8,19 @@ import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/core/update_check.dart';
 import 'package:flspeak/features/settings/widgets/about_card.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
-import 'package:flspeak/widgets/common.dart';
+import 'package:flspeak/theme/app_theme.dart';
+import 'package:flspeak/widgets/prism.dart';
 import 'package:flspeak/widgets/update_dot.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
+
+class _FixedUpdateController extends UpdateController {
+  _FixedUpdateController(this.initial);
+
+  final UpdateStateView initial;
+
+  @override
+  UpdateStateView build() => initial;
+}
 
 void main() {
   Widget buildTestWidget({
@@ -18,16 +28,25 @@ void main() {
     String? version,
     Future<bool> Function(String url)? onOpenUrl,
     UpdateStateView updateResult = const UpdateStateView(available: false),
+    UpdateCheckClient? checkClient,
   }) {
     return ProviderScope(
       overrides: [
         appVersionProvider.overrideWithValue('0.1.0'),
-        updateCheckClientProvider.overrideWithValue(() async => updateResult),
+        updateProvider.overrideWith(() => _FixedUpdateController(updateResult)),
+        if (checkClient != null)
+          updateCheckClientProvider.overrideWithValue(checkClient),
       ],
       child: MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        theme: buildAppTheme(Brightness.light),
+        localizationsDelegates: [
+          ...AppLocalizations.localizationsDelegates,
+          const PrismUiLocalizationsDelegate(),
+        ],
         supportedLocales: AppLocalizations.supportedLocales,
         locale: locale,
+        builder: (context, child) =>
+            PrismRootScope(brightness: Brightness.light, child: child!),
         home: Scaffold(
           body: SingleChildScrollView(
             child: AboutCard(
@@ -53,7 +72,7 @@ void main() {
     await tester.pumpWidget(buildTestWidget(locale: const Locale('zh')));
     await tester.pumpAndSettle();
 
-    expect(find.byType(HairlineCard), findsOneWidget);
+    expect(find.byType(SurfaceCard), findsOneWidget);
     expect(find.text('FlSpeak'), findsOneWidget);
     expect(find.text('v0.1.0'), findsOneWidget);
     expect(find.text('又一个跨平台、开源的 TeamSpeak 客户端'), findsOneWidget);
@@ -169,6 +188,7 @@ void main() {
   ) async {
     final semantics = tester.ensureSemantics();
     final opened = <String>[];
+    var refreshCalls = 0;
     await tester.pumpWidget(
       buildTestWidget(
         version: '0.1.0',
@@ -177,6 +197,10 @@ void main() {
           latestVersion: '0.2.0',
           releaseUrl: 'https://github.com/Dr1mH4X/FlSpeak/releases/tag/v0.2.0',
         ),
+        checkClient: () async {
+          refreshCalls++;
+          return const UpdateStateView(available: false);
+        },
         onOpenUrl: (url) async {
           opened.add(url);
           return true;
@@ -185,6 +209,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(refreshCalls, 0);
     expect(find.byType(UpdateDot), findsOneWidget);
     final link = find.bySemanticsLabel('打开版本 0.2.0 的发布页面');
     expect(link, findsOneWidget);

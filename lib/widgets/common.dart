@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide ButtonStyle, IconButton;
 
-import '../theme/app_theme.dart';
 import '../theme/app_motion.dart';
+import '../theme/app_theme.dart';
+import 'prism.dart';
 
 /// 空状态是行动邀请：说清楚现在缺什么、下一步点哪里。
 ///
@@ -84,11 +85,6 @@ class SectionLabel extends StatelessWidget {
   );
 }
 
-/// 页面级卡片描边：与 [hairlineSide] 同源，浅色靠细线，深色 outlineVariant
-/// 全色（M3 divider 规范）。
-BoxBorder? cardBorder(BuildContext context) =>
-    Border.fromBorderSide(hairlineSide(context));
-
 /// 对话框 / 底部抽屉的统一外壳。
 ///
 /// 设计稿里桌面端是居中卡片、手机端是贴底抽屉，两者共用同一套标题栏、
@@ -127,30 +123,40 @@ Future<T?> showAppModal<T>(
       constraints: BoxConstraints(
         maxHeight: MediaQuery.sizeOf(context).height * 0.92,
       ),
-      builder: (context) => Padding(
-        // 底部抽屉没有自动避让软键盘：添加服务器的输入框必须跟着键盘上移。
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.viewInsetsOf(context).bottom,
+      builder: (context) => ElevatedSurfaceTheme(
+        child: SurfaceScope(
+          level: SurfaceLevel.page,
+          child: Padding(
+            // 底部抽屉没有自动避让软键盘：添加服务器的输入框必须跟着键盘上移。
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.viewInsetsOf(context).bottom,
+            ),
+            child: panel(context),
+          ),
         ),
-        child: panel(context),
       ),
     );
   }
 
+  final floatingLevel = floatingSurfaceLevelFor(context.scheme);
   return Navigator.of(context, rootNavigator: true).push<T>(
     _AppDialogRoute<T>(
       context: context,
       barrierColor: context.scheme.scrim.withValues(alpha: 0.32),
-      // 底色与形状交给 dialogTheme（surfaceContainerHigh + xxxl）。
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: Radii.xxxlAll,
-          side: BorderSide(color: context.scheme.outlineVariant),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 512),
-          child: panel(context),
+      builder: (context) => ElevatedSurfaceTheme(
+        child: Builder(
+          builder: (context) => Dialog(
+            backgroundColor: surfaceColorFor(floatingLevel, context.scheme),
+            shape: AppShape.all(AppCorner.alert),
+            clipBehavior: Clip.antiAlias,
+            child: SurfaceScope(
+              level: floatingLevel,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 512),
+                child: panel(context),
+              ),
+            ),
+          ),
         ),
       ),
     ),
@@ -223,9 +229,9 @@ class _ModalPanel extends StatelessWidget {
               width: 40,
               height: 4,
               margin: const EdgeInsets.only(top: 10),
-              decoration: BoxDecoration(
-                color: scheme.outlineVariant,
-                borderRadius: BorderRadius.circular(2),
+              decoration: ShapeDecoration(
+                color: dividerColorOf(context),
+                shape: AppShape.full,
               ),
             ),
           ),
@@ -256,14 +262,18 @@ class _ModalPanel extends StatelessWidget {
                   ],
                 ),
               ),
-              IconButton(
-                onPressed: () => Navigator.of(context).maybePop(),
-                iconSize: IconSizes.toolbar,
-                color: scheme.onSurfaceVariant,
-                icon: Icon(
-                  Icons.close_rounded,
-                  semanticLabel: MaterialLocalizations.of(context)
-                      .closeButtonTooltip,
+              ElasticButton(
+                child: IconButton(
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  iconSize: IconSizes.toolbar,
+                  style: ButtonStyle.from(
+                    foregroundColor: scheme.onSurfaceVariant,
+                  ),
+                  icon: Icon(
+                    Icons.close_rounded,
+                    semanticLabel: MaterialLocalizations.of(context)
+                        .closeButtonTooltip,
+                  ),
                 ),
               ),
             ],
@@ -279,7 +289,7 @@ class _ModalPanel extends StatelessWidget {
           Container(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
             decoration: BoxDecoration(
-              border: Border(top: BorderSide(color: scheme.outlineVariant)),
+              border: Border(top: BorderSide(color: dividerColorOf(context))),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
@@ -364,7 +374,7 @@ class SecondaryMenu extends StatelessWidget {
                             controller.open(position: position);
                           },
                     iconSize: IconSizes.medium,
-                    style: IconButton.styleFrom(
+                    style: ButtonStyle.from(
                       minimumSize: const Size(Sizes.touch, Sizes.touch),
                       maximumSize: const Size(Sizes.touch, Sizes.touch),
                       padding: EdgeInsets.zero,
@@ -390,36 +400,6 @@ class SecondaryMenu extends StatelessWidget {
           child: content,
         );
       },
-    );
-  }
-}
-
-/// 页面级卡片家族：cardColor + xxl(29) 圆角 + 发丝描边 + 轻投影。
-///
-/// 连接页身份卡、服务器列表、添加行与设置卡共用，圆角/描边/投影只在这里
-/// 定义一次。[clip] 给行高亮贴边的列表用——裁到圆角内，条目的可见圆角
-/// 永远属于卡片本身（同心圆角的外层裁剪做法）。
-///
-/// 圆角取 xxl 而非 xxxl：家族里最矮的成员（添加行 ≈56 高）在 35 下会被
-/// 钳制成胶囊，页面上高矮卡片就渲染不出同一条弧；半径 ≤ 最矮卡的半高，
-/// 所有卡片才能圆角对齐。
-class HairlineCard extends StatelessWidget {
-  const HairlineCard({required this.child, this.clip = false, super.key});
-
-  final Widget child;
-
-  final bool clip;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: context.cardColor,
-        borderRadius: Radii.xxlAll,
-        border: Border.fromBorderSide(hairlineSide(context)),
-      ),
-      clipBehavior: clip ? Clip.antiAlias : Clip.none,
-      child: Material(type: MaterialType.transparency, child: child),
     );
   }
 }

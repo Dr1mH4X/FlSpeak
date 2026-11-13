@@ -2,7 +2,14 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        FilledButton,
+        IconButton,
+        OutlinedButton,
+        Switch,
+        TextButton;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -15,6 +22,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/pane_resizer.dart';
+import '../../../widgets/prism.dart';
 
 /// Top workspace section displaying active channel screen shares, the active
 /// publisher status banner, and the embedded WebRTC video viewer when watching.
@@ -275,8 +283,8 @@ class _StreamBanner extends StatelessWidget {
             if (content != null)
               Padding(
                 padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                child: ClipRRect(
-                  borderRadius: Radii.mediumAll,
+                child: ClipRSuperellipse(
+                  borderRadius: AppRadius.md,
                   child: SizedBox(height: contentHeight, child: content!),
                 ),
               ),
@@ -485,55 +493,65 @@ class _RemoteStreamBannerState extends ConsumerState<_RemoteStreamBanner> {
 
     final actions = isWatching
         ? <Widget>[
-            IconButton(
-              key: const ValueKey('stream-mute-toggle'),
-              onPressed: viewerController.toggleMuted,
-              icon: Icon(
-                viewer.isMuted
-                    ? Icons.volume_off_rounded
-                    : Icons.volume_up_rounded,
-                size: IconSizes.medium,
-                color: viewer.isMuted ? scheme.error : scheme.onSurfaceVariant,
-                semanticLabel: viewer.isMuted
-                    ? l10n.streamUnmute
-                    : l10n.streamMute,
+            ElasticButton(
+              child: IconButton(
+                key: const ValueKey('stream-mute-toggle'),
+                onPressed: viewerController.toggleMuted,
+                icon: Icon(
+                  viewer.isMuted
+                      ? Icons.volume_off_rounded
+                      : Icons.volume_up_rounded,
+                  size: IconSizes.medium,
+                  color: viewer.isMuted
+                      ? scheme.error
+                      : scheme.onSurfaceVariant,
+                  semanticLabel: viewer.isMuted
+                      ? l10n.streamUnmute
+                      : l10n.streamMute,
+                ),
               ),
             ),
-            IconButton(
-              key: const ValueKey('stream-fullscreen-toggle'),
-              onPressed: viewerController.toggleFullScreen,
-              icon: Icon(
-                viewer.isFullScreen
-                    ? Icons.fullscreen_exit_rounded
-                    : Icons.fullscreen_rounded,
-                size: IconSizes.medium,
-                color: scheme.onSurfaceVariant,
-                semanticLabel: viewer.isFullScreen
-                    ? l10n.streamExitFullscreen
-                    : l10n.streamFullscreen,
+            ElasticButton(
+              child: IconButton(
+                key: const ValueKey('stream-fullscreen-toggle'),
+                onPressed: viewerController.toggleFullScreen,
+                icon: Icon(
+                  viewer.isFullScreen
+                      ? Icons.fullscreen_exit_rounded
+                      : Icons.fullscreen_rounded,
+                  size: IconSizes.medium,
+                  color: scheme.onSurfaceVariant,
+                  semanticLabel: viewer.isFullScreen
+                      ? l10n.streamExitFullscreen
+                      : l10n.streamFullscreen,
+                ),
               ),
             ),
-            IconButton(
-              key: const ValueKey('stream-close-button'),
-              onPressed: () =>
-                  sessionController.leaveStream(viewer.streamId ?? stream.id),
-              icon: Icon(
-                Icons.close_rounded,
-                size: IconSizes.medium,
-                color: scheme.onSurfaceVariant,
-                semanticLabel: l10n.streamStopWatching,
+            ElasticButton(
+              child: IconButton(
+                key: const ValueKey('stream-close-button'),
+                onPressed: () =>
+                    sessionController.leaveStream(viewer.streamId ?? stream.id),
+                icon: Icon(
+                  Icons.close_rounded,
+                  size: IconSizes.medium,
+                  color: scheme.onSurfaceVariant,
+                  semanticLabel: l10n.streamStopWatching,
+                ),
               ),
             ),
           ]
         : <Widget>[
-            IconButton(
-              key: ValueKey('stream-watch-${stream.id}'),
-              onPressed: () => sessionController.watchStream(stream),
-              icon: Icon(
-                Icons.visibility_rounded,
-                size: IconSizes.medium,
-                color: scheme.onSurfaceVariant,
-                semanticLabel: l10n.streamWatch,
+            ElasticButton(
+              child: IconButton(
+                key: ValueKey('stream-watch-${stream.id}'),
+                onPressed: () => sessionController.watchStream(stream),
+                icon: Icon(
+                  Icons.visibility_rounded,
+                  size: IconSizes.medium,
+                  color: scheme.onSurfaceVariant,
+                  semanticLabel: l10n.streamWatch,
+                ),
               ),
             ),
           ];

@@ -1,10 +1,16 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        FilledButton,
+        IconButton,
+        OutlinedButton,
+        Switch,
+        TextButton;
 
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
-import '../../../widgets/common.dart';
 import '../../../widgets/monogram.dart';
-import '../../../widgets/press_feedback.dart';
+import '../../../widgets/prism.dart';
 
 /// 桌面端身份卡：连接页左侧的「你是谁」。
 ///
@@ -25,7 +31,7 @@ class IdentityCard extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
 
-    return HairlineCard(
+    return SurfaceCard(
       clip: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -55,9 +61,9 @@ class IdentityCard extends StatelessWidget {
                       width: 5,
                       height: height,
                       margin: const EdgeInsets.symmetric(horizontal: 3),
-                      decoration: BoxDecoration(
+                      decoration: ShapeDecoration(
                         color: scheme.onPrimaryContainer.withValues(alpha: 0.3),
-                        borderRadius: Radii.pillAll,
+                        shape: AppShape.full,
                       ),
                     ),
                 ],
@@ -87,7 +93,7 @@ class IdentityCard extends StatelessWidget {
                 const SizedBox(height: 20),
                 OutlinedButton.icon(
                   onPressed: onManage,
-                  style: OutlinedButton.styleFrom(
+                  style: ButtonStyle.from(
                     minimumSize: const Size.fromHeight(Sizes.touch),
                   ),
                   icon: const Icon(
@@ -123,10 +129,11 @@ class IdentityStrip extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
 
-    return HairlineCard(
+    return SurfaceCard(
       clip: true,
       child: AnimatedInkWell(
         onTap: onManage,
+        customBorder: AppShape.xl,
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(

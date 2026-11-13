@@ -5,7 +5,14 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        FilledButton,
+        IconButton,
+        OutlinedButton,
+        Switch,
+        TextButton;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flspeak/core/models.dart';
@@ -13,6 +20,7 @@ import 'package:flspeak/core/image_host.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
 import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/features/workspace/widgets/chat_pane.dart';
+import 'package:flspeak/widgets/prism.dart';
 
 class _ChatHarness extends StatefulWidget {
   const _ChatHarness({this.pick, this.upload, this.send, super.key});
@@ -33,9 +41,15 @@ class _ChatHarnessState extends State<_ChatHarness> {
   Widget build(BuildContext context) {
     final target = recipient;
     return MaterialApp(
+      theme: buildAppTheme(Brightness.light),
       locale: const Locale('zh'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      localizationsDelegates: const [
+        ...AppLocalizations.localizationsDelegates,
+        PrismUiLocalizationsDelegate(),
+      ],
       supportedLocales: AppLocalizations.supportedLocales,
+      builder: (context, child) =>
+          PrismRootScope(brightness: Brightness.light, child: child!),
       home: Scaffold(
         body: ChatPane(
           channelName: 'Lobby',
@@ -331,7 +345,7 @@ void main() {
       // 用户选项默认收起，点击展开后方可选中对应私聊成员。
       await tester.tap(find.text('私聊'));
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(ListTile, 'Peer'));
+      await tester.tap(find.widgetWithText(ListRow, 'Peer'));
       await tester.pumpAndSettle();
       expect(chosen, 'peer');
     },
@@ -537,8 +551,13 @@ void main() {
       MaterialApp(
         theme: buildAppTheme(Brightness.light),
         locale: const Locale('zh'),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: const [
+          ...AppLocalizations.localizationsDelegates,
+          PrismUiLocalizationsDelegate(),
+        ],
         supportedLocales: AppLocalizations.supportedLocales,
+        builder: (context, child) =>
+            PrismRootScope(brightness: Brightness.light, child: child!),
         home: Scaffold(
           body: SizedBox(
             width: 360,
@@ -566,7 +585,7 @@ void main() {
       find.widgetWithIcon(IconButton, Icons.send_rounded),
     );
     expect(
-      sendButton.style?.minimumSize?.resolve({}),
+      sendButton.style?.minimumSize,
       isNot(const Size(Sizes.touch, Sizes.touch)),
     );
     expect(sendButton.style?.backgroundColor?.resolve({}), isNull);

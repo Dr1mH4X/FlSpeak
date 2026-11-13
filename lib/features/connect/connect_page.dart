@@ -1,4 +1,11 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        FilledButton,
+        IconButton,
+        OutlinedButton,
+        Switch,
+        TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:go_router/go_router.dart';
@@ -8,12 +15,12 @@ import '../../core/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../router.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/common.dart';
+import '../../widgets/app_navigation_sidebar.dart';
+import '../../widgets/prism.dart';
 import 'widgets/add_server_dialog.dart';
 import 'widgets/connect_header.dart';
 import 'widgets/identity_card.dart';
 import 'widgets/identity_dialog.dart';
-import '../../widgets/app_navigation_sidebar.dart';
 import 'widgets/remove_server_dialog.dart';
 import 'widgets/server_row.dart';
 
@@ -245,7 +252,7 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
     );
 
     return Scaffold(
-      backgroundColor: scheme.surfaceContainerLowest,
+      backgroundColor: context.pageColor,
       body: SafeArea(
         top: !desktop,
         child: Row(
@@ -257,15 +264,18 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
               ),
             Expanded(
               child: Material(
-                color: scheme.surface,
+                color: context.pageColor,
                 borderRadius: BorderRadius.zero,
                 clipBehavior: Clip.antiAlias,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    header,
-                    Expanded(child: content),
-                  ],
+                child: SurfaceScope(
+                  level: SurfaceLevel.page,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      header,
+                      Expanded(child: content),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -357,15 +367,19 @@ class _ServerSection extends StatelessWidget {
               child: Text(l10n.serversTitle, style: context.texts.titleLarge),
             ),
             if (context.isCompact)
-              IconButton.filled(
-                onPressed: onAdd,
-                icon: Icon(Icons.add_rounded, semanticLabel: l10n.serverAdd),
+              ElasticButton(
+                child: IconButton.filled(
+                  onPressed: onAdd,
+                  icon: Icon(Icons.add_rounded, semanticLabel: l10n.serverAdd),
+                ),
               )
             else
-              FilledButton.icon(
-                onPressed: onAdd,
-                icon: const Icon(Icons.add_rounded, size: IconSizes.toolbar),
-                label: Text(l10n.serverAdd),
+              ElasticButton(
+                child: FilledButton.icon(
+                  onPressed: onAdd,
+                  icon: const Icon(Icons.add_rounded, size: IconSizes.toolbar),
+                  label: Text(l10n.serverAdd),
+                ),
               ),
           ],
         ),
@@ -396,7 +410,7 @@ class _ServerSection extends StatelessWidget {
             ),
           )
         else
-          HairlineCard(
+          SurfaceCard(
             clip: true,
             child: Column(
               children: [
@@ -406,7 +420,7 @@ class _ServerSection extends StatelessWidget {
                       height: 1,
                       indent: 20,
                       endIndent: 20,
-                      color: scheme.outlineVariant,
+                      color: dividerColorOf(context),
                     ),
                   ServerRow(
                     profile: servers[index],
@@ -434,7 +448,7 @@ class _EmptyServers extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
-    return HairlineCard(
+    return SurfaceCard(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
         child: Column(
@@ -442,9 +456,9 @@ class _EmptyServers extends StatelessWidget {
             Container(
               width: 80,
               height: 80,
-              decoration: BoxDecoration(
+              decoration: ShapeDecoration(
                 color: scheme.primaryContainer,
-                borderRadius: Radii.xxlAll,
+                shape: AppShape.xl,
               ),
               child: Icon(
                 Icons.forum_outlined,
@@ -467,10 +481,16 @@ class _EmptyServers extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 28),
-            FilledButton.tonalIcon(
-              onPressed: onAdd,
-              icon: const Icon(Icons.add_rounded, size: IconSizes.toolbar),
-              label: Text(l10n.serverEmptyAction),
+            ElasticButton(
+              child: FilledButton.icon(
+                onPressed: onAdd,
+                style: ButtonStyle.from(
+                  backgroundColor: scheme.secondaryContainer,
+                  foregroundColor: scheme.onSecondaryContainer,
+                ),
+                icon: const Icon(Icons.add_rounded, size: IconSizes.toolbar),
+                label: Text(l10n.serverEmptyAction),
+              ),
             ),
           ],
         ),

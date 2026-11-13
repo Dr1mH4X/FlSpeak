@@ -1,11 +1,20 @@
 import 'package:flspeak_ffi/flspeak_ffi.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        FilledButton,
+        IconButton,
+        LinearProgressIndicator,
+        OutlinedButton,
+        Switch,
+        TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models.dart';
 import '../../../core/notices.dart';
 import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../widgets/prism.dart';
 
 class ChannelFilesPane extends ConsumerStatefulWidget {
   const ChannelFilesPane({required this.channelId, super.key});
@@ -132,21 +141,25 @@ class _ChannelFilesPaneState extends ConsumerState<ChannelFilesPane> {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              IconButton(
-                onPressed: _path == '/' || _loading || downloading
-                    ? null
-                    : () {
-                        setState(
-                          () => _path =
-                              _path.substring(0, _path.lastIndexOf('/')).isEmpty
-                              ? '/'
-                              : _path.substring(0, _path.lastIndexOf('/')),
-                        );
-                        _load();
-                      },
-                icon: Icon(
-                  Icons.arrow_upward_rounded,
-                  semanticLabel: l10n.fileParent,
+              ElasticButton(
+                child: IconButton(
+                  onPressed: _path == '/' || _loading || downloading
+                      ? null
+                      : () {
+                          setState(
+                            () => _path =
+                                _path
+                                    .substring(0, _path.lastIndexOf('/'))
+                                    .isEmpty
+                                ? '/'
+                                : _path.substring(0, _path.lastIndexOf('/')),
+                          );
+                          _load();
+                        },
+                  icon: Icon(
+                    Icons.arrow_upward_rounded,
+                    semanticLabel: l10n.fileParent,
+                  ),
                 ),
               ),
               Expanded(
@@ -156,11 +169,13 @@ class _ChannelFilesPaneState extends ConsumerState<ChannelFilesPane> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              IconButton(
-                onPressed: _loading || downloading ? null : _load,
-                icon: Icon(
-                  Icons.refresh_rounded,
-                  semanticLabel: l10n.commonRetry,
+              ElasticButton(
+                child: IconButton(
+                  onPressed: _loading || downloading ? null : _load,
+                  icon: Icon(
+                    Icons.refresh_rounded,
+                    semanticLabel: l10n.commonRetry,
+                  ),
                 ),
               ),
             ],
@@ -216,7 +231,13 @@ class _ChannelFilesPaneState extends ConsumerState<ChannelFilesPane> {
                   itemCount: _files.length,
                   itemBuilder: (context, index) {
                     final file = _files[index];
-                    return ListTile(
+                    final onTap = file.directory && !downloading
+                        ? () {
+                            setState(() => _path = file.path);
+                            _load();
+                          }
+                        : null;
+                    final row = ListRow(
                       leading: Icon(
                         file.directory
                             ? Icons.folder_outlined
@@ -226,12 +247,6 @@ class _ChannelFilesPaneState extends ConsumerState<ChannelFilesPane> {
                       subtitle: file.directory
                           ? null
                           : Text(l10n.fileSizeBytes(file.size)),
-                      onTap: file.directory && !downloading
-                          ? () {
-                              setState(() => _path = file.path);
-                              _load();
-                            }
-                          : null,
                       trailing: file.directory
                           ? null
                           : IconButton(
@@ -243,6 +258,12 @@ class _ChannelFilesPaneState extends ConsumerState<ChannelFilesPane> {
                                 semanticLabel: l10n.fileDownload,
                               ),
                             ),
+                    );
+                    if (onTap == null) return row;
+                    return AnimatedInkWell(
+                      customBorder: AppShape.md,
+                      onTap: onTap,
+                      child: row,
                     );
                   },
                 ),

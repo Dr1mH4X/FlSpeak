@@ -1,7 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        Chip,
+        FilledButton,
+        IconButton,
+        OutlinedButton,
+        Switch,
+        TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
@@ -12,7 +20,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
-import '../../../widgets/press_feedback.dart';
+import '../../../widgets/prism.dart';
 
 /// User selection returned from [showScreenSharePickerDialog].
 @immutable
@@ -183,35 +191,13 @@ class _ScreenSharePickerSheetState
         Row(
           children: [
             Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
-                  borderRadius: Radii.mediumAll,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _SourceTabButton(
-                        key: const ValueKey('screen-share-tab-screens'),
-                        icon: Icons.desktop_windows_rounded,
-                        label: l10n.streamPickerScreens,
-                        selected: _activeTab == SourceType.Screen,
-                        onTap: () => _switchTab(SourceType.Screen),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: _SourceTabButton(
-                        key: const ValueKey('screen-share-tab-windows'),
-                        icon: Icons.web_asset_rounded,
-                        label: l10n.streamPickerWindows,
-                        selected: _activeTab == SourceType.Window,
-                        onTap: () => _switchTab(SourceType.Window),
-                      ),
-                    ),
-                  ],
-                ),
+              child: SegmentedControl<SourceType>(
+                segments: [
+                  (SourceType.Screen, l10n.streamPickerScreens),
+                  (SourceType.Window, l10n.streamPickerWindows),
+                ],
+                value: _activeTab,
+                onChanged: _switchTab,
               ),
             ),
             const SizedBox(width: 8),
@@ -284,64 +270,65 @@ class _ScreenSharePickerSheetState
                 ),
         ),
         const SizedBox(height: 14),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: scheme.surfaceContainerLow,
-            borderRadius: Radii.largeAll,
-            border: Border.all(color: scheme.outlineVariant),
+        DecoratedBox(
+          decoration: ShapeDecoration(
+            color: surfaceColorFor(context.raisedSurfaceLevel, scheme),
+            shape: AppShape.lg,
           ),
-          child: Wrap(
-            spacing: 16,
-            runSpacing: 10,
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    l10n.streamPickerResolution,
-                    style: context.texts.labelMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  for (final preset in ScreenShareResolutionPreset.values)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: _PresetChip(
-                        key: ValueKey('screen-share-res-${preset.id}'),
-                        label: preset.id,
-                        selected: _resolution == preset,
-                        onTap: () => setState(() => _resolution = preset),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Wrap(
+              spacing: 16,
+              runSpacing: 10,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      l10n.streamPickerResolution,
+                      style: context.texts.labelMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
                       ),
                     ),
-                ],
-              ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    l10n.streamPickerFrameRate,
-                    style: context.texts.labelMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  for (final preset in ScreenShareFrameRatePreset.values)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: _PresetChip(
-                        key: ValueKey('screen-share-fps-${preset.fps}'),
-                        label: '${preset.fps} FPS',
-                        selected: _frameRate == preset,
-                        onTap: () => setState(() => _frameRate = preset),
+                    const SizedBox(width: 8),
+                    for (final preset in ScreenShareResolutionPreset.values)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: Chip(
+                          key: ValueKey('screen-share-res-${preset.id}'),
+                          label: preset.id,
+                          selected: _resolution == preset,
+                          onPressed: () => setState(() => _resolution = preset),
+                        ),
+                      ),
+                  ],
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      l10n.streamPickerFrameRate,
+                      style: context.texts.labelMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
                       ),
                     ),
-                ],
-              ),
-            ],
+                    const SizedBox(width: 8),
+                    for (final preset in ScreenShareFrameRatePreset.values)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: Chip(
+                          key: ValueKey('screen-share-fps-${preset.fps}'),
+                          label: '${preset.fps} FPS',
+                          selected: _frameRate == preset,
+                          onPressed: () => setState(() => _frameRate = preset),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 16),
@@ -370,73 +357,6 @@ class _ScreenSharePickerSheetState
   }
 }
 
-class _SourceTabButton extends StatelessWidget {
-  const _SourceTabButton({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-    super.key,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    return Semantics(
-      button: true,
-      selected: selected,
-      child: AnimatedContainer(
-        duration: MediaQuery.disableAnimationsOf(context)
-            ? Duration.zero
-            : Motion.effectsFast,
-        curve: Motion.effectsDefaultCurve,
-        decoration: BoxDecoration(
-          color: selected ? scheme.primaryContainer : Colors.transparent,
-          borderRadius: Radii.smallAll,
-        ),
-        child: AnimatedInkWell(
-          onTap: onTap,
-          borderRadius: Radii.smallAll,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  icon,
-                  size: IconSizes.state,
-                  color: selected
-                      ? scheme.onPrimaryContainer
-                      : scheme.onSurfaceVariant,
-                ),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: context.texts.labelMedium?.copyWith(
-                      color: selected
-                          ? scheme.onPrimaryContainer
-                          : scheme.onSurfaceVariant,
-                      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _SourceCard extends StatelessWidget {
   const _SourceCard({
     required this.source,
@@ -454,6 +374,16 @@ class _SourceCard extends StatelessWidget {
     final scheme = context.scheme;
     final thumbnail = source.thumbnail;
     final hasThumbnail = thumbnail != null && thumbnail.isNotEmpty;
+    final fill = selected
+        ? scheme.primaryContainer.withValues(alpha: 0.32)
+        : surfaceColorFor(context.raisedSurfaceLevel, scheme);
+    final shape = RoundedSuperellipseBorder(
+      borderRadius: AppRadius.md,
+      side: BorderSide(
+        color: selected ? scheme.primary : scheme.outlineVariant,
+        width: selected ? 1.5 : 1,
+      ),
+    );
 
     return Semantics(
       button: true,
@@ -464,84 +394,77 @@ class _SourceCard extends StatelessWidget {
             ? Duration.zero
             : Motion.effectsFast,
         curve: Motion.effectsDefaultCurve,
-        decoration: BoxDecoration(
-          color: selected
-              ? scheme.primaryContainer.withValues(alpha: 0.32)
-              : scheme.surfaceContainerLow,
-          borderRadius: Radii.mediumAll,
-          border: Border.all(
-            color: selected ? scheme.primary : scheme.outlineVariant,
-            width: selected ? 1.5 : 1,
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: AnimatedInkWell(
-          onTap: onTap,
-          borderRadius: Radii.mediumAll,
-          child: Padding(
-            padding: const EdgeInsets.all(8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius: Radii.smallAll,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
+        decoration: ShapeDecoration(color: fill, shape: shape),
+        child: ClipRSuperellipse(
+          borderRadius: AppRadius.md,
+          child: AnimatedInkWell(
+            onTap: onTap,
+            customBorder: AppShape.md,
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: ClipRSuperellipse(
+                      borderRadius: AppRadius.sm,
+                      child: ColoredBox(
                         color: scheme.surfaceContainerHighest,
-                      ),
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          if (hasThumbnail)
-                            Image.memory(
-                              thumbnail,
-                              fit: BoxFit.cover,
-                              gaplessPlayback: true,
-                              errorBuilder: (_, _, _) => _SourceFallbackIcon(
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            if (hasThumbnail)
+                              Image.memory(
+                                thumbnail,
+                                fit: BoxFit.cover,
+                                gaplessPlayback: true,
+                                errorBuilder: (_, _, _) => _SourceFallbackIcon(
+                                  type: source.type,
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                              )
+                            else
+                              _SourceFallbackIcon(
                                 type: source.type,
                                 color: scheme.onSurfaceVariant,
                               ),
-                            )
-                          else
-                            _SourceFallbackIcon(
-                              type: source.type,
-                              color: scheme.onSurfaceVariant,
-                            ),
-                          if (selected)
-                            Positioned(
-                              top: 6,
-                              right: 6,
-                              child: Container(
-                                width: 22,
-                                height: 22,
-                                decoration: BoxDecoration(
-                                  color: scheme.primary,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  Icons.check_rounded,
-                                  size: 14,
-                                  color: scheme.onPrimary,
+                            if (selected)
+                              Positioned(
+                                top: 6,
+                                right: 6,
+                                child: DecoratedBox(
+                                  decoration: ShapeDecoration(
+                                    color: scheme.primary,
+                                    shape: AppShape.circle,
+                                  ),
+                                  child: SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: Icon(
+                                      Icons.check_rounded,
+                                      size: 14,
+                                      color: scheme.onPrimary,
+                                    ),
+                                  ),
                                 ),
                               ),
-                            ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  source.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: context.texts.labelMedium?.copyWith(
-                    color: selected ? scheme.primary : scheme.onSurface,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  const SizedBox(height: 6),
+                  Text(
+                    source.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.texts.labelMedium?.copyWith(
+                      color: selected ? scheme.primary : scheme.onSurface,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -565,59 +488,6 @@ class _SourceFallbackIcon extends StatelessWidget {
             : Icons.web_asset_rounded,
         size: 28,
         color: color,
-      ),
-    );
-  }
-}
-
-class _PresetChip extends StatelessWidget {
-  const _PresetChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-    super.key,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = context.scheme;
-    return Semantics(
-      button: true,
-      selected: selected,
-      child: AnimatedContainer(
-        duration: MediaQuery.disableAnimationsOf(context)
-            ? Duration.zero
-            : Motion.effectsFast,
-        curve: Motion.effectsDefaultCurve,
-        decoration: BoxDecoration(
-          color: selected
-              ? scheme.primaryContainer
-              : scheme.surfaceContainerHighest,
-          borderRadius: Radii.smallAll,
-          border: Border.all(
-            color: selected ? scheme.primary : Colors.transparent,
-          ),
-        ),
-        child: AnimatedInkWell(
-          onTap: onTap,
-          borderRadius: Radii.smallAll,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            child: Text(
-              label,
-              style: context.texts.labelSmall?.copyWith(
-                color: selected
-                    ? scheme.onPrimaryContainer
-                    : scheme.onSurfaceVariant,
-                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }

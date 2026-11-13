@@ -1,10 +1,18 @@
 import 'package:flspeak_ffi/flspeak_ffi.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        FilledButton,
+        IconButton,
+        OutlinedButton,
+        Switch,
+        TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../widgets/common.dart';
+import '../../../widgets/prism.dart';
 
 Future<void> showKickClient(
   BuildContext context,
@@ -136,7 +144,7 @@ class _KickFormState extends ConsumerState<_KickForm> {
               child: Text(l10n.commonCancel),
             ),
             FilledButton(
-              style: FilledButton.styleFrom(
+              style: ButtonStyle.from(
                 backgroundColor: Theme.of(context).colorScheme.error,
                 foregroundColor: Theme.of(context).colorScheme.onError,
               ),

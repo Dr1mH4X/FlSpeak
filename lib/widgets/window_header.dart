@@ -14,7 +14,7 @@ import '../core/window_metrics.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
 import 'caption_icon.dart';
-import 'view_scope.dart';
+import 'prism.dart' show ViewScope;
 
 /// 桌面端顶栏容器：
 /// - macOS 窄屏显示 28px 标题条；宽屏由侧栏顶部避让红绿灯。

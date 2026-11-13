@@ -1,5 +1,12 @@
 import 'package:flspeak_ffi/flspeak_ffi.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        FilledButton,
+        IconButton,
+        OutlinedButton,
+        Switch,
+        TextButton;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -10,6 +17,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/channel_icon.dart';
 import '../../../widgets/monogram.dart';
+import '../../../widgets/prism.dart';
 import 'member_avatar.dart';
 
 /// 工作区详情面板中的极简用户资料视图。
@@ -225,8 +233,11 @@ class MemberDetailsPane extends ConsumerWidget {
                                 ),
                                 const SizedBox(width: 4),
                                 IconButton(
-                                  visualDensity: VisualDensity.compact,
                                   iconSize: IconSizes.small,
+                                  style: ButtonStyle.from(
+                                    padding: const EdgeInsets.all(4),
+                                    minimumSize: const Size.square(32),
+                                  ),
                                   icon: const Icon(Icons.copy_rounded),
                                   onPressed: () async {
                                     await Clipboard.setData(

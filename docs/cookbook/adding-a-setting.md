@@ -4,7 +4,7 @@
 
 ## 前置条件
 
-- 已确定新配置项的归属分类（语言、外观、语音、通用、数据与存储）。
+- 已确定新配置项的归属分类（语言、外观、语音、通用、关于）。
 - 熟悉 Rust `SettingsManager` 与 Flutter 设置页组件规范（参见 [../../lib/features/settings/AGENTS.md](../../lib/features/settings/AGENTS.md)）。
 
 ## 操作步骤

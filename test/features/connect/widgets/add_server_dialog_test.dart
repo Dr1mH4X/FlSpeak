@@ -2,7 +2,14 @@ import 'dart:async';
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        FilledButton,
+        IconButton,
+        OutlinedButton,
+        Switch,
+        TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -15,6 +22,7 @@ import 'package:flspeak/l10n/app_localizations.dart';
 import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/widgets/app_navigation_sidebar.dart';
 import 'package:flspeak/widgets/monogram.dart';
+import 'package:flspeak/widgets/prism.dart';
 
 const _original = ServerProfileView(
   id: 'old.example.com:9987',
@@ -79,8 +87,13 @@ Future<ProviderContainer> _mount(WidgetTester tester, _Core core) async {
       child: MaterialApp(
         theme: buildAppTheme(Brightness.light),
         locale: const Locale('zh'),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: const [
+          ...AppLocalizations.localizationsDelegates,
+          PrismUiLocalizationsDelegate(),
+        ],
         supportedLocales: AppLocalizations.supportedLocales,
+        builder: (context, child) =>
+            PrismRootScope(brightness: Brightness.light, child: child!),
         home: const ConnectPage(),
       ),
     ),

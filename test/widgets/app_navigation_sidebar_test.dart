@@ -12,7 +12,7 @@ import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
 import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/widgets/app_navigation_sidebar.dart';
-import 'package:flspeak/widgets/view_scope.dart';
+import 'package:flspeak/widgets/prism.dart';
 
 class _FakeCore extends Fake implements CoreSession {}
 
@@ -45,8 +45,13 @@ void main() {
           container: container,
           child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: const [
+              ...AppLocalizations.localizationsDelegates,
+              PrismUiLocalizationsDelegate(),
+            ],
             supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) =>
+                PrismRootScope(brightness: Brightness.light, child: child!),
             home: const Scaffold(
               body: ViewScope(
                 size: Size(800, 600),
@@ -98,8 +103,13 @@ void main() {
           container: container,
           child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: const [
+              ...AppLocalizations.localizationsDelegates,
+              PrismUiLocalizationsDelegate(),
+            ],
             supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) =>
+                PrismRootScope(brightness: Brightness.light, child: child!),
             home: const Scaffold(
               body: ViewScope(
                 size: Size(1000, 700),
@@ -168,8 +178,13 @@ void main() {
           container: container,
           child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: const [
+              ...AppLocalizations.localizationsDelegates,
+              PrismUiLocalizationsDelegate(),
+            ],
             supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) =>
+                PrismRootScope(brightness: Brightness.light, child: child!),
             home: const Scaffold(
               body: Row(
                 children: [

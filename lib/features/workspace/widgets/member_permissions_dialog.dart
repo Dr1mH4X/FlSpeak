@@ -1,10 +1,18 @@
 import 'package:flspeak_ffi/flspeak_ffi.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        FilledButton,
+        IconButton,
+        OutlinedButton,
+        Switch,
+        TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../widgets/common.dart';
+import '../../../widgets/prism.dart';
 
 Future<void> showMemberPermissions(BuildContext context, ClientView client) =>
     showAppModal<void>(
@@ -83,8 +91,8 @@ class _PermissionsFormState extends ConsumerState<_PermissionsForm> {
               ),
             ),
             for (final group in groups.where((group) => group.kind == kind))
-              ListTile(
-                contentPadding: EdgeInsets.zero,
+              ListRow(
+                padding: EdgeInsets.zero,
                 title: Text(group.name),
                 trailing: kind == GroupKind.server
                     ? Switch(

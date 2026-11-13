@@ -1,4 +1,11 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        FilledButton,
+        IconButton,
+        OutlinedButton,
+        Switch,
+        TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
@@ -9,6 +16,7 @@ import '../../l10n/app_localizations.dart';
 import '../../theme/app_motion.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common.dart';
+import '../../widgets/prism.dart';
 import '../../widgets/window_header.dart';
 import '../settings/widgets/image_host_dialog.dart';
 import 'widgets/chat_pane.dart';
@@ -354,24 +362,24 @@ class _ChannelHeader extends StatelessWidget {
     return Container(
       height: Sizes.header,
       decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: context.scheme.outlineVariant),
-        ),
+        border: Border(bottom: BorderSide(color: dividerColorOf(context))),
       ),
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: horizontal),
         child: Row(
           children: [
             if (compact) ...[
-              IconButton(
-                onPressed: () => Scaffold.of(context).openDrawer(),
-                style: IconButton.styleFrom(
-                  minimumSize: const Size(Sizes.touch, Sizes.touch),
-                ),
-                icon: Icon(
-                  Icons.menu_rounded,
-                  size: IconSizes.standard,
-                  semanticLabel: l10n.workspaceOpenMenu,
+              ElasticButton(
+                child: IconButton(
+                  onPressed: () => Scaffold.of(context).openDrawer(),
+                  style: ButtonStyle.from(
+                    minimumSize: const Size(Sizes.touch, Sizes.touch),
+                  ),
+                  icon: Icon(
+                    Icons.menu_rounded,
+                    size: IconSizes.standard,
+                    semanticLabel: l10n.workspaceOpenMenu,
+                  ),
                 ),
               ),
               const SizedBox(width: 8),

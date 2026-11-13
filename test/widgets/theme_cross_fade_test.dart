@@ -3,7 +3,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:flspeak/widgets/theme_cross_fade.dart';
+import 'package:flspeak/theme/app_theme.dart';
+import 'package:flspeak/widgets/prism.dart';
 
 void main() {
   testWidgets(
@@ -15,10 +16,19 @@ void main() {
         ValueListenableBuilder<ThemeMode>(
           valueListenable: themeModeNotifier,
           builder: (context, mode, child) {
+            final brightness = mode == ThemeMode.dark
+                ? Brightness.dark
+                : Brightness.light;
             return MaterialApp(
               themeMode: mode,
-              theme: ThemeData.light(),
-              darkTheme: ThemeData.dark(),
+              themeAnimationDuration: Duration.zero,
+              theme: buildAppTheme(Brightness.light),
+              darkTheme: buildAppTheme(Brightness.dark),
+              builder: (context, appChild) => PrismRootScope(
+                brightness: brightness,
+                crossFadeTheme: false,
+                child: appChild!,
+              ),
               home: ThemeCrossFade(
                 child: Scaffold(
                   body: Center(

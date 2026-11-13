@@ -1,18 +1,25 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        FilledButton,
+        IconButton,
+        OutlinedButton,
+        Switch,
+        TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
-import '../../../l10n/app_localizations.dart';
 import '../../../core/providers.dart';
 import '../../../core/server_icon.dart';
-import '../../../widgets/server_icon_picker.dart';
+import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
 import '../../../widgets/monogram.dart';
-import 'relative_time.dart';
+import '../../../widgets/prism.dart';
+import '../../../widgets/server_icon_picker.dart';
 import 'add_server_dialog.dart';
-import '../../../widgets/press_feedback.dart';
+import 'relative_time.dart';
 
 /// 连接页的一行服务器：整行是主落点，右键弹统一的二级菜单放「从列表移除」。
 ///
@@ -250,10 +257,10 @@ class _ConnectedChip extends StatelessWidget {
     final scheme = context.scheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: context.cardColor,
-        borderRadius: Radii.pillAll,
-        boxShadow: [
+        shape: AppShape.full,
+        shadows: [
           BoxShadow(
             color: scheme.shadow.withValues(
               alpha: context.isDark ? 0.24 : 0.08,

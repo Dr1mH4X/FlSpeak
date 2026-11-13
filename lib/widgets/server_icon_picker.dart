@@ -5,7 +5,7 @@ import '../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
 import 'common.dart';
 import 'expressive_frame.dart';
-import 'press_feedback.dart';
+import 'prism.dart';
 
 Future<ServerIcon?> showServerIconPicker(
   BuildContext context,

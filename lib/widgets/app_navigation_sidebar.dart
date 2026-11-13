@@ -20,9 +20,8 @@ import '../router.dart';
 import '../theme/app_theme.dart';
 import 'common.dart';
 import 'monogram.dart';
+import 'prism.dart';
 import 'server_icon_picker.dart';
-import 'shape.dart';
-import 'view_scope.dart';
 import 'window_header.dart';
 
 const double _compactWidth = 48.0;
@@ -246,19 +245,12 @@ class _SidebarColors {
     : selectedFill = scheme.onSurface.withValues(alpha: 0.08),
       label = scheme.onSurface,
       icon = scheme.onSurfaceVariant,
-      indicator = scheme.primary,
-      overlay = WidgetStateProperty.fromMap({
-        WidgetState.pressed: scheme.onSurface.withValues(alpha: 0.06),
-        WidgetState.focused: scheme.onSurface.withValues(alpha: 0.1),
-        WidgetState.hovered: scheme.onSurface.withValues(alpha: 0.04),
-        WidgetState.any: Colors.transparent,
-      });
+      indicator = scheme.primary;
 
   final Color selectedFill;
   final Color label;
   final Color icon;
   final Color indicator;
-  final WidgetStateProperty<Color> overlay;
 }
 
 class _SidebarButton extends StatelessWidget {
@@ -284,6 +276,39 @@ class _SidebarButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Widget body = IconTheme.merge(
+      data: IconThemeData(size: _iconSize, color: colors.icon),
+      child: SizedBox(
+        height: height,
+        child: Stack(
+          children: [
+            if (selected)
+              PositionedDirectional(
+                start: 0,
+                top: (height - _indicatorHeight) / 2,
+                width: _indicatorWidth,
+                height: _indicatorHeight,
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: ShapeDecoration(
+                      color: colors.indicator,
+                      shape: AppShape.full,
+                    ),
+                  ),
+                ),
+              ),
+            child,
+          ],
+        ),
+      ),
+    );
+    if (onLongPress != null) {
+      body = GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onLongPress: onLongPress,
+        child: body,
+      );
+    }
     return Padding(
       padding: EdgeInsets.symmetric(
         horizontal: sideInset,
@@ -294,43 +319,14 @@ class _SidebarButton extends StatelessWidget {
         button: true,
         selected: selected,
         label: semanticLabel,
-        child: Material(
-          color: selected ? colors.selectedFill : Colors.transparent,
+        child: PressSurface(
+          fill: selected ? colors.selectedFill : Colors.transparent,
           shape: _itemShape,
-          child: InkWell(
-            onTap: onTap,
-            onLongPress: onLongPress,
-            customBorder: _itemShape,
-            mouseCursor: SystemMouseCursors.basic,
-            splashFactory: NoSplash.splashFactory,
-            overlayColor: colors.overlay,
-            child: IconTheme.merge(
-              data: IconThemeData(size: _iconSize, color: colors.icon),
-              child: SizedBox(
-                height: height,
-                child: Stack(
-                  children: [
-                    if (selected)
-                      PositionedDirectional(
-                        start: 0,
-                        top: (height - _indicatorHeight) / 2,
-                        width: _indicatorWidth,
-                        height: _indicatorHeight,
-                        child: IgnorePointer(
-                          child: DecoratedBox(
-                            decoration: ShapeDecoration(
-                              color: colors.indicator,
-                              shape: AppShape.full,
-                            ),
-                          ),
-                        ),
-                      ),
-                    child,
-                  ],
-                ),
-              ),
-            ),
-          ),
+          look: PressLook.tint,
+          onPressed: onTap,
+          selected: selected,
+          childFills: true,
+          child: body,
         ),
       ),
     );

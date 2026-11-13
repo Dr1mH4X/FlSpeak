@@ -2,7 +2,14 @@ import 'dart:typed_data';
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        FilledButton,
+        IconButton,
+        OutlinedButton,
+        Switch,
+        TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -15,6 +22,7 @@ import 'package:flspeak/features/workspace/widgets/members_pane.dart';
 import 'package:flspeak/features/workspace/workspace_page.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
 import 'package:flspeak/theme/app_theme.dart';
+import 'package:flspeak/widgets/prism.dart';
 
 const _peer = ClientView(
   id: 2,
@@ -75,8 +83,13 @@ Future<ProviderContainer> _mountWorkspace(
       child: MaterialApp(
         theme: buildAppTheme(Brightness.light),
         locale: const Locale('zh'),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: const [
+          ...AppLocalizations.localizationsDelegates,
+          PrismUiLocalizationsDelegate(),
+        ],
         supportedLocales: AppLocalizations.supportedLocales,
+        builder: (context, child) =>
+            PrismRootScope(brightness: Brightness.light, child: child!),
         home: Scaffold(
           body: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -115,16 +128,26 @@ void main() {
 
         final row = find.ancestor(
           of: find.text('Peer'),
-          matching: find.byType(InkWell),
+          matching: find.byType(PressSurface),
         );
+        final card = find.descendant(
+          of: row,
+          matching: find.byType(CardSurface),
+        );
+        final hoverColor = tester.widget<CardSurface>(card).hover;
+        expect(hoverColor.a, greaterThan(0));
+        final paintsHoverSurface = paints
+          ..something(
+            (method, args) =>
+                method == #drawRSuperellipse &&
+                args.whereType<Paint>().any((paint) => paint.color.a > 0),
+          );
+        expect(tester.renderObject(card), isNot(paintsHoverSurface));
         final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
         await mouse.addPointer(location: Offset.zero);
         await mouse.moveTo(tester.getCenter(row));
         await tester.pumpAndSettle();
-        expect(
-          tester.widget<InkWell>(row).statesController!.value,
-          contains(WidgetState.hovered),
-        );
+        expect(tester.renderObject(card), paintsHoverSurface);
         await mouse.removePointer();
 
         // Primary click on member
@@ -157,8 +180,12 @@ void main() {
                 .first,
           );
           expect(
-            (homeContainer.decoration as BoxDecoration).color,
+            (homeContainer.decoration as ShapeDecoration).color,
             Colors.transparent,
+          );
+          expect(
+            (homeContainer.decoration as ShapeDecoration).shape,
+            AppShape.md,
           );
 
           await tester.tap(find.text('Lobby'));
@@ -179,8 +206,12 @@ void main() {
                 .first,
           );
           expect(
-            (lobbyContainer.decoration as BoxDecoration).color,
+            (lobbyContainer.decoration as ShapeDecoration).color,
             isNot(Colors.transparent),
+          );
+          expect(
+            (lobbyContainer.decoration as ShapeDecoration).shape,
+            AppShape.md,
           );
         }
       },

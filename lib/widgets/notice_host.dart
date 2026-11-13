@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide ButtonStyle, IconButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/notices.dart';
 import '../theme/app_motion.dart';
 import '../theme/app_theme.dart';
+import 'prism.dart';
 
 /// 页面级提示的唯一宿主：窗口右上角的覆盖层。
 ///
@@ -269,7 +270,7 @@ class _NoticeCardState extends State<_NoticeCard> {
                     child: IconButton(
                       iconSize: IconSizes.small,
                       padding: EdgeInsets.zero,
-                      color: foreground,
+                      style: ButtonStyle.from(foregroundColor: foreground),
                       onPressed: _dismiss,
                       icon: Icon(
                         Icons.close_rounded,

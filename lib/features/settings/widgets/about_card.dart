@@ -9,7 +9,7 @@ import '../../../core/providers.dart';
 import '../../../core/update_check.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
-import '../../../widgets/common.dart';
+import '../../../widgets/prism.dart';
 import '../../../widgets/update_dot.dart';
 
 const String _repoUrl = 'https://github.com/Dr1mH4X/FlSpeak';
@@ -47,27 +47,18 @@ class AboutCard extends ConsumerStatefulWidget {
 
 class _AboutCardState extends ConsumerState<AboutCard> {
   @override
-  void initState() {
-    super.initState();
-    unawaited(ref.read(updateProvider.notifier).refresh());
-  }
-
-  @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
-    final isDark = context.isDark;
     final update = ref.watch(updateProvider);
     final latestVersion = update.latestVersion;
     final releaseUrl = update.releaseUrl;
     final String displayVersion =
         widget.version ?? ref.watch(appVersionProvider);
 
-    final sectionBg = isDark
-        ? scheme.surfaceContainer
-        : scheme.surfaceContainerLow;
+    final sectionBg = surfaceColorFor(SurfaceLevel.block, scheme);
 
-    return HairlineCard(
+    return SurfaceCard(
       clip: true,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 32),
@@ -80,15 +71,9 @@ class _AboutCardState extends ConsumerState<AboutCard> {
               child: Container(
                 width: 80,
                 height: 80,
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? scheme.surfaceContainerHigh
-                      : scheme.surfaceContainerLowest,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: scheme.outlineVariant.withValues(alpha: 0.6),
-                    width: 1.5,
-                  ),
+                decoration: ShapeDecoration(
+                  color: sectionBg,
+                  shape: AppShape.lg,
                 ),
               ),
             ),
@@ -173,9 +158,8 @@ class _AboutCardState extends ConsumerState<AboutCard> {
                 child: Semantics(
                   link: true,
                   label: 'GNU Affero General Public License v3.0 (AGPL-3.0)',
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(6),
-                    mouseCursor: SystemMouseCursors.click,
+                  child: AnimatedInkWell(
+                    customBorder: AppShape.sm,
                     onTap: () => widget.onOpenUrl(_licenseUrl),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
@@ -214,10 +198,7 @@ class _AboutCardState extends ConsumerState<AboutCard> {
             const SizedBox(height: 24),
 
             // 6. 分割线与底部 Powered by tsclient-rs
-            Divider(
-              color: scheme.outlineVariant.withValues(alpha: 0.5),
-              height: 1,
-            ),
+            Divider(color: dividerColorOf(context), height: 1),
             const SizedBox(height: 16),
             Center(
               child: Row(
@@ -268,10 +249,7 @@ class _InfoSection extends StatelessWidget {
     final scheme = context.scheme;
 
     return Container(
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: BorderRadius.circular(14),
-      ),
+      decoration: ShapeDecoration(color: backgroundColor, shape: AppShape.md),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -383,11 +361,11 @@ class _InteractiveLinkState extends State<_InteractiveLink> {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-            decoration: BoxDecoration(
+            decoration: ShapeDecoration(
               color: _hovered
                   ? scheme.primary.withValues(alpha: 0.1)
                   : Colors.transparent,
-              borderRadius: BorderRadius.circular(4),
+              shape: AppShape.xs,
             ),
             child: Text(
               widget.text,
@@ -427,10 +405,7 @@ class _VersionPill extends StatelessWidget {
     final label = version.startsWith('v') ? version : 'v$version';
 
     final pill = DecoratedBox(
-      decoration: ShapeDecoration(
-        color: scheme.primary,
-        shape: const StadiumBorder(),
-      ),
+      decoration: ShapeDecoration(color: scheme.primary, shape: AppShape.full),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         child: Text(

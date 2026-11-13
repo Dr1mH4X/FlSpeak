@@ -1,5 +1,12 @@
 import 'package:flspeak_ffi/flspeak_ffi.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        FilledButton,
+        IconButton,
+        OutlinedButton,
+        Switch,
+        TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers.dart';
@@ -8,7 +15,7 @@ import '../../../router.dart';
 import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
-import '../../../widgets/press_feedback.dart';
+import '../../../widgets/prism.dart';
 import '../workspace_state.dart';
 import 'member_permissions_dialog.dart';
 import 'kick_client_dialog.dart';
@@ -43,15 +50,12 @@ class ClientActionsButton extends ConsumerWidget {
             ? Duration.zero
             : Motion.effectsFast,
         curve: Motion.effectsDefaultCurve,
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
+        decoration: ShapeDecoration(
           color: isSelected ? scheme.primaryContainer : Colors.transparent,
-          borderRadius: Radii.mediumAll,
+          shape: AppShape.md,
         ),
-        child: Material(
-          color: Colors.transparent,
-          borderRadius: Radii.mediumAll,
-          clipBehavior: Clip.antiAlias,
+        child: ClipRSuperellipse(
+          borderRadius: AppRadius.md,
           child: AnimatedInkWell(
             onTap: () {
               ref
@@ -60,7 +64,7 @@ class ClientActionsButton extends ConsumerWidget {
               ref.read(routerProvider).go(AppRoutes.workspace);
               Scaffold.maybeOf(context)?.closeDrawer();
             },
-            borderRadius: Radii.mediumAll,
+            customBorder: AppShape.md,
             child: DefaultTextStyle.merge(
               style: isSelected ? TextStyle(color: foreground) : null,
               child: IconTheme.merge(

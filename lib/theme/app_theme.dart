@@ -1,8 +1,88 @@
 import 'dart:math' as math;
+import 'dart:ui' show ClipOp, lerpDouble;
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
+import 'package:prism_ui/prism_ui.dart' as prism;
 
-import '../widgets/press_feedback.dart';
+Color dividerColorForScheme(ColorScheme scheme) =>
+    scheme.onSurface.withValues(alpha: 0.14);
+
+Color dividerColorOf(BuildContext context) =>
+    dividerColorForScheme(Theme.of(context).colorScheme);
+
+/// 深色模式下覆盖层将各级表面色整体上提一档，维持层次感。
+ColorScheme elevatedColorScheme(ColorScheme scheme) {
+  if (scheme.brightness != Brightness.dark) {
+    return scheme;
+  }
+  return scheme.copyWith(
+    surface: scheme.surfaceContainer,
+    surfaceContainerLow: scheme.surfaceContainerHigh,
+    surfaceContainer: scheme.surfaceContainerHigh,
+    surfaceContainerHigh: scheme.surfaceContainerHighest,
+  );
+}
+
+extension SurfaceContext on BuildContext {
+  prism.SurfaceLevel get surfaceLevel => prism.SurfaceScope.of(this);
+  prism.SurfaceLevel get raisedSurfaceLevel => surfaceLevel.next;
+  Color get surfaceColor =>
+      surfaceLevel.colorOf(_toPrismColorScheme(Theme.of(this).colorScheme));
+  Color get raisedSurfaceColor => raisedSurfaceLevel.colorOf(
+    _toPrismColorScheme(Theme.of(this).colorScheme),
+  );
+}
+
+prism.ColorScheme _toPrismColorScheme(ColorScheme s) => prism.ColorScheme(
+  brightness: s.brightness,
+  primary: s.primary,
+  onPrimary: s.onPrimary,
+  primaryContainer: s.primaryContainer,
+  onPrimaryContainer: s.onPrimaryContainer,
+  primaryFixed: s.primaryFixed,
+  primaryFixedDim: s.primaryFixedDim,
+  onPrimaryFixed: s.onPrimaryFixed,
+  onPrimaryFixedVariant: s.onPrimaryFixedVariant,
+  secondary: s.secondary,
+  onSecondary: s.onSecondary,
+  secondaryContainer: s.secondaryContainer,
+  onSecondaryContainer: s.onSecondaryContainer,
+  secondaryFixed: s.secondaryFixed,
+  secondaryFixedDim: s.secondaryFixedDim,
+  onSecondaryFixed: s.onSecondaryFixed,
+  onSecondaryFixedVariant: s.onSecondaryFixedVariant,
+  tertiary: s.tertiary,
+  onTertiary: s.onTertiary,
+  tertiaryContainer: s.tertiaryContainer,
+  onTertiaryContainer: s.onTertiaryContainer,
+  tertiaryFixed: s.tertiaryFixed,
+  tertiaryFixedDim: s.tertiaryFixedDim,
+  onTertiaryFixed: s.onTertiaryFixed,
+  onTertiaryFixedVariant: s.onTertiaryFixedVariant,
+  error: s.error,
+  onError: s.onError,
+  errorContainer: s.errorContainer,
+  onErrorContainer: s.onErrorContainer,
+  surface: s.surface,
+  onSurface: s.onSurface,
+  surfaceDim: s.surfaceDim,
+  surfaceBright: s.surfaceBright,
+  surfaceContainerLowest: s.surfaceContainerLowest,
+  surfaceContainerLow: s.surfaceContainerLow,
+  surfaceContainer: s.surfaceContainer,
+  surfaceContainerHigh: s.surfaceContainerHigh,
+  surfaceContainerHighest: s.surfaceContainerHighest,
+  onSurfaceVariant: s.onSurfaceVariant,
+  outline: s.outline,
+  outlineVariant: s.outlineVariant,
+  shadow: s.shadow,
+  scrim: s.scrim,
+  inverseSurface: s.inverseSurface,
+  onInverseSurface: s.onInverseSurface,
+  inversePrimary: s.inversePrimary,
+  surfaceTint: s.surfaceTint,
+);
 
 /// 连接与错误使用独立语义色，避免与导航的蓝紫强调色混淆。
 @immutable
@@ -42,14 +122,16 @@ extension AppSchemeOf on BuildContext {
   TextTheme get texts => Theme.of(this).textTheme;
   bool get isDark => Theme.of(this).brightness == Brightness.dark;
 
-  /// 卡片使用 surfaceContainerLow，与内容底板形成柔和面阶。
-  Color get cardColor => scheme.surfaceContainerLow;
+  /// 卡片表面按当前上下文或卡片层级取色，依靠明度台阶区分页面。
+  Color get cardColor =>
+      prism.SurfaceLevel.card.colorOf(_toPrismColorScheme(scheme));
 
-  /// 主内容底板。
-  Color get pageColor => scheme.surface;
+  /// 主内容底板按页面表面层级取色。
+  Color get pageColor =>
+      prism.SurfaceLevel.page.colorOf(_toPrismColorScheme(scheme));
 
-  /// 描边与分隔线。
-  Color get hairline => scheme.outlineVariant;
+  /// 分隔线颜色取 `onSurface` 14% 不透明度。
+  Color get hairline => dividerColorOf(this);
 
   bool get isCompact => MediaQuery.sizeOf(this).width < Breakpoints.compact;
 }
@@ -79,14 +161,14 @@ abstract final class Radii {
   static BorderRadius get xxxlAll => BorderRadius.circular(xxxl);
   static BorderRadius get pillAll => BorderRadius.circular(pill);
 
-  static RoundedRectangleBorder get smallShape =>
-      RoundedRectangleBorder(borderRadius: smallAll);
-  static RoundedRectangleBorder get xlShape =>
-      RoundedRectangleBorder(borderRadius: xlAll);
-  static RoundedRectangleBorder get xxlShape =>
-      RoundedRectangleBorder(borderRadius: xxlAll);
-  static RoundedRectangleBorder get xxxlShape =>
-      RoundedRectangleBorder(borderRadius: xxxlAll);
+  static RoundedSuperellipseBorder get smallShape =>
+      RoundedSuperellipseBorder(borderRadius: smallAll);
+  static RoundedSuperellipseBorder get xlShape =>
+      RoundedSuperellipseBorder(borderRadius: xlAll);
+  static RoundedSuperellipseBorder get xxlShape =>
+      RoundedSuperellipseBorder(borderRadius: xxlAll);
+  static RoundedSuperellipseBorder get xxxlShape =>
+      RoundedSuperellipseBorder(borderRadius: xxxlAll);
 }
 
 /// 布局断点。和设计稿的 `md` / `lg` 对齐。
@@ -159,15 +241,9 @@ abstract final class IconSizes {
   static const display = 40.0;
 }
 
-/// 页面级容器的描边：浅色下一根很淡的线，深色按 M3 divider 规范用
-/// outlineVariant 全色——暗色下再压透明度就真的看不见了。
+/// 窗口结构边界线与发丝线：统一取 `onSurface` 14% 不透明度，亮暗表面维持同等对比。
 BorderSide hairlineSide(BuildContext context) {
-  final scheme = context.scheme;
-  return BorderSide(
-    color: context.isDark
-        ? scheme.outlineVariant
-        : scheme.outlineVariant.withValues(alpha: 0.7),
-  );
+  return BorderSide(color: dividerColorOf(context));
 }
 
 /// 服务器磁贴的配色：色相由档案 id 稳定散列而来，亮度则被归一到固定区间。
@@ -333,6 +409,11 @@ ColorScheme _scheme(Brightness brightness) {
     brightness: brightness,
     dynamicSchemeVariant: DynamicSchemeVariant.tonalSpot,
   );
+  final prismSeeded = prism.seededColorScheme(
+    seedColor: const Color(0xFF5556C9),
+    brightness: brightness,
+    style: prism.ColorStyle.soft,
+  );
 
   if (dark) {
     return seeded.copyWith(
@@ -342,18 +423,18 @@ ColorScheme _scheme(Brightness brightness) {
       onPrimaryContainer: const Color(0xFFE5E1FF),
       secondaryContainer: const Color(0xFF30313C),
       onSecondaryContainer: const Color(0xFFE2E1EC),
-      surface: const Color(0xFF16171F),
-      surfaceDim: const Color(0xFF111218),
-      surfaceBright: const Color(0xFF393A45),
-      surfaceContainerLowest: const Color(0xFF111218),
-      surfaceContainerLow: const Color(0xFF1E1F29),
-      surfaceContainer: const Color(0xFF252631),
-      surfaceContainerHigh: const Color(0xFF2E2F3C),
-      surfaceContainerHighest: const Color(0xFF393A49),
-      onSurface: const Color(0xFFEEEFF7),
-      onSurfaceVariant: const Color(0xFFB9BACB),
+      surface: prismSeeded.surface,
+      surfaceDim: prismSeeded.surfaceDim,
+      surfaceBright: prismSeeded.surfaceBright,
+      surfaceContainerLowest: prismSeeded.surfaceContainerLowest,
+      surfaceContainerLow: prismSeeded.surfaceContainerLow,
+      surfaceContainer: prismSeeded.surfaceContainer,
+      surfaceContainerHigh: prismSeeded.surfaceContainerHigh,
+      surfaceContainerHighest: prismSeeded.surfaceContainerHighest,
+      onSurface: prismSeeded.onSurface,
+      onSurfaceVariant: prismSeeded.onSurfaceVariant,
       outline: const Color(0xFF8D8E9F),
-      outlineVariant: const Color(0xFF3B3C4B),
+      outlineVariant: prismSeeded.outlineVariant,
       error: const Color(0xFFFFB4AB),
       onError: const Color(0xFF690005),
       errorContainer: const Color(0xFF93000A),
@@ -374,18 +455,18 @@ ColorScheme _scheme(Brightness brightness) {
     onPrimaryContainer: const Color(0xFF1D1857),
     secondaryContainer: const Color(0xFFE5E5EF),
     onSecondaryContainer: const Color(0xFF252531),
-    surface: const Color(0xFFF7F7FC),
-    surfaceDim: const Color(0xFFDADAE5),
-    surfaceBright: const Color(0xFFF7F7FC),
-    surfaceContainerLowest: const Color(0xFFFFFFFF),
-    surfaceContainerLow: const Color(0xFFF1F1F9),
-    surfaceContainer: const Color(0xFFEEEEF6),
-    surfaceContainerHigh: const Color(0xFFE7E7F1),
-    surfaceContainerHighest: const Color(0xFFE1E1ED),
-    onSurface: const Color(0xFF1C1D29),
-    onSurfaceVariant: const Color(0xFF5B5C70),
+    surface: prismSeeded.surface,
+    surfaceDim: prismSeeded.surfaceDim,
+    surfaceBright: prismSeeded.surfaceBright,
+    surfaceContainerLowest: prismSeeded.surfaceContainerLowest,
+    surfaceContainerLow: prismSeeded.surfaceContainerLow,
+    surfaceContainer: prismSeeded.surfaceContainer,
+    surfaceContainerHigh: prismSeeded.surfaceContainerHigh,
+    surfaceContainerHighest: prismSeeded.surfaceContainerHighest,
+    onSurface: prismSeeded.onSurface,
+    onSurfaceVariant: prismSeeded.onSurfaceVariant,
     outline: const Color(0xFF77788C),
-    outlineVariant: const Color(0xFFDCDCE8),
+    outlineVariant: prismSeeded.outlineVariant,
     error: const Color(0xFFBA1A1A),
     onError: Colors.white,
     errorContainer: const Color(0xFFFFDAD6),
@@ -398,237 +479,484 @@ ColorScheme _scheme(Brightness brightness) {
   );
 }
 
-ThemeData buildAppTheme(Brightness brightness) {
-  final scheme = _scheme(brightness);
-  final dark = brightness == Brightness.dark;
-  final text = _textTheme(brightness);
+final Map<(Brightness, TargetPlatform), ThemeData> _materialThemeCache = {};
+final Map<(Brightness, TargetPlatform), prism.ThemeData> _prismThemeCache = {};
 
-  final status = dark
-      ? const StatusColors(live: Color(0xFF3FBF87), deny: Color(0xFFE0574F))
-      : const StatusColors(live: Color(0xFF17724B), deny: Color(0xFFC0392F));
+const List<String> _cjkFontFallback = [
+  'PingFang SC',
+  'Microsoft YaHei',
+  'Noto Sans CJK SC',
+];
 
-  final focusRing = WidgetStateProperty.resolveWith<BorderSide>(
-    (states) => BorderSide(
-      width: 2,
-      color: states.contains(WidgetState.focused)
-          ? scheme.primary
-          : Colors.transparent,
-    ),
-  );
+Color surfaceColorFor(prism.SurfaceLevel level, ColorScheme scheme) =>
+    level.colorOf(_toPrismColorScheme(scheme));
 
-  return ThemeData(
-    useMaterial3: true,
-    brightness: brightness,
-    colorScheme: scheme,
-    scaffoldBackgroundColor: scheme.surface,
-    textTheme: text,
-    extensions: [status],
-    visualDensity: VisualDensity.standard,
-    iconTheme: IconThemeData(size: IconSizes.toolbar, color: scheme.onSurface),
-    splashFactory: InkSparkle.splashFactory,
-    dividerTheme: DividerThemeData(
-      color: scheme.outlineVariant,
-      thickness: 1,
-      space: 1,
+prism.SurfaceLevel floatingSurfaceLevelFor(ColorScheme scheme) =>
+    prism.SurfaceLevel.floatingOf(_toPrismColorScheme(scheme));
+
+/// 按亮度与目标平台缓存 `prism_ui` 主题实例，避免非主题重建时触发 `ThemeCrossFade`。
+prism.ThemeData buildPrismTheme(
+  Brightness brightness, {
+  TargetPlatform? platform,
+}) {
+  final effectivePlatform = platform ?? defaultTargetPlatform;
+  return _prismThemeCache.putIfAbsent((brightness, effectivePlatform), () {
+    final materialScheme = _scheme(brightness);
+    final scheme = _toPrismColorScheme(materialScheme);
+    final elevated = _toPrismColorScheme(elevatedColorScheme(materialScheme));
+    return prism.ThemeData(
+      colorScheme: scheme,
+      platform: effectivePlatform,
+      fontFamilyFallback: _cjkFontFallback,
+      scaffoldBackgroundColor: prism.SurfaceLevel.page.colorOf(scheme),
+      elevatedColorScheme: elevated,
+    );
+  });
+}
+
+/// 按亮度与目标平台缓存 Material 主题，保持与 `prism_ui` 一致的配色与形状规范。
+ThemeData buildAppTheme(Brightness brightness, {TargetPlatform? platform}) {
+  final effectivePlatform = platform ?? defaultTargetPlatform;
+  return _materialThemeCache.putIfAbsent((brightness, effectivePlatform), () {
+    final scheme = _scheme(brightness);
+    final dark = brightness == Brightness.dark;
+    final text = _textTheme(brightness);
+    final floatingSurface = surfaceColorFor(
+      floatingSurfaceLevelFor(scheme),
+      scheme,
+    );
+
+    final status = dark
+        ? const StatusColors(live: Color(0xFF3FBF87), deny: Color(0xFFE0574F))
+        : const StatusColors(live: Color(0xFF17724B), deny: Color(0xFFC0392F));
+
+    final focusRing = WidgetStateProperty.resolveWith<BorderSide>(
+      (states) => BorderSide(
+        width: 2,
+        color: states.contains(WidgetState.focused)
+            ? scheme.primary
+            : Colors.transparent,
+      ),
+    );
+
+    WidgetStateProperty<Color?> buttonOverlay({Color? hover}) =>
+        WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.pressed)) {
+            return Colors.transparent;
+          }
+          if (states.contains(WidgetState.hovered)) {
+            return hover ?? scheme.onSurface.withValues(alpha: 0.04);
+          }
+          if (states.contains(WidgetState.focused)) {
+            return scheme.onSurface.withValues(alpha: 0.08);
+          }
+          return null;
+        });
+
+    return ThemeData(
+      useMaterial3: true,
+      brightness: brightness,
+      platform: effectivePlatform,
+      colorScheme: scheme,
+      scaffoldBackgroundColor: surfaceColorFor(prism.SurfaceLevel.page, scheme),
+      textTheme: text,
+      extensions: [status],
+      visualDensity: VisualDensity.standard,
+      iconTheme: IconThemeData(
+        size: IconSizes.toolbar,
+        color: scheme.onSurface,
+      ),
+      splashFactory: NoSplash.splashFactory,
+      dividerColor: dividerColorForScheme(scheme),
+      dividerTheme: DividerThemeData(
+        color: dividerColorForScheme(scheme),
+        thickness: 1,
+        space: 1,
+      ),
+      cardTheme: CardThemeData(
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        clipBehavior: Clip.antiAlias,
+        color: surfaceColorFor(prism.SurfaceLevel.card, scheme),
+        shape: prism.AppShape.md,
+      ),
+      listTileTheme: ListTileThemeData(
+        shape: prism.AppShape.md,
+        iconColor: scheme.onSurfaceVariant,
+        textColor: scheme.onSurface,
+        minVerticalPadding: 8,
+        titleTextStyle: text.bodyLarge,
+        subtitleTextStyle: text.bodySmall?.copyWith(
+          color: scheme.onSurfaceVariant,
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        prefixIconColor: scheme.onSurfaceVariant,
+        suffixIconColor: scheme.onSurfaceVariant,
+        filled: true,
+        // M3 filled field 的容器色；暗色下避免更低面阶在面板上沉积成死黑。
+        fillColor: scheme.surfaceContainer,
+        hoverColor: scheme.onSurface.withValues(alpha: 0.04),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
+        border: AppInputBorder(
+          borderRadius: prism.AppRadius.md,
+          borderSide: BorderSide(color: scheme.outlineVariant),
+        ),
+        enabledBorder: AppInputBorder(
+          borderRadius: prism.AppRadius.md,
+          borderSide: BorderSide(color: scheme.outlineVariant),
+        ),
+        focusedBorder: AppInputBorder(
+          borderRadius: prism.AppRadius.md,
+          borderSide: BorderSide(color: scheme.primary, width: 2),
+        ),
+        errorBorder: AppInputBorder(
+          borderRadius: prism.AppRadius.md,
+          borderSide: BorderSide(color: scheme.error),
+        ),
+        focusedErrorBorder: AppInputBorder(
+          borderRadius: prism.AppRadius.md,
+          borderSide: BorderSide(color: scheme.error, width: 2),
+        ),
+        labelStyle: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+        hintStyle: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+        helperStyle: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+        errorStyle: text.bodySmall?.copyWith(color: scheme.error),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: ButtonStyle(
+          splashFactory: NoSplash.splashFactory,
+          overlayColor: buttonOverlay(
+            hover: scheme.onPrimary.withValues(alpha: 0.08),
+          ),
+          minimumSize: const WidgetStatePropertyAll(Size(0, Sizes.touch)),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 22),
+          ),
+          shape: const WidgetStatePropertyAll(prism.AppShape.full),
+          textStyle: WidgetStatePropertyAll(text.labelLarge),
+          side: focusRing,
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: ButtonStyle(
+          splashFactory: NoSplash.splashFactory,
+          overlayColor: buttonOverlay(),
+          minimumSize: const WidgetStatePropertyAll(Size(0, Sizes.touch)),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 16),
+          ),
+          shape: const WidgetStatePropertyAll(prism.AppShape.full),
+          textStyle: WidgetStatePropertyAll(text.labelLarge),
+          side: WidgetStateProperty.resolveWith(
+            (states) => BorderSide(
+              color: states.contains(WidgetState.focused)
+                  ? scheme.primary
+                  : scheme.outlineVariant,
+              width: states.contains(WidgetState.focused) ? 2 : 1,
+            ),
+          ),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: ButtonStyle(
+          splashFactory: NoSplash.splashFactory,
+          overlayColor: buttonOverlay(),
+          minimumSize: const WidgetStatePropertyAll(Size(0, Sizes.touch)),
+          shape: const WidgetStatePropertyAll(prism.AppShape.full),
+          textStyle: WidgetStatePropertyAll(text.labelLarge),
+        ),
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: ButtonStyle(
+          splashFactory: NoSplash.splashFactory,
+          overlayColor: buttonOverlay(),
+          iconSize: const WidgetStatePropertyAll(IconSizes.toolbar),
+          foregroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.disabled)) {
+              return scheme.onSurface.withValues(alpha: 0.38);
+            }
+            if (states.contains(WidgetState.selected)) {
+              return scheme.primary;
+            }
+            return scheme.onSurfaceVariant;
+          }),
+          shape: const WidgetStatePropertyAll(prism.AppShape.full),
+          side: focusRing,
+        ),
+      ),
+      // M3 primary tabs：指示器取 primary、标签取 titleSmall；选中态文字
+      // onSurface、未选中 onSurfaceVariant。应用把它放在频道头里当视图切换，
+      // 底部分隔线交给外层容器画，这里关掉。
+      tabBarTheme: TabBarThemeData(
+        labelColor: scheme.onSurface,
+        unselectedLabelColor: scheme.onSurfaceVariant,
+        labelStyle: text.titleSmall,
+        unselectedLabelStyle: text.titleSmall,
+        indicatorColor: scheme.primary,
+        indicatorSize: TabBarIndicatorSize.label,
+        dividerColor: Colors.transparent,
+        overlayColor: WidgetStatePropertyAll(
+          scheme.onSurface.withValues(alpha: 0.04),
+        ),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: floatingSurface,
+        surfaceTintColor: Colors.transparent,
+        shape: prism.AppShape.all(prism.AppCorner.alert),
+        titleTextStyle: text.titleLarge,
+        contentTextStyle: text.bodyMedium,
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: surfaceColorFor(prism.SurfaceLevel.page, scheme),
+        surfaceTintColor: Colors.transparent,
+        shape: prism.AppShape.top(prism.AppCorner.xxl),
+      ),
+      scrollbarTheme: ScrollbarThemeData(
+        thickness: const WidgetStatePropertyAll(8),
+        radius: const Radius.circular(4),
+        thumbColor: WidgetStatePropertyAll(
+          scheme.onSurfaceVariant.withValues(alpha: 0.35),
+        ),
+      ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: scheme.primary,
+        strokeCap: StrokeCap.round,
+      ),
+      // 面板样式归 MenuTheme；条目的 hover/按压高亮形状归 MenuButtonTheme。
+      menuTheme: MenuThemeData(
+        style: MenuStyle(
+          backgroundColor: WidgetStatePropertyAll(floatingSurface),
+          surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+          elevation: const WidgetStatePropertyAll(3.0),
+          shape: const WidgetStatePropertyAll(prism.AppShape.md),
+          padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+        ),
+      ),
+      menuButtonTheme: MenuButtonThemeData(
+        style: ButtonStyle(
+          splashFactory: NoSplash.splashFactory,
+          overlayColor: buttonOverlay(),
+          shape: WidgetStatePropertyAll(prism.AppShape.all(prism.AppCorner.md)),
+          iconSize: const WidgetStatePropertyAll(IconSizes.medium),
+          textStyle: WidgetStatePropertyAll(text.bodySmall),
+        ),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbIcon: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.selected)
+              ? const Icon(Icons.check_rounded, size: IconSizes.small)
+              : null,
+        ),
+      ),
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.macOS: FadeForwardsPageTransitionsBuilder(),
+          TargetPlatform.windows: FadeForwardsPageTransitionsBuilder(),
+          TargetPlatform.linux: FadeForwardsPageTransitionsBuilder(),
+        },
+      ),
+    ).withAppShapes;
+  });
+}
+
+class AppInputBorder extends InputBorder {
+  const AppInputBorder({
+    super.borderSide = const BorderSide(),
+    this.borderRadius = prism.AppRadius.md,
+    this.gapPadding = 4.0,
+  });
+
+  final BorderRadius borderRadius;
+  final double gapPadding;
+
+  RoundedSuperellipseBorder get _shape =>
+      RoundedSuperellipseBorder(borderRadius: borderRadius, side: borderSide);
+
+  @override
+  bool get isOutline => true;
+
+  @override
+  bool get preferPaintInterior => true;
+
+  @override
+  EdgeInsetsGeometry get dimensions => EdgeInsets.all(borderSide.width);
+
+  @override
+  AppInputBorder copyWith({
+    BorderSide? borderSide,
+    BorderRadius? borderRadius,
+    double? gapPadding,
+  }) {
+    return AppInputBorder(
+      borderSide: borderSide ?? this.borderSide,
+      borderRadius: borderRadius ?? this.borderRadius,
+      gapPadding: gapPadding ?? this.gapPadding,
+    );
+  }
+
+  @override
+  AppInputBorder scale(double t) {
+    return AppInputBorder(
+      borderSide: borderSide.scale(t),
+      borderRadius: borderRadius * t,
+      gapPadding: gapPadding * t,
+    );
+  }
+
+  @override
+  Path getInnerPath(Rect rect, {TextDirection? textDirection}) =>
+      _shape.getInnerPath(rect, textDirection: textDirection);
+
+  @override
+  Path getOuterPath(Rect rect, {TextDirection? textDirection}) =>
+      _shape.getOuterPath(rect, textDirection: textDirection);
+
+  @override
+  void paintInterior(
+    Canvas canvas,
+    Rect rect,
+    Paint paint, {
+    TextDirection? textDirection,
+  }) => _shape.paintInterior(canvas, rect, paint, textDirection: textDirection);
+
+  @override
+  ShapeBorder? lerpFrom(ShapeBorder? a, double t) {
+    if (a is AppInputBorder) {
+      return AppInputBorder(
+        borderSide: BorderSide.lerp(a.borderSide, borderSide, t),
+        borderRadius: BorderRadius.lerp(a.borderRadius, borderRadius, t)!,
+        gapPadding: a.gapPadding,
+      );
+    }
+    return super.lerpFrom(a, t);
+  }
+
+  @override
+  ShapeBorder? lerpTo(ShapeBorder? b, double t) {
+    if (b is AppInputBorder) {
+      return AppInputBorder(
+        borderSide: BorderSide.lerp(borderSide, b.borderSide, t),
+        borderRadius: BorderRadius.lerp(borderRadius, b.borderRadius, t)!,
+        gapPadding: b.gapPadding,
+      );
+    }
+    return super.lerpTo(b, t);
+  }
+
+  @override
+  void paint(
+    Canvas canvas,
+    Rect rect, {
+    double? gapStart,
+    double gapExtent = 0.0,
+    double gapPercentage = 0.0,
+    TextDirection? textDirection,
+  }) {
+    final outline = rect.deflate(borderSide.width / 2);
+    if (gapStart == null || gapExtent <= 0.0 || gapPercentage == 0.0) {
+      _shape.paint(canvas, rect, textDirection: textDirection);
+      return;
+    }
+    final extent = lerpDouble(
+      0.0,
+      gapExtent + gapPadding * 2.0,
+      gapPercentage,
+    )!;
+    final start = switch (textDirection ?? TextDirection.ltr) {
+      TextDirection.rtl => gapStart + gapPadding - extent,
+      TextDirection.ltr => gapStart - gapPadding,
+    };
+    final radii = borderRadius.resolve(textDirection);
+    final left = outline.left + math.max(0.0, start);
+    final depth =
+        math.max(radii.topLeft.y, radii.topRight.y) + borderSide.width;
+    canvas
+      ..save()
+      ..clipRect(
+        Rect.fromLTRB(
+          left,
+          outline.top - borderSide.width,
+          left + extent,
+          outline.top + depth,
+        ),
+        clipOp: ClipOp.difference,
+      );
+    _shape.paint(canvas, rect, textDirection: textDirection);
+    canvas.restore();
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) {
+      return true;
+    }
+    return other is AppInputBorder &&
+        other.borderSide == borderSide &&
+        other.borderRadius == borderRadius &&
+        other.gapPadding == gapPadding;
+  }
+
+  @override
+  int get hashCode => Object.hash(borderSide, borderRadius, gapPadding);
+}
+
+extension AppShapeThemeExt on ThemeData {
+  ThemeData get withAppShapes => copyWith(
+    cardTheme: cardTheme.copyWith(shape: prism.AppShape.md),
+    dialogTheme: dialogTheme.copyWith(
+      shape: prism.AppShape.all(prism.AppCorner.alert),
     ),
-    cardTheme: CardThemeData(
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      color: scheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(borderRadius: Radii.xxlAll),
+    bottomSheetTheme: bottomSheetTheme.copyWith(
+      shape: prism.AppShape.top(prism.AppCorner.xxl),
     ),
-    listTileTheme: ListTileThemeData(
-      shape: Radii.xlShape,
-      iconColor: scheme.onSurfaceVariant,
-      textColor: scheme.onSurface,
-      minVerticalPadding: 8,
-      titleTextStyle: text.bodyLarge,
-      subtitleTextStyle: text.bodySmall?.copyWith(
-        color: scheme.onSurfaceVariant,
+    snackBarTheme: snackBarTheme.copyWith(shape: prism.AppShape.xs),
+    chipTheme: chipTheme.copyWith(shape: prism.AppShape.sm),
+    popupMenuTheme: popupMenuTheme.copyWith(shape: prism.AppShape.md),
+    menuTheme: MenuThemeData(
+      style: (menuTheme.style ?? const MenuStyle()).copyWith(
+        shape: const WidgetStatePropertyAll(prism.AppShape.md),
       ),
     ),
-    inputDecorationTheme: InputDecorationTheme(
-      prefixIconColor: scheme.onSurfaceVariant,
-      suffixIconColor: scheme.onSurfaceVariant,
-      filled: true,
-      // M3 filled field 的容器色；暗色下避免更低面阶在面板上沉积成死黑。
-      fillColor: scheme.surfaceContainer,
-      hoverColor: scheme.onSurface.withValues(alpha: 0.08),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      border: OutlineInputBorder(
-        borderRadius: Radii.xlAll,
-        borderSide: BorderSide(color: scheme.outlineVariant),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: Radii.xlAll,
-        borderSide: BorderSide(color: scheme.outlineVariant),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: Radii.xlAll,
-        borderSide: BorderSide(color: scheme.primary, width: 2),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: Radii.xlAll,
-        borderSide: BorderSide(color: scheme.error),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: Radii.xlAll,
-        borderSide: BorderSide(color: scheme.error, width: 2),
-      ),
-      labelStyle: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-      hintStyle: text.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-      helperStyle: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-      errorStyle: text.bodySmall?.copyWith(color: scheme.error),
+    inputDecorationTheme: inputDecorationTheme.copyWith(
+      border: const AppInputBorder(),
+    ),
+    floatingActionButtonTheme: floatingActionButtonTheme.copyWith(
+      shape: prism.AppShape.md,
+    ),
+    navigationBarTheme: navigationBarTheme.copyWith(
+      indicatorShape: prism.AppShape.full,
+    ),
+    navigationRailTheme: navigationRailTheme.copyWith(
+      indicatorShape: prism.AppShape.full,
+    ),
+    progressIndicatorTheme: progressIndicatorTheme.copyWith(
+      borderRadius: prism.AppRadius.full,
     ),
     filledButtonTheme: FilledButtonThemeData(
-      style: ButtonStyle(
-        foregroundBuilder: pressFeedback,
-        minimumSize: const WidgetStatePropertyAll(Size(0, Sizes.touch)),
-        // h48 + r22 接近胶囊：光学对齐要求左右内边距 ≥ 半径（22）。
-        padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: 22),
-        ),
-        shape: const WidgetStatePropertyAll(
-          RoundedRectangleBorder(
-            borderRadius: BorderRadius.all(Radius.circular(Radii.xl)),
-          ),
-        ),
-        textStyle: WidgetStatePropertyAll(text.labelLarge),
-        side: focusRing,
-      ),
-    ),
-    outlinedButtonTheme: OutlinedButtonThemeData(
-      style: ButtonStyle(
-        foregroundBuilder: pressFeedback,
-        minimumSize: const WidgetStatePropertyAll(Size(0, Sizes.touch)),
-        padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: 16),
-        ),
-        shape: const WidgetStatePropertyAll(
-          RoundedRectangleBorder(
-            borderRadius: BorderRadius.all(Radius.circular(Radii.xl)),
-          ),
-        ),
-        textStyle: WidgetStatePropertyAll(text.labelLarge),
-        side: WidgetStateProperty.resolveWith(
-          (states) => BorderSide(
-            color: states.contains(WidgetState.focused)
-                ? scheme.primary
-                : scheme.outlineVariant,
-            width: states.contains(WidgetState.focused) ? 2 : 1,
-          ),
-        ),
-      ),
+      style: filledButtonTheme.style?.merge(_pillButton) ?? _pillButton,
     ),
     textButtonTheme: TextButtonThemeData(
-      style: ButtonStyle(
-        foregroundBuilder: pressFeedback,
-        minimumSize: const WidgetStatePropertyAll(Size(0, Sizes.touch)),
-        shape: const WidgetStatePropertyAll(
-          RoundedRectangleBorder(
-            borderRadius: BorderRadius.all(Radius.circular(Radii.xl)),
-          ),
-        ),
-        textStyle: WidgetStatePropertyAll(text.labelLarge),
-      ),
+      style: textButtonTheme.style?.merge(_pillButton) ?? _pillButton,
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: outlinedButtonTheme.style?.merge(_pillButton) ?? _pillButton,
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: elevatedButtonTheme.style?.merge(_pillButton) ?? _pillButton,
     ),
     iconButtonTheme: IconButtonThemeData(
-      style: ButtonStyle(
-        foregroundBuilder: pressFeedback,
-        iconSize: const WidgetStatePropertyAll(IconSizes.toolbar),
-        foregroundColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.disabled)) {
-            return scheme.onSurface.withValues(alpha: 0.38);
-          }
-          if (states.contains(WidgetState.selected)) {
-            return scheme.primary;
-          }
-          return scheme.onSurfaceVariant;
-        }),
-        shape: const WidgetStatePropertyAll(CircleBorder()),
-        side: focusRing,
-      ),
-    ),
-    // M3 primary tabs：指示器取 primary、标签取 titleSmall；选中态文字
-    // onSurface、未选中 onSurfaceVariant。应用把它放在频道头里当视图切换，
-    // 底部分隔线交给外层容器画，这里关掉。
-    tabBarTheme: TabBarThemeData(
-      labelColor: scheme.onSurface,
-      unselectedLabelColor: scheme.onSurfaceVariant,
-      labelStyle: text.titleSmall,
-      unselectedLabelStyle: text.titleSmall,
-      indicatorColor: scheme.primary,
-      indicatorSize: TabBarIndicatorSize.label,
-      dividerColor: Colors.transparent,
-      overlayColor: WidgetStatePropertyAll(
-        scheme.onSurface.withValues(alpha: 0.08),
-      ),
-    ),
-    dialogTheme: DialogThemeData(
-      // M3 dialog 的容器色是 surfaceContainerHigh，在暗色下与主面板拉开一级分离。
-      backgroundColor: scheme.surfaceContainerHigh,
-      surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: Radii.xxxlAll),
-      titleTextStyle: text.titleLarge,
-      contentTextStyle: text.bodyMedium,
-    ),
-    bottomSheetTheme: BottomSheetThemeData(
-      backgroundColor: scheme.surfaceContainerLow,
-      surfaceTintColor: Colors.transparent,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(Radii.xxxl)),
-      ),
-    ),
-    scrollbarTheme: ScrollbarThemeData(
-      thickness: const WidgetStatePropertyAll(8),
-      radius: const Radius.circular(4),
-      thumbColor: WidgetStatePropertyAll(
-        scheme.onSurfaceVariant.withValues(alpha: 0.35),
-      ),
-    ),
-    progressIndicatorTheme: ProgressIndicatorThemeData(
-      color: scheme.primary,
-      strokeCap: StrokeCap.round,
-    ),
-    // 面板样式归 MenuTheme；条目的 hover/按压高亮形状归 MenuButtonTheme 的
-    // shape（M3 默认是直角，这里给 10 才和应用圆角一致）。
-    // 面板不留内边距：条目高亮贴满面板，圆角由面板形状统一裁出来，
-    // 和原生桌面菜单一致；M3 默认的 8dp 上下留白会让高亮悬在面板中间。
-    menuTheme: MenuThemeData(
-      style: MenuStyle(
-        backgroundColor: WidgetStatePropertyAll(scheme.surfaceContainerLow),
-        surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
-        // M3 menu 的阴影档位是 3（level 2）。
-        elevation: const WidgetStatePropertyAll(3.0),
-        shape: WidgetStatePropertyAll(Radii.xxlShape),
-        padding: const WidgetStatePropertyAll(EdgeInsets.zero),
-      ),
-    ),
-    menuButtonTheme: MenuButtonThemeData(
-      style: ButtonStyle(
-        foregroundBuilder: pressFeedback,
-        shape: WidgetStatePropertyAll(Radii.smallShape),
-        iconSize: const WidgetStatePropertyAll(IconSizes.medium),
-        textStyle: WidgetStatePropertyAll(text.bodySmall),
-      ),
-    ),
-    switchTheme: SwitchThemeData(
-      thumbIcon: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.selected)
-            ? const Icon(Icons.check_rounded, size: IconSizes.small)
-            : null,
-      ),
-    ),
-    pageTransitionsTheme: const PageTransitionsTheme(
-      builders: {
-        TargetPlatform.macOS: FadeForwardsPageTransitionsBuilder(),
-        TargetPlatform.windows: FadeForwardsPageTransitionsBuilder(),
-        TargetPlatform.linux: FadeForwardsPageTransitionsBuilder(),
-      },
+      style: iconButtonTheme.style?.merge(_pillButton) ?? _pillButton,
     ),
   );
 }
+
+const _pillButton = ButtonStyle(
+  shape: WidgetStatePropertyAll(prism.AppShape.full),
+);
 
 /// 服务器磁贴上的单字标记：取备注名首个可显示的字符，退化到地址首字母。
 String serverMonogram(String label, String host) {

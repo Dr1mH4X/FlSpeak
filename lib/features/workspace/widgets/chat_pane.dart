@@ -1,17 +1,25 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        FilledButton,
+        IconButton,
+        OutlinedButton,
+        Switch,
+        TextButton;
 import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
-import '../../../core/models.dart';
 import '../../../core/image_host.dart';
+import '../../../core/models.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
 import '../../../widgets/monogram.dart';
+import '../../../widgets/prism.dart';
 import 'media_viewer.dart';
 import 'message_content.dart';
 
@@ -443,8 +451,8 @@ class _ChatPaneState extends State<ChatPane> {
                 constraints: const BoxConstraints(maxWidth: _contentMaxWidth),
                 child: Row(
                   children: [
-                    ClipRRect(
-                      borderRadius: Radii.mediumAll,
+                    ClipRSuperellipse(
+                      borderRadius: AppRadius.md,
                       child: Image.memory(
                         _image!.bytes,
                         width: 64,
@@ -537,8 +545,8 @@ class _ChatPaneState extends State<ChatPane> {
             child: Material(
               color: scheme.surfaceContainerHighest,
               clipBehavior: Clip.antiAlias,
-              shape: RoundedRectangleBorder(
-                borderRadius: Radii.largeAll,
+              shape: RoundedSuperellipseBorder(
+                borderRadius: AppRadius.md,
                 side: BorderSide(color: scheme.outlineVariant),
               ),
               child: ListView.builder(
@@ -547,7 +555,8 @@ class _ChatPaneState extends State<ChatPane> {
                 itemCount: matched.length,
                 itemBuilder: (context, index) {
                   final cmd = matched[index];
-                  return InkWell(
+                  return AnimatedInkWell(
+                    customBorder: AppShape.sm,
                     onTap: () {
                       final completed = '/${cmd.name} ';
                       _input.value = TextEditingValue(
@@ -623,147 +632,149 @@ class _ChatPaneState extends State<ChatPane> {
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: _contentMaxWidth),
-          child: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
+          child: DecoratedBox(
+            decoration: ShapeDecoration(
               // 暗色主面板本身就是 surfaceContainer，输入条往上一级
               // （Highest）才浮得出来；亮色维持原状。
               color: scheme.surfaceContainerHigh,
-              borderRadius: Radii.xlAll,
-              border: Border.all(color: scheme.outlineVariant),
+              shape: RoundedSuperellipseBorder(
+                borderRadius: AppRadius.xl,
+                side: BorderSide(color: scheme.outlineVariant),
+              ),
             ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                _ScopeButton(
-                  scope: scope,
-                  onChanged: widget.onScopeChanged,
-                  recipients: widget.recipients,
-                  onRecipientChanged: widget.onRecipientChanged,
-                  onRecipientSelected: widget.onRecipientSelected,
-                  selectedRecipient: _selectedRecipient,
-                  unreadScopes: widget.unreadScopes,
-                  unreadPeers: widget.unreadPeers,
-                  enabled: !_sending && !widget.busy,
-                ),
-                if (widget.onPickImage != null || widget.onPasteImage != null)
-                  SecondaryMenu(
-                    items: [
-                      if (widget.onPickImage != null)
-                        MenuItemButton(
-                          onPressed: () => _selectImage(widget.onPickImage!),
-                          child: Text(l10n.chatChooseImage),
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  _ScopeButton(
+                    scope: scope,
+                    onChanged: widget.onScopeChanged,
+                    recipients: widget.recipients,
+                    onRecipientChanged: widget.onRecipientChanged,
+                    onRecipientSelected: widget.onRecipientSelected,
+                    selectedRecipient: _selectedRecipient,
+                    unreadScopes: widget.unreadScopes,
+                    unreadPeers: widget.unreadPeers,
+                    enabled: !_sending && !widget.busy,
+                  ),
+                  if (widget.onPickImage != null || widget.onPasteImage != null)
+                    SecondaryMenu(
+                      items: [
+                        if (widget.onPickImage != null)
+                          MenuItemButton(
+                            onPressed: () => _selectImage(widget.onPickImage!),
+                            child: Text(l10n.chatChooseImage),
+                          ),
+                        if (widget.onPasteImage != null)
+                          MenuItemButton(
+                            onPressed: () => _selectImage(widget.onPasteImage!),
+                            child: Text(l10n.chatPasteImage),
+                          ),
+                        if (widget.onConfigureImageHost != null)
+                          MenuItemButton(
+                            onPressed: widget.onConfigureImageHost,
+                            child: Text(l10n.imageHostTitle),
+                          ),
+                      ],
+                      builder: (context, menu) => IconButton(
+                        onPressed: _sending || widget.busy
+                            ? null
+                            : () => menu.isOpen ? menu.close() : menu.open(),
+                        icon: Icon(
+                          Icons.add_photo_alternate_outlined,
+                          size: IconSizes.toolbar,
+                          semanticLabel: l10n.chatAttachImage,
                         ),
-                      if (widget.onPasteImage != null)
-                        MenuItemButton(
-                          onPressed: () => _selectImage(widget.onPasteImage!),
-                          child: Text(l10n.chatPasteImage),
-                        ),
-                      if (widget.onConfigureImageHost != null)
-                        MenuItemButton(
-                          onPressed: widget.onConfigureImageHost,
-                          child: Text(l10n.imageHostTitle),
-                        ),
-                    ],
-                    builder: (context, menu) => IconButton(
-                      onPressed: _sending || widget.busy
-                          ? null
-                          : () => menu.isOpen ? menu.close() : menu.open(),
+                      ),
+                    ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final hintStyle = texts.bodyMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        );
+                        var hintText = l10n.chatComposerHintTo(target);
+                        if (scope == ChatScope.channel) {
+                          final textWidth = math.max(
+                            0.0,
+                            constraints.maxWidth - 44,
+                          );
+                          final painter = TextPainter(
+                            text: TextSpan(text: hintText, style: hintStyle),
+                            maxLines: 1,
+                            textDirection: Directionality.of(context),
+                            textScaler: MediaQuery.textScalerOf(context),
+                          )..layout(maxWidth: textWidth);
+                          final overflows = painter.didExceedMaxLines;
+                          painter.dispose();
+                          if (overflows) {
+                            hintText = l10n.chatComposerHintTo(
+                              l10n.chatScopeChannel,
+                            );
+                          }
+                        }
+                        return Focus(
+                          canRequestFocus: false,
+                          skipTraversal: true,
+                          onKeyEvent: _handleKeyEvent,
+                          child: TextField(
+                            controller: _input,
+                            focusNode: _focus,
+                            enabled: !_sending && !widget.busy && _canSend,
+                            minLines: 1,
+                            maxLines: 5,
+                            keyboardType: TextInputType.multiline,
+                            // 触屏没有 Tab 键：点输入框外收起键盘。
+                            onTapOutside: (_) =>
+                                FocusManager.instance.primaryFocus?.unfocus(),
+                            style: texts.bodyMedium?.copyWith(
+                              color: scheme.onSurface,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: hintText,
+                              hintMaxLines: 1,
+                              hintStyle: hintStyle,
+                              filled: false,
+                              isDense: true,
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              disabledBorder: InputBorder.none,
+                              // 文本距弧边的总内边距 = 容器 8 + 22 = 30，
+                              // 与有效圆角半径（60 高钳制后的 30）光学对齐。
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 22,
+                                vertical: 11,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _input,
+                    builder: (context, value, child) => IconButton(
+                      onPressed:
+                          !widget.busy &&
+                              !_sending &&
+                              _canSend &&
+                              (value.text.trim().isNotEmpty || _image != null)
+                          ? _send
+                          : null,
+                      style: ButtonStyle.from(foregroundColor: scheme.primary),
                       icon: Icon(
-                        Icons.add_photo_alternate_outlined,
+                        Icons.send_rounded,
                         size: IconSizes.toolbar,
-                        semanticLabel: l10n.chatAttachImage,
+                        semanticLabel: l10n.chatSend,
                       ),
                     ),
                   ),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final hintStyle = texts.bodyMedium?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      );
-                      var hintText = l10n.chatComposerHintTo(target);
-                      if (scope == ChatScope.channel) {
-                        final textWidth = math.max(
-                          0.0,
-                          constraints.maxWidth - 44,
-                        );
-                        final painter = TextPainter(
-                          text: TextSpan(text: hintText, style: hintStyle),
-                          maxLines: 1,
-                          textDirection: Directionality.of(context),
-                          textScaler: MediaQuery.textScalerOf(context),
-                        )..layout(maxWidth: textWidth);
-                        final overflows = painter.didExceedMaxLines;
-                        painter.dispose();
-                        if (overflows) {
-                          hintText = l10n.chatComposerHintTo(
-                            l10n.chatScopeChannel,
-                          );
-                        }
-                      }
-                      return Focus(
-                        canRequestFocus: false,
-                        skipTraversal: true,
-                        onKeyEvent: _handleKeyEvent,
-                        child: TextField(
-                          controller: _input,
-                          focusNode: _focus,
-                          enabled: !_sending && !widget.busy && _canSend,
-                          minLines: 1,
-                          maxLines: 5,
-                          keyboardType: TextInputType.multiline,
-                          // 触屏没有 Tab 键：点输入框外收起键盘。
-                          onTapOutside: (_) =>
-                              FocusManager.instance.primaryFocus?.unfocus(),
-                          style: texts.bodyMedium?.copyWith(
-                            color: scheme.onSurface,
-                          ),
-                          decoration: InputDecoration(
-                            hintText: hintText,
-                            hintMaxLines: 1,
-                            hintStyle: hintStyle,
-                            filled: false,
-                            isDense: true,
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            disabledBorder: InputBorder.none,
-                            // 文本距弧边的总内边距 = 容器 8 + 22 = 30，
-                            // 与有效圆角半径（60 高钳制后的 30）光学对齐。
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 22,
-                              vertical: 11,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(width: 4),
-                ValueListenableBuilder<TextEditingValue>(
-                  valueListenable: _input,
-                  builder: (context, value, child) => IconButton(
-                    onPressed:
-                        !widget.busy &&
-                            !_sending &&
-                            _canSend &&
-                            (value.text.trim().isNotEmpty || _image != null)
-                        ? _send
-                        : null,
-                    style: IconButton.styleFrom(
-                      foregroundColor: scheme.primary,
-                    ),
-                    icon: Icon(
-                      Icons.send_rounded,
-                      size: IconSizes.toolbar,
-                      semanticLabel: l10n.chatSend,
-                    ),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -847,12 +858,10 @@ class _ScopeButton extends StatelessWidget {
                           Icons.public_rounded,
                         ),
                       ])
-                        ListTile(
-                          leading: Icon(entry.$3),
-                          title: Text(entry.$2),
-                          trailing: unreadScopes.contains(entry.$1)
-                              ? const _UnreadDot()
-                              : null,
+                        _ScopeOptionRow(
+                          icon: entry.$3,
+                          title: entry.$2,
+                          unread: unreadScopes.contains(entry.$1),
                           selected: scope == entry.$1,
                           onTap: () {
                             Navigator.pop(context);
@@ -860,7 +869,7 @@ class _ScopeButton extends StatelessWidget {
                           },
                         ),
                       if (recipients.isNotEmpty) ...[
-                        const Divider(),
+                        Divider(color: dividerColorOf(context), height: 1),
                         ExpansionTile(
                           leading: const Icon(Icons.person_rounded),
                           title: Row(
@@ -881,13 +890,11 @@ class _ScopeButton extends StatelessWidget {
                           collapsedIconColor: isDirect ? scheme.primary : null,
                           children: [
                             for (final peer in recipients)
-                              ListTile(
-                                leading: const Icon(Icons.person_rounded),
-                                title: Text(peer.nickname),
-                                subtitle: Text(l10n.chatDirectTag),
-                                trailing: unreadPeers.contains(peer.uid)
-                                    ? const _UnreadDot()
-                                    : null,
+                              _ScopeOptionRow(
+                                icon: Icons.person_rounded,
+                                title: peer.nickname,
+                                subtitle: l10n.chatDirectTag,
+                                unread: unreadPeers.contains(peer.uid),
                                 selected:
                                     isDirect &&
                                     peer.uid == selectedRecipient?.uid,
@@ -925,6 +932,49 @@ class _ScopeButton extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _ScopeOptionRow extends StatelessWidget {
+  const _ScopeOptionRow({
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    required this.unread,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final bool unread;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.scheme;
+    final foreground = selected ? scheme.onPrimaryContainer : null;
+    final row = DecoratedBox(
+      decoration: ShapeDecoration(
+        color: selected ? scheme.primaryContainer : Colors.transparent,
+        shape: AppShape.none,
+      ),
+      child: AnimatedInkWell(
+        onTap: onTap,
+        child: ListRow(
+          leading: Icon(icon, color: foreground),
+          title: Text(
+            title,
+            style: foreground != null ? TextStyle(color: foreground) : null,
+          ),
+          subtitle: subtitle == null ? null : Text(subtitle!),
+          trailing: unread ? const _UnreadDot() : null,
+        ),
+      ),
+    );
+    return row;
   }
 }
 

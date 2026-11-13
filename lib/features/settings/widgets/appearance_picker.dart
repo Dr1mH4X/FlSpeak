@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/preferences.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
-import '../../../widgets/press_feedback.dart';
+import '../../../widgets/prism.dart';
 
 class AppearancePicker extends StatelessWidget {
   const AppearancePicker({
@@ -22,7 +22,10 @@ class AppearancePicker extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(l10n.appearancePreview, style: context.texts.titleLarge),
+        Text(
+          l10n.appearancePreview,
+          style: AppTextStyle.headline.of(context, emphasized: true),
+        ),
         const SizedBox(height: 20),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -41,23 +44,25 @@ class AppearancePicker extends StatelessWidget {
                     color: Colors.transparent,
                     child: AnimatedInkWell(
                       onTap: () => onChanged(mode),
-                      borderRadius: Radii.largeAll,
+                      customBorder: AppShape.lg,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Container(
                             padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              borderRadius: Radii.largeAll,
-                              border: Border.all(
-                                color: value == mode
-                                    ? scheme.primary
-                                    : scheme.outlineVariant,
-                                width: 2,
+                            decoration: ShapeDecoration(
+                              shape: RoundedSuperellipseBorder(
+                                borderRadius: AppRadius.lg,
+                                side: BorderSide(
+                                  color: value == mode
+                                      ? scheme.primary
+                                      : dividerColorOf(context),
+                                  width: value == mode ? 2 : 1,
+                                ),
                               ),
                             ),
-                            child: ClipRRect(
-                              borderRadius: Radii.mediumAll,
+                            child: ClipRSuperellipse(
+                              borderRadius: AppRadius.md,
                               child: SizedBox(
                                 height: 88,
                                 child: mode == AppThemePreference.system
@@ -92,11 +97,13 @@ class AppearancePicker extends StatelessWidget {
                                   l10n.settingsThemeSystem,
                               },
                               textAlign: TextAlign.center,
-                              style: context.texts.labelMedium?.copyWith(
-                                color: value == mode
-                                    ? scheme.primary
-                                    : scheme.onSurfaceVariant,
-                              ),
+                              style: AppTextStyle.footnote
+                                  .of(context, emphasized: value == mode)
+                                  .copyWith(
+                                    color: value == mode
+                                        ? scheme.primary
+                                        : scheme.onSurfaceVariant,
+                                  ),
                             ),
                           ),
                         ],
@@ -114,9 +121,11 @@ class AppearancePicker extends StatelessWidget {
 
   Widget _preview(Brightness brightness) {
     final scheme = buildAppTheme(brightness).colorScheme;
+    final pageColor = surfaceColorFor(SurfaceLevel.page, scheme);
+    final cardColor = surfaceColorFor(SurfaceLevel.card, scheme);
     return ExcludeSemantics(
       child: ColoredBox(
-        color: scheme.surface,
+        color: pageColor,
         child: Row(
           children: [
             Expanded(
@@ -142,9 +151,9 @@ class AppearancePicker extends StatelessWidget {
                   children: [
                     Container(
                       height: 6,
-                      decoration: BoxDecoration(
+                      decoration: ShapeDecoration(
                         color: scheme.primary,
-                        borderRadius: Radii.pillAll,
+                        shape: AppShape.full,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -154,9 +163,9 @@ class AppearancePicker extends StatelessWidget {
                     const Spacer(),
                     Container(
                       height: 12,
-                      decoration: BoxDecoration(
-                        color: scheme.surfaceContainerHigh,
-                        borderRadius: Radii.smallAll,
+                      decoration: ShapeDecoration(
+                        color: cardColor,
+                        shape: AppShape.sm,
                       ),
                     ),
                   ],

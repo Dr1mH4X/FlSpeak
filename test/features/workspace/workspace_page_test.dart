@@ -3,7 +3,14 @@
 import 'dart:typed_data';
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        FilledButton,
+        IconButton,
+        OutlinedButton,
+        Switch,
+        TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -18,6 +25,7 @@ import 'package:flspeak/features/workspace/widgets/channel_pane.dart';
 import 'package:flspeak/features/workspace/widgets/chat_pane.dart';
 import 'package:flspeak/features/workspace/workspace_page.dart';
 import 'package:flspeak/features/workspace/workspace_state.dart';
+import 'package:flspeak/widgets/prism.dart';
 
 class _Core extends Fake implements CoreSession {
   final joined = <({String streamId, int sourceClid})>[];
@@ -323,8 +331,13 @@ Future<ProviderContainer> _mount(
       child: MaterialApp(
         theme: buildAppTheme(Brightness.light),
         locale: const Locale('zh'),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: const [
+          ...AppLocalizations.localizationsDelegates,
+          PrismUiLocalizationsDelegate(),
+        ],
         supportedLocales: AppLocalizations.supportedLocales,
+        builder: (context, child) =>
+            PrismRootScope(brightness: Brightness.light, child: child!),
         home: const Scaffold(body: WorkspacePage()),
       ),
     ),
@@ -700,8 +713,13 @@ void main() {
         child: MaterialApp(
           theme: buildAppTheme(Brightness.light),
           locale: const Locale('zh'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: const [
+            ...AppLocalizations.localizationsDelegates,
+            PrismUiLocalizationsDelegate(),
+          ],
           supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
           home: const Scaffold(
             body: SizedBox(width: 288, child: ChannelPanel()),
           ),

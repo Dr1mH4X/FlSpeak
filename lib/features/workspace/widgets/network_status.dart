@@ -1,7 +1,14 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        FilledButton,
+        IconButton,
+        OutlinedButton,
+        Switch,
+        TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
@@ -10,6 +17,7 @@ import '../../../core/network_quality.dart';
 import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/prism.dart';
 import '../../../widgets/signal_ribbon.dart';
 
 /// 用户卡里的网络状态入口。点击后在入口上方展开非模态浮层；
@@ -51,7 +59,7 @@ class NetworkStatus extends StatelessWidget {
           expanded: expanded,
           child: IconButton(
             onPressed: onToggle,
-            color: color,
+            style: ButtonStyle.from(foregroundColor: color),
             icon: Icon(
               Icons.wifi_rounded,
               size: IconSizes.toolbar,
@@ -258,27 +266,25 @@ class _NetworkTelemetryPanelState extends ConsumerState<NetworkTelemetryPanel> {
                           size: IconSizes.toolbar,
                           semanticLabel: l10n.windowUnpin,
                         ),
-                        style: ButtonStyle(
-                          foregroundColor: WidgetStateProperty.resolveWith(
-                            (states) => states.contains(WidgetState.selected)
-                                ? scheme.primary
-                                : scheme.onSurfaceVariant,
-                          ),
-                          backgroundColor: WidgetStateProperty.resolveWith(
-                            (states) => states.contains(WidgetState.selected)
-                                ? scheme.primaryContainer.withValues(alpha: 0.4)
-                                : Colors.transparent,
-                          ),
+                        style: ButtonStyle.from(
+                          foregroundColor: pinned
+                              ? scheme.primary
+                              : scheme.onSurfaceVariant,
+                          backgroundColor: pinned
+                              ? scheme.primaryContainer.withValues(alpha: 0.4)
+                              : Colors.transparent,
                         ),
                       ),
                       IconButton(
                         onPressed: widget.onClose,
+                        style: ButtonStyle.from(
+                          foregroundColor: scheme.onSurfaceVariant,
+                        ),
                         icon: Icon(
                           Icons.close_rounded,
                           size: IconSizes.toolbar,
                           semanticLabel: l10n.commonClose,
                         ),
-                        color: scheme.onSurfaceVariant,
                       ),
                     ],
                   ),
