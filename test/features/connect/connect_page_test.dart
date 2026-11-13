@@ -17,6 +17,7 @@ import 'package:flspeak/router.dart';
 import 'package:flspeak/features/connect/connect_page.dart';
 import 'package:flspeak/features/connect/widgets/identity_card.dart';
 import 'package:flspeak/features/connect/widgets/server_row.dart';
+import 'package:flspeak/widgets/expressive_frame.dart';
 import 'package:flspeak/widgets/prism.dart';
 
 class _FakeCore extends Fake implements CoreSession {
@@ -602,4 +603,58 @@ void main() {
       }
     }
   });
+
+  testWidgets(
+    'ServerRow connecting uses left ExpressiveFrame spin without CircularProgressIndicator',
+    (tester) async {
+      tester.view.physicalSize = const Size(1000, 700);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            coreSessionProvider.overrideWithValue(_FakeCore()),
+            sessionViewProvider.overrideWith(_TestSessionController.new),
+          ],
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            locale: const Locale('zh'),
+            localizationsDelegates: const [
+              ...AppLocalizations.localizationsDelegates,
+              PrismUiLocalizationsDelegate(),
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) =>
+                PrismRootScope(brightness: Brightness.light, child: child!),
+            home: Scaffold(
+              body: ServerRow(
+                profile: const ServerProfileView(
+                  id: 'server-1',
+                  label: 'Test Server',
+                  host: '127.0.0.1',
+                  port: 9987,
+                ),
+                connected: false,
+                connecting: true,
+                enabled: false,
+                lastConnected: null,
+                onTap: () {},
+                onRemove: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 250));
+
+      expect(find.text('正在连接…'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      final frame = tester.widget<ExpressiveFrame>(
+        find.byType(ExpressiveFrame),
+      );
+      expect(frame.loading, isTrue);
+    },
+  );
 }

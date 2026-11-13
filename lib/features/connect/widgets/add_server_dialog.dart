@@ -60,9 +60,7 @@ Future<ServerProfileView?> showAddServerDialog(
                 child: FilledButton(
                   onPressed: busy ? null : () => formKey.currentState?.submit(),
                   child: AnimatedSwitcher(
-                    duration: MediaQuery.disableAnimationsOf(context)
-                        ? Duration.zero
-                        : Motion.effectsFast,
+                    duration: Motion.effectsFast,
                     switchInCurve: Motion.effectsFastCurve,
                     switchOutCurve: Motion.effectsFastCurve.flipped,
                     child: busy
@@ -276,7 +274,6 @@ class _AddServerFormState extends ConsumerState<_AddServerForm> {
           children: [
             ExpressiveFrame(
               size: 44,
-              shapeSeed: _icon.index,
               child: Icon(_icon.icon, color: context.scheme.onPrimaryContainer),
             ),
             const SizedBox(width: 12),

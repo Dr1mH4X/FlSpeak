@@ -43,7 +43,6 @@ class ServerBadge extends ConsumerWidget {
             ExpressiveFrame(
               size: size,
               loading: loading,
-              shapeSeed: icon.index,
               color: selected
                   ? scheme.primaryContainer
                   : scheme.surfaceContainerHigh,
@@ -147,9 +146,7 @@ class MemberAvatar extends StatelessWidget {
 
     // 说话描边用透明边占位过渡：边框出现/消失不再挤动布局，也不瞬跳。
     final avatar = AnimatedContainer(
-      duration: MediaQuery.disableAnimationsOf(context)
-          ? Duration.zero
-          : Motion.effectsFast,
+      duration: Motion.effectsFast,
       curve: Motion.effectsDefaultCurve,
       width: size,
       height: size,
@@ -207,10 +204,6 @@ class _SpeakingHaloState extends State<_SpeakingHalo>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (MediaQuery.disableAnimationsOf(context)) {
-      _controller.stop();
-      return;
-    }
     if (!_controller.isAnimating) {
       _controller.repeat();
     }

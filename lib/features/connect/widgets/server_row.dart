@@ -61,11 +61,6 @@ class _ServerRowState extends ConsumerState<ServerRow> {
     // 640 以下把「上次连接」让位给服务器名，否则窄屏只剩省略号。
     final narrow = MediaQuery.sizeOf(context).width < 640;
     final showLastConnected = !narrow;
-    // M3 effects default：行状态（高亮、整行降透明度）都是颜色/透明度动画。
-    final animations = MediaQuery.disableAnimationsOf(context)
-        ? Duration.zero
-        : Motion.effectsDefault;
-
     final compact = context.isCompact;
     final showMoreButton = compact && !widget.connecting;
 
@@ -73,7 +68,7 @@ class _ServerRowState extends ConsumerState<ServerRow> {
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: AnimatedContainer(
-        duration: animations,
+        duration: Motion.effectsDefault,
         curve: Motion.effectsDefaultCurve,
         color: connected
             ? scheme.primaryContainer.withValues(alpha: 0.3)
@@ -123,7 +118,7 @@ class _ServerRowState extends ConsumerState<ServerRow> {
               // M3 state layer：hover 是 onSurface 8%，不再自定底色。
               hoverColor: scheme.onSurface.withValues(alpha: 0.08),
               child: AnimatedOpacity(
-                duration: animations,
+                duration: Motion.effectsDefault,
                 curve: Motion.effectsDefaultCurve,
                 opacity: active ? 1 : 0.5,
                 child: Padding(
@@ -182,22 +177,12 @@ class _ServerRowState extends ConsumerState<ServerRow> {
                       ),
                       const SizedBox(width: 8),
                       if (!narrow && widget.connecting)
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const SizedBox.square(
-                              dimension: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              l10n.sessionConnecting,
-                              style: texts.labelMedium?.copyWith(
-                                fontSize: 12,
-                                color: scheme.primary,
-                              ),
-                            ),
-                          ],
+                        Text(
+                          l10n.sessionConnecting,
+                          style: texts.labelMedium?.copyWith(
+                            fontSize: 12,
+                            color: scheme.primary,
+                          ),
                         )
                       else if (!narrow && connected)
                         _ConnectedChip(label: l10n.sessionConnected)
@@ -218,9 +203,7 @@ class _ServerRowState extends ConsumerState<ServerRow> {
                       // hover 反馈按 M3 归到 effects fast：nudge 只有 2px，
                       // 用 slow 的 spatial 档反而拖沓。
                       AnimatedContainer(
-                        duration: MediaQuery.disableAnimationsOf(context)
-                            ? Duration.zero
-                            : Motion.effectsFast,
+                        duration: Motion.effectsFast,
                         curve: Motion.effectsFastCurve,
                         transform: Matrix4.translationValues(
                           _hovered && active ? 2 : 0,

@@ -52,7 +52,6 @@ class ServerIconGrid extends StatelessWidget {
                     children: [
                       ExpressiveFrame(
                         size: 48,
-                        shapeSeed: icon.index,
                         color: selected == icon
                             ? scheme.primaryContainer
                             : scheme.surfaceContainerHigh,

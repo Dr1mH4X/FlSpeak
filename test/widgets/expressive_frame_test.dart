@@ -6,54 +6,53 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flspeak/widgets/expressive_frame.dart';
 
 void main() {
-  double perimeter(WidgetTester tester) {
-    final clip = tester.widget<ClipPath>(find.byType(ClipPath));
-    final shape = (clip.clipper! as ShapeBorderClipper).shape;
-    return shape
-        .getOuterPath(const Rect.fromLTWH(0, 0, 40, 40))
-        .computeMetrics()
-        .fold(0.0, (sum, metric) => sum + metric.length);
+  double rotationOf(WidgetTester tester) {
+    final paint = tester.widget<CustomPaint>(
+      find.descendant(
+        of: find.byType(ExpressiveFrame),
+        matching: find.byType(CustomPaint),
+      ),
+    );
+    return (paint.painter! as dynamic).rotation as double;
   }
 
-  Future<void> pumpFrame(
-    WidgetTester tester, {
-    required bool loading,
-    bool reducedMotion = false,
-  }) => tester.pumpWidget(
-    MaterialApp(
-      home: MediaQuery(
-        data: MediaQueryData(disableAnimations: reducedMotion),
-        child: Center(
-          child: ExpressiveFrame(
-            loading: loading,
-            child: const Icon(Icons.music_note),
+  Future<void> pumpFrame(WidgetTester tester, {required bool loading}) =>
+      tester.pumpWidget(
+        MaterialApp(
+          home: Center(
+            child: ExpressiveFrame(
+              loading: loading,
+              child: const Icon(Icons.music_note),
+            ),
           ),
         ),
-      ),
-    ),
+      );
+
+  testWidgets(
+    'clover spins while loading and settles cleanly on quarter turn when stopped',
+    (tester) async {
+      await pumpFrame(tester, loading: true);
+      final initial = rotationOf(tester);
+      expect(initial, 0);
+
+      await tester.pump(const Duration(milliseconds: 500));
+      final moving = rotationOf(tester);
+      expect(moving, greaterThan(0));
+
+      // 保持图标本身不随花底旋转。
+      expect(
+        find.ancestor(
+          of: find.byIcon(Icons.music_note),
+          matching: find.byType(Transform),
+        ),
+        findsNothing,
+      );
+
+      await pumpFrame(tester, loading: false);
+      await tester.pumpAndSettle();
+      final settled = rotationOf(tester);
+      expect(settled, greaterThanOrEqualTo(moving));
+      expect(tester.binding.hasScheduledFrame, isFalse);
+    },
   );
-
-  testWidgets('loading morph freezes at its current shape on completion', (
-    tester,
-  ) async {
-    await pumpFrame(tester, loading: true);
-    final initial = perimeter(tester);
-    await tester.pump(const Duration(milliseconds: 650));
-    final moving = perimeter(tester);
-    expect(moving, isNot(closeTo(initial, 0.01)));
-    await pumpFrame(tester, loading: false);
-    final stopped = perimeter(tester);
-    expect(stopped, closeTo(moving, 0.001));
-    await tester.pump(const Duration(seconds: 3));
-    expect(perimeter(tester), closeTo(stopped, 0.001));
-    expect(tester.binding.hasScheduledFrame, isFalse);
-  });
-
-  testWidgets('reduced motion keeps loading frame static', (tester) async {
-    await pumpFrame(tester, loading: true, reducedMotion: true);
-    final initial = perimeter(tester);
-    await tester.pump(const Duration(seconds: 3));
-    expect(perimeter(tester), closeTo(initial, 0.001));
-    expect(tester.binding.hasScheduledFrame, isFalse);
-  });
 }

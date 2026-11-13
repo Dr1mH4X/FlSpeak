@@ -123,7 +123,6 @@ class _IconImageState extends State<_IconImage> {
         child: ExpressiveFrame(
           size: 28,
           color: widget.color.withValues(alpha: 0.08),
-          shapeSeed: widget.seed,
           loading: !failed && (widget.data.isLoading || !_decoded),
           child: content,
         ),
