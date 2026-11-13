@@ -481,13 +481,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get networkPing => 'Ping';
 
   @override
+  String get networkJitter => 'Jitter';
+
+  @override
   String get networkLossIn => 'Loss in';
 
   @override
   String get networkLossOut => 'Loss out';
-
-  @override
-  String get networkIdleTime => 'Idle time';
 
   @override
   String get networkUnavailable => 'Unavailable';

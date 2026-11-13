@@ -9,8 +9,6 @@ pub struct NetworkTelemetry {
     pub probes_sent: u64,
     pub probes_failed: u64,
     pub connected_seconds: u64,
-    /// 服务器统计的空闲时长；客户端从未上报时为 `None`。
-    pub idle_seconds: Option<u64>,
     /// 服务器到客户端的丢包百分比；服务器未提供时为 `None`。
     pub loss_in_percent: Option<f64>,
     /// 客户端到服务器的丢包百分比；服务器未提供时为 `None`。
@@ -25,7 +23,6 @@ struct ConnectionStats {
     ping_ms: Option<f64>,
     jitter_ms: Option<f64>,
     connected_seconds: Option<u64>,
-    idle_seconds: Option<u64>,
     loss_in_percent: Option<f64>,
     loss_out_percent: Option<f64>,
 }
@@ -35,6 +32,9 @@ pub(crate) struct NetworkMonitor {
     recent: VecDeque<Option<f64>>,
     probes_sent: u64,
     probes_failed: u64,
+    keepalive_ping_ms: Option<f64>,
+    keepalive_jitter_ms: Option<f64>,
+    local_loss_in_percent: Option<f64>,
     connection: ConnectionStats,
 }
 
@@ -45,6 +45,9 @@ impl NetworkMonitor {
             recent: VecDeque::new(),
             probes_sent: 0,
             probes_failed: 0,
+            keepalive_ping_ms: None,
+            keepalive_jitter_ms: None,
+            local_loss_in_percent: None,
             connection: ConnectionStats::default(),
         }
     }
@@ -55,7 +58,6 @@ impl NetworkMonitor {
             ping_ms: parse_f64(params, "connection_ping"),
             jitter_ms: parse_f64(params, "connection_ping_deviation"),
             connected_seconds: parse_millis_seconds(params, "connection_connected_time"),
-            idle_seconds: parse_millis_seconds(params, "connection_idle_time"),
             loss_in_percent: parse_fraction_percent(
                 params,
                 "connection_server2client_packetloss_total",
@@ -70,20 +72,44 @@ impl NetworkMonitor {
             ping_ms: next.ping_ms.or(self.connection.ping_ms),
             jitter_ms: next.jitter_ms.or(self.connection.jitter_ms),
             connected_seconds: next.connected_seconds.or(self.connection.connected_seconds),
-            idle_seconds: next.idle_seconds.or(self.connection.idle_seconds),
             loss_in_percent: next.loss_in_percent.or(self.connection.loss_in_percent),
             loss_out_percent: next.loss_out_percent.or(self.connection.loss_out_percent),
         };
     }
 
+    /// 用传输层 keepalive Ping/Pong 测得的往返均值与抖动刷新本端基线。
+    pub(crate) fn apply_round_trip(&mut self, round_trip: Option<tsclient_rs::RoundTrip>) {
+        if let Some(rt) = round_trip {
+            if rt.mean_ms.is_finite() {
+                self.keepalive_ping_ms = Some(rt.mean_ms);
+            }
+            if rt.deviation_ms.is_finite() {
+                self.keepalive_jitter_ms = Some(rt.deviation_ms);
+            }
+        }
+    }
+
+    /// 用传输层本地统计的服务端到客户端丢包率刷新入向丢包兜底值。
+    pub(crate) fn apply_packet_loss(&mut self, packet_loss: Option<tsclient_rs::PacketLoss>) {
+        if let Some(loss) = packet_loss
+            && loss.total.is_finite()
+        {
+            self.local_loss_in_percent = Some((loss.total * 100.0).clamp(0.0, 100.0));
+        }
+    }
+
     pub(crate) fn connection_ping(&self) -> Option<f64> {
         self.connection
             .ping_ms
+            .or(self.keepalive_ping_ms)
             .or_else(|| self.recent.back().copied().flatten())
     }
 
     pub(crate) fn connection_jitter(&self) -> Option<f64> {
-        self.connection.jitter_ms.or_else(|| jitter(&self.recent))
+        self.connection
+            .jitter_ms
+            .or(self.keepalive_jitter_ms)
+            .or_else(|| jitter(&self.recent))
     }
 
     pub(crate) fn record(
@@ -108,8 +134,12 @@ impl NetworkMonitor {
     fn snapshot_with(&self, sampled_at: u64, probe_ms: Option<f64>) -> NetworkTelemetry {
         let failures = self.recent.iter().filter(|sample| sample.is_none()).count();
         NetworkTelemetry {
-            // 协议层 ping 是权威值；目录探测只在前者缺失时兜底。
-            round_trip_ms: self.connection.ping_ms.or(probe_ms),
+            // 协议层 ping 是权威值；其次采用 keepalive RTT，目录探测只在两者缺失时兜底。
+            round_trip_ms: self
+                .connection
+                .ping_ms
+                .or(self.keepalive_ping_ms)
+                .or(probe_ms),
             jitter_ms: self.connection_jitter(),
             recent_failure_percent: if self.recent.is_empty() {
                 0.0
@@ -122,8 +152,10 @@ impl NetworkMonitor {
                 .connection
                 .connected_seconds
                 .unwrap_or_else(|| self.connected_at.elapsed().as_secs()),
-            idle_seconds: self.connection.idle_seconds,
-            loss_in_percent: self.connection.loss_in_percent,
+            loss_in_percent: self
+                .connection
+                .loss_in_percent
+                .or(self.local_loss_in_percent),
             loss_out_percent: self.connection.loss_out_percent,
             sampled_at,
         }
@@ -184,14 +216,13 @@ mod tests {
     }
 
     #[test]
-    fn server_connection_info_adds_loss_idle_and_ping_without_erasing_probe_history() {
+    fn server_connection_info_adds_loss_and_ping_without_erasing_probe_history() {
         let mut monitor = NetworkMonitor::new();
         monitor.record(Some(40.0), 1);
         monitor.apply_connection_info(&HashMap::from([
             ("connection_ping".into(), "44.5".into()),
             ("connection_ping_deviation".into(), "1.5".into()),
             ("connection_connected_time".into(), "65000".into()),
-            ("connection_idle_time".into(), "3725000".into()),
             (
                 "connection_server2client_packetloss_total".into(),
                 "0.005".into(),
@@ -207,7 +238,6 @@ mod tests {
         assert_eq!(telemetry.jitter_ms, Some(1.5));
         assert_eq!(telemetry.loss_in_percent, Some(0.5));
         assert_eq!(telemetry.loss_out_percent, Some(1.0));
-        assert_eq!(telemetry.idle_seconds, Some(3_725));
         assert_eq!(telemetry.connected_seconds, 65);
         assert_eq!(telemetry.probes_sent, 1);
         assert_eq!(telemetry.probes_failed, 0);
@@ -221,7 +251,6 @@ mod tests {
                 ("connection_ping".into(), value.into()),
                 ("connection_ping_deviation".into(), value.into()),
                 ("connection_connected_time".into(), value.into()),
-                ("connection_idle_time".into(), value.into()),
                 (
                     "connection_server2client_packetloss_total".into(),
                     value.into(),
@@ -235,19 +264,30 @@ mod tests {
             let telemetry = monitor.snapshot(1);
             assert_eq!(telemetry.round_trip_ms, None);
             assert_eq!(telemetry.jitter_ms, None);
-            assert_eq!(telemetry.idle_seconds, None);
             assert_eq!(telemetry.loss_in_percent, None);
             assert_eq!(telemetry.loss_out_percent, None);
         }
     }
 
     #[test]
-    fn protocol_ping_wins_over_the_directory_probe() {
+    fn protocol_ping_wins_over_keepalive_and_directory_probe() {
         let mut monitor = NetworkMonitor::new();
-        monitor.apply_connection_info(&HashMap::from([("connection_ping".into(), "44.5".into())]));
+        monitor.apply_round_trip(Some(tsclient_rs::RoundTrip {
+            mean_ms: 32.0,
+            deviation_ms: 2.5,
+        }));
+        let from_keepalive = monitor.record(Some(80.0), 1);
+        assert_eq!(from_keepalive.round_trip_ms, Some(32.0));
+        assert_eq!(from_keepalive.jitter_ms, Some(2.5));
 
-        let telemetry = monitor.record(Some(80.0), 1);
+        monitor.apply_connection_info(&HashMap::from([
+            ("connection_ping".into(), "44.5".into()),
+            ("connection_ping_deviation".into(), "1.2".into()),
+        ]));
+
+        let telemetry = monitor.record(Some(80.0), 2);
         assert_eq!(telemetry.round_trip_ms, Some(44.5));
+        assert_eq!(telemetry.jitter_ms, Some(1.2));
         assert_eq!(telemetry.recent_failure_percent, 0.0);
 
         let mut fallback = NetworkMonitor::new();
@@ -267,6 +307,31 @@ mod tests {
         assert_eq!(telemetry.round_trip_ms, None);
         assert_eq!(telemetry.loss_in_percent, None);
         assert_eq!(telemetry.loss_out_percent, None);
-        assert_eq!(telemetry.idle_seconds, None);
+    }
+
+    #[test]
+    fn local_packet_loss_fills_inbound_loss_when_server_omits_it() {
+        let mut monitor = NetworkMonitor::new();
+        monitor.apply_packet_loss(Some(tsclient_rs::PacketLoss {
+            speech: 0.01,
+            keepalive: 0.0,
+            control: 0.02,
+            total: 0.015,
+        }));
+        monitor.apply_connection_info(&HashMap::from([(
+            "connection_client2server_packetloss_total".into(),
+            "0.0".into(),
+        )]));
+
+        let fallback = monitor.snapshot(1);
+        assert!((fallback.loss_in_percent.unwrap() - 1.5).abs() < 1e-9);
+        assert_eq!(fallback.loss_out_percent, Some(0.0));
+
+        monitor.apply_connection_info(&HashMap::from([(
+            "connection_server2client_packetloss_total".into(),
+            "0.03".into(),
+        )]));
+        let authoritative = monitor.snapshot(2);
+        assert!((authoritative.loss_in_percent.unwrap() - 3.0).abs() < 1e-9);
     }
 }

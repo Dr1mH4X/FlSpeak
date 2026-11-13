@@ -107,6 +107,7 @@ class _NetworkTelemetryPanelState extends ConsumerState<NetworkTelemetryPanel> {
   static const _sampleInterval = Duration(seconds: 1);
 
   List<double?> _pingHistory = List<double?>.filled(_historyLength, null);
+  List<double?> _jitterHistory = List<double?>.filled(_historyLength, null);
   List<double?> _lossInHistory = List<double?>.filled(_historyLength, null);
   List<double?> _lossOutHistory = List<double?>.filled(_historyLength, null);
   Timer? _timer;
@@ -118,18 +119,10 @@ class _NetworkTelemetryPanelState extends ConsumerState<NetworkTelemetryPanel> {
     final telemetry = ref.read(sessionViewProvider).network;
     if (telemetry != null) {
       _lastTelemetry = telemetry;
-      _pingHistory = List<double?>.filled(
-        _historyLength,
-        _pingLevel(telemetry),
-      );
-      _lossInHistory = List<double?>.filled(
-        _historyLength,
-        _lossLevel(telemetry.lossInPercent),
-      );
-      _lossOutHistory = List<double?>.filled(
-        _historyLength,
-        _lossLevel(telemetry.lossOutPercent),
-      );
+      _pingHistory = _seedHistory(_pingLevel(telemetry));
+      _jitterHistory = _seedHistory(_jitterLevel(telemetry));
+      _lossInHistory = _seedHistory(_lossLevel(telemetry.lossInPercent));
+      _lossOutHistory = _seedHistory(_lossLevel(telemetry.lossOutPercent));
     }
     unawaited(ref.read(sessionViewProvider.notifier).sampleNetwork());
     _timer = Timer.periodic(_sampleInterval, (_) {
@@ -149,6 +142,7 @@ class _NetworkTelemetryPanelState extends ConsumerState<NetworkTelemetryPanel> {
     }
     _lastTelemetry = telemetry;
     _pingHistory = [..._pingHistory.skip(1), _pingLevel(telemetry)];
+    _jitterHistory = [..._jitterHistory.skip(1), _jitterLevel(telemetry)];
     _lossInHistory = [
       ..._lossInHistory.skip(1),
       _lossLevel(telemetry.lossInPercent),
@@ -159,12 +153,28 @@ class _NetworkTelemetryPanelState extends ConsumerState<NetworkTelemetryPanel> {
     ];
   }
 
+  static List<double?> _seedHistory(double? level) {
+    final history = List<double?>.filled(_historyLength, null);
+    if (level != null) {
+      history[_historyLength - 1] = level;
+    }
+    return history;
+  }
+
   static double? _pingLevel(NetworkTelemetry telemetry) {
     final latency = telemetry.roundTripMs;
     if (latency == null) {
       return telemetry.recentFailurePercent > 0 ? 1 : null;
     }
     return math.sqrt((latency / 200).clamp(0.0, 1.0));
+  }
+
+  static double? _jitterLevel(NetworkTelemetry telemetry) {
+    final jitter = telemetry.jitterMs;
+    if (jitter == null) {
+      return null;
+    }
+    return math.sqrt((jitter / 50).clamp(0.0, 1.0));
   }
 
   static double? _lossLevel(double? percent) {
@@ -291,8 +301,18 @@ class _NetworkTelemetryPanelState extends ConsumerState<NetworkTelemetryPanel> {
                 const SizedBox(height: 4),
                 _MetricTraceRow(
                   label: l10n.networkPing,
-                  value: _formatPing(l10n, telemetry),
+                  value: _formatMilliseconds(l10n, telemetry?.roundTripMs),
                   history: _pingHistory,
+                  color: color,
+                  traceWidth: traceWidth,
+                  valueWidth: valueWidth,
+                  labelStyle: labelStyle,
+                  valueStyle: valueStyle,
+                ),
+                _MetricTraceRow(
+                  label: l10n.networkJitter,
+                  value: _formatMilliseconds(l10n, telemetry?.jitterMs),
+                  history: _jitterHistory,
                   color: color,
                   traceWidth: traceWidth,
                   valueWidth: valueWidth,
@@ -316,12 +336,6 @@ class _NetworkTelemetryPanelState extends ConsumerState<NetworkTelemetryPanel> {
                   color: color,
                   traceWidth: traceWidth,
                   valueWidth: valueWidth,
-                  labelStyle: labelStyle,
-                  valueStyle: valueStyle,
-                ),
-                _MetricRow(
-                  label: l10n.networkIdleTime,
-                  value: _formatIdle(l10n, telemetry?.idleSeconds),
                   labelStyle: labelStyle,
                   valueStyle: valueStyle,
                 ),
@@ -407,47 +421,6 @@ class _MetricTraceRow extends StatelessWidget {
   }
 }
 
-class _MetricRow extends StatelessWidget {
-  const _MetricRow({
-    required this.label,
-    required this.value,
-    required this.labelStyle,
-    required this.valueStyle,
-  });
-
-  final String label;
-  final String value;
-  final TextStyle? labelStyle;
-  final TextStyle? valueStyle;
-
-  @override
-  Widget build(BuildContext context) {
-    return MergeSemantics(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: labelStyle,
-              ),
-            ),
-            Text(
-              value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: valueStyle,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 Color _qualityColor(
   BuildContext context, {
   required bool connected,
@@ -466,12 +439,11 @@ Color _qualityColor(
   };
 }
 
-String _formatPing(AppLocalizations l10n, NetworkTelemetry? telemetry) {
-  final latency = telemetry?.roundTripMs;
-  if (latency == null) {
+String _formatMilliseconds(AppLocalizations l10n, double? value) {
+  if (value == null) {
     return l10n.networkUnavailable;
   }
-  return l10n.networkMilliseconds(latency.round().toString());
+  return l10n.networkMilliseconds(value.round().toString());
 }
 
 String _formatPercent(AppLocalizations l10n, double? percent) {
@@ -480,16 +452,4 @@ String _formatPercent(AppLocalizations l10n, double? percent) {
   }
   final value = percent.toStringAsFixed(1);
   return '${value.endsWith('.0') ? value.substring(0, value.length - 2) : value}%';
-}
-
-String _formatIdle(AppLocalizations l10n, int? seconds) {
-  if (seconds == null) {
-    return l10n.networkUnavailable;
-  }
-  final duration = Duration(seconds: math.max(0, seconds));
-  final days = duration.inDays.toString().padLeft(2, '0');
-  final hours = (duration.inHours % 24).toString().padLeft(2, '0');
-  final minutes = (duration.inMinutes % 60).toString().padLeft(2, '0');
-  final rest = (duration.inSeconds % 60).toString().padLeft(2, '0');
-  return '$days:$hours:$minutes:$rest';
 }

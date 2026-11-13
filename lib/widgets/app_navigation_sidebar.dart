@@ -20,7 +20,7 @@ import '../router.dart';
 import '../theme/app_theme.dart';
 import 'common.dart';
 import 'monogram.dart';
-import 'prism.dart';
+import 'prism.dart' hide Divider;
 import 'server_icon_picker.dart';
 import 'window_header.dart';
 

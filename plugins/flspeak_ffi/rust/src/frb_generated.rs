@@ -4169,7 +4169,6 @@ impl SseDecode for crate::api::session::NetworkTelemetry {
         let mut var_probesSent = <u64>::sse_decode(deserializer);
         let mut var_probesFailed = <u64>::sse_decode(deserializer);
         let mut var_connectedSeconds = <u64>::sse_decode(deserializer);
-        let mut var_idleSeconds = <Option<u64>>::sse_decode(deserializer);
         let mut var_lossInPercent = <Option<f64>>::sse_decode(deserializer);
         let mut var_lossOutPercent = <Option<f64>>::sse_decode(deserializer);
         let mut var_sampledAt = <u64>::sse_decode(deserializer);
@@ -4180,7 +4179,6 @@ impl SseDecode for crate::api::session::NetworkTelemetry {
             probes_sent: var_probesSent,
             probes_failed: var_probesFailed,
             connected_seconds: var_connectedSeconds,
-            idle_seconds: var_idleSeconds,
             loss_in_percent: var_lossInPercent,
             loss_out_percent: var_lossOutPercent,
             sampled_at: var_sampledAt,
@@ -5367,7 +5365,6 @@ impl flutter_rust_bridge::IntoDart for crate::api::session::NetworkTelemetry {
             self.probes_sent.into_into_dart().into_dart(),
             self.probes_failed.into_into_dart().into_dart(),
             self.connected_seconds.into_into_dart().into_dart(),
-            self.idle_seconds.into_into_dart().into_dart(),
             self.loss_in_percent.into_into_dart().into_dart(),
             self.loss_out_percent.into_into_dart().into_dart(),
             self.sampled_at.into_into_dart().into_dart(),
@@ -6184,7 +6181,6 @@ impl SseEncode for crate::api::session::NetworkTelemetry {
         <u64>::sse_encode(self.probes_sent, serializer);
         <u64>::sse_encode(self.probes_failed, serializer);
         <u64>::sse_encode(self.connected_seconds, serializer);
-        <Option<u64>>::sse_encode(self.idle_seconds, serializer);
         <Option<f64>>::sse_encode(self.loss_in_percent, serializer);
         <Option<f64>>::sse_encode(self.loss_out_percent, serializer);
         <u64>::sse_encode(self.sampled_at, serializer);

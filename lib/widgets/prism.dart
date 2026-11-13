@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/material.dart'
     hide
         ButtonStyle,
+        Divider,
         FilledButton,
         IconButton,
         OutlinedButton,
@@ -26,6 +27,7 @@ export 'package:prism_ui/prism_ui.dart'
         Checkbox,
         Chip,
         DecorationListItem,
+        Divider,
         ElasticButton,
         ElasticHover,
         ElasticPress,

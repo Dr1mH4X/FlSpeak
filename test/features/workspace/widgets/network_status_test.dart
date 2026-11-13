@@ -22,18 +22,17 @@ import 'package:flspeak/widgets/signal_ribbon.dart';
 
 NetworkTelemetry _sample({
   double? latency = 30,
+  double? jitter = 5,
   double failure = 0,
   double? lossIn = 0,
   double? lossOut = 0,
-  int? idleSeconds = 65,
 }) => NetworkTelemetry(
   roundTripMs: latency,
-  jitterMs: 5,
+  jitterMs: jitter,
   recentFailurePercent: failure,
   probesSent: 10,
   probesFailed: failure > 0 ? 1 : 0,
   connectedSeconds: 65,
-  idleSeconds: idleSeconds,
   lossInPercent: lossIn,
   lossOutPercent: lossOut,
   sampledAt: DateTime(2026, 11, 6, 12).millisecondsSinceEpoch,
@@ -148,7 +147,7 @@ void main() {
       expect(iconColor(), scheme.error);
 
       controller.setNetwork(
-        _sample(latency: 45, idleSeconds: 3_725, lossIn: 0.5, lossOut: 1),
+        _sample(latency: 45, jitter: 8, lossIn: 0.5, lossOut: 1),
       );
       await tester.tap(find.byIcon(Icons.wifi_rounded));
       await tester.pump();
@@ -160,19 +159,30 @@ void main() {
       expect(controller.samples, samplesBeforeTick + 1);
       expect(find.text('网络状态'), findsOneWidget);
       expect(find.text('Ping'), findsOneWidget);
+      expect(find.text('抖动'), findsOneWidget);
       expect(find.text('丢包（入）'), findsOneWidget);
       expect(find.text('丢包（出）'), findsOneWidget);
-      expect(find.text('空闲时间'), findsOneWidget);
+      expect(find.text('空闲时间'), findsNothing);
       expect(find.text('45 毫秒'), findsOneWidget);
+      expect(find.text('8 毫秒'), findsOneWidget);
       expect(find.text('0.5%'), findsOneWidget);
       expect(find.text('1%'), findsOneWidget);
-      expect(find.text('00:01:02:05'), findsOneWidget);
 
       final panel = find.byKey(const ValueKey('network-telemetry-panel'));
       expect(
         find.descendant(of: panel, matching: find.byType(SignalRibbon)),
-        findsNWidgets(3),
+        findsNWidgets(4),
       );
+      final initialRibbons = tester
+          .widgetList<SignalRibbon>(
+            find.descendant(of: panel, matching: find.byType(SignalRibbon)),
+          )
+          .toList();
+      for (final ribbon in initialRibbons) {
+        expect(ribbon.values, hasLength(24));
+        expect(ribbon.values.take(23), everyElement(isNull));
+        expect(ribbon.values.last, isNotNull);
+      }
       final panelSize = tester.getSize(panel);
       expect(panelSize.width, lessThanOrEqualTo(272));
 
@@ -259,7 +269,7 @@ void main() {
     final panel = find.byKey(const ValueKey('network-telemetry-panel'));
     expect(
       find.descendant(of: panel, matching: find.byType(SignalRibbon)),
-      findsOneWidget,
+      findsNWidgets(2),
     );
 
     controller.setNetwork(_sample(lossIn: 0.5, lossOut: 1));
@@ -270,10 +280,12 @@ void main() {
           find.descendant(of: panel, matching: find.byType(SignalRibbon)),
         )
         .toList();
-    expect(ribbons, hasLength(3));
-    expect(ribbons[1].values.whereType<double>(), hasLength(1));
+    expect(ribbons, hasLength(4));
+    expect(ribbons[0].values.whereType<double>(), hasLength(2));
+    expect(ribbons[1].values.whereType<double>(), hasLength(2));
     expect(ribbons[2].values.whereType<double>(), hasLength(1));
-    expect(ribbons[1].values.last, closeTo(0.316, 0.001));
+    expect(ribbons[3].values.whereType<double>(), hasLength(1));
+    expect(ribbons[2].values.last, closeTo(0.316, 0.001));
   });
 
   testWidgets('closing the compact drawer disposes the panel timer', (

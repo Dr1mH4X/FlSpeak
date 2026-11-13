@@ -21,7 +21,7 @@ import '../../router.dart';
 import '../../theme/app_motion.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_navigation_sidebar.dart';
-import '../../widgets/prism.dart';
+import '../../widgets/prism.dart' hide Divider;
 import 'widgets/add_server_dialog.dart';
 import 'widgets/connect_header.dart';
 import 'widgets/identity_card.dart';

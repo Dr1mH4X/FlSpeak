@@ -974,6 +974,12 @@ abstract class AppLocalizations {
   /// **'Ping'**
   String get networkPing;
 
+  /// No description provided for @networkJitter.
+  ///
+  /// In en, this message translates to:
+  /// **'Jitter'**
+  String get networkJitter;
+
   /// No description provided for @networkLossIn.
   ///
   /// In en, this message translates to:
@@ -985,12 +991,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Loss out'**
   String get networkLossOut;
-
-  /// No description provided for @networkIdleTime.
-  ///
-  /// In en, this message translates to:
-  /// **'Idle time'**
-  String get networkIdleTime;
 
   /// No description provided for @networkUnavailable.
   ///

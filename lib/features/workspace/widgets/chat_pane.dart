@@ -19,7 +19,7 @@ import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
 import '../../../widgets/monogram.dart';
-import '../../../widgets/prism.dart';
+import '../../../widgets/prism.dart' hide Divider;
 import 'media_viewer.dart';
 import 'message_content.dart';
 

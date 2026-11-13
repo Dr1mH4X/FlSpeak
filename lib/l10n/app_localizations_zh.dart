@@ -475,13 +475,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get networkPing => 'Ping';
 
   @override
+  String get networkJitter => '抖动';
+
+  @override
   String get networkLossIn => '丢包（入）';
 
   @override
   String get networkLossOut => '丢包（出）';
-
-  @override
-  String get networkIdleTime => '空闲时间';
 
   @override
   String get networkUnavailable => '暂无数据';

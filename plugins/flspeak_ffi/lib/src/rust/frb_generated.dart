@@ -3245,8 +3245,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   NetworkTelemetry dco_decode_network_telemetry(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 10)
-      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
     return NetworkTelemetry(
       roundTripMs: dco_decode_opt_box_autoadd_f_64(arr[0]),
       jitterMs: dco_decode_opt_box_autoadd_f_64(arr[1]),
@@ -3254,10 +3254,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       probesSent: dco_decode_CastedPrimitive_u_64(arr[3]),
       probesFailed: dco_decode_CastedPrimitive_u_64(arr[4]),
       connectedSeconds: dco_decode_CastedPrimitive_u_64(arr[5]),
-      idleSeconds: dco_decode_opt_CastedPrimitive_u_64(arr[6]),
-      lossInPercent: dco_decode_opt_box_autoadd_f_64(arr[7]),
-      lossOutPercent: dco_decode_opt_box_autoadd_f_64(arr[8]),
-      sampledAt: dco_decode_CastedPrimitive_u_64(arr[9]),
+      lossInPercent: dco_decode_opt_box_autoadd_f_64(arr[6]),
+      lossOutPercent: dco_decode_opt_box_autoadd_f_64(arr[7]),
+      sampledAt: dco_decode_CastedPrimitive_u_64(arr[8]),
     );
   }
 
@@ -4186,7 +4185,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_probesSent = sse_decode_CastedPrimitive_u_64(deserializer);
     var var_probesFailed = sse_decode_CastedPrimitive_u_64(deserializer);
     var var_connectedSeconds = sse_decode_CastedPrimitive_u_64(deserializer);
-    var var_idleSeconds = sse_decode_opt_CastedPrimitive_u_64(deserializer);
     var var_lossInPercent = sse_decode_opt_box_autoadd_f_64(deserializer);
     var var_lossOutPercent = sse_decode_opt_box_autoadd_f_64(deserializer);
     var var_sampledAt = sse_decode_CastedPrimitive_u_64(deserializer);
@@ -4197,7 +4195,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       probesSent: var_probesSent,
       probesFailed: var_probesFailed,
       connectedSeconds: var_connectedSeconds,
-      idleSeconds: var_idleSeconds,
       lossInPercent: var_lossInPercent,
       lossOutPercent: var_lossOutPercent,
       sampledAt: var_sampledAt,
@@ -5127,7 +5124,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_CastedPrimitive_u_64(self.probesSent, serializer);
     sse_encode_CastedPrimitive_u_64(self.probesFailed, serializer);
     sse_encode_CastedPrimitive_u_64(self.connectedSeconds, serializer);
-    sse_encode_opt_CastedPrimitive_u_64(self.idleSeconds, serializer);
     sse_encode_opt_box_autoadd_f_64(self.lossInPercent, serializer);
     sse_encode_opt_box_autoadd_f_64(self.lossOutPercent, serializer);
     sse_encode_CastedPrimitive_u_64(self.sampledAt, serializer);

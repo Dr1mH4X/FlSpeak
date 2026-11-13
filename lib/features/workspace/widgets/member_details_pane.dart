@@ -17,7 +17,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/channel_icon.dart';
 import '../../../widgets/monogram.dart';
-import '../../../widgets/prism.dart';
+import '../../../widgets/prism.dart' hide Divider;
 import 'member_avatar.dart';
 
 /// 工作区详情面板中的极简用户资料视图。

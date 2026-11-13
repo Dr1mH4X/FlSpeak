@@ -9,7 +9,7 @@ import '../../../core/providers.dart';
 import '../../../core/update_check.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
-import '../../../widgets/prism.dart';
+import '../../../widgets/prism.dart' hide Divider;
 import '../../../widgets/update_dot.dart';
 
 const String _websiteUrl = 'https://flspeak.dreamhax.cc';
