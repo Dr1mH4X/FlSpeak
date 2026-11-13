@@ -12,6 +12,7 @@ import '../../../theme/app_theme.dart';
 import '../../../widgets/prism.dart';
 import '../../../widgets/update_dot.dart';
 
+const String _websiteUrl = 'https://flspeak.dreamhax.cc';
 const String _repoUrl = 'https://github.com/Dr1mH4X/FlSpeak';
 const String _issuesUrl = 'https://github.com/Dr1mH4X/FlSpeak/issues';
 const String _licenseUrl =
@@ -130,6 +131,13 @@ class _AboutCardState extends ConsumerState<AboutCard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  _BulletLinkRow(
+                    label: '${l10n.aboutWebsite}: ',
+                    linkText: l10n.aboutWebsiteAction,
+                    url: _websiteUrl,
+                    onTap: () => widget.onOpenUrl(_websiteUrl),
+                  ),
+                  const SizedBox(height: 8),
                   _BulletLinkRow(
                     label: '${l10n.aboutSourceCode}: ',
                     linkText: 'GitHub',

@@ -359,6 +359,8 @@
   "channelDescriptionFailed": "Failed to load channel description",
   "aboutSubtitle": "Yet another teamspeak client, multi-platform and open-source.",
   "aboutSourceAndFeedback": "Project & Source",
+  "aboutWebsite": "Project Website",
+  "aboutWebsiteAction": "Visit",
   "aboutSourceCode": "Source Code",
   "aboutIssueTracker": "Issue Tracker",
   "updateAvailableBadge": "New version {version} available",

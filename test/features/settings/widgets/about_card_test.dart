@@ -77,8 +77,14 @@ void main() {
     expect(find.text('v0.1.0'), findsOneWidget);
     expect(find.text('又一个跨平台、开源的 TeamSpeak 客户端'), findsOneWidget);
     expect(find.text('项目与源码'), findsOneWidget);
+    expect(find.text('项目官网: '), findsOneWidget);
+    expect(find.text('点击前往'), findsOneWidget);
     expect(find.text('GitHub'), findsOneWidget);
     expect(find.text('GitHub Issue'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('点击前往')).dy,
+      lessThan(tester.getTopLeft(find.text('GitHub')).dy),
+    );
     expect(find.text('许可证'), findsOneWidget);
     expect(
       find.text('GNU Affero General Public License v3.0 (AGPL-3.0)'),
@@ -109,6 +115,8 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Project & Source'), findsOneWidget);
+    expect(find.text('Project Website: '), findsOneWidget);
+    expect(find.text('Visit'), findsOneWidget);
   });
 
   testWidgets(
@@ -124,6 +132,11 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+
+      // 点击项目官网链接
+      await tester.tap(find.text('点击前往'));
+      await tester.pumpAndSettle();
+      expect(opened, contains('https://flspeak.dreamhax.cc'));
 
       // 点击 GitHub 源码链接
       await tester.tap(find.text('GitHub'));
@@ -146,6 +159,8 @@ void main() {
       );
 
       // 点击 tsclient-rs 链接
+      await tester.ensureVisible(find.text('tsclient-rs'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('tsclient-rs'));
       await tester.pumpAndSettle();
       expect(opened, contains('https://github.com/Dr1mH4X/tsclient-rs'));

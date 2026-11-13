@@ -742,6 +742,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aboutSourceAndFeedback => '项目与源码';
 
   @override
+  String get aboutWebsite => '项目官网';
+
+  @override
+  String get aboutWebsiteAction => '点击前往';
+
+  @override
   String get aboutSourceCode => '开源代码';
 
   @override

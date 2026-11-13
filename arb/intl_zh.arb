@@ -359,6 +359,8 @@
   "channelDescriptionFailed": "获取频道简介失败",
   "aboutSubtitle": "又一个跨平台、开源的 TeamSpeak 客户端",
   "aboutSourceAndFeedback": "项目与源码",
+  "aboutWebsite": "项目官网",
+  "aboutWebsiteAction": "点击前往",
   "aboutSourceCode": "开源代码",
   "aboutIssueTracker": "问题反馈",
   "updateAvailableBadge": "有新版本 {version}",

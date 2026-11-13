@@ -1472,6 +1472,18 @@ abstract class AppLocalizations {
   /// **'Project & Source'**
   String get aboutSourceAndFeedback;
 
+  /// No description provided for @aboutWebsite.
+  ///
+  /// In en, this message translates to:
+  /// **'Project Website'**
+  String get aboutWebsite;
+
+  /// No description provided for @aboutWebsiteAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Visit'**
+  String get aboutWebsiteAction;
+
   /// No description provided for @aboutSourceCode.
   ///
   /// In en, this message translates to:

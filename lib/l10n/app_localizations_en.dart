@@ -760,6 +760,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aboutSourceAndFeedback => 'Project & Source';
 
   @override
+  String get aboutWebsite => 'Project Website';
+
+  @override
+  String get aboutWebsiteAction => 'Visit';
+
+  @override
   String get aboutSourceCode => 'Source Code';
 
   @override
