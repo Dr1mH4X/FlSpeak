@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  FLUTTER_VERSION: '3.47.5'
+  FLUTTER_VERSION: '3.50.0'
   NDK_VERSION: r28c
   # 见 checks.yml：audiopus_sys 内置 Opus 的 CMake 版本下限需要放宽。
   CMAKE_POLICY_VERSION_MINIMUM: '3.5'

@@ -6,7 +6,7 @@ on:
   workflow_call:
 
 env:
-  FLUTTER_VERSION: '3.47.5'
+  FLUTTER_VERSION: '3.50.0'
   # 与 plugins/flspeak_ffi/pubspec.yaml 的 flutter_rust_bridge 版本一致；校验和
   # 对应 x86_64-unknown-linux-gnu 的官方预编译附件。
   FRB_CODEGEN_VERSION: '2.13.0'
