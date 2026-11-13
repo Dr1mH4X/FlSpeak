@@ -134,10 +134,16 @@ pub(crate) enum SessionSignal {
         id: i32,
         channel_id: u64,
     },
-    /// 目录快照（0.2.1 起目录一变就发）：携带最新的成员状态，含静音标志。
+    /// 目录快照（0.2.1 起目录一变就发）：携带完整频道与成员快照。
     Snapshot {
         epoch: u64,
-        clients: Vec<ClientView>,
+        snapshot: tsclient_rs::DirectorySnapshot,
+    },
+    /// 成员状态或服务器组变更：用于检测本端 `server_groups` 变化。
+    ClientUpdated {
+        epoch: u64,
+        id: i32,
+        server_groups: Vec<String>,
     },
     Disconnected {
         epoch: u64,
@@ -226,6 +232,11 @@ pub(crate) struct Actor {
     audio_enabled: bool,
     last_snapshot: Option<(Vec<ChannelView>, Vec<ClientView>)>,
     channel_codecs: HashMap<u64, i32>,
+    channel_list_allowed: Option<bool>,
+    channel_meta_allowed: Option<bool>,
+    client_list_allowed: Option<bool>,
+    subscribed_all_channels: bool,
+    self_server_groups: Vec<String>,
     channel_tools: crate::channel_tools::ChannelTools,
     current_codec: i32,
     ever_connected: bool,
@@ -300,6 +311,11 @@ impl Actor {
             audio_enabled,
             last_snapshot: None,
             channel_codecs: HashMap::new(),
+            channel_list_allowed: None,
+            channel_meta_allowed: None,
+            client_list_allowed: None,
+            subscribed_all_channels: false,
+            self_server_groups: Vec::new(),
             channel_tools: Default::default(),
             current_codec: VOICE_CODEC,
             ever_connected: false,
@@ -477,6 +493,10 @@ impl Actor {
             } => {
                 let result = self.move_to_channel(client_id, channel_id, password).await;
                 if result.is_ok() {
+                    if self.self_client_id == Some(client_id) && self.self_channel_id != channel_id
+                    {
+                        self.reset_directory_permissions();
+                    }
                     let _ = self.refresh_snapshot(true).await;
                     if self.self_client_id == Some(client_id) && channel_id != 0 {
                         self.maybe_announce_identity().await;
@@ -494,6 +514,7 @@ impl Actor {
                 let _ = reply.send(self.list_clients().await);
             }
             SessionCommand::RequestSnapshot { reply } => {
+                self.reset_directory_permissions();
                 let _ = reply.send(self.refresh_snapshot(true).await);
             }
             SessionCommand::SampleNetwork { reply } => {
@@ -925,6 +946,9 @@ impl Actor {
             }
         };
 
+        self.reset_directory_permissions();
+        self.subscribed_all_channels = false;
+        self.self_server_groups.clear();
         self.connection_epoch = self.connection_epoch.wrapping_add(1);
         self.epoch.store(self.connection_epoch, Ordering::SeqCst);
         let _ = self.disconnect_tx.send(self.connection_epoch);
@@ -979,6 +1003,11 @@ impl Actor {
                 self.subscribe_all_channels().await;
                 if let Some(client) = self.client.clone() {
                     self.wait_for_welcome_directory(&client).await;
+                    if let Some(snapshot) = client.directory_snapshot()
+                        && let Some(me) = snapshot.clients.iter().find(|c| c.id == client_id)
+                    {
+                        self.self_server_groups = Self::normalize_server_groups(&me.server_groups);
+                    }
                 }
                 if let Err(err) = self.refresh_snapshot(true).await {
                     self.emit(SessionEvent::Log {
@@ -1103,7 +1132,7 @@ impl Actor {
 
     async fn list_channels(&mut self) -> Result<Vec<ChannelView>, SessionError> {
         let client = self.connected()?;
-        let directory = self.read_channel_directory(&client).await?;
+        let directory = self.read_channel_directory(&client, false).await?;
         if let Some(err) = directory.metadata_error {
             self.emit(SessionEvent::Log {
                 level: "warn".into(),
@@ -1127,9 +1156,12 @@ impl Actor {
         Ok(crate::text_format::bbcode_to_markdown(&desc))
     }
 
-    async fn list_clients(&self) -> Result<Vec<ClientView>, SessionError> {
+    async fn list_clients(&mut self) -> Result<Vec<ClientView>, SessionError> {
         let client = self.connected()?;
-        self.read_clients(&client).await
+        let (mut rows, _) = self.read_clients(&client).await?;
+        self.enrich_clients(&mut rows);
+        rows.sort_by_key(|client| client.id);
+        Ok(rows)
     }
 
     /// 成员列表 = clientlist 与欢迎目录快照的合并，再保证自己这一行可信。
@@ -1137,25 +1169,46 @@ impl Actor {
     /// 部分 TS6 服务器的 clientlist 行缺 `cid`（解析成 0），而欢迎目录的
     /// `channelclientlist` 行频道是准的；反过来目录可能漏掉后来进出的成员。
     /// 两边按 id 合并：clientlist 的标志新，目录的频道准。
-    async fn read_clients(&self, client: &Arc<Client>) -> Result<Vec<ClientView>, SessionError> {
+    /// 返回 `(成员列表, 是否仅来自内存目录快照)`。
+    async fn read_clients(
+        &mut self,
+        client: &Arc<Client>,
+    ) -> Result<(Vec<ClientView>, bool), SessionError> {
+        let directory = client.directory_snapshot().map(|snapshot| snapshot.clients);
+        if self.client_list_allowed == Some(false) {
+            let Some(directory) = directory else {
+                return Err(SessionError::Protocol("成员目录尚未就绪".into()));
+            };
+            let mut rows: Vec<ClientView> = directory.into_iter().map(ClientView::from).collect();
+            self.ensure_self_row(client, &mut rows).await;
+            return Ok((rows, true));
+        }
+
         let listed = tsclient_rs::listClients(client).await;
-        let directory = client
-            .directory_snapshot()
-            .map(|snapshot| snapshot.clients)
-            .unwrap_or_default();
-        let mut rows = match listed {
-            Ok(listed) => merged_clients(listed, directory),
+        let (mut rows, from_directory_only) = match listed {
+            Ok(listed) => {
+                self.client_list_allowed = Some(true);
+                (merged_clients(listed, directory.unwrap_or_default()), false)
+            }
             Err(err) => {
-                // 目录还没同步完（None 或空）时同样拿不到成员，回退到原错误。
-                if directory.is_empty() {
-                    return Err(protocol_error(err));
+                if is_permission_denied(&err) {
+                    self.client_list_allowed = Some(false);
+                    let Some(directory) = directory else {
+                        return Err(protocol_error(err));
+                    };
+                    (directory.into_iter().map(ClientView::from).collect(), true)
+                } else {
+                    let directory = directory.unwrap_or_default();
+                    // 目录还没同步完（None 或空）时同样拿不到成员，回退到原错误。
+                    if directory.is_empty() {
+                        return Err(protocol_error(err));
+                    }
+                    (directory.into_iter().map(ClientView::from).collect(), true)
                 }
-                directory.into_iter().map(ClientView::from).collect()
             }
         };
         self.ensure_self_row(client, &mut rows).await;
-        self.enrich_clients(&mut rows);
-        Ok(rows)
+        Ok((rows, from_directory_only))
     }
 
     /// 自身行修补：本地已知频道时无网补齐；首次未知用 `whoami` 学习。
@@ -1274,10 +1327,9 @@ impl Actor {
         let Some(client) = self.client.clone() else {
             return Ok(());
         };
-        let previous = self.last_snapshot.clone();
         let mut failures = Vec::new();
 
-        let channels = match self.read_channel_directory(&client).await {
+        let incoming_channels = match self.read_channel_directory(&client, true).await {
             Ok(directory) => {
                 if let Some(err) = directory.metadata_error {
                     self.emit(SessionEvent::Log {
@@ -1285,28 +1337,19 @@ impl Actor {
                         message: format!("读取频道标志失败: {err}"),
                     });
                 }
-                if let Some(codecs) = directory.codecs {
-                    self.channel_codecs = codecs;
-                }
-                directory.channels
+                Some((directory.channels, directory.codecs.unwrap_or_default()))
             }
             Err(err) => {
                 failures.push(format!("频道目录: {err}"));
-                previous
-                    .as_ref()
-                    .map(|(channels, _)| channels.clone())
-                    .unwrap_or_default()
+                None
             }
         };
 
-        let clients = match self.read_clients(&client).await {
-            Ok(clients) => clients,
+        let incoming_clients = match self.read_clients(&client).await {
+            Ok((clients, from_directory_only)) => Some((clients, from_directory_only)),
             Err(err) => {
                 failures.push(format!("成员列表: {err}"));
-                previous
-                    .as_ref()
-                    .map(|(_, clients)| clients.clone())
-                    .unwrap_or_default()
+                None
             }
         };
 
@@ -1319,6 +1362,8 @@ impl Actor {
                 message: format!("刷新部分目录失败: {failure}"),
             });
         }
+
+        let (channels, clients) = self.prepare_merged_snapshot(incoming_channels, incoming_clients);
 
         let mut self_codec = self.channel_codecs.get(&self.self_channel_id).copied();
         if self_codec.is_none() && self.self_channel_id != 0 {
@@ -1347,30 +1392,26 @@ impl Actor {
             }
         }
 
-        let changed = force
-            || self
-                .last_snapshot
-                .as_ref()
-                .is_none_or(|(old_channels, old_clients)| {
-                    old_channels != &channels || old_clients != &clients
-                });
-        if changed {
-            self.last_snapshot = Some((channels.clone(), clients.clone()));
-            self.emit(SessionEvent::Snapshot { channels, clients });
-        }
+        self.commit_snapshot(channels, clients, force);
         self.sync_stream_channel().await;
         Ok(())
     }
 
-    async fn subscribe_all_channels(&self) {
+    async fn subscribe_all_channels(&mut self) {
         let Ok(client) = self.connected() else {
             return;
         };
-        if let Err(err) = client.exec_command("channelsubscribeall", 5_000).await {
-            self.emit(SessionEvent::Log {
-                level: "warn".into(),
-                message: format!("订阅全部频道失败，将只接收当前订阅范围内的成员事件: {err}"),
-            });
+        match client.exec_command("channelsubscribeall", 5_000).await {
+            Ok(()) => {
+                self.subscribed_all_channels = true;
+            }
+            Err(err) => {
+                self.subscribed_all_channels = false;
+                self.emit(SessionEvent::Log {
+                    level: "warn".into(),
+                    message: format!("订阅全部频道失败，将只接收当前订阅范围内的成员事件: {err}"),
+                });
+            }
         }
     }
 
@@ -1384,48 +1425,68 @@ impl Actor {
         .await;
     }
 
-    async fn read_channel_directory(
-        &mut self,
-        client: &Client,
-    ) -> Result<ChannelDirectory, SessionError> {
-        // 复用已有目录请求采样，避免额外探测占用语音发送所在的 actor。
-        let started = Instant::now();
-        let result = tsclient_rs::listChannels(client).await;
+    fn record_network_probe(&mut self, started: Instant, reached: bool) {
         if let Some(monitor) = &mut self.network_monitor {
-            // 权限拒绝也是服务器的有效回复，不能当作网络丢失。
-            let reached = matches!(&result, Ok(_) | Err(tsclient_rs::Error::ServerError { .. }));
             let round_trip_ms = reached.then(|| started.elapsed().as_secs_f64() * 1_000.0);
             let telemetry = monitor.record(round_trip_ms, now_millis());
             self.emit(SessionEvent::Network(telemetry));
         }
-        let (channels, explicit_list_worked) = match result {
-            Ok(channels) => (channels, true),
+    }
+
+    async fn read_channel_directory(
+        &mut self,
+        client: &Client,
+        probe_whoami_on_skip: bool,
+    ) -> Result<ChannelDirectory, SessionError> {
+        if self.channel_list_allowed == Some(false) {
+            if probe_whoami_on_skip && self.network_monitor.is_some() {
+                let started = Instant::now();
+                let probe = client.exec_command_with_response("whoami", 5_000).await;
+                let reached = matches!(&probe, Ok(_) | Err(tsclient_rs::Error::ServerError { .. }));
+                self.record_network_probe(started, reached);
+            }
+            let Some(snapshot) = client
+                .directory_snapshot()
+                .filter(|snapshot| !snapshot.channels.is_empty())
+            else {
+                return Err(SessionError::Protocol("频道目录尚未就绪".into()));
+            };
+            return Ok(directory_from_channels(snapshot.channels, None));
+        }
+
+        // 复用已有目录请求采样，避免额外探测占用语音发送所在的 actor。
+        let started = Instant::now();
+        let result = tsclient_rs::listChannels(client).await;
+        // 权限拒绝也是服务器的有效回复，不能当作网络丢失。
+        let reached = matches!(&result, Ok(_) | Err(tsclient_rs::Error::ServerError { .. }));
+        self.record_network_probe(started, reached);
+
+        let channels = match result {
+            Ok(channels) => {
+                self.channel_list_allowed = Some(true);
+                channels
+            }
             Err(err) => {
+                if is_permission_denied(&err) {
+                    self.channel_list_allowed = Some(false);
+                }
                 let Some(snapshot) = client
                     .directory_snapshot()
                     .filter(|snapshot| !snapshot.channels.is_empty())
                 else {
                     return Err(protocol_error(err));
                 };
-                (snapshot.channels, false)
+                return Ok(directory_from_channels(snapshot.channels, None));
             }
         };
-        if !explicit_list_worked {
-            let codecs: HashMap<u64, i32> = channels
-                .iter()
-                .filter_map(|channel| channel.codec.map(|codec| (channel.id, codec)))
-                .collect();
-            return Ok(ChannelDirectory {
-                channels: channels
-                    .into_iter()
-                    .map(|channel| channel_view(channel, None))
-                    .collect(),
-                codecs: (!codecs.is_empty()).then_some(codecs),
-                metadata_error: None,
-            });
+
+        if self.channel_meta_allowed == Some(false) {
+            return Ok(directory_from_channels(channels, None));
         }
+
         match fetch_channel_metadata(client).await {
             Ok(metadata) => {
+                self.channel_meta_allowed = Some(true);
                 let mut codecs: HashMap<u64, i32> = metadata
                     .iter()
                     .filter_map(|(id, channel)| channel.codec.map(|codec| (*id, codec)))
@@ -1448,18 +1509,15 @@ impl Actor {
                 })
             }
             Err(err) => {
-                let codecs: HashMap<u64, i32> = channels
-                    .iter()
-                    .filter_map(|channel| channel.codec.map(|codec| (channel.id, codec)))
-                    .collect();
-                Ok(ChannelDirectory {
-                    channels: channels
-                        .into_iter()
-                        .map(|channel| channel_view(channel, None))
-                        .collect(),
-                    codecs: (!codecs.is_empty()).then_some(codecs),
-                    metadata_error: Some(err.to_string()),
-                })
+                if is_permission_denied(&err) {
+                    self.channel_meta_allowed = Some(false);
+                    Ok(directory_from_channels(channels, None))
+                } else {
+                    Ok(directory_from_channels(
+                        channels,
+                        Some(protocol_error(err).to_string()),
+                    ))
+                }
             }
         }
     }
@@ -2049,26 +2107,19 @@ impl Actor {
                 }
                 pending.store(false, Ordering::Relaxed);
             }
-            SessionSignal::Snapshot { epoch, clients } => {
-                if epoch != self.connection_epoch {
-                    return;
+            SessionSignal::Snapshot { epoch, snapshot } => {
+                if epoch == self.connection_epoch {
+                    self.handle_directory_snapshot(snapshot);
                 }
-                // 只有成员状态真的变了才转发；频道元数据仍由周期性的
-                // refresh_snapshot 维护，这里只替换成员并同步基线。
-                let Some((channels, previous)) = self.last_snapshot.clone() else {
-                    return;
-                };
-                // TS6 服务器推给自己的行永远缺频道，用会话状态补齐再比较。
-                let mut clients = clients;
-                self.patch_self_row(&mut clients);
-                self.enrich_clients(&mut clients);
-                if previous == clients {
-                    return;
+            }
+            SessionSignal::ClientUpdated {
+                epoch,
+                id,
+                server_groups,
+            } => {
+                if epoch == self.connection_epoch && self.self_client_id == Some(id) {
+                    self.sync_self_server_groups(&server_groups);
                 }
-                if let Some((_, old_clients)) = self.last_snapshot.as_mut() {
-                    *old_clients = clients.clone();
-                }
-                self.emit(SessionEvent::Snapshot { channels, clients });
             }
             SessionSignal::Disconnected { epoch, message } => {
                 if epoch == self.connection_epoch {
@@ -2236,6 +2287,7 @@ impl Actor {
         if self.self_channel_id == channel_id {
             return;
         }
+        self.reset_directory_permissions();
         let mut codec = self.channel_codecs.get(&channel_id).copied();
         if codec.is_none()
             && channel_id != 0
@@ -2755,6 +2807,9 @@ impl Actor {
         self.commands_fetching.clear();
         self.ack_cooldowns.clear();
         self.last_announce_time = None;
+        self.reset_directory_permissions();
+        self.subscribed_all_channels = false;
+        self.self_server_groups.clear();
         self.connection_epoch = self.connection_epoch.wrapping_add(1);
         self.epoch.store(self.connection_epoch, Ordering::SeqCst);
         let _ = self.disconnect_tx.send(self.connection_epoch);
@@ -3012,6 +3067,124 @@ impl Actor {
         });
     }
 
+    fn reset_directory_permissions(&mut self) {
+        self.channel_list_allowed = None;
+        self.channel_meta_allowed = None;
+        self.client_list_allowed = None;
+    }
+
+    fn normalize_server_groups(groups: &[String]) -> Vec<String> {
+        let mut normalized: Vec<String> =
+            groups.iter().filter(|g| !g.is_empty()).cloned().collect();
+        normalized.sort();
+        normalized.dedup();
+        normalized
+    }
+
+    fn sync_self_server_groups(&mut self, groups: &[String]) {
+        let normalized = Self::normalize_server_groups(groups);
+        if self.self_server_groups != normalized {
+            self.self_server_groups = normalized;
+            self.reset_directory_permissions();
+        }
+    }
+
+    fn handle_directory_snapshot(&mut self, snapshot: tsclient_rs::DirectorySnapshot) {
+        if let Some(self_id) = self.self_client_id
+            && let Some(me) = snapshot.clients.iter().find(|c| c.id == self_id)
+        {
+            self.sync_self_server_groups(&me.server_groups);
+        }
+        let incoming_codecs: HashMap<u64, i32> = snapshot
+            .channels
+            .iter()
+            .filter_map(|channel| channel.codec.map(|codec| (channel.id, codec)))
+            .collect();
+        let incoming_channels: Vec<ChannelView> = snapshot
+            .channels
+            .into_iter()
+            .map(|channel| channel_view(channel, None))
+            .collect();
+        let incoming_clients: Vec<ClientView> =
+            snapshot.clients.into_iter().map(ClientView::from).collect();
+        let (channels, clients) = self.prepare_merged_snapshot(
+            Some((incoming_channels, incoming_codecs)),
+            Some((incoming_clients, true)),
+        );
+        if self.self_channel_id != 0
+            && let Some(codec) = self.channel_codecs.get(&self.self_channel_id).copied()
+            && codec != self.current_codec
+        {
+            self.apply_channel_codec(Some(codec));
+        }
+        self.commit_snapshot(channels, clients, false);
+    }
+
+    fn prepare_merged_snapshot(
+        &mut self,
+        incoming_channels: Option<(Vec<ChannelView>, HashMap<u64, i32>)>,
+        incoming_clients: Option<(Vec<ClientView>, bool)>,
+    ) -> (Vec<ChannelView>, Vec<ClientView>) {
+        let (prev_channels, prev_clients) = self
+            .last_snapshot
+            .as_ref()
+            .map(|(channels, clients)| (channels.as_slice(), clients.as_slice()))
+            .unwrap_or((&[], &[]));
+
+        let channels = match incoming_channels {
+            Some((raw_channels, raw_codecs)) => {
+                let (merged_channels, merged_codecs) = merge_channels(
+                    raw_channels,
+                    raw_codecs,
+                    prev_channels,
+                    &self.channel_codecs,
+                );
+                self.channel_codecs = merged_codecs;
+                merged_channels
+            }
+            None => prev_channels.to_vec(),
+        };
+
+        let mut clients = match incoming_clients {
+            Some((raw_clients, from_directory_only)) => {
+                let prune_departed = !from_directory_only
+                    || self.subscribed_all_channels
+                    || self.client_list_allowed == Some(false);
+                merge_clients(
+                    raw_clients,
+                    prev_clients,
+                    prune_departed,
+                    self.self_channel_id,
+                )
+            }
+            None => prev_clients.to_vec(),
+        };
+        // TS6 服务器推给自己的行永远缺频道，用会话状态补齐后再统一补充身份信息。
+        self.patch_self_row(&mut clients);
+        self.enrich_clients(&mut clients);
+        clients.sort_by_key(|client| client.id);
+        (channels, clients)
+    }
+
+    fn commit_snapshot(
+        &mut self,
+        channels: Vec<ChannelView>,
+        clients: Vec<ClientView>,
+        force: bool,
+    ) {
+        let changed = force
+            || self
+                .last_snapshot
+                .as_ref()
+                .is_none_or(|(old_channels, old_clients)| {
+                    old_channels != &channels || old_clients != &clients
+                });
+        if changed {
+            self.last_snapshot = Some((channels.clone(), clients.clone()));
+            self.emit(SessionEvent::Snapshot { channels, clients });
+        }
+    }
+
     fn emit_voice_state(&self) {
         self.emit(SessionEvent::Voice(self.voice_state.clone()));
     }
@@ -3042,12 +3215,116 @@ fn reconnect_delay(attempt: u32) -> Duration {
 
 async fn fetch_channel_metadata(
     client: &Client,
-) -> Result<HashMap<u64, ChannelMetadata>, SessionError> {
+) -> Result<HashMap<u64, ChannelMetadata>, tsclient_rs::Error> {
     let rows = client
         .exec_command_with_response("channellist -flags -codec", 5_000)
-        .await
-        .map_err(protocol_error)?;
+        .await?;
     Ok(parse_channel_metadata(&rows))
+}
+
+fn is_permission_denied(err: &tsclient_rs::Error) -> bool {
+    matches!(err, tsclient_rs::Error::ServerError { id, .. } if id == "2568")
+}
+
+fn directory_from_channels(
+    channels: Vec<ChannelInfo>,
+    metadata_error: Option<String>,
+) -> ChannelDirectory {
+    let codecs: HashMap<u64, i32> = channels
+        .iter()
+        .filter_map(|channel| channel.codec.map(|codec| (channel.id, codec)))
+        .collect();
+    ChannelDirectory {
+        channels: channels
+            .into_iter()
+            .map(|channel| channel_view(channel, None))
+            .collect(),
+        codecs: (!codecs.is_empty()).then_some(codecs),
+        metadata_error,
+    }
+}
+
+fn merge_channels(
+    incoming_channels: Vec<ChannelView>,
+    incoming_codecs: HashMap<u64, i32>,
+    previous_channels: &[ChannelView],
+    existing_codecs: &HashMap<u64, i32>,
+) -> (Vec<ChannelView>, HashMap<u64, i32>) {
+    let prev_by_id: HashMap<u64, &ChannelView> = previous_channels
+        .iter()
+        .map(|channel| (channel.id, channel))
+        .collect();
+    let mut merged_channels = Vec::with_capacity(incoming_channels.len());
+    let mut merged_codecs = HashMap::new();
+
+    for mut channel in incoming_channels {
+        if let Some(prev) = prev_by_id.get(&channel.id) {
+            channel.order = channel.order.or(prev.order);
+            channel.icon_id = channel.icon_id.or(prev.icon_id);
+            channel.max_clients = channel.max_clients.or(prev.max_clients);
+            channel.max_clients_limited = channel.max_clients_limited.or(prev.max_clients_limited);
+            channel.password_protected = channel.password_protected.or(prev.password_protected);
+        }
+        if let Some(codec) = incoming_codecs
+            .get(&channel.id)
+            .copied()
+            .or_else(|| existing_codecs.get(&channel.id).copied())
+        {
+            merged_codecs.insert(channel.id, codec);
+        }
+        merged_channels.push(channel);
+    }
+
+    (merged_channels, merged_codecs)
+}
+
+fn merge_clients(
+    incoming_clients: Vec<ClientView>,
+    previous_clients: &[ClientView],
+    prune_departed: bool,
+    self_channel_id: u64,
+) -> Vec<ClientView> {
+    let prev_by_id: HashMap<i32, &ClientView> = previous_clients
+        .iter()
+        .map(|client| (client.id, client))
+        .collect();
+    let mut merged = Vec::with_capacity(incoming_clients.len());
+    let mut seen = HashSet::with_capacity(incoming_clients.len());
+
+    for mut client in incoming_clients {
+        seen.insert(client.id);
+        if let Some(prev) = prev_by_id.get(&client.id) {
+            if client.nickname.is_empty() && !prev.nickname.is_empty() {
+                client.nickname = prev.nickname.clone();
+            }
+            if client.uid.is_empty() && !prev.uid.is_empty() {
+                client.uid = prev.uid.clone();
+            }
+            if client.channel_id == 0 && prev.channel_id != 0 {
+                client.channel_id = prev.channel_id;
+            }
+            client.input_muted = client.input_muted.or(prev.input_muted);
+            client.output_muted = client.output_muted.or(prev.output_muted);
+            client.away = client.away.or(prev.away);
+            if client.away != Some(false) {
+                client.away_message = client.away_message.or_else(|| prev.away_message.clone());
+            }
+        }
+        merged.push(client);
+    }
+
+    if !prune_departed {
+        for prev in previous_clients {
+            if !seen.contains(&prev.id)
+                && prev.channel_id != self_channel_id
+                && prev.channel_id != 0
+            {
+                merged.push(prev.clone());
+            }
+        }
+    }
+
+    merged
 }
 
 fn parse_channel_metadata(rows: &[HashMap<String, String>]) -> HashMap<u64, ChannelMetadata> {
@@ -3316,7 +3593,11 @@ fn emit(events: &broadcast::Sender<SessionEvent>, event: SessionEvent) {
             "error" => tracing::error!(target: "session", "{message}"),
             "warn" => tracing::warn!(target: "session", "{message}"),
             "debug" => tracing::debug!(target: "session", "{message}"),
+            "trace" => tracing::trace!(target: "session", "{message}"),
             _ => tracing::info!(target: "session", "{message}"),
+        }
+        if matches!(level.as_str(), "debug" | "trace") {
+            return;
         }
     }
     // 没有订阅者时事件直接丢弃，actor 不因此停下。
@@ -3454,6 +3735,7 @@ fn register_handlers(
     }));
 
     let channel = events.clone();
+    let updated = signals.clone();
     let live = Arc::clone(&current);
     client.on_client_updated(Arc::new(move |event: ProtocolEvent| {
         if live.load(Ordering::Relaxed) != epoch {
@@ -3470,6 +3752,11 @@ fn register_handlers(
                     away_message: info.away_message,
                 },
             );
+            let _ = updated.send(SessionSignal::ClientUpdated {
+                epoch,
+                id: info.id,
+                server_groups: info.server_groups,
+            });
         }
     }));
 
@@ -3503,10 +3790,7 @@ fn register_handlers(
             return;
         }
         if let ProtocolEvent::DirectorySnapshot(snapshot) = event {
-            let _ = channel.send(SessionSignal::Snapshot {
-                epoch,
-                clients: snapshot.clients.into_iter().map(ClientView::from).collect(),
-            });
+            let _ = channel.send(SessionSignal::Snapshot { epoch, snapshot });
         }
     }));
 
@@ -3655,7 +3939,11 @@ impl EventLogger {
             "error" => tracing::error!(target: "tsclient", message = message),
             "warn" => tracing::warn!(target: "tsclient", message = message),
             "debug" => tracing::debug!(target: "tsclient", message = message),
+            "trace" => tracing::trace!(target: "tsclient", message = message),
             _ => tracing::info!(target: "tsclient", message = message),
+        }
+        if matches!(level, "debug" | "trace") {
+            return;
         }
         let _ = self.events.send(SessionEvent::Log {
             level: level.to_string(),
@@ -4709,5 +4997,480 @@ mod tests {
         assert!(actor.commands_fetching.is_empty());
         assert!(actor.ack_cooldowns.is_empty());
         assert!(actor.last_announce_time.is_none());
+        assert!(actor.channel_list_allowed.is_none());
+        assert!(actor.channel_meta_allowed.is_none());
+        assert!(actor.client_list_allowed.is_none());
+        assert!(!actor.subscribed_all_channels);
+        assert!(actor.self_server_groups.is_empty());
+    }
+
+    fn channel_info(id: u64, parent_id: u64, order: u64, name: &str) -> ChannelInfo {
+        ChannelInfo {
+            id,
+            parent_id,
+            order,
+            name: name.to_string(),
+            description: String::new(),
+            password_protected: None,
+            max_clients: None,
+            max_clients_limited: None,
+            codec: None,
+            icon_id: None,
+        }
+    }
+
+    #[test]
+    fn directory_snapshot_merges_channels_codecs_and_skips_unchanged_diff() {
+        let mut actor = audio_actor();
+        actor.self_client_id = Some(1);
+        actor.self_channel_id = 5;
+        actor.subscribed_all_channels = true;
+        actor.peer_identities.insert(
+            "peer-uid".into(),
+            CachedPeerIdentity {
+                client_type: ClientType::FlSpeak,
+                app_name: "FlSpeak".into(),
+                app_version: "0.1.12".into(),
+                capabilities: vec!["chat".into()],
+            },
+        );
+        actor.channel_codecs.insert(5, 4);
+        actor.channel_codecs.insert(99, 5);
+        actor.last_snapshot = Some((
+            vec![
+                ChannelView {
+                    icon_id: Some(77),
+                    id: 5,
+                    parent_id: 0,
+                    order: Some(0),
+                    name: "Lobby".into(),
+                    description: String::new(),
+                    max_clients: Some(12),
+                    max_clients_limited: Some(true),
+                    password_protected: Some(true),
+                },
+                ChannelView {
+                    icon_id: None,
+                    id: 99,
+                    parent_id: 0,
+                    order: Some(5),
+                    name: "Deleted".into(),
+                    description: String::new(),
+                    max_clients: None,
+                    max_clients_limited: None,
+                    password_protected: None,
+                },
+            ],
+            vec![
+                ClientView {
+                    id: 1,
+                    nickname: "Self".into(),
+                    uid: "self-uid".into(),
+                    channel_id: 5,
+                    input_muted: None,
+                    output_muted: None,
+                    away: None,
+                    away_message: None,
+                    client_type: ClientType::FlSpeak,
+                    app_name: Some("FlSpeak".into()),
+                    app_version: Some(env!("CARGO_PKG_VERSION").into()),
+                    capabilities: Vec::new(),
+                    bot_commands: None,
+                },
+                ClientView {
+                    id: 2,
+                    nickname: "Peer".into(),
+                    uid: "peer-uid".into(),
+                    channel_id: 5,
+                    input_muted: Some(false),
+                    output_muted: Some(false),
+                    away: Some(false),
+                    away_message: None,
+                    client_type: ClientType::FlSpeak,
+                    app_name: Some("FlSpeak".into()),
+                    app_version: Some("0.1.12".into()),
+                    capabilities: vec!["chat".into()],
+                    bot_commands: None,
+                },
+            ],
+        ));
+        let mut events = actor.events.subscribe();
+
+        // 等价的 DirectorySnapshot（可选元数据为 None，TS6 自身 cid=0）：合并后无差异，不发事件。
+        actor.handle_directory_snapshot(tsclient_rs::DirectorySnapshot {
+            channels: vec![channel_info(5, 0, 0, "Lobby")],
+            clients: vec![
+                ClientInfo {
+                    uid: "self-uid".into(),
+                    ..client_info(1, 0, "Self")
+                },
+                ClientInfo {
+                    uid: "peer-uid".into(),
+                    input_muted: Some(false),
+                    output_muted: Some(false),
+                    away: Some(false),
+                    ..client_info(2, 5, "Peer")
+                },
+            ],
+            truncated: false,
+        });
+        assert!(events.try_recv().is_ok()); // 频道 99 被删除，触发一次更新
+        assert!(!actor.channel_codecs.contains_key(&99));
+        assert_eq!(actor.channel_codecs.get(&5), Some(&4));
+
+        // 再次推送完全相同的快照，命中 Diff 跳过广播。
+        actor.handle_directory_snapshot(tsclient_rs::DirectorySnapshot {
+            channels: vec![channel_info(5, 0, 0, "Lobby")],
+            clients: vec![
+                ClientInfo {
+                    uid: "self-uid".into(),
+                    ..client_info(1, 0, "Self")
+                },
+                ClientInfo {
+                    uid: "peer-uid".into(),
+                    input_muted: Some(false),
+                    output_muted: Some(false),
+                    away: Some(false),
+                    ..client_info(2, 5, "Peer")
+                },
+            ],
+            truncated: false,
+        });
+        assert!(events.try_recv().is_err());
+
+        // 频道改名 + 新建频道 + 保留既有 Some 扩展字段 + 保留 peer identity。
+        actor.handle_directory_snapshot(tsclient_rs::DirectorySnapshot {
+            channels: vec![
+                channel_info(5, 0, 0, "Main Lobby"),
+                ChannelInfo {
+                    codec: Some(5),
+                    password_protected: Some(true),
+                    ..channel_info(8, 5, 0, "Sub")
+                },
+            ],
+            clients: vec![
+                ClientInfo {
+                    uid: "self-uid".into(),
+                    ..client_info(1, 0, "Self")
+                },
+                ClientInfo {
+                    uid: "peer-uid".into(),
+                    input_muted: Some(true),
+                    ..client_info(2, 5, "Peer")
+                },
+            ],
+            truncated: false,
+        });
+        let Some(SessionEvent::Snapshot { channels, clients }) = events.try_recv().ok() else {
+            panic!("expected Snapshot event after real change");
+        };
+        assert_eq!(channels.len(), 2);
+        assert_eq!(channels[0].name, "Main Lobby");
+        assert_eq!(channels[0].icon_id, Some(77));
+        assert_eq!(channels[0].max_clients, Some(12));
+        assert_eq!(channels[0].max_clients_limited, Some(true));
+        assert_eq!(channels[0].password_protected, Some(true));
+        assert_eq!(channels[1].id, 8);
+        assert_eq!(channels[1].password_protected, Some(true));
+        assert_eq!(actor.channel_codecs.get(&8), Some(&5));
+        let self_row = clients.iter().find(|c| c.id == 1).unwrap();
+        assert_eq!(self_row.channel_id, 5);
+        let peer_row = clients.iter().find(|c| c.id == 2).unwrap();
+        assert_eq!(peer_row.input_muted, Some(true));
+        assert_eq!(peer_row.app_name.as_deref(), Some("FlSpeak"));
+    }
+
+    #[test]
+    fn directory_snapshot_preserves_unsubscribed_channels_only_when_clientlist_active() {
+        let mut actor = audio_actor();
+        actor.self_client_id = Some(1);
+        actor.self_channel_id = 5;
+        actor.subscribed_all_channels = false;
+        actor.client_list_allowed = Some(true);
+        actor.last_snapshot = Some((
+            vec![
+                ChannelView {
+                    icon_id: None,
+                    id: 5,
+                    parent_id: 0,
+                    order: Some(0),
+                    name: "Current".into(),
+                    description: String::new(),
+                    max_clients: None,
+                    max_clients_limited: None,
+                    password_protected: None,
+                },
+                ChannelView {
+                    icon_id: None,
+                    id: 9,
+                    parent_id: 0,
+                    order: Some(5),
+                    name: "Other".into(),
+                    description: String::new(),
+                    max_clients: None,
+                    max_clients_limited: None,
+                    password_protected: None,
+                },
+            ],
+            vec![
+                ClientView::from(client_info(1, 5, "Self")),
+                ClientView::from(client_info(2, 5, "LeftCurrent")),
+                ClientView::from(client_info(3, 9, "UnsubscribedPeer")),
+            ],
+        ));
+
+        // channelsubscribeall 失败但 clientlist 可用时：当前频道离场者裁剪，未订阅频道成员保留。
+        actor.handle_directory_snapshot(tsclient_rs::DirectorySnapshot {
+            channels: vec![
+                channel_info(5, 0, 0, "Current"),
+                channel_info(9, 0, 5, "Other"),
+            ],
+            clients: vec![client_info(1, 5, "Self")],
+            truncated: false,
+        });
+        let (_, clients) = actor.last_snapshot.as_ref().unwrap();
+        assert_eq!(clients.iter().map(|c| c.id).collect::<Vec<_>>(), vec![1, 3]);
+
+        // 当 clientlist 被禁用时，按目录快照裁剪所有不在快照里的成员。
+        actor.client_list_allowed = Some(false);
+        actor.handle_directory_snapshot(tsclient_rs::DirectorySnapshot {
+            channels: vec![
+                channel_info(5, 0, 0, "Current"),
+                channel_info(9, 0, 5, "Other"),
+            ],
+            clients: vec![client_info(1, 5, "Self")],
+            truncated: false,
+        });
+        let (_, clients) = actor.last_snapshot.as_ref().unwrap();
+        assert_eq!(clients.iter().map(|c| c.id).collect::<Vec<_>>(), vec![1]);
+    }
+
+    struct SelectiveErrorMiddleware {
+        calls: Arc<std::sync::Mutex<Vec<String>>>,
+        deny_prefixes: Vec<&'static str>,
+    }
+
+    impl tsclient_rs::CommandMiddleware for SelectiveErrorMiddleware {
+        fn wrap(&self, _: TestCommandHandler) -> TestCommandHandler {
+            let calls = Arc::clone(&self.calls);
+            let deny_prefixes = self.deny_prefixes.clone();
+            Arc::new(move |command| {
+                calls.lock().unwrap().push(command.clone());
+                let denied = deny_prefixes
+                    .iter()
+                    .any(|prefix| command.starts_with(prefix));
+                Box::pin(async move {
+                    if denied {
+                        Err(tsclient_rs::Error::ServerError {
+                            id: "2568".into(),
+                            server_message: "insufficient client permissions".into(),
+                            extra_message: None,
+                        })
+                    } else {
+                        // 用 ServerError 模拟服务器已应答但无数据行的探针，避免 5s 超时等待。
+                        Err(tsclient_rs::Error::ServerError {
+                            id: "0".into(),
+                            server_message: "ok".into(),
+                            extra_message: None,
+                        })
+                    }
+                })
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn permission_flags_skip_repeated_2568_queries_and_whoami_keeps_rtt_alive() {
+        tokio::task::LocalSet::new()
+            .run_until(async {
+                let calls = Arc::new(std::sync::Mutex::new(Vec::new()));
+                let client = Client::new(
+                    tsclient_rs::generateIdentity(0),
+                    "127.0.0.1:9987".into(),
+                    "test".into(),
+                    tsclient_rs::ClientOptions {
+                        command_middleware: vec![Box::new(SelectiveErrorMiddleware {
+                            calls: Arc::clone(&calls),
+                            deny_prefixes: vec!["channellist ", "clientlist "],
+                        })],
+                        ..Default::default()
+                    },
+                );
+                client.mark_connected();
+                let mut actor = audio_actor();
+                actor.client = Some(Arc::new(client));
+                actor.self_client_id = Some(1);
+                actor.network_monitor = Some(crate::network::NetworkMonitor::new());
+                let mut events = actor.events.subscribe();
+
+                // 首次拉取：channellist 与 clientlist 均被 2568 拒绝并独立标为 Some(false)。
+                let client_ref = actor.client.clone().unwrap();
+                let _ = actor.read_channel_directory(&client_ref, true).await;
+                let _ = actor.read_clients(&client_ref).await;
+                assert_eq!(actor.channel_list_allowed, Some(false));
+                assert_eq!(actor.client_list_allowed, Some(false));
+                assert_eq!(actor.channel_meta_allowed, None);
+
+                // 清空记录，第二次轮询应跳过 channellist/clientlist，改用 whoami 测 RTT。
+                calls.lock().unwrap().clear();
+                let _ = actor.read_channel_directory(&client_ref, true).await;
+                let _ = actor.read_clients(&client_ref).await;
+                let second_round = calls.lock().unwrap().clone();
+                assert_eq!(second_round.len(), 1);
+                assert!(second_round[0].starts_with("whoami"));
+
+                let mut network_events = Vec::new();
+                let mut warn_logs = Vec::new();
+                while let Ok(ev) = events.try_recv() {
+                    match ev {
+                        SessionEvent::Network(t) => network_events.push(t),
+                        SessionEvent::Log { level, message } if level == "warn" => {
+                            warn_logs.push(message);
+                        }
+                        _ => {}
+                    }
+                }
+                assert!(warn_logs.is_empty());
+                assert_eq!(network_events.len(), 2);
+                assert_eq!(network_events[1].probes_sent, 2);
+                assert_eq!(network_events[1].probes_failed, 0);
+                assert!(network_events[1].round_trip_ms.is_some());
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn dynamic_reset_triggers_clear_permission_flags() {
+        let mut actor = audio_actor();
+        actor.self_client_id = Some(7);
+        actor.self_channel_id = 5;
+        actor.self_server_groups = vec!["6".into()];
+
+        // 1. 切换频道重置权限标志。
+        actor.channel_list_allowed = Some(false);
+        actor.channel_meta_allowed = Some(false);
+        actor.client_list_allowed = Some(false);
+        actor.on_self_moved(9).await;
+        assert_eq!(actor.channel_list_allowed, None);
+        assert_eq!(actor.channel_meta_allowed, None);
+        assert_eq!(actor.client_list_allowed, None);
+
+        // 2. ClientUpdated 服务器组不变时不重置；变化时重置（顺序不同但集合相同也不重置）。
+        actor.channel_list_allowed = Some(false);
+        actor.channel_meta_allowed = Some(false);
+        actor.client_list_allowed = Some(false);
+        actor.self_server_groups = vec!["6".into(), "8".into()];
+        actor
+            .handle_signal(SessionSignal::ClientUpdated {
+                epoch: actor.connection_epoch,
+                id: 7,
+                server_groups: vec!["8".into(), "6".into()],
+            })
+            .await;
+        assert_eq!(actor.channel_list_allowed, Some(false));
+
+        actor
+            .handle_signal(SessionSignal::ClientUpdated {
+                epoch: actor.connection_epoch,
+                id: 7,
+                server_groups: vec!["6".into(), "7".into(), "8".into()],
+            })
+            .await;
+        assert_eq!(actor.channel_list_allowed, None);
+        assert_eq!(actor.channel_meta_allowed, None);
+        assert_eq!(actor.client_list_allowed, None);
+
+        // 3. DirectorySnapshot 检测到自身 server_groups 变化时也重置。
+        actor.channel_list_allowed = Some(false);
+        actor.channel_meta_allowed = Some(false);
+        actor.client_list_allowed = Some(false);
+        actor
+            .handle_signal(SessionSignal::Snapshot {
+                epoch: actor.connection_epoch,
+                snapshot: tsclient_rs::DirectorySnapshot {
+                    channels: Vec::new(),
+                    clients: vec![ClientInfo {
+                        server_groups: vec!["6".into()],
+                        ..client_info(7, 9, "Self")
+                    }],
+                    truncated: false,
+                },
+            })
+            .await;
+        assert_eq!(actor.channel_list_allowed, None);
+        assert_eq!(actor.channel_meta_allowed, None);
+        assert_eq!(actor.client_list_allowed, None);
+
+        // 4. RequestSnapshot 命令重置权限标志。
+        actor.channel_list_allowed = Some(false);
+        actor.channel_meta_allowed = Some(false);
+        actor.client_list_allowed = Some(false);
+        let (reply, rx) = oneshot::channel();
+        assert!(
+            actor
+                .handle(SessionCommand::RequestSnapshot { reply })
+                .await
+        );
+        assert!(rx.await.unwrap().is_ok());
+        assert_eq!(actor.channel_list_allowed, None);
+        assert_eq!(actor.channel_meta_allowed, None);
+        assert_eq!(actor.client_list_allowed, None);
+    }
+
+    #[test]
+    fn debug_and_trace_logs_do_not_cross_ffi_broadcast_channel() {
+        let (events, mut rx) = broadcast::channel(16);
+        let logger = EventLogger {
+            events: events.clone(),
+        };
+
+        logger.log("debug", "suppressed tsclient debug");
+        logger.log("trace", "suppressed tsclient trace");
+        emit(
+            &events,
+            SessionEvent::Log {
+                level: "debug".into(),
+                message: "suppressed actor debug".into(),
+            },
+        );
+        emit(
+            &events,
+            SessionEvent::Log {
+                level: "trace".into(),
+                message: "suppressed actor trace".into(),
+            },
+        );
+        assert!(rx.try_recv().is_err());
+
+        logger.log("info", "allowed tsclient info");
+        emit(
+            &events,
+            SessionEvent::Log {
+                level: "warn".into(),
+                message: "allowed actor warn".into(),
+            },
+        );
+        emit(
+            &events,
+            SessionEvent::Log {
+                level: "error".into(),
+                message: "allowed actor error".into(),
+            },
+        );
+
+        let received: Vec<(String, String)> = std::iter::from_fn(|| rx.try_recv().ok())
+            .filter_map(|ev| match ev {
+                SessionEvent::Log { level, message } => Some((level, message)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            received,
+            vec![
+                ("info".into(), "allowed tsclient info".into()),
+                ("warn".into(), "allowed actor warn".into()),
+                ("error".into(), "allowed actor error".into()),
+            ]
+        );
     }
 }

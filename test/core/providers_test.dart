@@ -101,6 +101,24 @@ class _Core extends Fake implements CoreSession {
 
   int accessCalls = 0;
   int memberGroupsCalls = 0;
+  int moveCalls = 0;
+  int requestSnapshotCalls = 0;
+
+  @override
+  Future<void> moveToChannel({
+    required int clientId,
+    required int channelId,
+    String? password,
+  }) async {
+    if (fail) throw const CoreError.connection(message: 'move rejected');
+    moveCalls++;
+  }
+
+  @override
+  Future<void> requestSnapshot() async {
+    if (fail) throw const CoreError.connection(message: 'snapshot rejected');
+    requestSnapshotCalls++;
+  }
 
   @override
   Future<AccessView> access() async {
@@ -1255,4 +1273,30 @@ void main() {
     expect(bot.capabilities, ['chat:slash_commands']);
     expect(bot.botCommands, [playCmd]);
   });
+
+  test(
+    'joinChannel moves without triggering a redundant requestSnapshot',
+    () async {
+      final events = StreamController<CoreEvent>.broadcast(sync: true);
+      final core = _Core(events);
+      final container = ProviderContainer(
+        overrides: [coreSessionProvider.overrideWithValue(core)],
+      );
+      addTearDown(() async {
+        container.dispose();
+        await events.close();
+      });
+
+      final controller = container.read(sessionViewProvider.notifier);
+      events.add(
+        const CoreEvent.state(
+          state: CoreSessionState.connected(clientId: 1, channelId: 5),
+        ),
+      );
+
+      expect(await controller.joinChannel(8), isTrue);
+      expect(core.moveCalls, 1);
+      expect(core.requestSnapshotCalls, 0);
+    },
+  );
 }

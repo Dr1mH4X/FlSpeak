@@ -231,7 +231,6 @@ class SessionController extends Notifier<SessionView> {
             channelId: channelId,
             password: password,
           );
-      await refresh();
     }, passwordPrompt: true);
   }
 
