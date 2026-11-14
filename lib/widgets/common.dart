@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart'
     hide ButtonStyle, IconButton, PopupMenuItem;
 
-import '../theme/app_motion.dart';
 import '../theme/app_theme.dart';
 import 'prism.dart';
 
@@ -98,6 +97,15 @@ Future<T?> showAppModal<T>(
   WidgetBuilder? footer,
 }) {
   final compact = context.isCompact;
+  final navigator = Navigator.of(context, rootNavigator: true);
+  final capturedThemes = InheritedTheme.capture(
+    from: context,
+    to: navigator.context,
+  );
+  final barrierColor = context.scheme.scrim.withValues(alpha: 0.32);
+  final barrierLabel = MaterialLocalizations.of(context)
+      .modalBarrierDismissLabel;
+
   Widget panel(BuildContext context) => _ModalPanel(
     title: title,
     description: description,
@@ -106,30 +114,21 @@ Future<T?> showAppModal<T>(
   );
 
   if (compact) {
-    return showModalBottomSheet<T>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: false,
-      sheetAnimationStyle: const AnimationStyle(
-        duration: Motion.effectsSlow,
-        reverseDuration: Motion.effectsDefault,
-        curve: Motion.spatialCurve,
-      ),
-      // M3 scrim：scrim 色压 32%，亮暗主题各自成立。
-      barrierColor: context.scheme.scrim.withValues(alpha: 0.32),
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.sizeOf(context).height * 0.92,
-      ),
-      builder: (context) => ElevatedSurfaceTheme(
-        child: SurfaceScope(
-          level: SurfaceLevel.page,
-          child: Padding(
-            // 底部抽屉没有自动避让软键盘：添加服务器的输入框必须跟着键盘上移。
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.viewInsetsOf(context).bottom,
+    return navigator.push<T>(
+      SnapSheetRoute<T>(
+        fitsContent: true,
+        sheetBarrierColor: barrierColor,
+        barrierLabel: barrierLabel,
+        builder: (context, _) => capturedThemes.wrap(
+          SurfaceScope(
+            level: SurfaceLevel.page,
+            child: SafeArea(
+              top: false,
+              child: Material(
+                type: MaterialType.transparency,
+                child: panel(context),
+              ),
             ),
-            child: panel(context),
           ),
         ),
       ),
@@ -137,65 +136,22 @@ Future<T?> showAppModal<T>(
   }
 
   final floatingLevel = floatingSurfaceLevelFor(context.scheme);
-  return Navigator.of(context, rootNavigator: true).push<T>(
-    _AppDialogRoute<T>(
-      context: context,
-      barrierColor: context.scheme.scrim.withValues(alpha: 0.32),
-      builder: (context) => ElevatedSurfaceTheme(
-        child: Builder(
-          builder: (context) => Dialog(
-            backgroundColor: surfaceColorFor(floatingLevel, context.scheme),
-            shape: AppShape.all(AppCorner.alert),
-            clipBehavior: Clip.antiAlias,
-            child: SurfaceScope(
-              level: floatingLevel,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 512),
-                child: panel(context),
-              ),
-            ),
+  return navigator.push<T>(
+    FormSheetRoute<T>(
+      backgroundColor: surfaceColorFor(floatingLevel, context.scheme),
+      barrierColor: barrierColor,
+      barrierLabel: barrierLabel,
+      builder: (context) => capturedThemes.wrap(
+        SurfaceScope(
+          level: floatingLevel,
+          child: Material(
+            type: MaterialType.transparency,
+            child: panel(context),
           ),
         ),
       ),
     ),
   );
-}
-
-class _AppDialogRoute<T> extends DialogRoute<T> {
-  _AppDialogRoute({
-    required super.context,
-    required super.builder,
-    required super.barrierColor,
-  }) : super(
-         themes: InheritedTheme.capture(
-           from: context,
-           to: Navigator.of(context, rootNavigator: true).context,
-         ),
-         traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
-         animationStyle: const AnimationStyle(
-           duration: Motion.effectsDefault,
-           reverseDuration: Motion.effectsFast,
-         ),
-       );
-
-  @override
-  Widget buildTransitions(
-    BuildContext context,
-    Animation<double> animation,
-    Animation<double> secondaryAnimation,
-    Widget child,
-  ) {
-    final progress = animation.drive(
-      CurveTween(curve: Motion.effectsDefaultCurve),
-    );
-    return FadeTransition(
-      opacity: progress,
-      child: ScaleTransition(
-        scale: progress.drive(Tween(begin: 0.94, end: 1.0)),
-        child: child,
-      ),
-    );
-  }
 }
 
 class _ModalPanel extends StatelessWidget {
@@ -218,18 +174,7 @@ class _ModalPanel extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (context.isCompact)
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(top: 10),
-              decoration: ShapeDecoration(
-                color: dividerColorOf(context),
-                shape: AppShape.full,
-              ),
-            ),
-          ),
+        if (context.isCompact) const SheetDragHandle(),
         Padding(
           padding: EdgeInsets.fromLTRB(20, context.isCompact ? 14 : 20, 12, 8),
           child: Row(

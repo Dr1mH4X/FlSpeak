@@ -40,6 +40,7 @@ export 'package:prism_ui/prism_ui.dart'
         ElasticPress,
         ElevatedSurfaceExt,
         FocusRing,
+        FormSheetRoute,
         GooSurface,
         IconButtonData,
         ItemPosition,
@@ -73,6 +74,8 @@ export 'package:prism_ui/prism_ui.dart'
         SegmentedControl,
         SelectionBadge,
         SelectionCheck,
+        SheetDragHandle,
+        SnapSheetRoute,
         SpringCurve,
         Surface,
         SurfaceLevel,
@@ -87,11 +90,14 @@ export 'package:prism_ui/prism_ui.dart'
         ViewScope,
         dropletSpring,
         focusRingSide,
+        formSheetShape,
         generateGroup,
         listHeaderPaddingOf,
         listRowMinHeight,
         listRowVerticalPadding,
-        riseAndFall;
+        riseAndFall,
+        sheetNavigatorOf,
+        snapSheetDetents;
 
 export 'package:prism_ui/icons/icons.dart'
     show

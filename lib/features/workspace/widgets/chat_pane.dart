@@ -832,87 +832,136 @@ class _ScopeButton extends StatelessWidget {
     return IconButton(
       onPressed: !enabled
           ? null
-          : () => showModalBottomSheet<void>(
-              context: context,
-              showDragHandle: true,
-              isScrollControlled: true,
-              builder: (context) => SafeArea(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: MediaQuery.sizeOf(context).height * .7,
-                  ),
-                  child: ListView(
-                    shrinkWrap: true,
-                    children: [
-                      for (final entry in [
-                        (
-                          ChatScope.channel,
-                          l10n.chatScopeChannel,
-                          Icons.chat_bubble_rounded,
-                        ),
-                        (
-                          ChatScope.server,
-                          l10n.chatScopeServer,
-                          Icons.public_rounded,
-                        ),
-                      ])
-                        _ScopeOptionRow(
-                          icon: entry.$3,
-                          title: entry.$2,
-                          unread: unreadScopes.contains(entry.$1),
-                          selected: scope == entry.$1,
-                          onTap: () {
-                            Navigator.pop(context);
-                            onChanged(entry.$1);
-                          },
-                        ),
-                      if (recipients.isNotEmpty) ...[
-                        Divider(color: dividerColorOf(context), height: 1),
-                        ExpansionTile(
-                          leading: const Icon(Icons.person_rounded),
-                          title: Row(
-                            children: [
-                              Text(l10n.chatScopeDirect),
-                              if (unreadPeers.isNotEmpty) ...[
-                                const SizedBox(width: 8),
-                                const _UnreadDot(),
+          : () {
+              final navigator = Navigator.of(context, rootNavigator: true);
+              final capturedThemes = InheritedTheme.capture(
+                from: context,
+                to: navigator.context,
+              );
+              navigator.push<void>(
+                SnapSheetRoute<void>(
+                  fitsContent: true,
+                  sheetBarrierColor: scheme.scrim.withValues(alpha: 0.32),
+                  barrierLabel: MaterialLocalizations.of(context)
+                      .modalBarrierDismissLabel,
+                  builder: (context, _) => capturedThemes.wrap(
+                    SurfaceScope(
+                      level: SurfaceLevel.page,
+                      child: Material(
+                        type: MaterialType.transparency,
+                        child: SafeArea(
+                          top: false,
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxHeight: MediaQuery.sizeOf(context).height * .7,
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const SheetDragHandle(),
+                                const SizedBox(height: 8),
+                                Flexible(
+                                  child: ListView(
+                                    shrinkWrap: true,
+                                    children: [
+                                      for (final entry in [
+                                        (
+                                          ChatScope.channel,
+                                          l10n.chatScopeChannel,
+                                          Icons.chat_bubble_rounded,
+                                        ),
+                                        (
+                                          ChatScope.server,
+                                          l10n.chatScopeServer,
+                                          Icons.public_rounded,
+                                        ),
+                                      ])
+                                        _ScopeOptionRow(
+                                          icon: entry.$3,
+                                          title: entry.$2,
+                                          unread: unreadScopes.contains(
+                                            entry.$1,
+                                          ),
+                                          selected: scope == entry.$1,
+                                          onTap: () {
+                                            Navigator.pop(context);
+                                            onChanged(entry.$1);
+                                          },
+                                        ),
+                                      if (recipients.isNotEmpty) ...[
+                                        Divider(
+                                          color: dividerColorOf(context),
+                                          height: 1,
+                                        ),
+                                        ExpansionTile(
+                                          leading: const Icon(
+                                            Icons.person_rounded,
+                                          ),
+                                          title: Row(
+                                            children: [
+                                              Text(l10n.chatScopeDirect),
+                                              if (unreadPeers.isNotEmpty) ...[
+                                                const SizedBox(width: 8),
+                                                const _UnreadDot(),
+                                              ],
+                                            ],
+                                          ),
+                                          initiallyExpanded: false,
+                                          shape: const Border(),
+                                          collapsedShape: const Border(),
+                                          textColor: isDirect
+                                              ? scheme.primary
+                                              : null,
+                                          iconColor: isDirect
+                                              ? scheme.primary
+                                              : null,
+                                          collapsedTextColor: isDirect
+                                              ? scheme.primary
+                                              : null,
+                                          collapsedIconColor: isDirect
+                                              ? scheme.primary
+                                              : null,
+                                          children: [
+                                            for (final peer in recipients)
+                                              _ScopeOptionRow(
+                                                icon: Icons.person_rounded,
+                                                title: peer.nickname,
+                                                subtitle: l10n.chatDirectTag,
+                                                unread: unreadPeers.contains(
+                                                  peer.uid,
+                                                ),
+                                                selected:
+                                                    isDirect &&
+                                                    peer.uid ==
+                                                        selectedRecipient?.uid,
+                                                onTap: () {
+                                                  Navigator.pop(context);
+                                                  if (onRecipientSelected !=
+                                                      null) {
+                                                    onRecipientSelected!(peer);
+                                                  } else {
+                                                    onRecipientChanged(
+                                                      peer.uid,
+                                                    );
+                                                  }
+                                                },
+                                              ),
+                                          ],
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
                               ],
-                            ],
+                            ),
                           ),
-                          initiallyExpanded: false,
-                          shape: const Border(),
-                          collapsedShape: const Border(),
-                          textColor: isDirect ? scheme.primary : null,
-                          iconColor: isDirect ? scheme.primary : null,
-                          collapsedTextColor: isDirect ? scheme.primary : null,
-                          collapsedIconColor: isDirect ? scheme.primary : null,
-                          children: [
-                            for (final peer in recipients)
-                              _ScopeOptionRow(
-                                icon: Icons.person_rounded,
-                                title: peer.nickname,
-                                subtitle: l10n.chatDirectTag,
-                                unread: unreadPeers.contains(peer.uid),
-                                selected:
-                                    isDirect &&
-                                    peer.uid == selectedRecipient?.uid,
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  if (onRecipientSelected != null) {
-                                    onRecipientSelected!(peer);
-                                  } else {
-                                    onRecipientChanged(peer.uid);
-                                  }
-                                },
-                              ),
-                          ],
                         ),
-                      ],
-                    ],
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
+              );
+            },
       icon: Badge(
         isLabelVisible: _hasUnread,
         smallSize: 8,

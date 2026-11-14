@@ -186,9 +186,14 @@ void main() {
       await tester.tap(detailsTab);
       await tester.pumpAndSettle();
 
-      // Verify that ChannelDetailsPane is shown in the workspace without any dialog
+      // Verify that ChannelDetailsPane is shown in the workspace without any modal sheet
       expect(find.byType(ChannelDetailsPane), findsOneWidget);
-      expect(find.byType(Dialog), findsNothing);
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is Surface && w.shape == formSheetShape,
+        ),
+        findsNothing,
+      );
       expect(find.text('Channel topic & details'), findsOneWidget);
 
       // Verify that the pane starts from the top and is not vertically centered

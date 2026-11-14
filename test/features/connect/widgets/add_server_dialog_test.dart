@@ -127,8 +127,11 @@ void main() {
         final core = _Core();
         final container = await _mount(tester, core);
         await _openEditor(tester, homeRow: homeRow);
+        final sheet = find.byWidgetPredicate(
+          (w) => w is Surface && w.shape == formSheetShape,
+        );
         final fields = find.descendant(
-          of: find.byType(Dialog),
+          of: sheet,
           matching: find.byType(TextField),
         );
         expect(
@@ -143,7 +146,7 @@ void main() {
         await tester.enterText(fields.last, 'Renamed');
         await tester.tap(find.widgetWithText(FilledButton, '保存'));
         await tester.pumpAndSettle();
-        expect(find.byType(Dialog), findsNothing);
+        expect(sheet, findsNothing);
         expect(core.edits, [
           (id: _original.id, label: 'Renamed', address: 'new.example.com:9999'),
         ]);
@@ -171,8 +174,11 @@ void main() {
       final core = _Core()..fail = true;
       final container = await _mount(tester, core);
       await _openEditor(tester, homeRow: true);
+      final sheet = find.byWidgetPredicate(
+        (w) => w is Surface && w.shape == formSheetShape,
+      );
       final fields = find.descendant(
-        of: find.byType(Dialog),
+        of: sheet,
         matching: find.byType(TextField),
       );
       await tester.enterText(fields.first, 'nickname');
@@ -182,7 +188,7 @@ void main() {
       await tester.enterText(fields.first, 'new.example.com:9999');
       await tester.tap(find.widgetWithText(FilledButton, '保存'));
       await tester.pumpAndSettle();
-      expect(find.byType(Dialog), findsOneWidget);
+      expect(sheet, findsOneWidget);
       expect(container.read(sessionViewProvider).servers.single, _original);
       expect(
         tester.widget<TextField>(fields.first).controller!.text,

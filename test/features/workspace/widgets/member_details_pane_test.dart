@@ -154,8 +154,13 @@ void main() {
         await tester.tap(find.text('Peer'));
         await tester.pumpAndSettle();
 
-        // No modal dialog should pop up
-        expect(find.byType(Dialog), findsNothing);
+        // No modal sheet should pop up
+        expect(
+          find.byWidgetPredicate(
+            (w) => w is Surface && w.shape == formSheetShape,
+          ),
+          findsNothing,
+        );
 
         // Details pane should be rendered in the main workspace
         expect(find.byType(MemberDetailsPane), findsOneWidget);
@@ -297,7 +302,12 @@ void main() {
       await tester.tap(find.text(client.nickname));
       await tester.pumpAndSettle();
 
-      expect(find.byType(Dialog), findsNothing);
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is Surface && w.shape == formSheetShape,
+        ),
+        findsNothing,
+      );
       expect(find.byType(MemberDetailsPane), findsOneWidget);
       expect(find.text(client.nickname), findsWidgets);
     });
