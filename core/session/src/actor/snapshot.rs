@@ -258,3 +258,118 @@ impl From<ClientInfo> for ClientView {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::actor::test_support::*;
+
+    #[test]
+    fn merged_clients_prefers_listed_flags_but_directory_channels() {
+        let listed = vec![client_info(55, 0, "x414"), client_info(61, 0, "probe")];
+        let directory = vec![client_info(55, 770, "x414")];
+        let rows = merged_clients(listed, directory);
+        assert_eq!(rows.len(), 2);
+        let x414 = rows.iter().find(|row| row.id == 55).unwrap();
+        assert_eq!(x414.channel_id, 770);
+        // 目录里没有的自己这行也保留，等 clientinfo 补频道。
+        assert_eq!(rows.iter().find(|row| row.id == 61).unwrap().channel_id, 0);
+    }
+
+    #[test]
+    fn merged_clients_keeps_directory_only_members() {
+        let directory = vec![client_info(55, 770, "x414")];
+        let rows = merged_clients(Vec::new(), directory);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].channel_id, 770);
+    }
+
+    #[test]
+    fn unescape_text_handles_common_teamseek_escapes() {
+        assert_eq!(unescape_text("Fl\\sSpeak"), "Fl Speak");
+        // \| 不是转义序列（管道走 \p），按未知转义原样保留。
+        assert_eq!(unescape_text("a\\/b\\|c\\\\d"), "a/b\\|c\\d");
+        assert_eq!(unescape_text("普通\\s名字"), "普通 名字");
+        // 未知转义原样保留，尾部孤立反斜杠不吞字。
+        assert_eq!(unescape_text("a\\qb"), "a\\qb");
+        assert_eq!(unescape_text("tail\\"), "tail\\");
+    }
+
+    #[test]
+    fn channel_flags_codec_and_public_metadata_are_parsed() {
+        let mut first = HashMap::new();
+        first.insert("cid".to_string(), "7".to_string());
+        first.insert("channel_order".to_string(), "3".to_string());
+        first.insert("channel_topic".to_string(), "Welcome".to_string());
+        first.insert(
+            "channel_description".to_string(),
+            "Full description".to_string(),
+        );
+        first.insert("channel_maxclients".to_string(), "25".to_string());
+        first.insert(
+            "channel_flag_maxclients_unlimited".to_string(),
+            "0".to_string(),
+        );
+        first.insert("channel_flag_password".to_string(), "1".to_string());
+        first.insert("channel_codec".to_string(), "5".to_string());
+        let mut second = HashMap::new();
+        second.insert("cid".to_string(), "8".to_string());
+        second.insert(
+            "channel_flag_maxclients_unlimited".to_string(),
+            "1".to_string(),
+        );
+        second.insert("channel_codec".to_string(), "not-a-number".to_string());
+        let mut third = HashMap::new();
+        third.insert("channel_codec".to_string(), "4".to_string());
+
+        let metadata = parse_channel_metadata(&[first, second, third]);
+        let first = metadata.get(&7).expect("first channel");
+        assert_eq!(first.order, Some(3));
+        assert_eq!(first.description.as_deref(), Some("Full description"));
+        assert_eq!(first.codec, Some(5));
+        assert_eq!(first.max_clients, Some(25));
+        assert_eq!(first.max_clients_limited, Some(true));
+        assert_eq!(first.password_protected, Some(true));
+
+        let second = metadata.get(&8).expect("second channel");
+        assert_eq!(second.codec, None);
+        assert_eq!(second.max_clients_limited, Some(false));
+        assert_eq!(metadata.len(), 2);
+    }
+
+    #[test]
+    fn channel_view_merges_directory_rows_with_optional_flags() {
+        let channel = ChannelInfo {
+            icon_id: Some(3763318035),
+            id: 9,
+            parent_id: 2,
+            order: 1,
+            name: "Lobby".to_string(),
+            description: String::new(),
+            password_protected: None,
+            max_clients: None,
+            max_clients_limited: None,
+            codec: None,
+        };
+        let metadata = ChannelMetadata {
+            order: Some(12),
+            description: Some("Public topic".to_string()),
+            max_clients: Some(10),
+            max_clients_limited: Some(true),
+            password_protected: Some(false),
+            ..ChannelMetadata::default()
+        };
+
+        let view = channel_view(channel.clone(), Some(&metadata));
+        assert_eq!(view.icon_id, Some(3763318035));
+        assert_eq!(view.order, Some(12));
+        assert_eq!(view.description, "Public topic");
+        assert_eq!(view.max_clients, Some(10));
+        assert_eq!(view.max_clients_limited, Some(true));
+        assert_eq!(view.password_protected, Some(false));
+
+        let fallback = channel_view(channel, None);
+        assert_eq!(fallback.order, Some(1));
+        assert_eq!(fallback.password_protected, None);
+    }
+}

@@ -143,7 +143,7 @@ impl Actor {
 /// 优先在空白处断开；找不到合适空白时退到字符边界。单个字符本身超过上限时
 /// 独占一片，不切断 UTF-8。片与片之间的空白会被丢弃，语义与 TeamSpeakClaw 一致。
 #[allow(dead_code)]
-pub(super) fn split_text_message(message: &str, max_bytes: usize) -> Vec<String> {
+fn split_text_message(message: &str, max_bytes: usize) -> Vec<String> {
     assert!(max_bytes > 0, "max_bytes must be > 0");
     if message.len() <= max_bytes {
         return vec![message.to_string()];
@@ -193,4 +193,171 @@ pub(super) fn split_text_message(message: &str, max_bytes: usize) -> Vec<String>
     }
 
     chunks
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::actor::test_support::*;
+
+    #[test]
+    fn direct_peer_uid_uses_the_sender_or_resolves_the_echo_target() {
+        let mut actor = audio_actor();
+        actor.self_client_id = Some(7);
+        actor.last_snapshot = Some((
+            Vec::new(),
+            vec![
+                ClientView {
+                    id: 7,
+                    nickname: "Self".into(),
+                    uid: "self".into(),
+                    channel_id: 5,
+                    input_muted: None,
+                    output_muted: None,
+                    away: None,
+                    away_message: None,
+                    client_type: ClientType::FlSpeak,
+                    app_name: Some("FlSpeak".into()),
+                    app_version: Some("0.1.12".into()),
+                    capabilities: Vec::new(),
+                    bot_commands: None,
+                },
+                ClientView {
+                    id: 9,
+                    nickname: "Peer".into(),
+                    uid: "peer".into(),
+                    channel_id: 5,
+                    input_muted: None,
+                    output_muted: None,
+                    away: None,
+                    away_message: None,
+                    client_type: ClientType::Standard,
+                    app_name: None,
+                    app_version: None,
+                    capabilities: Vec::new(),
+                    bot_commands: None,
+                },
+            ],
+        ));
+
+        let incoming = TextMessageView {
+            from: "Peer".into(),
+            from_uid: "peer".into(),
+            from_id: 9,
+            message: "hi".into(),
+            target_mode: 1,
+            target_id: 7,
+            peer_uid: String::new(),
+            at: 1,
+        };
+        assert_eq!(actor.direct_peer_uid(&incoming), "peer");
+
+        let echo = TextMessageView {
+            from: "Self".into(),
+            from_uid: "self".into(),
+            from_id: 7,
+            message: "hello".into(),
+            target_mode: 1,
+            target_id: 9,
+            peer_uid: String::new(),
+            at: 2,
+        };
+        assert_eq!(actor.direct_peer_uid(&echo), "peer");
+
+        let broadcast = TextMessageView {
+            target_mode: 3,
+            target_id: 0,
+            ..echo
+        };
+        assert_eq!(actor.direct_peer_uid(&broadcast), "");
+    }
+
+    #[test]
+    fn short_text_message_is_sent_as_one_chunk() {
+        assert_eq!(split_text_message("hello", 8192), vec!["hello"]);
+        assert_eq!(split_text_message("hello", 5), vec!["hello"]);
+    }
+
+    #[test]
+    fn long_text_message_splits_on_utf8_boundaries() {
+        let message = "a".repeat(10_000);
+        let chunks = split_text_message(&message, 8192);
+        assert_eq!(chunks.len(), 2);
+        assert!(chunks.iter().all(|chunk| chunk.len() <= 8192));
+        assert_eq!(chunks.concat(), message);
+    }
+
+    #[test]
+    fn split_text_message_prefers_whitespace_and_preserves_text() {
+        let chunks = split_text_message("hello world foo bar", 10);
+        assert!(chunks.iter().all(|chunk| chunk.len() <= 10));
+        let stripped: String = chunks
+            .concat()
+            .chars()
+            .filter(|ch| !ch.is_whitespace())
+            .collect();
+        assert_eq!(stripped, "helloworldfoobar");
+    }
+
+    #[test]
+    fn split_text_message_keeps_emoji_whole() {
+        let chunks = split_text_message("a🥴bc", 2);
+        assert_eq!(chunks, vec!["a", "🥴", "bc"]);
+    }
+
+    #[test]
+    fn split_text_message_handles_fullwidth_space() {
+        let message = "a\u{3000}b\u{3000}c";
+        let chunks = split_text_message(message, 3);
+        assert!(chunks.iter().all(|chunk| !chunk.is_empty()));
+        assert_eq!(chunks.concat(), message);
+    }
+
+    #[test]
+    fn build_welcome_message_uses_label_or_host_and_skips_blank() {
+        let labeled = ServerProfile {
+            id: "ts.example.com:9987".into(),
+            label: " My Community ".into(),
+            host: "ts.example.com".into(),
+            port: 9987,
+            server_password: None,
+            default_channel: None,
+            default_channel_password: None,
+        };
+        let message = Actor::build_welcome_message(&labeled, "  Welcome to TS!  ", 42).unwrap();
+        assert_eq!(message.from, "My Community");
+        assert_eq!(message.from_uid, "");
+        assert_eq!(message.from_id, 0);
+        assert_eq!(message.message, "Welcome to TS!");
+        assert_eq!(message.target_mode, 3);
+        assert_eq!(message.target_id, 0);
+        assert_eq!(message.at, 42);
+
+        let unlabeled = ServerProfile {
+            label: "   ".into(),
+            ..labeled.clone()
+        };
+        let fallback = Actor::build_welcome_message(&unlabeled, "Hello", 99).unwrap();
+        assert_eq!(fallback.from, "ts.example.com");
+
+        assert!(Actor::build_welcome_message(&labeled, "  \n\t ", 100).is_none());
+        assert!(Actor::build_welcome_message(&labeled, "[center]   [/center]", 101).is_none());
+
+        let bbcode_welcome = concat!(
+            "[COLOR=#ff55ff][I]Welcome notice[/I][/COLOR] ",
+            "Portal [URL]https://portal.example.com/[/URL] ",
+            "[COLOR=#FFD700][B]Client guide[/B] ",
+            "[URL=https://docs.example.com/guide]Open guide [/URL][/COLOR]",
+        );
+        let converted = Actor::build_welcome_message(&labeled, bbcode_welcome, 102).unwrap();
+        assert_eq!(
+            converted.message,
+            concat!(
+                r##"<color hex="#ff55ff">*Welcome notice*</color> "##,
+                "Portal [https://portal.example.com/](https://portal.example.com/) ",
+                r##"<color hex="#ffd700">**Client guide** "##,
+                "[Open guide ](https://docs.example.com/guide)</color>",
+            )
+        );
+    }
 }

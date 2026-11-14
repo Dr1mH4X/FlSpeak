@@ -44,3 +44,124 @@ impl Actor {
         result
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::actor::test_support::*;
+
+    struct RefusedDirectory {
+        calls: Arc<std::sync::Mutex<Vec<String>>>,
+    }
+
+    impl tsclient_rs::CommandMiddleware for RefusedDirectory {
+        fn wrap(&self, _: TestCommandHandler) -> TestCommandHandler {
+            let calls = Arc::clone(&self.calls);
+            Arc::new(move |command| {
+                calls.lock().unwrap().push(command);
+                Box::pin(async {
+                    Err(tsclient_rs::Error::ServerError {
+                        id: "2568".into(),
+                        server_message: "insufficient client permissions".into(),
+                        extra_message: None,
+                    })
+                })
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn telemetry_only_samples_existing_directory_requests() {
+        tokio::task::LocalSet::new()
+            .run_until(async {
+                let calls = Arc::new(std::sync::Mutex::new(Vec::new()));
+                let client = Client::new(
+                    tsclient_rs::generateIdentity(0),
+                    "127.0.0.1:9987".into(),
+                    "test".into(),
+                    tsclient_rs::ClientOptions {
+                        command_middleware: vec![Box::new(RefusedDirectory {
+                            calls: Arc::clone(&calls),
+                        })],
+                        ..Default::default()
+                    },
+                );
+                client.mark_connected();
+                let mut actor = audio_actor();
+                actor.client = Some(Arc::new(client));
+                actor.state = SessionState::Connected {
+                    client_id: 1,
+                    channel_id: 1,
+                };
+                actor.network_monitor = Some(crate::network::NetworkMonitor::new());
+                let mut events = actor.events.subscribe();
+                let (commands, receiver) = mpsc::unbounded_channel();
+                let task = tokio::task::spawn_local(async move {
+                    actor.run(receiver).await;
+                });
+                tokio::time::sleep(Duration::from_millis(5_100)).await;
+                let idle_calls = calls.lock().unwrap().clone();
+                let (reply, result) = oneshot::channel();
+                commands
+                    .send(SessionCommand::ListChannels { reply })
+                    .unwrap();
+                assert!(result.await.unwrap().is_err());
+                let telemetry = loop {
+                    if let SessionEvent::Network(telemetry) = events.recv().await.unwrap() {
+                        break telemetry;
+                    }
+                };
+                let directory_calls = calls.lock().unwrap().clone();
+                commands.send(SessionCommand::Shutdown).unwrap();
+                task.await.unwrap();
+                assert!(idle_calls.is_empty());
+                assert_eq!(directory_calls.len(), 1);
+                assert!(directory_calls[0].starts_with("channellist "));
+                assert_eq!(telemetry.probes_sent, 1);
+                assert_eq!(telemetry.probes_failed, 0);
+                assert!(telemetry.round_trip_ms.is_some());
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn network_sampling_sends_through_the_actor_queue() {
+        tokio::task::LocalSet::new()
+            .run_until(async {
+                let calls = Arc::new(std::sync::Mutex::new(Vec::new()));
+                let client = Client::new(
+                    tsclient_rs::generateIdentity(0),
+                    "127.0.0.1:9987".into(),
+                    "test".into(),
+                    tsclient_rs::ClientOptions {
+                        command_middleware: vec![Box::new(RefusedDirectory {
+                            calls: Arc::clone(&calls),
+                        })],
+                        ..Default::default()
+                    },
+                );
+                client.mark_connected();
+                let mut actor = audio_actor();
+                actor.client = Some(Arc::new(client));
+                actor.self_client_id = Some(7);
+                let (commands, receiver) = mpsc::unbounded_channel();
+                let task = tokio::task::spawn_local(async move {
+                    actor.run(receiver).await;
+                });
+
+                let (reply, result) = oneshot::channel();
+                commands
+                    .send(SessionCommand::SampleNetwork { reply })
+                    .unwrap();
+                assert!(result.await.unwrap().is_err());
+                assert_eq!(
+                    calls.lock().unwrap().last().map(String::as_str),
+                    Some("getconnectioninfo clid=7")
+                );
+
+                commands.send(SessionCommand::Shutdown).unwrap();
+                task.await.unwrap();
+            })
+            .await;
+    }
+}
