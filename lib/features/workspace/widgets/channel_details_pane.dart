@@ -41,29 +41,27 @@ class ChannelDetailsPane extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: scheme.surfaceContainerLow,
-                    borderRadius: Radii.largeAll,
-                    border: Border.all(color: scheme.outlineVariant),
-                  ),
-                  child: Row(
-                    children: [
-                      ChannelIcon(
-                        iconId: channel.iconId,
-                        color: scheme.primary,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          channelDisplayName(channel),
-                          style: texts.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
+                SurfaceCard(
+                  shape: AppShape.md,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        ChannelIcon(
+                          iconId: channel.iconId,
+                          color: scheme.primary,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            channelDisplayName(channel),
+                            style: texts.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -75,71 +73,68 @@ class ChannelDetailsPane extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(height: 8),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: scheme.surfaceContainerLow,
-                    borderRadius: Radii.largeAll,
-                    border: Border.all(color: scheme.outlineVariant),
-                  ),
-                  child: descriptionAsync.when(
-                    loading: () => const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 32),
-                      child: Center(
-                        child: SizedBox.square(
-                          dimension: 24,
-                          child: ActivityIndicator(size: 24),
-                        ),
-                      ),
-                    ),
-                    error: (error, _) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 24),
-                      child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              l10n.channelDescriptionFailed,
-                              style: texts.bodySmall?.copyWith(
-                                color: scheme.error,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            TextButton.icon(
-                              onPressed: () => ref.invalidate(
-                                channelDescriptionProvider(channel.id),
-                              ),
-                              icon: const Icon(
-                                Icons.refresh_rounded,
-                                size: IconSizes.small,
-                              ),
-                              label: Text(l10n.commonRetry),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    data: (description) {
-                      final trimmed = description.trim();
-                      if (trimmed.isEmpty) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 32),
-                          child: Center(
-                            child: Text(
-                              l10n.channelDescriptionEmpty,
-                              style: texts.bodyMedium?.copyWith(
-                                color: scheme.onSurfaceVariant,
-                              ),
-                            ),
+                SurfaceCard(
+                  shape: AppShape.md,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: descriptionAsync.when(
+                      loading: () => const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 32),
+                        child: Center(
+                          child: SizedBox.square(
+                            dimension: 24,
+                            child: ActivityIndicator(size: 24),
                           ),
+                        ),
+                      ),
+                      error: (error, _) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                l10n.channelDescriptionFailed,
+                                style: texts.bodySmall?.copyWith(
+                                  color: scheme.error,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              TextButton.icon(
+                                onPressed: () => ref.invalidate(
+                                  channelDescriptionProvider(channel.id),
+                                ),
+                                icon: const Icon(
+                                  Icons.refresh_rounded,
+                                  size: IconSizes.small,
+                                ),
+                                label: Text(l10n.commonRetry),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      data: (description) {
+                        final trimmed = description.trim();
+                        if (trimmed.isEmpty) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 32),
+                            child: Center(
+                              child: Text(
+                                l10n.channelDescriptionEmpty,
+                                style: texts.bodyMedium?.copyWith(
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                          );
+                        }
+                        return MessageContent(
+                          text: trimmed,
+                          style: texts.bodyMedium ?? const TextStyle(),
                         );
-                      }
-                      return MessageContent(
-                        text: trimmed,
-                        style: texts.bodyMedium ?? const TextStyle(),
-                      );
-                    },
+                      },
+                    ),
                   ),
                 ),
               ],

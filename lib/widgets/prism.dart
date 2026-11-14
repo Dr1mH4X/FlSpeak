@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/material.dart'
     hide
         ButtonStyle,
+        Card,
         Divider,
         FilledButton,
         IconButton,
@@ -27,6 +28,7 @@ export 'package:prism_ui/prism_ui.dart'
         BannerHostState,
         BannerLevel,
         ButtonStyle,
+        Card,
         CardSurface,
         Checkbox,
         Chip,
@@ -56,6 +58,7 @@ export 'package:prism_ui/prism_ui.dart'
         ListSectionGap,
         Measure,
         MeasureScope,
+        MetaChip,
         PopupAnchor,
         PopupMenu,
         PopupMenuItem,
@@ -77,6 +80,7 @@ export 'package:prism_ui/prism_ui.dart'
         TonalButtonGroup,
         TonalButtonSize,
         TonalButtonTheme,
+        TonalChip,
         ViewScope,
         dropletSpring,
         focusRingSide,

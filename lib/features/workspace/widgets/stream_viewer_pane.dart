@@ -19,7 +19,6 @@ import '../../../core/providers.dart';
 import '../../../core/stream_publisher.dart';
 import '../../../core/stream_viewer.dart';
 import '../../../l10n/app_localizations.dart';
-import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/pane_resizer.dart';
 import '../../../widgets/prism.dart';
@@ -228,15 +227,9 @@ class _StreamBanner extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
-      child: AnimatedContainer(
+      child: SurfaceCard(
         key: containerKey,
-        duration: Motion.effectsDefault,
-        curve: Motion.effectsDefaultCurve,
-        decoration: BoxDecoration(
-          color: scheme.surfaceContainerLow,
-          borderRadius: Radii.largeAll,
-          border: Border.all(color: scheme.outlineVariant),
-        ),
+        shape: AppShape.md,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -318,31 +311,9 @@ class _StreamPublisherBanner extends ConsumerWidget {
     return _StreamBanner(
       containerKey: const ValueKey('stream-publisher-banner'),
       title: '${l10n.streamPublishing} · $sourceLabel',
-      badge: Container(
+      badge: MetaChip(
         key: const ValueKey('stream-publisher-viewer-count'),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: scheme.secondaryContainer.withValues(alpha: 0.7),
-          borderRadius: Radii.smallAll,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.people_alt_rounded,
-              size: IconSizes.state,
-              color: scheme.onSecondaryContainer,
-            ),
-            const SizedBox(width: 4),
-            Text(
-              l10n.streamViewerCount(publisher.viewerCount),
-              style: context.texts.labelSmall?.copyWith(
-                color: scheme.onSecondaryContainer,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
+        label: l10n.streamViewerCount(publisher.viewerCount),
       ),
       actions: [
         if (renderer != null)

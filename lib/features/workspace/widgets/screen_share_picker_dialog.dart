@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart'
     hide
         ButtonStyle,
+        Card,
         Chip,
         FilledButton,
         IconButton,
@@ -17,7 +18,6 @@ import '../../../core/preferences.dart';
 import '../../../core/providers.dart';
 import '../../../core/stream_publisher.dart';
 import '../../../l10n/app_localizations.dart';
-import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
 import '../../../widgets/prism.dart';
@@ -374,97 +374,64 @@ class _SourceCard extends StatelessWidget {
     final scheme = context.scheme;
     final thumbnail = source.thumbnail;
     final hasThumbnail = thumbnail != null && thumbnail.isNotEmpty;
-    final fill = selected
-        ? scheme.primaryContainer.withValues(alpha: 0.32)
-        : surfaceColorFor(context.raisedSurfaceLevel, scheme);
-    final shape = RoundedSuperellipseBorder(
-      borderRadius: AppRadius.md,
-      side: BorderSide(
-        color: selected ? scheme.primary : scheme.outlineVariant,
-        width: selected ? 1.5 : 1,
-      ),
-    );
 
     return Semantics(
       button: true,
       selected: selected,
       label: source.name,
-      child: AnimatedContainer(
-        duration: Motion.effectsFast,
-        curve: Motion.effectsDefaultCurve,
-        decoration: ShapeDecoration(color: fill, shape: shape),
-        child: ClipRSuperellipse(
-          borderRadius: AppRadius.md,
-          child: AnimatedInkWell(
-            onTap: onTap,
-            customBorder: AppShape.md,
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: ClipRSuperellipse(
-                      borderRadius: AppRadius.sm,
-                      child: ColoredBox(
-                        color: scheme.surfaceContainerHighest,
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            if (hasThumbnail)
-                              Image.memory(
-                                thumbnail,
-                                fit: BoxFit.cover,
-                                gaplessPlayback: true,
-                                errorBuilder: (_, _, _) => _SourceFallbackIcon(
-                                  type: source.type,
-                                  color: scheme.onSurfaceVariant,
-                                ),
-                              )
-                            else
-                              _SourceFallbackIcon(
-                                type: source.type,
-                                color: scheme.onSurfaceVariant,
-                              ),
-                            if (selected)
-                              Positioned(
-                                top: 6,
-                                right: 6,
-                                child: DecoratedBox(
-                                  decoration: ShapeDecoration(
-                                    color: scheme.primary,
-                                    shape: AppShape.circle,
-                                  ),
-                                  child: SizedBox(
-                                    width: 22,
-                                    height: 22,
-                                    child: Icon(
-                                      Icons.check_rounded,
-                                      size: 14,
-                                      color: scheme.onPrimary,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
+      child: Card(
+        isSelected: selected,
+        onPressed: onTap,
+        padding: const EdgeInsets.all(8),
+        shape: AppShape.md,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: ClipRSuperellipse(
+                borderRadius: AppRadius.sm,
+                child: ColoredBox(
+                  color: scheme.surfaceContainerHighest,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (hasThumbnail)
+                        Image.memory(
+                          thumbnail,
+                          fit: BoxFit.cover,
+                          gaplessPlayback: true,
+                          errorBuilder: (_, _, _) => _SourceFallbackIcon(
+                            type: source.type,
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        )
+                      else
+                        _SourceFallbackIcon(
+                          type: source.type,
+                          color: scheme.onSurfaceVariant,
                         ),
-                      ),
-                    ),
+                      if (selected)
+                        const Positioned(
+                          top: 6,
+                          right: 6,
+                          child: SelectionBadge(),
+                        ),
+                    ],
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    source.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: context.texts.labelMedium?.copyWith(
-                      color: selected ? scheme.primary : scheme.onSurface,
-                      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
-          ),
+            const SizedBox(height: 6),
+            Text(
+              source.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: context.texts.labelMedium?.copyWith(
+                color: selected ? scheme.primary : scheme.onSurface,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+              ),
+            ),
+          ],
         ),
       ),
     );

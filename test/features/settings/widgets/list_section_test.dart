@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart'
     hide
         ButtonStyle,
+        Card,
         Checkbox,
         FilledButton,
         IconButton,
@@ -226,15 +227,15 @@ void main() {
           ),
         );
 
-        final selectedMaterial = tester.widget<Material>(
+        final selectedSurface = tester.widget<CardSurface>(
           find
               .descendant(
                 of: find.byType(SettingTextCard).first,
-                matching: find.byType(Material),
+                matching: find.byType(CardSurface),
               )
               .first,
         );
-        expect(selectedMaterial.color, theme.colorScheme.primary);
+        expect(selectedSurface.fill, theme.colorScheme.primary);
 
         final selectedText = tester.widget<Text>(find.text('Selected'));
         expect(selectedText.style?.color, theme.colorScheme.onPrimary);

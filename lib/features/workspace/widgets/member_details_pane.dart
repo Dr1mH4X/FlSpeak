@@ -59,12 +59,8 @@ class MemberDetailsPane extends ConsumerWidget {
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 896),
-            child: Container(
-              decoration: BoxDecoration(
-                color: scheme.surfaceContainerLow,
-                borderRadius: Radii.largeAll,
-                border: Border.all(color: scheme.outlineVariant),
-              ),
+            child: SurfaceCard(
+              shape: AppShape.md,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 mainAxisSize: MainAxisSize.min,
@@ -101,23 +97,10 @@ class MemberDetailsPane extends ConsumerWidget {
                                   ),
                                   if (isOffline) ...[
                                     const SizedBox(width: 10),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 3,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: scheme.errorContainer,
-                                        borderRadius: Radii.pillAll,
-                                      ),
-                                      child: Text(
-                                        l10n.memberUnavailable,
-                                        maxLines: 1,
-                                        style: texts.labelSmall?.copyWith(
-                                          color: scheme.onErrorContainer,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
+                                    TonalChip(
+                                      label: l10n.memberUnavailable,
+                                      color: scheme.errorContainer,
+                                      foregroundColor: scheme.onErrorContainer,
                                     ),
                                   ],
                                 ],
@@ -294,25 +277,7 @@ class MemberDetailsPane extends ConsumerWidget {
                                         padding: const EdgeInsets.only(
                                           right: 4,
                                         ),
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 6,
-                                            vertical: 2,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color:
-                                                scheme.surfaceContainerHighest,
-                                            borderRadius: Radii.smallAll,
-                                          ),
-                                          child: Text(
-                                            cap,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: texts.labelSmall?.copyWith(
-                                              color: scheme.onSurfaceVariant,
-                                            ),
-                                          ),
-                                        ),
+                                        child: MetaChip(label: cap),
                                       ),
                                   ],
                                 ],
@@ -350,29 +315,28 @@ class _StatusPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final texts = context.texts;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: Radii.pillAll,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 4),
-          Flexible(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: texts.labelSmall?.copyWith(
-                color: textColor,
-                fontWeight: FontWeight.w500,
+    return DecoratedBox(
+      decoration: ShapeDecoration(color: backgroundColor, shape: AppShape.full),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: texts.labelSmall?.copyWith(
+                  color: textColor,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
