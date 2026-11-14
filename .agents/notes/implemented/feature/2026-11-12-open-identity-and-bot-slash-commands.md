@@ -10,11 +10,11 @@ TeamSpeak 服务端与客户端标准协议不区分第三方客户端实现与�
 
 - 采用两阶段分层插件命令协议：第一阶段 `tsclient:identity` 仅交换客户端类型、软件名、版本号与能力标签（`capabilities`）；第二阶段 `tsclient:commands` 仅在打开支持 `"chat:slash_commands"` 的私信窗口或键入 `/` 时通过单播按需拉取命令清单。
 - 所有 `plugincmd` 的收发、防刷冷却与会话缓存统一收敛在 `core/session` 的 `Actor` 内串行调度，不向 Dart 暴露原始插件命令通道。
-- 入站报文执行严格的长度与数量截断：`app_name` 与 `app_version` 截断至 32 字符，`capabilities` 最多保留 16 项且单项截断至 32 字符；命令清单最多保留 12 条，单条命令的 `name`、`args`、`desc` 分别截断至 24、32、64 字符；`BotCommandView` 的 `args` 与 `desc` 标记 `#[serde(default)]`，容忍省略空字段的精简 JSON 报文。
+- 入站报文执行版本号校验（仅处理 `v = 1`）与严格的长度、数量截断：`app_name` 与 `app_version` 截断至 32 字符，`capabilities` 最多保留 16 项且单项截断至 32 字符；命令清单最多保留 16 条，单条命令的 `name`、`args`、`desc` 分别截断至 24、32、64 字符；`BotCommandView` 的 `args` 与 `desc` 标记 `#[serde(default)]`，容忍省略空字段的精简 JSON 报文；出站 `tsclient:identity` JSON 载荷严格限制小于 1024 字节。
 - 防刷频与去重冷却：
-  - 本端进房或切换频道触发的 `announce` 频道广播强制间隔至少 2 秒（`SELF_ANNOUNCE_DEBOUNCE`）。
+  - 本端进房或切换频道触发的 `announce` 频道广播通过 `announce_state` 强制去抖至少 2 秒（`SELF_ANNOUNCE_DEBOUNCE`），窗口内连续切房会调度去重后的尾随广播，首次发送失败时回滚去抖时间并在 500 毫秒后单次重试。
   - 忽略 `invoker_id` 等于本端 `self_client_id` 的回显广播。
-  - 按对端 UID 维护 `ack_cooldowns`：收到同一 UID 的 `announce` 在 10 秒内最多单播回复一次 `announce_ack`；收到同一 UID 的定向 `query` 在 5 秒内最多单播回复一次 `announce_ack`。
+  - 通过 `ack_limiter` 按 `(peer, action)` 维护独立冷却（收到 `announce` 在 10 秒内、定向 `query` 在 5 秒内最多单播回复一次 `announce_ack`）并自动清理过期记录，叠加全局出站令牌桶限制洪峰；先校验连接存活与载荷体积再扣减配额，发送失败时回滚该对端冷却。
   - 按对端 UID 维护 `peer_commands` 缓存与 `commands_fetching` 在途集合：同一连接周期内每个 UID 最多发起一次 `list_req` 单播查询，在途期间忽略重复触发，收到 `list_ack` 或断线重置时清理在途标记。
 - 频道树成员行在昵称右侧为 `ClientType.bot` 渲染机器人徽标（`Icons.smart_toy_rounded`），为 `ClientType.flSpeak` 渲染闪电徽标（`Icons.electric_bolt_rounded`），通过 `Semantics` 提供读屏标签，不使用任何悬停提示。
 - 成员详情弹窗对非标准客户端展示客户端软件名、版本号与能力标签 Chip。
@@ -167,7 +167,7 @@ pub fn register_bot_open_protocol(client: &Client, bot_self_id: ClientId) {
 
 - 同频道成员通过一次轻量频道广播与单播回执完成身份识别；跨频道成员在打开私信窗口时按需完成单播探测。
 - 斜杠命令清单仅在与声明 `"chat:slash_commands"` 的私信对象交互时拉取一次，命令执行仍走标准私信文本 `sendtextmessage`，兼容服务端日志与既有 Bot 指令解析器。
-- 断线或重连（`invalidate_handlers`）会清空 `peer_identities`、`peer_commands`、`commands_fetching`、`ack_cooldowns` 与 `last_announce_time`，确保新会话重新协商。
+- 断线或重连（`invalidate_handlers`）会清空 `peer_identities`、`peer_commands`、`commands_fetching` 并重置 `ack_limiter` 与 `announce_state`，确保新会话重新协商。
 
 ## Related
 
@@ -175,6 +175,6 @@ pub fn register_bot_open_protocol(client: &Client, bot_self_id: ClientId) {
 
 ## Testing
 
-- `core/session` 的 `actor::tests` 覆盖 `BotCommandView` 缺省字段反序列化、身份与命令报文超长截断、忽略自身回显、按 UID 区分 `announce`（10 秒）与 `query`（5 秒）的回复冷却、在途防重标记清理以及断线状态重置。
+- `core/session` 的 `actor::tests` 覆盖 `BotCommandView` 缺省字段反序列化、`v = 1` 版本校验、身份与命令报文超长截断与 `< 1024` 字节载荷上限、忽略自身回显、按 `(peer, action)` 隔离 `announce`（10 秒）与 `query`（5 秒）冷却、过期清理、全局令牌桶、失败回滚、切房尾随广播与单次重试、在途防重标记清理以及断线状态重置。
 - `test/core/providers_test.dart` 覆盖打开未识别私信对象触发 `queryPeerIdentity`、收到含 `"chat:slash_commands"` 的成员快照后自动拉取命令、以及成员移动或更新事件保持已识别元数据。
 - `test/features/workspace/widgets/member_details_dialog_test.dart` 与 `test/features/workspace/widgets/chat_pane_test.dart` 覆盖频道树徽标读屏语义、成员详情软件与能力 Chip 展示、私信 `/` 命令按需拉取、前缀过滤、点击补全带空格以及输入空格进入参数阶段后自动收起补全列表。

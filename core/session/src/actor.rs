@@ -53,11 +53,16 @@ const COMMAND_NOT_FOUND: &str = "256";
 const STREAM_PROBE_TIMEOUT_MS: u64 = 5_000;
 const NETWORK_SAMPLE_ERROR_LOG_INTERVAL: Duration = Duration::from_secs(30);
 
+const PROTOCOL_VERSION: u8 = 1;
 const IDENTITY_PLUGIN: &str = "tsclient:identity";
 const COMMANDS_PLUGIN: &str = "tsclient:commands";
 const ANNOUNCE_ACK_COOLDOWN: Duration = Duration::from_secs(10);
 const QUERY_ACK_COOLDOWN: Duration = Duration::from_secs(5);
 const SELF_ANNOUNCE_DEBOUNCE: Duration = Duration::from_secs(2);
+const SELF_ANNOUNCE_RETRY_DELAY: Duration = Duration::from_millis(500);
+const ACK_GLOBAL_BURST: f64 = 4.0;
+const ACK_GLOBAL_RATE_PER_SEC: f64 = 2.0;
+const MAX_PAYLOAD_BYTES: usize = 1024;
 const MAX_IDENTITY_FIELD_CHARS: usize = 32;
 const MAX_CAPABILITIES: usize = 16;
 const MAX_BOT_COMMANDS: usize = 16;
@@ -93,6 +98,169 @@ struct CachedPeerIdentity {
     app_name: String,
     app_version: String,
     capabilities: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum AckCooldownAction {
+    IdentityAnnounce,
+    IdentityQuery,
+}
+
+impl AckCooldownAction {
+    fn from_action(action: &str) -> Option<Self> {
+        match action {
+            "announce" => Some(Self::IdentityAnnounce),
+            "query" => Some(Self::IdentityQuery),
+            _ => None,
+        }
+    }
+
+    fn cooldown(self) -> Duration {
+        match self {
+            Self::IdentityAnnounce => ANNOUNCE_ACK_COOLDOWN,
+            Self::IdentityQuery => QUERY_ACK_COOLDOWN,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct AckCooldownKey {
+    peer: String,
+    action: AckCooldownAction,
+}
+
+/// 按 `(peer, action)` 隔离单播回复冷却，并用全局令牌桶约束出站 ACK 洪峰。
+struct AckRateLimiter {
+    cooldowns: HashMap<AckCooldownKey, Instant>,
+    tokens: f64,
+    last_refill: Instant,
+}
+
+impl AckRateLimiter {
+    fn new(now: Instant) -> Self {
+        Self {
+            cooldowns: HashMap::new(),
+            tokens: ACK_GLOBAL_BURST,
+            last_refill: now,
+        }
+    }
+
+    fn try_acquire(&mut self, peer: &str, action: AckCooldownAction, now: Instant) -> bool {
+        self.cooldowns
+            .retain(|key, &mut last| now.saturating_duration_since(last) < key.action.cooldown());
+
+        let key = AckCooldownKey {
+            peer: peer.to_string(),
+            action,
+        };
+        if let Some(&last) = self.cooldowns.get(&key)
+            && now.saturating_duration_since(last) < action.cooldown()
+        {
+            return false;
+        }
+
+        let elapsed = now
+            .saturating_duration_since(self.last_refill)
+            .as_secs_f64();
+        self.tokens = (self.tokens + elapsed * ACK_GLOBAL_RATE_PER_SEC).min(ACK_GLOBAL_BURST);
+        self.last_refill = self.last_refill.max(now);
+        if self.tokens < 1.0 {
+            return false;
+        }
+        self.tokens -= 1.0;
+
+        self.cooldowns.insert(key, now);
+        true
+    }
+
+    fn rollback(&mut self, peer: &str, action: AckCooldownAction, acquired_at: Instant) {
+        let key = AckCooldownKey {
+            peer: peer.to_string(),
+            action,
+        };
+        if self.cooldowns.get(&key) == Some(&acquired_at) {
+            self.cooldowns.remove(&key);
+        }
+    }
+
+    fn reset(&mut self, now: Instant) {
+        self.cooldowns.clear();
+        self.tokens = ACK_GLOBAL_BURST;
+        self.last_refill = now;
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AnnounceDecision {
+    SendNow {
+        attempt_at: Instant,
+        seq_at_start: u64,
+    },
+    ScheduleTrailing {
+        wait: Duration,
+    },
+    AlreadyScheduled,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AnnounceAttemptMode {
+    Normal,
+    Trailing,
+}
+
+#[derive(Default)]
+struct AnnounceState {
+    last_attempt: Option<Instant>,
+    trailing_scheduled: bool,
+    success_seq: u64,
+}
+
+impl AnnounceState {
+    fn try_begin(&mut self, mode: AnnounceAttemptMode, now: Instant) -> AnnounceDecision {
+        if matches!(mode, AnnounceAttemptMode::Trailing) {
+            self.trailing_scheduled = false;
+        }
+        if let Some(last) = self.last_attempt {
+            let elapsed = now.saturating_duration_since(last);
+            if elapsed < SELF_ANNOUNCE_DEBOUNCE {
+                if !self.trailing_scheduled {
+                    self.trailing_scheduled = true;
+                    return AnnounceDecision::ScheduleTrailing {
+                        wait: SELF_ANNOUNCE_DEBOUNCE - elapsed,
+                    };
+                }
+                return AnnounceDecision::AlreadyScheduled;
+            }
+        }
+
+        self.last_attempt = Some(now);
+        self.trailing_scheduled = false;
+        AnnounceDecision::SendNow {
+            attempt_at: now,
+            seq_at_start: self.success_seq,
+        }
+    }
+
+    fn record_success(&mut self) {
+        self.success_seq = self.success_seq.wrapping_add(1);
+    }
+
+    fn rollback_failure(&mut self, attempt_at: Instant, seq_at_start: u64) -> bool {
+        if self.last_attempt == Some(attempt_at) {
+            self.last_attempt = None;
+        }
+        self.success_seq == seq_at_start
+    }
+
+    fn should_run_failure_retry(&self, seq_at_start: u64) -> bool {
+        self.success_seq == seq_at_start
+    }
+
+    fn reset(&mut self) {
+        self.last_attempt = None;
+        self.trailing_scheduled = false;
+        self.success_seq = self.success_seq.wrapping_add(1);
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -194,6 +362,13 @@ pub(crate) enum SessionSignal {
         icon_id: u32,
         result: Result<Vec<u8>, SessionError>,
     },
+    /// 开放协议延迟进房广播（去抖尾随广播或失败单次重试）。
+    AnnounceIdentity {
+        epoch: u64,
+        mode: AnnounceAttemptMode,
+        allow_failure_retry: bool,
+        expected_seq: Option<u64>,
+    },
 }
 
 pub(crate) struct SessionAudio {
@@ -274,8 +449,8 @@ pub(crate) struct Actor {
     peer_identities: HashMap<String, CachedPeerIdentity>,
     peer_commands: HashMap<String, Vec<BotCommandView>>,
     commands_fetching: HashSet<String>,
-    ack_cooldowns: HashMap<String, Instant>,
-    last_announce_time: Option<Instant>,
+    ack_limiter: AckRateLimiter,
+    announce_state: AnnounceState,
     pending_images: VecDeque<PendingImage>,
     active_image: Option<ActiveImage>,
     server_icons: HashMap<String, crate::server_icons::CachedServerIcon>,
@@ -362,8 +537,8 @@ impl Actor {
             peer_identities: HashMap::new(),
             peer_commands: HashMap::new(),
             commands_fetching: HashSet::new(),
-            ack_cooldowns: HashMap::new(),
-            last_announce_time: None,
+            ack_limiter: AckRateLimiter::new(Instant::now()),
+            announce_state: AnnounceState::default(),
             pending_images: VecDeque::new(),
             active_image: None,
             server_icons,
@@ -2590,6 +2765,22 @@ impl Actor {
                     }
                 }
             }
+            SessionSignal::AnnounceIdentity {
+                epoch,
+                mode,
+                allow_failure_retry,
+                expected_seq,
+            } => {
+                if epoch != self.connection_epoch {
+                    return;
+                }
+                if let Some(seq) = expected_seq
+                    && !self.announce_state.should_run_failure_retry(seq)
+                {
+                    return;
+                }
+                self.announce_identity_step(mode, allow_failure_retry).await;
+            }
         }
     }
 
@@ -3233,8 +3424,8 @@ impl Actor {
         self.peer_identities.clear();
         self.peer_commands.clear();
         self.commands_fetching.clear();
-        self.ack_cooldowns.clear();
-        self.last_announce_time = None;
+        self.ack_limiter.reset(Instant::now());
+        self.announce_state.reset();
         self.reset_directory_permissions();
         self.subscribed_all_channels = false;
         self.self_server_groups.clear();
@@ -3312,65 +3503,117 @@ impl Actor {
             .unwrap_or_default()
     }
 
+    fn encode_identity_payload(&self, action: &str) -> Option<String> {
+        let payload = IdentityPayload {
+            v: PROTOCOL_VERSION,
+            action: action.into(),
+            client_type: "flspeak".into(),
+            app_name: "FlSpeak".into(),
+            app_version: env!("CARGO_PKG_VERSION").into(),
+            capabilities: self_capabilities(),
+        };
+        let data = serde_json::to_string(&payload).ok()?;
+        if data.len() >= MAX_PAYLOAD_BYTES {
+            self.emit(SessionEvent::Log {
+                level: "warn".into(),
+                message: format!(
+                    "跳过发送超长开放协议载荷: action={action}, bytes={}, limit={MAX_PAYLOAD_BYTES}",
+                    data.len()
+                ),
+            });
+            return None;
+        }
+        Some(data)
+    }
+
+    fn schedule_announce_signal(
+        &self,
+        delay: Duration,
+        mode: AnnounceAttemptMode,
+        allow_failure_retry: bool,
+        expected_seq: Option<u64>,
+    ) {
+        let epoch = self.connection_epoch;
+        let signals = self.signals.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(delay).await;
+            let _ = signals.send(SessionSignal::AnnounceIdentity {
+                epoch,
+                mode,
+                allow_failure_retry,
+                expected_seq,
+            });
+        });
+    }
+
     async fn maybe_announce_identity(&mut self) {
+        self.announce_identity_step(AnnounceAttemptMode::Normal, true)
+            .await;
+    }
+
+    async fn announce_identity_step(
+        &mut self,
+        mode: AnnounceAttemptMode,
+        allow_failure_retry: bool,
+    ) {
         if self.self_channel_id == 0 {
             return;
         }
         let Some(client) = self.client.clone() else {
             return;
         };
-        let now = Instant::now();
-        if let Some(last) = self.last_announce_time
-            && now.duration_since(last) < SELF_ANNOUNCE_DEBOUNCE
-        {
+        let Some(data) = self.encode_identity_payload("announce") else {
             return;
-        }
-        self.last_announce_time = Some(now);
-        let payload = IdentityPayload {
-            v: 1,
-            action: "announce".into(),
-            client_type: "flspeak".into(),
-            app_name: "FlSpeak".into(),
-            app_version: env!("CARGO_PKG_VERSION").into(),
-            capabilities: self_capabilities(),
         };
-        if let Ok(data) = serde_json::to_string(&payload) {
-            let _ = tsclient_rs::send_plugin_command(
-                &client,
-                IDENTITY_PLUGIN,
-                &data,
-                PluginCommandTarget::CurrentChannel,
-                None,
-            )
-            .await;
-        }
-    }
 
-    fn should_reply_identity_ack(
-        &mut self,
-        cooldown_key: &str,
-        action: &str,
-        now: Instant,
-    ) -> bool {
-        let cooldown = match action {
-            "announce" => ANNOUNCE_ACK_COOLDOWN,
-            "query" => QUERY_ACK_COOLDOWN,
-            _ => return false,
+        let now = Instant::now();
+        let (attempt_at, seq_at_start) = match self.announce_state.try_begin(mode, now) {
+            AnnounceDecision::SendNow {
+                attempt_at,
+                seq_at_start,
+            } => (attempt_at, seq_at_start),
+            AnnounceDecision::ScheduleTrailing { wait } => {
+                self.schedule_announce_signal(wait, AnnounceAttemptMode::Trailing, true, None);
+                return;
+            }
+            AnnounceDecision::AlreadyScheduled => return,
         };
-        if let Some(last) = self.ack_cooldowns.get(cooldown_key)
-            && now.duration_since(*last) < cooldown
+
+        match tsclient_rs::send_plugin_command(
+            &client,
+            IDENTITY_PLUGIN,
+            &data,
+            PluginCommandTarget::CurrentChannel,
+            None,
+        )
+        .await
         {
-            return false;
+            Ok(()) => self.announce_state.record_success(),
+            Err(err) => {
+                let should_retry = self
+                    .announce_state
+                    .rollback_failure(attempt_at, seq_at_start);
+                self.emit(SessionEvent::Log {
+                    level: "debug".into(),
+                    message: format!("开放协议进房广播失败: {err}"),
+                });
+                if allow_failure_retry && should_retry {
+                    self.schedule_announce_signal(
+                        SELF_ANNOUNCE_RETRY_DELAY,
+                        AnnounceAttemptMode::Normal,
+                        false,
+                        Some(seq_at_start),
+                    );
+                }
+            }
         }
-        self.ack_cooldowns.insert(cooldown_key.to_string(), now);
-        true
     }
 
     async fn handle_identity_event(&mut self, event: PluginCommandEvent) {
         let Ok(payload) = serde_json::from_str::<IdentityPayload>(&event.data) else {
             return;
         };
-        if self.self_client_id == Some(event.invoker_id) {
+        if payload.v != PROTOCOL_VERSION || self.self_client_id == Some(event.invoker_id) {
             return;
         }
 
@@ -3381,41 +3624,50 @@ impl Actor {
             self.sync_peer_metadata_to_snapshot();
         }
 
+        let Some(action) = AckCooldownAction::from_action(&payload.action) else {
+            return;
+        };
+        let Some(client) = self.client.clone() else {
+            return;
+        };
+        let Some(data) = self.encode_identity_payload("announce_ack") else {
+            return;
+        };
+
         let cooldown_key = if !peer_uid.is_empty() {
             peer_uid
         } else {
             event.invoker_id.to_string()
         };
-        if !self.should_reply_identity_ack(&cooldown_key, &payload.action, Instant::now()) {
+        let now = Instant::now();
+        if !self.ack_limiter.try_acquire(&cooldown_key, action, now) {
             return;
         }
 
-        if let Some(client) = self.client.clone() {
-            let reply = IdentityPayload {
-                v: 1,
-                action: "announce_ack".into(),
-                client_type: "flspeak".into(),
-                app_name: "FlSpeak".into(),
-                app_version: env!("CARGO_PKG_VERSION").into(),
-                capabilities: self_capabilities(),
-            };
-            if let Ok(data) = serde_json::to_string(&reply) {
-                let _ = tsclient_rs::send_plugin_command(
-                    &client,
-                    IDENTITY_PLUGIN,
-                    &data,
-                    PluginCommandTarget::Client,
-                    Some(event.invoker_id),
-                )
-                .await;
-            }
+        if let Err(err) = tsclient_rs::send_plugin_command(
+            &client,
+            IDENTITY_PLUGIN,
+            &data,
+            PluginCommandTarget::Client,
+            Some(event.invoker_id),
+        )
+        .await
+        {
+            self.ack_limiter.rollback(&cooldown_key, action, now);
+            self.emit(SessionEvent::Log {
+                level: "debug".into(),
+                message: format!(
+                    "开放协议身份回执发送失败: invoker_id={}, err={err}",
+                    event.invoker_id
+                ),
+            });
         }
     }
 
     async fn query_peer_identity(&mut self, target_clid: i32) -> Result<(), SessionError> {
         let client = self.connected()?;
         let req = serde_json::json!({
-            "v": 1,
+            "v": PROTOCOL_VERSION,
             "action": "query"
         });
         tsclient_rs::send_plugin_command(
@@ -3433,7 +3685,10 @@ impl Actor {
         let Ok(payload) = serde_json::from_str::<CommandsPayload>(&event.data) else {
             return;
         };
-        if payload.action != "list_ack" || self.self_client_id == Some(event.invoker_id) {
+        if payload.v != PROTOCOL_VERSION
+            || payload.action != "list_ack"
+            || self.self_client_id == Some(event.invoker_id)
+        {
             return;
         }
         let peer_uid = self.resolve_peer_uid(event.invoker_id, &event.invoker_uid);
@@ -3465,7 +3720,7 @@ impl Actor {
             }
         };
         let req = serde_json::json!({
-            "v": 1,
+            "v": PROTOCOL_VERSION,
             "action": "list_req"
         });
         let result = tsclient_rs::send_plugin_command(
@@ -5280,7 +5535,7 @@ mod tests {
             })
             .await;
         assert!(!actor.peer_identities.contains_key("self-uid"));
-        assert!(!actor.ack_cooldowns.contains_key("self-uid"));
+        assert!(actor.ack_limiter.cooldowns.is_empty());
         assert!(events.try_recv().is_err());
 
         // 对端宣告超长字段与过多 capability 时按上限截断，并同步刷新内存快照。
@@ -5320,29 +5575,192 @@ mod tests {
         assert!(bot.capabilities.iter().all(|c| c.chars().count() <= 32));
     }
 
-    #[test]
-    fn identity_reply_cooldown_throttles_announce_and_query_per_uid() {
+    #[tokio::test]
+    async fn identity_and_commands_events_ignore_unsupported_protocol_version() {
         let mut actor = audio_actor();
-        let t0 = Instant::now();
+        actor.self_client_id = Some(7);
+        actor.last_snapshot = Some((
+            Vec::new(),
+            vec![ClientView::from(ClientInfo {
+                id: 12,
+                nickname: "MusicBot".into(),
+                uid: "bot-uid".into(),
+                ..client_info(12, 5, "MusicBot")
+            })],
+        ));
+        actor.commands_fetching.insert("bot-uid".into());
+        let mut events = actor.events.subscribe();
 
-        assert!(actor.should_reply_identity_ack("peer-a", "announce", t0));
-        assert!(!actor.should_reply_identity_ack(
+        for bad_version in [0, 2] {
+            actor
+                .handle_identity_event(PluginCommandEvent {
+                    name: IDENTITY_PLUGIN.into(),
+                    data: serde_json::json!({
+                        "v": bad_version,
+                        "action": "announce",
+                        "client_type": "bot",
+                        "app_name": "MusicBot",
+                        "app_version": "2.0",
+                    })
+                    .to_string(),
+                    invoker_id: 12,
+                    invoker_name: "MusicBot".into(),
+                    invoker_uid: "bot-uid".into(),
+                })
+                .await;
+
+            actor.handle_commands_event(PluginCommandEvent {
+                name: COMMANDS_PLUGIN.into(),
+                data: serde_json::json!({
+                    "v": bad_version,
+                    "action": "list_ack",
+                    "commands": [{ "name": "play" }],
+                })
+                .to_string(),
+                invoker_id: 12,
+                invoker_name: "MusicBot".into(),
+                invoker_uid: "bot-uid".into(),
+            });
+        }
+
+        assert!(!actor.peer_identities.contains_key("bot-uid"));
+        assert!(!actor.peer_commands.contains_key("bot-uid"));
+        assert!(actor.commands_fetching.contains("bot-uid"));
+        assert!(events.try_recv().is_err());
+    }
+
+    #[test]
+    fn ack_rate_limiter_isolates_actions_enforces_global_bucket_and_rolls_back() {
+        let t0 = Instant::now();
+        let mut limiter = AckRateLimiter::new(t0);
+
+        // 同一对端的 announce 与 query 冷却相互独立，不交叉阻塞。
+        assert!(limiter.try_acquire("peer-a", AckCooldownAction::IdentityAnnounce, t0));
+        assert!(limiter.try_acquire("peer-a", AckCooldownAction::IdentityQuery, t0));
+        assert!(!limiter.try_acquire(
             "peer-a",
-            "announce",
+            AckCooldownAction::IdentityQuery,
+            t0 + Duration::from_secs(4)
+        ));
+        assert!(limiter.try_acquire(
+            "peer-a",
+            AckCooldownAction::IdentityQuery,
+            t0 + Duration::from_secs(5)
+        ));
+        assert!(!limiter.try_acquire(
+            "peer-a",
+            AckCooldownAction::IdentityAnnounce,
             t0 + Duration::from_secs(9)
         ));
-        assert!(actor.should_reply_identity_ack(
+        assert!(limiter.try_acquire(
             "peer-a",
-            "announce",
+            AckCooldownAction::IdentityAnnounce,
             t0 + Duration::from_secs(10)
         ));
 
-        let t1 = t0 + Duration::from_secs(20);
-        assert!(actor.should_reply_identity_ack("peer-b", "query", t1));
-        assert!(!actor.should_reply_identity_ack("peer-b", "query", t1 + Duration::from_secs(4)));
-        assert!(actor.should_reply_identity_ack("peer-b", "query", t1 + Duration::from_secs(5)));
+        // 全局令牌桶初始突发为 4，耗尽后第 5 个请求被拒绝且不会污染该对端冷却记录。
+        let t_burst = t0 + Duration::from_secs(30);
+        let mut burst = AckRateLimiter::new(t_burst);
+        for i in 0..4 {
+            assert!(burst.try_acquire(
+                &format!("peer-{i}"),
+                AckCooldownAction::IdentityAnnounce,
+                t_burst
+            ));
+        }
+        assert!(!burst.try_acquire("peer-blocked", AckCooldownAction::IdentityAnnounce, t_burst));
 
-        assert!(!actor.should_reply_identity_ack("peer-c", "announce_ack", t1));
+        // 0.5 秒后补回 1 个令牌，刚才被全局限流拒绝的 peer-blocked 立刻可请求。
+        assert!(burst.try_acquire(
+            "peer-blocked",
+            AckCooldownAction::IdentityAnnounce,
+            t_burst + Duration::from_millis(500)
+        ));
+
+        // 发送失败回滚后无需等待 5 秒冷却，且 11 秒后过期记录会被清理。
+        let t_rb = t_burst + Duration::from_secs(20);
+        assert!(burst.try_acquire("peer-rb", AckCooldownAction::IdentityQuery, t_rb));
+        burst.rollback("peer-rb", AckCooldownAction::IdentityQuery, t_rb);
+        assert!(burst.try_acquire(
+            "peer-rb",
+            AckCooldownAction::IdentityQuery,
+            t_rb + Duration::from_millis(100)
+        ));
+
+        let t_prune = t_rb + Duration::from_secs(11);
+        assert!(burst.try_acquire("peer-fresh", AckCooldownAction::IdentityQuery, t_prune));
+        assert_eq!(burst.cooldowns.len(), 1);
+        assert!(burst.cooldowns.contains_key(&AckCooldownKey {
+            peer: "peer-fresh".to_string(),
+            action: AckCooldownAction::IdentityQuery,
+        }));
+    }
+
+    #[test]
+    fn announce_state_schedules_trailing_and_rolls_back_on_failure() {
+        let mut state = AnnounceState::default();
+        let t0 = Instant::now();
+
+        assert_eq!(
+            state.try_begin(AnnounceAttemptMode::Normal, t0),
+            AnnounceDecision::SendNow {
+                attempt_at: t0,
+                seq_at_start: 0,
+            }
+        );
+
+        // 去抖窗口内多次切房仅调度一次尾随广播。
+        assert_eq!(
+            state.try_begin(AnnounceAttemptMode::Normal, t0 + Duration::from_millis(500)),
+            AnnounceDecision::ScheduleTrailing {
+                wait: Duration::from_millis(1500),
+            }
+        );
+        assert_eq!(
+            state.try_begin(AnnounceAttemptMode::Normal, t0 + Duration::from_secs(1)),
+            AnnounceDecision::AlreadyScheduled
+        );
+
+        // 尾随触发时到达 2 秒窗口即刻发送。
+        let t_trailing = t0 + Duration::from_secs(2);
+        assert_eq!(
+            state.try_begin(AnnounceAttemptMode::Trailing, t_trailing),
+            AnnounceDecision::SendNow {
+                attempt_at: t_trailing,
+                seq_at_start: 0,
+            }
+        );
+
+        // 发送失败回滚后允许单次重试，成功后阻止过期重试。
+        assert!(state.rollback_failure(t_trailing, 0));
+        assert!(state.should_run_failure_retry(0));
+        assert_eq!(
+            state.try_begin(
+                AnnounceAttemptMode::Normal,
+                t0 + Duration::from_millis(2100)
+            ),
+            AnnounceDecision::SendNow {
+                attempt_at: t0 + Duration::from_millis(2100),
+                seq_at_start: 0,
+            }
+        );
+        state.record_success();
+        assert!(!state.should_run_failure_retry(0));
+    }
+
+    #[test]
+    fn encode_identity_payload_stays_within_payload_limit() {
+        let actor = audio_actor();
+        for action in ["announce", "announce_ack"] {
+            let encoded = actor
+                .encode_identity_payload(action)
+                .expect("serialized identity payload");
+            assert!(encoded.len() < MAX_PAYLOAD_BYTES);
+            let value: serde_json::Value =
+                serde_json::from_str(&encoded).expect("valid json payload");
+            assert_eq!(value["v"], PROTOCOL_VERSION);
+            assert_eq!(value["action"], action);
+        }
     }
 
     #[tokio::test]
@@ -5420,16 +5838,31 @@ mod tests {
         );
         actor.peer_commands.insert("bot-uid".into(), Vec::new());
         actor.commands_fetching.insert("other-uid".into());
-        actor.ack_cooldowns.insert("bot-uid".into(), Instant::now());
-        actor.last_announce_time = Some(Instant::now());
+        let now = Instant::now();
+        assert!(
+            actor
+                .ack_limiter
+                .try_acquire("bot-uid", AckCooldownAction::IdentityAnnounce, now)
+        );
+        assert!(matches!(
+            actor
+                .announce_state
+                .try_begin(AnnounceAttemptMode::Normal, now),
+            AnnounceDecision::SendNow { .. }
+        ));
+        let prev_epoch = actor.connection_epoch;
 
         actor.invalidate_handlers();
 
         assert!(actor.peer_identities.is_empty());
         assert!(actor.peer_commands.is_empty());
         assert!(actor.commands_fetching.is_empty());
-        assert!(actor.ack_cooldowns.is_empty());
-        assert!(actor.last_announce_time.is_none());
+        assert!(actor.ack_limiter.cooldowns.is_empty());
+        assert_eq!(actor.ack_limiter.tokens, ACK_GLOBAL_BURST);
+        assert!(actor.announce_state.last_attempt.is_none());
+        assert!(!actor.announce_state.trailing_scheduled);
+        assert!(!actor.announce_state.should_run_failure_retry(0));
+        assert_eq!(actor.connection_epoch, prev_epoch + 1);
         assert!(actor.channel_list_allowed.is_none());
         assert!(actor.channel_meta_allowed.is_none());
         assert!(actor.client_list_allowed.is_none());
