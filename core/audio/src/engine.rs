@@ -12,13 +12,15 @@ use crate::AudioError;
 use crate::capture::{CapturePipeline, VoicePacer};
 use crate::convert::FormatConverter;
 use crate::device::{CaptureStream, PlaybackStream, start_capture, start_playback};
-use crate::format::{FRAME_MS, OPUS_STEREO};
+use crate::format::OPUS_STEREO;
 use crate::level::{LevelMeter, LevelReading, MeterClock, SharedMeter, rms};
 use crate::playback::{MIX_FRAME_MS, PlaybackPipeline, VoiceFrame};
 
 const CONTROL_CAPACITY: usize = 64;
 const INCOMING_CAPACITY: usize = 256;
 const IO_TICK_MS: u64 = 10;
+const CAPTURE_POLL_MS: u64 = 5;
+const CATCHUP_PACING_MS: u64 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AudioStage {
@@ -251,8 +253,51 @@ fn send_error<T>(err: TrySendError<T>) -> AudioError {
     }
 }
 
+struct CaptureLoopState {
+    pipeline: CapturePipeline,
+    stream: Option<CaptureStream>,
+    device: Option<String>,
+    speaking: bool,
+    capture_epoch: u64,
+    pacer: VoicePacer,
+    mic_meter: LevelMeter,
+    sink: EventSink,
+    meter: Arc<SharedMeter>,
+}
+
+impl CaptureLoopState {
+    fn handle_command(&mut self, command: CaptureCommand) -> bool {
+        match &command {
+            CaptureCommand::Start { epoch, .. } => {
+                self.capture_epoch = *epoch;
+                self.mic_meter.silence();
+                self.meter.clear_mic();
+            }
+            CaptureCommand::Stop => {
+                self.capture_epoch = 0;
+                self.mic_meter.silence();
+                self.meter.clear_mic();
+            }
+            CaptureCommand::SetDevice { .. } => {
+                self.mic_meter.silence();
+                self.meter.clear_mic();
+            }
+            _ => {}
+        }
+        handle_capture_command(
+            command,
+            &mut self.pipeline,
+            &mut self.stream,
+            &mut self.device,
+            &mut self.speaking,
+            &self.sink,
+            &mut self.pacer,
+        )
+    }
+}
+
 fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, meter: Arc<SharedMeter>) {
-    let mut pipeline = match CapturePipeline::new(crate::format::VOICE_CODEC) {
+    let pipeline = match CapturePipeline::new(crate::format::VOICE_CODEC) {
         Ok(pipeline) => pipeline,
         Err(err) => {
             sink(AudioEvent::Error {
@@ -262,120 +307,123 @@ fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, meter: Arc<
             return;
         }
     };
-    let mut stream: Option<CaptureStream> = None;
-    let mut device: Option<String> = None;
-    let mut speaking = false;
-    let mut capture_epoch = 0;
-    let mut pacer = VoicePacer::default();
+    let mut state = CaptureLoopState {
+        pipeline,
+        stream: None,
+        device: None,
+        speaking: false,
+        capture_epoch: 0,
+        pacer: VoicePacer::default(),
+        mic_meter: LevelMeter::default(),
+        sink,
+        meter,
+    };
     let mut raw = Vec::new();
-    let mut mic_meter = LevelMeter::default();
-    let mut next_frame = Instant::now();
-    let tick = Duration::from_millis(IO_TICK_MS);
+    let idle_tick = Duration::from_millis(IO_TICK_MS);
+    let poll_tick = Duration::from_millis(CAPTURE_POLL_MS);
+    let catchup_spacing = Duration::from_millis(CATCHUP_PACING_MS);
 
-    loop {
+    'capture: loop {
         let now = Instant::now();
-        let wait = next_frame.saturating_duration_since(now);
-        match commands.recv_timeout(wait.min(tick)) {
-            Ok(CaptureCommand::Shutdown) => break,
+        let wait = if state.stream.is_none() {
+            idle_tick
+        } else if state.pipeline.has_ready_frame() && state.pipeline.is_transmitting() {
+            match state.pacer.next_due_at() {
+                Some(due) if due <= now => catchup_spacing,
+                Some(due) => due.saturating_duration_since(now).min(poll_tick),
+                None => poll_tick,
+            }
+        } else {
+            poll_tick
+        };
+        match commands.recv_timeout(wait) {
             Ok(command) => {
-                match &command {
-                    CaptureCommand::Start { epoch, .. } => {
-                        capture_epoch = *epoch;
-                        mic_meter.silence();
-                        meter.clear_mic();
-                    }
-                    CaptureCommand::Stop => {
-                        capture_epoch = 0;
-                        mic_meter.silence();
-                        meter.clear_mic();
-                    }
-                    CaptureCommand::SetDevice { .. } => {
-                        mic_meter.silence();
-                        meter.clear_mic();
-                    }
-                    _ => {}
+                if !state.handle_command(command) {
+                    break 'capture;
                 }
-                if !handle_capture_command(
-                    command,
-                    &mut pipeline,
-                    &mut stream,
-                    &mut device,
-                    &mut speaking,
-                    &sink,
-                    &mut pacer,
-                ) {
-                    break;
+                while let Ok(command) = commands.try_recv() {
+                    if !state.handle_command(command) {
+                        break 'capture;
+                    }
                 }
             }
             Err(RecvTimeoutError::Timeout) => {}
-            Err(RecvTimeoutError::Disconnected) => break,
+            Err(RecvTimeoutError::Disconnected) => break 'capture,
         }
 
-        let now = Instant::now();
-        if now < next_frame {
-            continue;
-        }
-        next_frame += Duration::from_millis(FRAME_MS);
-        if next_frame <= now {
-            next_frame = now + Duration::from_millis(FRAME_MS);
-        }
-
-        if let Some(stream) = &stream {
+        if let Some(stream) = &state.stream {
             raw.clear();
-            stream.drain_into(&mut raw, 48_000 * 2 / 5);
+            let max_drain = (stream.format.sample_rate_hz as usize)
+                .saturating_mul(stream.format.channels as usize)
+                / 2;
+            stream.drain_into(&mut raw, max_drain.max(48_000 * 2 / 5));
             if !raw.is_empty() {
-                pipeline.push_capture(&raw, stream.format);
+                state.pipeline.push_capture(&raw, stream.format);
             }
             if let Some(message) = stream.take_error() {
-                sink(AudioEvent::Error {
+                (state.sink)(AudioEvent::Error {
                     stage: AudioStage::Capture,
                     message,
                 });
             }
         }
 
-        let mic = if stream.is_some() && pipeline.is_capturing() {
-            mic_meter.update(rms(&raw))
+        let mic = if state.stream.is_some() && state.pipeline.is_capturing() {
+            if raw.is_empty() {
+                state.mic_meter.level()
+            } else {
+                state.mic_meter.update(rms(&raw))
+            }
         } else {
-            mic_meter.silence()
+            state.mic_meter.silence()
         };
         // 只是共享给 playback 线程合成事件；跨 FFI 的频率由那边控制。
-        meter.store_mic(capture_epoch, mic);
+        state.meter.store_mic(state.capture_epoch, mic);
 
-        match pipeline.take_packet() {
-            Ok(Some(packet)) => {
-                if pacer.due(now, true) {
-                    sink(AudioEvent::Outbound {
+        let now = Instant::now();
+        while state.pipeline.has_ready_frame() {
+            if state.pipeline.is_transmitting() && !state.pacer.is_due(now) {
+                break;
+            }
+            match state.pipeline.take_packet() {
+                Ok(Some(packet)) => {
+                    let _ = state.pacer.is_due(now);
+                    (state.sink)(AudioEvent::Outbound {
                         codec: packet.codec,
                         data: packet.data,
                         produced_at: now,
                     });
-                    pacer.advance();
+                    state.pacer.advance();
+                    break;
+                }
+                Ok(None) => {
+                    state.pacer.reset();
+                }
+                Err(err) => {
+                    (state.sink)(AudioEvent::Error {
+                        stage: AudioStage::Codec,
+                        message: err.to_string(),
+                    });
+                    break;
                 }
             }
-            Ok(None) => {
-                pacer.due(now, false);
-            }
-            Err(err) => sink(AudioEvent::Error {
-                stage: AudioStage::Codec,
-                message: err.to_string(),
-            }),
+        }
+        if !state.pipeline.is_capturing() {
+            state.pacer.reset();
         }
 
-        let now_speaking = pipeline.is_speaking();
-        if now_speaking != speaking {
-            speaking = now_speaking;
-            sink(AudioEvent::SelfSpeaking {
+        let now_speaking = state.pipeline.is_speaking();
+        if now_speaking != state.speaking {
+            state.speaking = now_speaking;
+            (state.sink)(AudioEvent::SelfSpeaking {
                 speaking: now_speaking,
             });
         }
     }
 
-    if let Some(stream) = stream.take() {
-        drop(stream);
-    }
-    meter.clear_mic();
-    sink(AudioEvent::CaptureState { ready: false });
+    drop(state.stream.take());
+    state.meter.clear_mic();
+    (state.sink)(AudioEvent::CaptureState { ready: false });
 }
 
 fn handle_capture_command(
@@ -393,7 +441,7 @@ fn handle_capture_command(
             *device = next;
             open_capture(stream, pipeline, (*device).clone(), sink);
             *speaking = false;
-            pacer.due(Instant::now(), false);
+            pacer.reset();
         }
         CaptureCommand::Stop => {
             if let Some(stream) = stream.take() {
@@ -401,6 +449,7 @@ fn handle_capture_command(
             }
             pipeline.end();
             *speaking = false;
+            pacer.reset();
             sink(AudioEvent::CaptureState { ready: false });
         }
         CaptureCommand::SetDevice { device: next } => {
@@ -408,26 +457,42 @@ fn handle_capture_command(
             *device = next;
             if was_active {
                 open_capture(stream, pipeline, (*device).clone(), sink);
+                *speaking = false;
+                pacer.reset();
             }
         }
         CaptureCommand::SetMuted(next) => {
             pipeline.set_muted(next);
+            if next {
+                pacer.reset();
+            }
         }
-        CaptureCommand::SetDeafened(deafened) => pipeline.set_deafened(deafened),
+        CaptureCommand::SetDeafened(deafened) => {
+            pipeline.set_deafened(deafened);
+            if deafened {
+                pacer.reset();
+            }
+        }
         CaptureCommand::SetPttMode(next) => {
             pipeline.set_ptt_mode(next);
+            pacer.reset();
             sink(AudioEvent::CaptureState {
                 ready: stream.is_some(),
             });
         }
         CaptureCommand::SetPttActive(next) => {
             pipeline.set_ptt_active(next);
+            if !next {
+                pacer.reset();
+            }
             sink(AudioEvent::CaptureState {
                 ready: stream.is_some(),
             });
         }
         CaptureCommand::SetCodec(codec) => match pipeline.set_codec(codec) {
-            Ok(()) => {}
+            Ok(()) => {
+                pacer.reset();
+            }
             Err(err) => sink(AudioEvent::Error {
                 stage: AudioStage::Codec,
                 message: err.to_string(),

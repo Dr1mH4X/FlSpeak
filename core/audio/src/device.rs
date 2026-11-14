@@ -55,14 +55,20 @@ pub struct CaptureStream {
 }
 
 impl CaptureStream {
-    /// 把环形队列里已有的样本取到 `output`，最多 `max` 个。
+    /// 把环形队列里已有的样本按完整源帧取到 `output`，最多 `max` 个。
     pub fn drain_into(&self, output: &mut Vec<f32>, max: usize) {
         output.clear();
-        for _ in 0..max {
+        let channels = (self.format.channels as usize).max(1);
+        let limit = max - (max % channels);
+        for _ in 0..limit {
             match self.samples.pop() {
                 Some(sample) => output.push(sample),
                 None => break,
             }
+        }
+        let remainder = output.len() % channels;
+        if remainder != 0 {
+            output.truncate(output.len() - remainder);
         }
     }
 
@@ -229,13 +235,17 @@ where
     f32: FromSample<T>,
 {
     let error_slot = errors;
+    let channels = (config.channels as usize).max(1);
     device
         .build_input_stream(
             *config,
             move |data: &[T], _: &cpal::InputCallbackInfo| {
-                for sample in data {
-                    if samples.push(f32::from_sample(*sample)).is_err() {
+                for frame in data.chunks_exact(channels) {
+                    if samples.len() + channels > samples.capacity() {
                         break;
+                    }
+                    for sample in frame {
+                        let _ = samples.push(f32::from_sample(*sample));
                     }
                 }
             },

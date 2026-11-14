@@ -38,11 +38,7 @@ impl VoicePacer {
         }
     }
 
-    pub fn due(&mut self, now: Instant, has_packet: bool) -> bool {
-        if !has_packet {
-            self.next_send_at = None;
-            return false;
-        }
+    pub fn is_due(&mut self, now: Instant) -> bool {
         match self.next_send_at {
             None => {
                 self.next_send_at = Some(now);
@@ -59,10 +55,26 @@ impl VoicePacer {
         }
     }
 
+    pub fn due(&mut self, now: Instant, has_packet: bool) -> bool {
+        if !has_packet {
+            self.reset();
+            return false;
+        }
+        self.is_due(now)
+    }
+
     pub fn advance(&mut self) {
         if let Some(next) = self.next_send_at.take() {
             self.next_send_at = Some(next + self.frame);
         }
+    }
+
+    pub fn reset(&mut self) {
+        self.next_send_at = None;
+    }
+
+    pub fn next_due_at(&self) -> Option<Instant> {
+        self.next_send_at
     }
 }
 
@@ -200,6 +212,23 @@ impl CapturePipeline {
         self.enabled && !self.muted && !self.deafened
     }
 
+    /// 缓冲是否已攒满一帧完整的 20ms PCM。
+    pub fn has_ready_frame(&self) -> bool {
+        self.is_capturing()
+            && self.received_any
+            && self.pcm.len() >= frame_samples(self.target.channels)
+    }
+
+    /// 当前是否正处于主动发包阶段（PTT 按下或 VAD 语音段内）。
+    pub fn is_transmitting(&self) -> bool {
+        self.is_capturing()
+            && if self.ptt_mode {
+                self.ptt_active
+            } else {
+                self.speaking
+            }
+    }
+
     /// 追加设备原生格式的采集样本。
     pub fn push_capture(&mut self, samples: &[f32], source: AudioFormat) {
         if !self.enabled || samples.is_empty() {
@@ -221,15 +250,18 @@ impl CapturePipeline {
         self.pcm.extend(self.converted.iter().copied());
         self.received_any = true;
 
-        let max = MAX_PENDING_FRAMES * frame_samples(self.target.channels);
+        let channels = (self.target.channels as usize).max(1);
+        let frame_len = frame_samples(self.target.channels);
+        let max = MAX_PENDING_FRAMES * frame_len;
         if self.pcm.len() > max {
-            let keep = RESYNC_FRAMES * frame_samples(self.target.channels);
+            let keep = RESYNC_FRAMES * frame_len;
             let drop = self.pcm.len() - keep;
-            self.pcm.drain(..drop);
+            let aligned_drop = drop - (drop % channels);
+            self.pcm.drain(..aligned_drop);
         }
     }
 
-    /// 产出下一帧。调用方按 20ms 节拍调用；数据不足时补零。
+    /// 产出下一帧完整 20ms 语音包；样本未凑满 20ms 时等待下一批采集，绝不补零。
     pub fn take_packet(&mut self) -> Result<Option<CapturePacket>, AudioError> {
         if !self.enabled || self.muted || self.deafened || !self.received_any {
             if self.muted || self.deafened {
@@ -239,10 +271,12 @@ impl CapturePipeline {
         }
 
         let needed = frame_samples(self.target.channels);
-        self.frame.clear();
-        for _ in 0..needed {
-            self.frame.push(self.pcm.pop_front().unwrap_or(0.0));
+        if self.pcm.len() < needed {
+            return Ok(None);
         }
+
+        self.frame.clear();
+        self.frame.extend(self.pcm.drain(..needed));
 
         let should_send = if self.ptt_mode {
             self.ptt_active
@@ -252,7 +286,6 @@ impl CapturePipeline {
 
         if !should_send {
             self.speaking = false;
-            self.pcm.clear();
             return Ok(None);
         }
 
@@ -449,5 +482,45 @@ mod tests {
             pipeline.push_capture(&loud_frame(1), OPUS_MONO);
         }
         assert!(pipeline.pcm.len() <= MAX_PENDING_FRAMES * FRAME_SAMPLES_PER_CHANNEL);
+    }
+
+    #[test]
+    fn partial_frames_wait_without_zero_padding_and_keep_phase() {
+        let mut pipeline = CapturePipeline::new(VOICE_CODEC).unwrap();
+        pipeline.begin();
+        pipeline.set_ptt_mode(true);
+        pipeline.set_ptt_active(true);
+
+        // 模拟 512 样本回调（约 10.67ms），不足 960 样本时绝不补零发包。
+        let first_half: Vec<f32> = (0..512).map(|i| (i as f32 * 0.03).sin() * 0.5).collect();
+        pipeline.push_capture(&first_half, OPUS_MONO);
+        assert!(!pipeline.has_ready_frame());
+        assert!(pipeline.take_packet().unwrap().is_none());
+
+        // 第二批到达后，512 + 512 = 1024 >= 960，产出完整 20ms 包且保留余下 64 样本。
+        let second_half: Vec<f32> = (512..1024).map(|i| (i as f32 * 0.03).sin() * 0.5).collect();
+        pipeline.push_capture(&second_half, OPUS_MONO);
+        assert!(pipeline.has_ready_frame());
+        let packet = pipeline.take_packet().unwrap().expect("凑满 20ms 应产出包");
+        assert_eq!(pipeline.pcm.len(), 64);
+
+        let mut decoder = crate::codec::OpusDecoder::new().unwrap();
+        let mut decoded = vec![0i16; crate::format::MAX_OPUS_SAMPLES];
+        let decoded_samples = decoder.decode(Some(&packet.data), &mut decoded).unwrap();
+        assert_eq!(decoded_samples, FRAME_SAMPLES_PER_CHANNEL);
+    }
+
+    #[test]
+    fn silent_frame_does_not_discard_samples_of_next_frame() {
+        let mut pipeline = CapturePipeline::new(VOICE_CODEC).unwrap();
+        pipeline.begin();
+        // 推入 960 个静音 + 960 个有效语音：第一帧静音不应清空第二帧样本。
+        let mut samples = vec![0.0; FRAME_SAMPLES_PER_CHANNEL];
+        samples.extend(loud_frame(1));
+        pipeline.push_capture(&samples, OPUS_MONO);
+
+        assert!(pipeline.take_packet().unwrap().is_none());
+        assert_eq!(pipeline.pcm.len(), FRAME_SAMPLES_PER_CHANNEL);
+        assert!(pipeline.take_packet().unwrap().is_some());
     }
 }

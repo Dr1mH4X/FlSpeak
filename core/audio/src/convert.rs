@@ -1,9 +1,54 @@
 //! 设备格式与协议格式之间的声道映射和重采样。
 //!
-//! 语音只用流式线性插值：48kHz 立体声是统一中间格式，设备给什么就转什么。
-//! 状态全部由 `FormatConverter` 持有，调用方可以任意切分输入块。
+//! 非等采样率路径使用预计算的加窗 sinc 多相 FIR（降采样自动收窄截止频率以抗混叠），
+//! 48kHz 同采样率路径直接透传；状态全部由 `FormatConverter` 持有，调用方可以任意切分输入块。
+
+use std::f32::consts::PI;
 
 use crate::format::AudioFormat;
+
+const HALF_TAPS: usize = 8;
+const TAPS: usize = HALF_TAPS * 2;
+const PHASE_STEPS: usize = 256;
+
+/// 预计算的 `(PHASE_STEPS + 1) * TAPS` 多相滤波系数表。
+fn build_polyphase_table(src_rate: u32, dst_rate: u32) -> Vec<f32> {
+    let cutoff = (dst_rate as f64 / src_rate as f64).min(1.0) as f32;
+    let radius = HALF_TAPS as f32;
+    let mut table = Vec::with_capacity((PHASE_STEPS + 1) * TAPS);
+
+    for phase in 0..=PHASE_STEPS {
+        let frac = phase as f32 / PHASE_STEPS as f32;
+        let start = table.len();
+        let mut sum = 0.0f32;
+        for tap in 0..TAPS {
+            let offset = tap as isize - (HALF_TAPS as isize - 1);
+            let x = offset as f32 - frac;
+            let sinc = if x.abs() < 1e-6 {
+                cutoff
+            } else {
+                let arg = PI * cutoff * x;
+                arg.sin() / (PI * x)
+            };
+            let window = if x.abs() >= radius {
+                0.0
+            } else {
+                let norm = x / radius;
+                0.42 + 0.5 * (PI * norm).cos() + 0.08 * (2.0 * PI * norm).cos()
+            };
+            let weight = sinc * window;
+            table.push(weight);
+            sum += weight;
+        }
+        if sum.abs() > 1e-6 {
+            let inv = 1.0 / sum;
+            for weight in &mut table[start..] {
+                *weight *= inv;
+            }
+        }
+    }
+    table
+}
 
 /// 交织样本的流式格式转换器。
 ///
@@ -13,20 +58,40 @@ pub struct FormatConverter {
     dst: AudioFormat,
     /// 已经映射到目标声道数的待消费源帧。
     buffer: Vec<f32>,
-    /// 下一个输出样本在 `buffer` 中的位置（以源帧为单位）。
-    position: f64,
+    /// 下一个输出样本在 `buffer` 中的整数源帧位置。
+    buf_frame: usize,
+    /// 相位分子（`0 <= phase_num < dst.sample_rate_hz`），避免长时运行浮点累加漂移。
+    phase_num: u64,
     /// 一帧目标声道数的临时缓冲，避免每个源帧都分配。
     frame: Vec<f32>,
+    /// 异采样率时预计算的多相 FIR 系数表；同采样率时为空。
+    table: Vec<f32>,
 }
 
 impl FormatConverter {
     pub fn new(src: AudioFormat, dst: AudioFormat) -> Self {
+        let needs_resample = src.sample_rate_hz != 0
+            && dst.sample_rate_hz != 0
+            && src.sample_rate_hz != dst.sample_rate_hz
+            && dst.channels > 0;
+        let (buffer, buf_frame, table) = if needs_resample {
+            let pre_history = (HALF_TAPS - 1) * dst.channels as usize;
+            (
+                vec![0.0; pre_history],
+                HALF_TAPS - 1,
+                build_polyphase_table(src.sample_rate_hz, dst.sample_rate_hz),
+            )
+        } else {
+            (Vec::new(), 0, Vec::new())
+        };
         Self {
             src,
             dst,
-            buffer: Vec::new(),
-            position: 0.0,
+            buffer,
+            buf_frame,
+            phase_num: 0,
             frame: Vec::new(),
+            table,
         }
     }
 
@@ -64,34 +129,47 @@ impl FormatConverter {
         if self.src.sample_rate_hz == self.dst.sample_rate_hz {
             output.extend_from_slice(&self.buffer);
             self.buffer.clear();
-            self.position = 0.0;
+            self.buf_frame = 0;
+            self.phase_num = 0;
             return;
         }
 
-        let ratio = self.src.sample_rate_hz as f64 / self.dst.sample_rate_hz as f64;
+        let src_rate = self.src.sample_rate_hz as u64;
+        let dst_rate = self.dst.sample_rate_hz as u64;
         let total_frames = self.buffer.len() / dst_channels;
 
         loop {
-            let index = self.position.floor() as usize;
-            if index + 1 >= total_frames {
+            let base = self.buf_frame;
+            if base + HALF_TAPS >= total_frames {
                 break;
             }
-            let fraction = (self.position - index as f64) as f32;
-            let left = index * dst_channels;
-            let right = left + dst_channels;
+            let frac = self.phase_num as f32 / dst_rate as f32;
+            let scaled = (frac * PHASE_STEPS as f32).clamp(0.0, PHASE_STEPS as f32);
+            let phase_lo = (scaled.floor() as usize).min(PHASE_STEPS);
+            let phase_hi = (phase_lo + 1).min(PHASE_STEPS);
+            let alpha = scaled - phase_lo as f32;
+            let row_lo = &self.table[phase_lo * TAPS..(phase_lo + 1) * TAPS];
+            let row_hi = &self.table[phase_hi * TAPS..(phase_hi + 1) * TAPS];
+            let first_frame = base - (HALF_TAPS - 1);
+
             for channel in 0..dst_channels {
-                let a = self.buffer[left + channel];
-                let b = self.buffer[right + channel];
-                output.push(a + (b - a) * fraction);
+                let mut acc = 0.0f32;
+                for tap in 0..TAPS {
+                    let weight = row_lo[tap] + (row_hi[tap] - row_lo[tap]) * alpha;
+                    let sample = self.buffer[(first_frame + tap) * dst_channels + channel];
+                    acc += sample * weight;
+                }
+                output.push(acc);
             }
-            self.position += ratio;
+            let next_phase = self.phase_num + src_rate;
+            self.buf_frame += (next_phase / dst_rate) as usize;
+            self.phase_num = next_phase % dst_rate;
         }
 
-        // 至少留一帧，下一块才能和这一块插值衔接。
-        let consumed = (self.position.floor() as usize).min(total_frames.saturating_sub(1));
-        if consumed > 0 {
-            self.buffer.drain(..consumed * dst_channels);
-            self.position -= consumed as f64;
+        let keep_from = self.buf_frame.saturating_sub(HALF_TAPS - 1);
+        if keep_from > 0 {
+            self.buffer.drain(..keep_from * dst_channels);
+            self.buf_frame -= keep_from;
         }
     }
 
@@ -163,8 +241,9 @@ mod tests {
         let mut converter = FormatConverter::new(format(24_000, 2), PCM);
         let mut output = Vec::new();
         converter.process(&[0.0; 960], &mut output);
+        let lookahead = HALF_TAPS * 4;
         assert!(
-            output.len() >= 1916 && output.len() <= 1920,
+            output.len() >= 1920 - lookahead && output.len() <= 1920,
             "{}",
             output.len()
         );
@@ -172,7 +251,7 @@ mod tests {
         // 下一块继续输出，不丢连续性。
         converter.process(&[0.0; 960], &mut output);
         assert!(
-            output.len() >= 3836 && output.len() <= 3840,
+            output.len() >= 3840 - lookahead && output.len() <= 3840,
             "{}",
             output.len()
         );
@@ -183,11 +262,61 @@ mod tests {
         let mut converter = FormatConverter::new(PCM, format(24_000, 2));
         let mut output = Vec::new();
         converter.process(&[0.0; 1920], &mut output);
+        let lookahead = HALF_TAPS * 2;
         assert!(
-            output.len() >= 958 && output.len() <= 960,
+            output.len() >= 960 - lookahead && output.len() <= 960,
             "{}",
             output.len()
         );
+    }
+
+    #[test]
+    fn dc_and_passband_sine_preserve_unity_gain_across_rates() {
+        for src_rate in [16_000, 44_100, 96_000] {
+            let mut dc = FormatConverter::new(format(src_rate, 1), format(48_000, 1));
+            let mut dc_out = Vec::new();
+            dc.process(&vec![0.75; 4000], &mut dc_out);
+            let tail = &dc_out[dc_out.len() / 2..];
+            for &sample in tail {
+                assert!(
+                    (sample - 0.75).abs() < 1e-4,
+                    "src_rate={src_rate} dc drift: {sample}"
+                );
+            }
+
+            let mut sine = FormatConverter::new(format(src_rate, 1), format(48_000, 1));
+            let input: Vec<f32> = (0..4000)
+                .map(|i| (2.0 * PI * 1000.0 * i as f32 / src_rate as f32).sin())
+                .collect();
+            let mut sine_out = Vec::new();
+            sine.process(&input, &mut sine_out);
+            let peak = sine_out[sine_out.len() / 2..]
+                .iter()
+                .map(|s| s.abs())
+                .fold(0.0f32, f32::max);
+            assert!(
+                (peak - 1.0).abs() < 0.02,
+                "src_rate={src_rate} 1kHz peak={peak}"
+            );
+        }
+    }
+
+    #[test]
+    fn downsampling_attenuates_aliasing_above_nyquist() {
+        // 96kHz -> 48kHz 时，36kHz（高于目标 Nyquist 24kHz）应被显著抑制，而不是混叠成 12kHz。
+        let mut converter = FormatConverter::new(format(96_000, 1), format(48_000, 1));
+        let input: Vec<f32> = (0..4800)
+            .map(|i| (2.0 * PI * 36_000.0 * i as f32 / 96_000.0).sin())
+            .collect();
+        let mut output = Vec::new();
+        converter.process(&input, &mut output);
+        let rms_out = (output[output.len() / 2..]
+            .iter()
+            .map(|s| s * s)
+            .sum::<f32>()
+            / (output.len() / 2) as f32)
+            .sqrt();
+        assert!(rms_out < 0.05, "alias leakage too high: rms={rms_out}");
     }
 
     #[test]
