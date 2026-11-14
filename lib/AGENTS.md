@@ -10,7 +10,7 @@
 - `lib/l10n/**` 是生成物，不要手改；改 `arb/` 后重跑 `flutter gen-l10n`。
 - FFI 生成类型在 `plugins/flspeak_ffi/lib/src/rust/**`，同样不要手改。
 - 页面布局可以依赖 `SessionView`，但不能依赖 `CoreSession` 的内部状态。
-- 页面级瞬时错误与提示统一走 `lib/core/notices.dart` 的 `NoticeCenter`，由 `lib/widgets/notice_host.dart` 在右上角渲染；不要在页面或卡片里自建错误横幅，也不要用 `SnackBar`。字段校验留在输入框旁，持久状态（设备不可用 chip、身份提升横幅）留在页面上。
+- 页面级瞬时错误与提示统一走 `lib/core/notices.dart` 的 `NoticeCenter` 门面，由 `lib/app.dart` 挂载的 `prism_ui` `BannerHost` 渲染；不要在页面或卡片里自建错误横幅，也不要用 `SnackBar`。字段校验留在输入框旁，持久状态（设备不可用 chip、身份提升横幅）留在页面上。
 - Dart 单测统一存放在根目录 `test/` 下（镜像 `lib/` 目录结构），靠 `just test`（即 `flutter test`）跑。
 
 子目录规则详见：

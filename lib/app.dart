@@ -18,7 +18,6 @@ import 'core/window_metrics.dart';
 import 'l10n/app_localizations.dart';
 import 'router.dart';
 import 'theme/app_theme.dart';
-import 'widgets/notice_host.dart';
 import 'widgets/prism.dart';
 import 'widgets/window_header.dart';
 
@@ -347,14 +346,69 @@ class _WindowFrame extends StatelessWidget {
           isMacOS: isMacOS,
           isWindows: isWindows,
           isMobileView: isMobileView,
-          child: Stack(
-            children: [
-              child,
-              const Positioned(top: 0, right: 0, child: NoticeHost()),
-            ],
+          // WindowHeaderContainer 已把子内容压在标题栏下方，topInset 只避让页面顶栏。
+          child: BannerHost(
+            stacked: !isMobileView,
+            topInset: Sizes.header + 8,
+            child: _NoticeBannerBridge(child: child),
           ),
         ),
       ),
     );
+  }
+}
+
+/// 将 [NoticeCenter] 门面收到的提示映射为 `prism_ui` [BannerLevel] 并交给 [BannerHost]。
+class _NoticeBannerBridge extends ConsumerStatefulWidget {
+  const _NoticeBannerBridge({required this.child});
+
+  final Widget child;
+
+  @override
+  ConsumerState<_NoticeBannerBridge> createState() =>
+      _NoticeBannerBridgeState();
+}
+
+class _NoticeBannerBridgeState extends ConsumerState<_NoticeBannerBridge> {
+  var _lastForwardedId = -1;
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = ref.read(noticeCenterProvider);
+    if (initial.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _forwardNew(ref.read(noticeCenterProvider));
+      });
+    }
+  }
+
+  void _forwardNew(List<AppNotice> notices) {
+    final host = BannerHost.maybeOf(context);
+    if (host == null) {
+      return;
+    }
+    final pending =
+        notices.where((notice) => notice.id > _lastForwardedId).toList()
+          ..sort((a, b) => a.id.compareTo(b.id));
+    for (final notice in pending) {
+      _lastForwardedId = notice.id;
+      host.show(
+        notice.message,
+        level: switch (notice.tone) {
+          NoticeTone.error => BannerLevel.error,
+          NoticeTone.info => BannerLevel.info,
+        },
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen<List<AppNotice>>(noticeCenterProvider, (previous, next) {
+      _forwardNew(next);
+    });
+    return widget.child;
   }
 }

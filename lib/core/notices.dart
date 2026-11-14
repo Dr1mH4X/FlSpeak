@@ -1,10 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// 提示的语义。错误用 error 容器，操作结果用 info 容器。
+/// 提示的语义。错误映射为 `BannerLevel.error`，操作结果映射为 `BannerLevel.info`。
 enum NoticeTone { error, info }
 
-/// 一条瞬时提示。`id` 每次展示都递增，让宿主重启动画与倒计时。
+/// 一条瞬时提示。`id` 每次展示都递增，让宿主桥接识别新提示并重新触发横幅。
 @immutable
 class AppNotice {
   const AppNotice({
@@ -18,7 +18,7 @@ class AppNotice {
   final NoticeTone tone;
 }
 
-/// 页面级瞬时提示的唯一入口，按新到旧保留最近几条。
+/// 页面级瞬时提示的门面入口，按新到旧保留最近几条供横幅宿主消费。
 ///
 /// 只保存要展示的文案；持久状态（连接态、设备就绪、身份提升）仍留在
 /// `SessionView` 与各自的页面组件里。
@@ -35,16 +35,12 @@ class NoticeCenter extends Notifier<List<AppNotice>> {
     if (text.isEmpty) {
       return;
     }
-    // 同文案同 tone 视为同一条：换新 id 插到队首，宿主据此重新计时。
+    // 同文案同 tone 视为同一条：换新 id 插到队首，让 BannerHost 重新计时。
     state = [
       AppNotice(id: _nextId++, message: text, tone: tone),
       for (final notice in state)
         if (notice.message != text || notice.tone != tone) notice,
     ].take(limit).toList();
-  }
-
-  void dismiss(int id) {
-    state = state.where((notice) => notice.id != id).toList();
   }
 }
 

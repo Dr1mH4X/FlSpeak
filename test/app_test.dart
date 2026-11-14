@@ -4,6 +4,8 @@
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart'
+    show debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -14,11 +16,13 @@ import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:flspeak/app.dart';
 import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/core/models.dart';
+import 'package:flspeak/core/notices.dart';
 import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/core/preferences.dart';
 import 'package:flspeak/core/update_check.dart';
 import 'package:flspeak/router.dart';
 import 'package:flspeak/widgets/app_navigation_sidebar.dart';
+import 'package:flspeak/widgets/prism.dart' show BannerHost;
 import 'package:flspeak/widgets/update_dot.dart';
 
 class _PttSession extends SessionController {
@@ -453,6 +457,58 @@ void main() {
       await tester.pumpAndSettle();
       expect(sidebarMaterial().color, baselineSidebarColor);
       expect(find.byKey(const ValueKey<String>('overview')), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'NoticeCenter maps tones into BannerHost without double-adding window header height',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_PttCore()),
+          storePathProvider.overrideWithValue(
+            '/tmp/flspeak-test/preferences.json',
+          ),
+          sessionViewProvider.overrideWith(_PttSession.new),
+          preferencesStoreProvider.overrideWithValue(
+            PreferencesStore.inMemory(
+              preferences: const SessionPreferences(
+                nickname: 'Test',
+                locale: 'zh',
+              ),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const TsClientApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final host = tester.widget<BannerHost>(find.byType(BannerHost));
+      expect(host.stacked, isTrue);
+      expect(host.topInset, Sizes.header + 8);
+
+      container.read(noticeCenterProvider.notifier)
+        ..show('操作已完成', tone: NoticeTone.info)
+        ..show('连接失败', tone: NoticeTone.error);
+      await tester.pumpAndSettle();
+
+      expect(find.text('操作已完成'), findsOneWidget);
+      expect(find.text('连接失败'), findsOneWidget);
+
+      // Windows 32px 标题栏已由 WindowHeaderContainer 扣除，横幅从 32 + 56 = 88 下方展开。
+      final topBannerY = tester.getTopLeft(find.text('连接失败')).dy;
+      expect(topBannerY, greaterThanOrEqualTo(32 + Sizes.header + 8));
+      expect(topBannerY, lessThan(32 + 32 + Sizes.header + 8));
     },
   );
 }
