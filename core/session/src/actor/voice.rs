@@ -579,6 +579,7 @@ impl Actor {
                 let _ = self.voice.stop_capture();
                 self.capture_active = false;
             }
+            self.sync_voice_gate();
             return;
         }
         self.apply_channel_codec(codec);
@@ -632,20 +633,12 @@ impl Actor {
                 data,
                 produced_at,
             } => {
-                if !self.can_send_voice(codec, produced_at, Instant::now()) {
-                    return;
-                }
-                if data.len() > MAX_PACKET_BYTES {
-                    crate::log_error!(
-                        size = data.len(),
-                        max = MAX_PACKET_BYTES;
-                        "encoding layer constraint violated: packet exceeds budget"
-                    );
-                    return;
-                }
-                if let Some(client) = &self.client {
-                    client.send_voice(data, codec);
-                }
+                self.voice_tx_snapshot().dispatch_outbound(
+                    codec,
+                    data,
+                    produced_at,
+                    Instant::now(),
+                );
             }
             AudioEvent::Talkers { client_ids } => {
                 self.emit(SessionEvent::Speaking { client_ids });
@@ -682,20 +675,33 @@ impl Actor {
         }
     }
 
-    fn voice_gate_open(&self) -> bool {
-        matches!(self.state, SessionState::Connected { .. })
-            && self.self_channel_id != 0
-            && self.capture_active
-            && !self.voice_state.muted
-            && !self.voice_state.deafened
-            && (!self.voice_state.ptt_mode || self.voice_state.ptt_active)
+    pub(super) fn voice_tx_snapshot(&self) -> VoiceTxGate {
+        VoiceTxGate {
+            client: self.client.clone(),
+            connected: matches!(self.state, SessionState::Connected { .. }),
+            self_channel_id: self.self_channel_id,
+            capture_active: self.capture_active,
+            muted: self.voice_state.muted,
+            deafened: self.voice_state.deafened,
+            ptt_mode: self.voice_state.ptt_mode,
+            ptt_active: self.voice_state.ptt_active,
+            current_codec: self.current_codec,
+            audio_since: self.audio_since,
+        }
     }
 
+    pub(super) fn sync_voice_gate(&self) {
+        *self.voice_tx_gate.borrow_mut() = self.voice_tx_snapshot();
+    }
+
+    fn voice_gate_open(&self) -> bool {
+        self.voice_tx_snapshot().voice_gate_open()
+    }
+
+    #[cfg(test)]
     pub(super) fn can_send_voice(&self, codec: i32, produced_at: Instant, now: Instant) -> bool {
-        self.voice_gate_open()
-            && codec == self.current_codec
-            && produced_at >= self.audio_since
-            && now.saturating_duration_since(produced_at) <= MAX_VOICE_QUEUE_DELAY
+        self.voice_tx_snapshot()
+            .can_send_voice(codec, produced_at, now)
     }
 
     pub(super) fn start_voice(&mut self) {
@@ -719,6 +725,7 @@ impl Actor {
         } else {
             self.capture_active = false;
         }
+        self.sync_voice_gate();
     }
 
     pub(super) fn stop_voice(&mut self) {
@@ -726,6 +733,79 @@ impl Actor {
             let _ = self.voice.stop();
         }
         self.capture_active = false;
+        self.sync_voice_gate();
+    }
+}
+
+#[derive(Clone)]
+pub(super) struct VoiceTxGate {
+    pub client: Option<Arc<Client>>,
+    pub connected: bool,
+    pub self_channel_id: u64,
+    pub capture_active: bool,
+    pub muted: bool,
+    pub deafened: bool,
+    pub ptt_mode: bool,
+    pub ptt_active: bool,
+    pub current_codec: i32,
+    pub audio_since: Instant,
+}
+
+impl Default for VoiceTxGate {
+    fn default() -> Self {
+        Self {
+            client: None,
+            connected: false,
+            self_channel_id: 0,
+            capture_active: false,
+            muted: false,
+            deafened: false,
+            ptt_mode: false,
+            ptt_active: false,
+            current_codec: VOICE_CODEC,
+            audio_since: Instant::now(),
+        }
+    }
+}
+
+impl VoiceTxGate {
+    pub(super) fn voice_gate_open(&self) -> bool {
+        self.connected
+            && self.self_channel_id != 0
+            && self.capture_active
+            && !self.muted
+            && !self.deafened
+            && (!self.ptt_mode || self.ptt_active)
+    }
+
+    pub(super) fn can_send_voice(&self, codec: i32, produced_at: Instant, now: Instant) -> bool {
+        self.voice_gate_open()
+            && codec == self.current_codec
+            && produced_at >= self.audio_since
+            && now.saturating_duration_since(produced_at) <= MAX_VOICE_QUEUE_DELAY
+    }
+
+    pub(super) fn dispatch_outbound(
+        &self,
+        codec: i32,
+        data: Vec<u8>,
+        produced_at: Instant,
+        now: Instant,
+    ) {
+        if !self.can_send_voice(codec, produced_at, now) {
+            return;
+        }
+        if data.len() > MAX_PACKET_BYTES {
+            crate::log_error!(
+                size = data.len(),
+                max = MAX_PACKET_BYTES;
+                "encoding layer constraint violated: packet exceeds budget"
+            );
+            return;
+        }
+        if let Some(client) = &self.client {
+            client.send_voice(data, codec);
+        }
     }
 }
 

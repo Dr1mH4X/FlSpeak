@@ -248,3 +248,87 @@ async fn dynamic_reset_triggers_clear_permission_flags() {
     assert_eq!(actor.channel_meta_allowed, None);
     assert_eq!(actor.client_list_allowed, None);
 }
+
+struct SlowDirectory(Arc<tokio::sync::Notify>);
+
+impl tsclient_rs::CommandMiddleware for SlowDirectory {
+    fn wrap(&self, _: TestCommandHandler) -> TestCommandHandler {
+        let started = Arc::clone(&self.0);
+        Arc::new(move |command| {
+            let started = Arc::clone(&started);
+            Box::pin(async move {
+                if command.starts_with("channellist") {
+                    started.notify_one();
+                    tokio::time::sleep(Duration::from_millis(250)).await;
+                }
+                Err(tsclient_rs::Error::ServerError {
+                    id: "2568".into(),
+                    server_message: "denied".into(),
+                    extra_message: None,
+                })
+            })
+        })
+    }
+}
+
+#[tokio::test]
+async fn outbound_voice_is_not_blocked_by_slow_actor_commands() {
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let started = Arc::new(tokio::sync::Notify::new());
+            let client = Client::new(
+                tsclient_rs::generateIdentity(0),
+                "127.0.0.1:9987".into(),
+                "test".into(),
+                tsclient_rs::ClientOptions {
+                    command_middleware: vec![Box::new(SlowDirectory(Arc::clone(&started)))],
+                    ..Default::default()
+                },
+            );
+            client.mark_connected();
+            let mut actor = audio_actor();
+            actor.client = Some(Arc::new(client));
+            actor.state = SessionState::Connected {
+                client_id: 1,
+                channel_id: 1,
+            };
+            actor.self_channel_id = 1;
+            actor.capture_active = true;
+            // 容量为 1：若 audio_events 在慢命令期间不被消费，连续发送 4 个包必然超时阻塞。
+            let (audio, audio_rx) = mpsc::channel(1);
+            actor.audio_events = audio_rx;
+            let (commands, rx) = mpsc::unbounded_channel();
+            let task = tokio::task::spawn_local(async move {
+                actor.run(rx).await;
+            });
+
+            let (reply, mut list_rx) = oneshot::channel();
+            commands
+                .send(SessionCommand::ListChannels { reply })
+                .unwrap();
+            started.notified().await;
+
+            for _ in 0..4 {
+                tokio::time::timeout(
+                    Duration::from_millis(50),
+                    audio.send(AudioEvent::Outbound {
+                        codec: VOICE_CODEC,
+                        data: vec![1, 2, 3, 4],
+                        produced_at: Instant::now(),
+                    }),
+                )
+                .await
+                .expect("音频发包不应被慢命令阻塞")
+                .unwrap();
+            }
+            // 此时 ListChannels 仍在阻塞中，证明音频发包真正绕开了慢等待。
+            assert!(matches!(
+                list_rx.try_recv(),
+                Err(oneshot::error::TryRecvError::Empty)
+            ));
+
+            commands.send(SessionCommand::Shutdown).unwrap();
+            task.await.unwrap();
+        })
+        .await;
+}

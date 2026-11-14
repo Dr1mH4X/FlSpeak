@@ -14,9 +14,11 @@ mod tests_integration;
 mod transfers;
 mod voice;
 
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use std::pin::Pin;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::task::{Context, Poll};
@@ -149,6 +151,8 @@ pub(crate) enum SessionSignal {
         epoch: u64,
         seq: u64,
     },
+    /// 来自音频线程的非上行控制事件（状态/说话人/错误）。
+    AudioControl(AudioEvent),
 }
 
 pub(crate) struct SessionAudio {
@@ -185,6 +189,7 @@ pub(crate) struct Actor {
     capture_active: bool,
     audio_since: Instant,
     audio_enabled: bool,
+    voice_tx_gate: Rc<RefCell<VoiceTxGate>>,
     last_snapshot: Option<(Vec<ChannelView>, Vec<ClientView>)>,
     channel_codecs: HashMap<u64, i32>,
     channel_list_allowed: Option<bool>,
@@ -275,6 +280,7 @@ impl Actor {
             capture_active: false,
             audio_since: Instant::now(),
             audio_enabled,
+            voice_tx_gate: Rc::new(RefCell::new(VoiceTxGate::default())),
             last_snapshot: None,
             channel_codecs: HashMap::new(),
             channel_list_allowed: None,
@@ -318,12 +324,37 @@ impl Actor {
         // interval 的第一次 tick 立即就绪；消费掉，避免刚启动就发空快照。
         snapshots.tick().await;
 
-        loop {
-            // 排空音频事件，保证语音帧零延迟分发
-            while let Ok(event) = self.audio_events.try_recv() {
-                self.handle_audio(event);
+        self.sync_voice_gate();
+        let (_, dummy_rx) = mpsc::channel(1);
+        let mut audio_rx = std::mem::replace(&mut self.audio_events, dummy_rx);
+        let (stop_audio_tx, mut stop_audio_rx) = oneshot::channel::<()>();
+        let audio_gate = Rc::clone(&self.voice_tx_gate);
+        let audio_signals = self.signals.clone();
+        // 在同一个单线程 LocalSet 上独立泵取 audio_events，避免慢速网络 .await 阻塞语音发送。
+        let audio_pump = tokio::task::spawn_local(async move {
+            loop {
+                tokio::select! {
+                    biased;
+                    _ = &mut stop_audio_rx => break,
+                    event = audio_rx.recv() => match event {
+                        Some(AudioEvent::Outbound { codec, data, produced_at }) => {
+                            audio_gate.borrow().dispatch_outbound(
+                                codec,
+                                data,
+                                produced_at,
+                                Instant::now(),
+                            );
+                        }
+                        Some(other) => {
+                            let _ = audio_signals.send(SessionSignal::AudioControl(other));
+                        }
+                        None => break,
+                    }
+                }
             }
+        });
 
+        loop {
             if self.active_image.is_none() && !self.pending_images.is_empty() {
                 self.start_next_image();
             }
@@ -358,11 +389,6 @@ impl Actor {
                         self.handle_signal(signal).await;
                     }
                 }
-                audio = self.audio_events.recv() => {
-                    if let Some(event) = audio {
-                        self.handle_audio(event);
-                    }
-                }
                 result = async {
                     match &mut self.active_image {
                         Some(active) => active.negotiation.as_mut().await,
@@ -378,6 +404,8 @@ impl Actor {
                 }
             }
         }
+        let _ = stop_audio_tx.send(());
+        let _ = audio_pump.await;
         self.teardown().await;
     }
 
@@ -1121,6 +1149,9 @@ impl Actor {
                 self.report_voice_flags_step(VoiceReportMode::Timer { seq })
                     .await;
             }
+            SessionSignal::AudioControl(event) => {
+                self.handle_audio(event);
+            }
         }
     }
 }
@@ -1135,12 +1166,14 @@ impl Actor {
         self.voice.set_meter_epoch(scope);
         self.levels.set_epoch(scope);
         self.state = state.clone();
+        self.sync_voice_gate();
         self.emit(SessionEvent::State {
             state,
             connection_epoch: self.connection_epoch,
         });
     }
     pub(super) fn emit_voice_state(&self) {
+        self.sync_voice_gate();
         self.emit(SessionEvent::Voice(self.voice_state.clone()));
     }
 

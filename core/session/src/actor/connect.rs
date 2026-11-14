@@ -405,6 +405,7 @@ impl Actor {
             self.set_state(SessionState::Disconnected);
             return Ok(());
         };
+        self.sync_voice_gate();
         let outcome = tokio::time::timeout(DISCONNECT_TIMEOUT, client.disconnect()).await;
         self.active_server_id = None;
         self.self_client_id = None;
@@ -424,6 +425,7 @@ impl Actor {
         }
         self.invalidate_handlers();
         self.client = None;
+        self.sync_voice_gate();
         self.active_server_id = None;
         self.self_client_id = None;
         self.self_channel_id = 0;
