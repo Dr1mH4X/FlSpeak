@@ -80,7 +80,7 @@ docs(boundary): record the SRV and TSDNS trade-offs
 dart setup.dart macos arm64 --version 0.2.0   # 内置 flutter build + 归拢产物到 dist/
 ```
 
-CI 上打 `v*` tag 会从 tag 推导版本号，再按 5 个构建作业打包生成 7 类平台架构产物。发版日志与 Release 正文见 [release/AGENTS.md](release/AGENTS.md)，发布矩阵与已知简化见 [ci-cd.md](ci-cd.md)。
+CI 上打 `v*` tag 会从 tag 推导版本号，再按 5 个构建作业打包生成 8 类平台架构产物。发版日志与 Release 正文见 [release/AGENTS.md](release/AGENTS.md)，发布矩阵与已知简化见 [ci-cd.md](ci-cd.md)。
 
 Android 的 debug 与 release 签名分开配置，都写进 `android/key.properties`：debug 用 `debugStoreFile`、`debugStorePassword`、`debugKeyAlias`、`debugKeyPassword`，release 用 `releaseStoreFile`、`releaseStorePassword`、`releaseKeyAlias`、`releaseKeyPassword`（路径相对 `android/app/` 解析）。没有对应配置时 debug 用平台默认调试密钥、release 退回 debug 配置，方便 `flutter run --release`。CI 侧的八个签名 secret 与 `REQUIRE_RELEASE_SIGNING` 见 [ci-cd.md](ci-cd.md)。
 

@@ -4,7 +4,7 @@
 
 | 来源 | 原始许可证 | 引入形式与内容 |
 | --- | --- | --- |
-| [FlClash](https://github.com/chen08209/FlClash) | GPL-3.0 | macOS 标题条布局、窗口尺寸与红绿灯让位，Windows 标题栏控制按钮与 Segoe Fluent 矢量图标，以及设置行与设置文本卡片适配 |
+| [FlClash](https://github.com/chen08209/FlClash) | GPL-3.0 | macOS 标题条布局、窗口尺寸与红绿灯让位，Windows 标题栏控制按钮与 Segoe Fluent 矢量图标，Windows Inno Setup 安装脚本与简体中文语言包，以及设置行与设置文本卡片适配 |
 | [prism_ui](https://pub.dev/packages/prism_ui) | GPL-3.0 | Pub 依赖 `prism_ui`，直接提供按钮、弹性按压、`PressSurface`、表面层级、超椭圆形状、滑块开关、弹出菜单、`ListRow`、`DecorationListItem`、Liquid Glass、Goo 与主题过渡原语 |
 | [FlClash 的 `plugins/window`](https://github.com/chen08209/FlClash/tree/main/plugins/window) | MIT | 隐藏标题栏、窗口拖拽、双击缩放、最小化/最大化/关闭、置顶、系统材质特效（Mica/Acrylic）、单实例检测与全屏状态 |
 | [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | MIT | Markdown 正文段落单物理行检查门禁脚本 |
@@ -15,7 +15,7 @@
 
 原始许可证为 GNU General Public License v3.0，见 FlClash 仓库根 `LICENSE`，原文见 https://www.gnu.org/licenses/gpl-3.0.txt 。复制片段的版权归 FlClash 作者所有。
 
-复制内容来自 `lib/common/layout.dart` 的窗口尺寸与红绿灯区域、`lib/manager/window_manager.dart` 的 `WindowHeaderContainer`、`WindowHeaderLayout`、`WindowHeaderBar`、`WindowHeader`、`lib/ui/sidebar.dart`、`lib/ui/icons/app_glyphs.dart`、`lib/ui/icons/caption_icon.dart`、`lib/ui/list_item.dart` 与 `lib/ui/setting_text_card.dart`。
+复制内容来自 `lib/common/layout.dart` 的窗口尺寸与红绿灯区域、`lib/manager/window_manager.dart` 的 `WindowHeaderContainer`、`WindowHeaderLayout`、`WindowHeaderBar`、`WindowHeader`、`lib/ui/sidebar.dart`、`lib/ui/icons/app_glyphs.dart`、`lib/ui/icons/caption_icon.dart`、`lib/ui/list_item.dart`、`lib/ui/setting_text_card.dart` 与 `windows/packaging/exe/` 的 `inno_setup.iss`、`ChineseSimplified.isl`。
 
 | 本仓库文件 | 原始文件 |
 | --- | --- |
@@ -26,6 +26,7 @@
 | `lib/widgets/caption_icon.dart` | `lib/ui/icons/caption_icon.dart` |
 | `lib/features/settings/widgets/list_item.dart` | `lib/ui/list_item.dart` |
 | `lib/features/settings/widgets/setting_text_card.dart` | `lib/ui/setting_text_card.dart` |
+| `windows/packaging/exe/inno_setup.iss`、`ChineseSimplified.isl` | `windows/packaging/exe/inno_setup.iss`、`ChineseSimplified.isl` |
 
 ## prism_ui
 

@@ -1,0 +1,24 @@
+{
+  "title": "FlSpeak",
+  "icon-size": 80,
+  "window": {
+    "size": {
+      "width": 640,
+      "height": 420
+    }
+  },
+  "contents": [
+    {
+      "x": 448,
+      "y": 210,
+      "type": "link",
+      "path": "/Applications"
+    },
+    {
+      "x": 192,
+      "y": 210,
+      "type": "file",
+      "path": "FlSpeak.app"
+    }
+  ]
+}

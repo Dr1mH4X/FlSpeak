@@ -104,12 +104,12 @@ releaseKeyPassword=<密码>
 
 ## `setup.dart` 做了与没做什么
 
-做：读版本号 → `flutter build <platform> --release --build-name/--build-number` → 把平台产物按 `flspeak-<version>-<platform>-<arch>.<ext>` 归拢进 `dist/`。
+做：读版本号 → `flutter build <platform> --release --build-name/--build-number` → 按平台归拢或打包产物进 `dist/`：macOS 通过 `appdmg` 与 [macos/packaging/dmg/make_config.json](../macos/packaging/dmg/make_config.json) 生成 `flspeak-<version>-macos-<arch>.dmg`；Windows 通过 Inno Setup (`ISCC.exe`) 与 [windows/packaging/exe/inno_setup.iss](../windows/packaging/exe/inno_setup.iss) 生成 `flspeak-<version>-windows-<arch>-setup.exe` 安装包以及绿色便携版 `flspeak-<version>-windows-<arch>.zip`；Linux 生成 `flspeak-<version>-linux-<arch>.tar.gz`；Android 生成分 ABI `.apk`。
 
-没做（**已知简化**，需要各自的打包工具）：
-- dmg / pkg 与 Apple 公证；
+没做（**已知简化**，需要各自的打包工具或签名凭据）：
+- macOS 开发者签名与 Apple 公证（`dmg` 与 `.app` 为未公证产物）；
 - deb / rpm / AppImage；
-- MSI / 安装器与 Windows 代码签名（当前产物是未签名 zip）；
+- Windows Authenticode 代码签名（`.exe` 安装包与绿色 `.zip` 为未签名产物）；
 - F-Droid 元数据。
 
 `setup.dart` 还只会给**当前主机**能构建的平台打包：在 macOS 上请求 `windows` 会直接报错退出，交叉平台打包交给 release 矩阵。

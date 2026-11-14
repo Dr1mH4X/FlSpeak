@@ -161,7 +161,7 @@ jobs:
         if: matrix.platform == 'macos'
         run: |
           mkdir -p dist
-          ditto -c -k --sequesterRsrc --keepParent build/macos/Build/Products/Debug/flspeak.app dist/flspeak-macos-${{ runner.arch }}-debug.zip
+          ditto -c -k --sequesterRsrc --keepParent build/macos/Build/Products/Debug/FlSpeak.app dist/flspeak-macos-${{ runner.arch }}-debug.zip
 
       - name: Archive Windows bundle
         if: matrix.platform == 'windows'
