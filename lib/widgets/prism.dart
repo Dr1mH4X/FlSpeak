@@ -18,6 +18,7 @@ import '../theme/app_theme.dart';
 
 export 'package:prism_ui/prism_ui.dart'
     show
+        ActivityIndicator,
         AppCorner,
         AppRadius,
         AppShape,
@@ -65,6 +66,8 @@ export 'package:prism_ui/prism_ui.dart'
         PressLook,
         PressSurface,
         SegmentedControl,
+        SelectionBadge,
+        SelectionCheck,
         SpringCurve,
         SurfaceLevel,
         SurfaceScope,

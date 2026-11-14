@@ -171,21 +171,7 @@ class _IdentityDialogContentState extends State<_IdentityDialogContent> {
           ),
         ),
         const SizedBox(width: 8),
-        Container(
-          width: 20,
-          height: 20,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: scheme.primary,
-            shape: BoxShape.circle,
-            border: Border.all(color: scheme.primary),
-          ),
-          child: Icon(
-            Icons.check_rounded,
-            size: IconSizes.micro,
-            color: scheme.onPrimary,
-          ),
-        ),
+        const SelectionBadge(size: 20),
         const SizedBox(width: 4),
         IconButton(
           onPressed: _startEditing,

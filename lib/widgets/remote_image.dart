@@ -1,5 +1,7 @@
-import 'package:flutter/material.dart' hide ButtonStyle, TextButton;
+import 'package:flutter/material.dart'
+    hide ButtonStyle, SelectableText, TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:prism_ui/prism_ui.dart' as prism_ui show SelectableText;
 
 import '../core/remote_images.dart';
 import '../l10n/app_localizations.dart';
@@ -34,7 +36,7 @@ class RemoteImage extends ConsumerWidget {
         label: l10n.chatImageLoading,
         child: SizedBox.square(
           dimension: 24,
-          child: CircularProgressIndicator(strokeWidth: 2, color: color),
+          child: ActivityIndicator(size: 24, color: color),
         ),
       ),
     );
@@ -52,7 +54,7 @@ class RemoteImage extends ConsumerWidget {
               style: TextStyle(color: color),
             ),
             const SizedBox(height: 4),
-            SelectableText(
+            prism_ui.SelectableText(
               url,
               maxLines: 2,
               style: TextStyle(color: color, fontSize: 12),
