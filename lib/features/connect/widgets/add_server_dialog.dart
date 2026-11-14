@@ -71,8 +71,8 @@ Future<ServerProfileView?> showAddServerDialog(
                             children: [
                               SizedBox.square(
                                 dimension: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
+                                child: ActivityIndicator(
+                                  size: 16,
                                   color: scheme.onPrimary,
                                 ),
                               ),

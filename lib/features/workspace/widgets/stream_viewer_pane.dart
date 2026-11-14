@@ -817,7 +817,7 @@ class _ConnectingPlaceholder extends StatelessWidget {
           const SizedBox(
             width: 24,
             height: 24,
-            child: CircularProgressIndicator(strokeWidth: 2.5),
+            child: ActivityIndicator(size: 24),
           ),
           const SizedBox(height: 10),
           Text(

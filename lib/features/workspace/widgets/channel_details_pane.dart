@@ -89,7 +89,7 @@ class ChannelDetailsPane extends ConsumerWidget {
                       child: Center(
                         child: SizedBox.square(
                           dimension: 24,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                          child: ActivityIndicator(size: 24),
                         ),
                       ),
                     ),

@@ -676,7 +676,7 @@ class _AudioDevicePicker extends ConsumerWidget {
             const SizedBox(
               width: 16,
               height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
+              child: ActivityIndicator(size: 16),
             ),
             const SizedBox(width: 12),
             Expanded(

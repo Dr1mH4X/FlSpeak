@@ -12,6 +12,7 @@ import 'package:flspeak/features/workspace/workspace_page.dart';
 import 'package:flspeak/features/workspace/workspace_state.dart';
 import 'package:flspeak/features/workspace/widgets/channel_details_pane.dart';
 import 'package:flspeak/features/workspace/widgets/media_grid.dart';
+import 'package:flspeak/widgets/prism.dart';
 
 class _FakeCore extends Fake implements CoreSession {
   _FakeCore({this.descriptionResult, this.throwError = false});
@@ -78,7 +79,7 @@ void main() {
     );
 
     // Initial loading
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(ActivityIndicator), findsOneWidget);
 
     await tester.pumpAndSettle();
 

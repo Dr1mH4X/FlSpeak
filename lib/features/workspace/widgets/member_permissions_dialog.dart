@@ -65,7 +65,7 @@ class _PermissionsFormState extends ConsumerState<_PermissionsForm> {
               peer.id == widget.client.id && peer.uid == widget.client.uid,
         );
     return groups.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const Center(child: ActivityIndicator(size: 36)),
       error: (error, stack) => Column(
         mainAxisSize: MainAxisSize.min,
         children: [

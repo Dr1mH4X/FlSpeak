@@ -203,7 +203,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const CircularProgressIndicator(),
+            const ActivityIndicator(size: 36),
             const SizedBox(height: 16),
             Text(
               view.reconnecting

@@ -608,7 +608,7 @@ void main() {
   });
 
   testWidgets(
-    'ServerRow connecting uses left ExpressiveFrame spin without CircularProgressIndicator',
+    'ServerRow connecting uses left ExpressiveFrame spin without ActivityIndicator',
     (tester) async {
       tester.view.physicalSize = const Size(1000, 700);
       tester.view.devicePixelRatio = 1.0;
@@ -653,7 +653,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 250));
 
       expect(find.text('正在连接…'), findsOneWidget);
-      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.byType(ActivityIndicator), findsNothing);
       final frame = tester.widget<ExpressiveFrame>(
         find.byType(ExpressiveFrame),
       );
