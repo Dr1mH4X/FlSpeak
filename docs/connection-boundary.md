@@ -20,7 +20,7 @@ FlSpeak 的 TeamSpeak 连接只面向 TeamSpeak 服务器。边界由录入格�
 | `core/server/src/lib.rs` | IP/域名解析、档案登记；拒绝空地址、协议前缀、裸昵称和非法端口 |
 | `core/proto/src/lib.rs` | SRV 解析、`DenyResolver`、最终官方主机检查和建连 |
 | `core/session/src/images.rs` | 图片 URL 的 host 检查与 SSRF 防护 |
-| `core/session/src/actor.rs` | 连接流程、重连和文件传输主机校验 |
+| `core/session/src/actor/` | 连接流程、重连和文件传输主机校验（`connect.rs`、`transfers.rs`） |
 | `core/session/src/updates.rs` | 固定 GitHub Releases 主机的版本检查、SemVer 比较、6 小时缓存与失败回退 |
 
 ## 验证
