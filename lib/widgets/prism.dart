@@ -416,8 +416,7 @@ class OptionsValueButton extends StatelessWidget {
   }
 }
 
-/// 隔离上游 `_StyledButtonState.didUpdateWidget` 在启用/选中态切换时同步触发 `setState` 的问题，
-/// 不改动 `plugins/prism_ui` 子模块本身。
+/// 隔离上游 `prism_ui` `_StyledButtonState.didUpdateWidget` 在启用/选中态切换时同步触发 `setState` 的问题。
 class IconButton extends StatelessWidget {
   const IconButton({
     super.key,

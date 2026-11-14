@@ -31,8 +31,7 @@ dependencies:
   talker: ^4.6.0
   flspeak_ffi:
     path: plugins/flspeak_ffi
-  prism_ui:
-    path: plugins/prism_ui
+  prism_ui: ^0.1.2
   flutter_webrtc: ^1.6.3
   url_launcher: ^6.3.2
 

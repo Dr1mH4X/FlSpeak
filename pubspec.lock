@@ -646,9 +646,10 @@ packages:
   prism_ui:
     dependency: "direct main"
     description:
-      path: "plugins/prism_ui"
-      relative: true
-    source: path
+      name: prism_ui
+      sha256: "599406d872567a01c165b856536406a94473e5e54243f296eeef6f5882113961"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
     version: "0.1.2"
   process:
     dependency: transitive

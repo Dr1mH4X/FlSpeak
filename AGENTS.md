@@ -30,7 +30,7 @@ FlSpeak 是 TeamSpeak 第三方客户端：Flutter 负责界面，Rust 负责协
 
 ## 约定与行为工作流
 
-- **UI 变更**：使用 [fls-client-ui-ux](.agents/skills/fls-client-ui-ux/SKILL.md) 作为设计与审查入口；界面组件优先经 [lib/widgets/prism.dart](lib/widgets/prism.dart) 复用 `plugins/prism_ui` 原语（见 [Flutter 界面设计规范](docs/subsystems/ui-design.md)），并严格遵守 [Flutter 界面文案与操作按钮约束](docs/defensive-patterns/ui.md)（全仓不引入 Tooltip，无多余说明文本）。
+- **UI 变更**：使用 [fls-client-ui-ux](.agents/skills/fls-client-ui-ux/SKILL.md) 作为设计与审查入口；界面组件优先经 [lib/widgets/prism.dart](lib/widgets/prism.dart) 复用 `prism_ui` 原语（见 [Flutter 界面设计规范](docs/subsystems/ui-design.md)），并严格遵守 [Flutter 界面文案与操作按钮约束](docs/defensive-patterns/ui.md)（全仓不引入 Tooltip，无多余说明文本）。
 - **代码审查**：审查 PR 或交付前自查时，遵循 [fls-code-review](.agents/skills/fls-code-review/SKILL.md)；严格对照 [docs/defensive-patterns/README.md](docs/defensive-patterns/README.md) 映射表逐项核查，禁止凭记忆审查。
 - **运行本地检查与提推前验证**：在提交或推送前，遵循 [fls-pre-push-checks](.agents/skills/fls-pre-push-checks/SKILL.md)；按即将推出的 diff 选出覆盖它的最小检查集，不反射式地跑全量套件。
 - **Agent Notes 决策记录**：只有不可变长效决策才建笔记，遵循 [fls-archive-agent-notes](.agents/skills/fls-archive-agent-notes/SKILL.md)；归档记录冻结不改。

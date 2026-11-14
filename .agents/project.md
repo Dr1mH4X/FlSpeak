@@ -7,7 +7,6 @@
 | `core/session/` | Rust crate | 会话 Actor 调度、独占驱动 `tsclient-rs` 的 `Client` 实例、事件分发总线与状态机生命周期 |
 | `core/audio/` | Rust crate | 独占双线程全双工音频管线（设备枚举、采集、播放、Opus 编解码、VAD 语音检测与 JitterBuffer） |
 | `plugins/flspeak_ffi/` | Flutter plugin | 唯一的跨语言 FFI 桥梁（flutter_rust_bridge 绑定层与 Native Assets 编译集成） |
-| `plugins/prism_ui/` | Git 子模块 | Flutter UI 原语与设计系统组件库（经 [lib/widgets/prism.dart](../lib/widgets/prism.dart) 桥接导出，界面层优先复用） |
 | `lib/` | Flutter App | 客户端 UI 组件、Riverpod 状态持有与响应式渲染 |
 | `arb/` | L10n 资源 | 应用国际化多语言 ARB 词条源文件 |
 | `.agents/` | 规范与上下文 | 面向编码 Agent 的架构决策记录（notes/）与专属复用工作流技能（skills/） |

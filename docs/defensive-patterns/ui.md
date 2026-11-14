@@ -21,5 +21,5 @@
 ## 视觉系统与布局约束
 
 - 表面层级、超椭圆圆角、字阶、按压反馈与设置行规范必须遵守 [Flutter 界面设计规范](../subsystems/ui-design.md)。
-- 优先使用 `prism` 组件：标准交互控件、表面容器与反馈原语一律通过 [lib/widgets/prism.dart](../../lib/widgets/prism.dart) 选用 `plugins/prism_ui` 实现（子模块已提供但未转出时先在桥接层补充导出）；引入 `package:flutter/material.dart` 时 `hide` 同名冲突的 Material 控件，不在 `lib/` 手写重复控件或回退使用 Material 默认控件。
+- 优先使用 `prism` 组件：标准交互控件、表面容器与反馈原语一律通过 [lib/widgets/prism.dart](../../lib/widgets/prism.dart) 选用 `prism_ui` 实现（上游包已提供但未转出时先在桥接层补充导出）；引入 `package:flutter/material.dart` 时 `hide` 同名冲突的 Material 控件，不在 `lib/` 手写重复控件或回退使用 Material 默认控件。
 - 禁止使用 `Tooltip` / `tooltip:`；禁止在按钮或自绘卡片上恢复 `0.94` 缩放按压；禁止在普通卡片/设置行外围恢复描边或图标色块填充。
