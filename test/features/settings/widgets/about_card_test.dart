@@ -73,6 +73,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(SurfaceCard), findsOneWidget);
+    final iconImage = tester.widget<Image>(find.byType(Image));
+    expect(
+      (iconImage.image as AssetImage).assetName,
+      'macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_256.png',
+    );
     expect(find.text('FlSpeak'), findsOneWidget);
     expect(find.text('v0.1.0'), findsOneWidget);
     expect(find.text('又一个跨平台、开源的 TeamSpeak 客户端'), findsOneWidget);

@@ -67,15 +67,14 @@ class _AboutCardState extends ConsumerState<AboutCard> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // 1. 图标占位
+            // 1. 应用图标
             Center(
-              child: Container(
+              child: Image.asset(
+                'macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_256.png',
                 width: 80,
                 height: 80,
-                decoration: ShapeDecoration(
-                  color: sectionBg,
-                  shape: AppShape.lg,
-                ),
+                filterQuality: FilterQuality.high,
+                excludeFromSemantics: true,
               ),
             ),
             const SizedBox(height: 18),

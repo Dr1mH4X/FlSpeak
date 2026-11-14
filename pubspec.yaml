@@ -46,4 +46,6 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   generate: true
+  assets:
+    - macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_256.png
 
