@@ -538,70 +538,72 @@ class _ChatPaneState extends State<ChatPane> {
           ),
           child: Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: Material(
+            child: Surface(
               color: scheme.surfaceContainerHighest,
               clipBehavior: Clip.antiAlias,
-              shape: RoundedSuperellipseBorder(
-                borderRadius: AppRadius.md,
+              shape: AppShape.xl.copyWith(
                 side: BorderSide(color: scheme.outlineVariant),
               ),
-              child: ListView.builder(
-                shrinkWrap: true,
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                itemCount: matched.length,
-                itemBuilder: (context, index) {
-                  final cmd = matched[index];
-                  return AnimatedInkWell(
-                    customBorder: AppShape.sm,
-                    onTap: () {
-                      final completed = '/${cmd.name} ';
-                      _input.value = TextEditingValue(
-                        text: completed,
-                        selection: TextSelection.collapsed(
-                          offset: completed.length,
-                        ),
-                      );
-                      _focus.requestFocus();
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 8,
-                      ),
-                      child: Row(
-                        children: [
-                          Text(
-                            '/${cmd.name}',
-                            style: context.texts.labelLarge?.copyWith(
-                              color: scheme.primary,
-                              fontWeight: FontWeight.w600,
-                            ),
+              child: SurfaceScope(
+                level: floatingSurfaceLevelFor(scheme),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  itemCount: matched.length,
+                  itemBuilder: (context, index) {
+                    final cmd = matched[index];
+                    return AnimatedInkWell(
+                      customBorder: AppShape.sm,
+                      onTap: () {
+                        final completed = '/${cmd.name} ';
+                        _input.value = TextEditingValue(
+                          text: completed,
+                          selection: TextSelection.collapsed(
+                            offset: completed.length,
                           ),
-                          if (cmd.args.isNotEmpty) ...[
-                            const SizedBox(width: 6),
+                        );
+                        _focus.requestFocus();
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
+                        child: Row(
+                          children: [
                             Text(
-                              cmd.args,
-                              style: context.texts.bodySmall?.copyWith(
-                                color: scheme.tertiary,
+                              '/${cmd.name}',
+                              style: context.texts.labelLarge?.copyWith(
+                                color: scheme.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            if (cmd.args.isNotEmpty) ...[
+                              const SizedBox(width: 6),
+                              Text(
+                                cmd.args,
+                                style: context.texts.bodySmall?.copyWith(
+                                  color: scheme.tertiary,
+                                ),
+                              ),
+                            ],
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                cmd.desc,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: context.texts.bodySmall?.copyWith(
+                                  color: scheme.onSurfaceVariant,
+                                ),
                               ),
                             ),
                           ],
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              cmd.desc,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: context.texts.bodySmall?.copyWith(
-                                color: scheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
             ),
           ),

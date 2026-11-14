@@ -11,9 +11,10 @@ import '../../core/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../router.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/app_navigation_sidebar.dart';
+import '../../widgets/prism.dart' show AppShape, Surface;
 import 'widgets/channel_pane.dart';
 import 'widgets/channel_pane_resizer.dart';
-import '../../widgets/app_navigation_sidebar.dart';
 
 /// 工作区三栏布局；窄屏将服务器与频道收进抽屉。
 class WorkspaceShell extends ConsumerWidget {
@@ -149,9 +150,9 @@ class _MainSurface extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = context.scheme;
 
-    return Material(
+    return Surface(
       color: scheme.surface,
-      borderRadius: BorderRadius.zero,
+      shape: AppShape.none,
       clipBehavior: Clip.antiAlias,
       child: child,
     );

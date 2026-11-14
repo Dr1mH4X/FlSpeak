@@ -87,17 +87,24 @@ class _MediaTile extends StatelessWidget {
     return Semantics(
       button: true,
       label: name.isEmpty ? l10n.mediaViewerTitle : name,
-      child: Material(
+      child: Surface(
         color: scheme.surfaceContainer,
-        borderRadius: Radii.xxlAll,
+        shape: AppShape.xl,
         clipBehavior: Clip.antiAlias,
-        child: AnimatedInkWell(
-          onTap: onTap,
-          child: RemoteImage(
-            url: url,
-            width: double.infinity,
-            height: double.infinity,
-            fit: BoxFit.cover,
+        child: FocusRing(
+          shape: AppShape.xl,
+          child: PressSurface(
+            fill: Colors.transparent,
+            shape: AppShape.xl,
+            look: PressLook.tint,
+            onPressed: onTap,
+            childFills: true,
+            child: RemoteImage(
+              url: url,
+              width: double.infinity,
+              height: double.infinity,
+              fit: BoxFit.cover,
+            ),
           ),
         ),
       ),

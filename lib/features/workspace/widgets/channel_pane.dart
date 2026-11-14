@@ -143,7 +143,7 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
       );
     }
 
-    return Material(
+    return Surface(
       color: scheme.surfaceContainerLow,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

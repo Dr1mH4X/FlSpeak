@@ -238,7 +238,7 @@ class _AppNavigationSidebarState extends ConsumerState<AppNavigationSidebar>
           ),
         );
       },
-      child: Material(
+      child: Surface(
         color: scheme.surfaceContainerLowest,
         shape: BorderDirectional(
           end: BorderSide(
@@ -337,14 +337,17 @@ class _SidebarButton extends StatelessWidget {
         button: true,
         selected: selected,
         label: semanticLabel,
-        child: PressSurface(
-          fill: selected ? colors.selectedFill : Colors.transparent,
+        child: FocusRing(
           shape: _itemShape,
-          look: PressLook.tint,
-          onPressed: onTap,
-          selected: selected,
-          childFills: true,
-          child: body,
+          child: PressSurface(
+            fill: selected ? colors.selectedFill : Colors.transparent,
+            shape: _itemShape,
+            look: PressLook.tint,
+            onPressed: onTap,
+            selected: selected,
+            childFills: true,
+            child: body,
+          ),
         ),
       ),
     );
@@ -803,7 +806,7 @@ class _SidebarOverlay extends StatelessWidget {
               },
               child: FocusScope(
                 autofocus: true,
-                child: Material(
+                child: Surface(
                   color: scheme.surfaceContainerLowest,
                   shape: BorderDirectional(
                     end: BorderSide(

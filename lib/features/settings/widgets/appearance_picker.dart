@@ -40,73 +40,82 @@ class AppearancePicker extends StatelessWidget {
                 child: Semantics(
                   selected: value == mode,
                   button: true,
-                  child: Material(
+                  child: Surface(
                     color: Colors.transparent,
-                    child: AnimatedInkWell(
-                      onTap: () => onChanged(mode),
-                      customBorder: AppShape.lg,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: ShapeDecoration(
-                              shape: RoundedSuperellipseBorder(
-                                borderRadius: AppRadius.lg,
-                                side: BorderSide(
-                                  color: value == mode
-                                      ? scheme.primary
-                                      : dividerColorOf(context),
-                                  width: value == mode ? 2 : 1,
+                    shape: AppShape.lg,
+                    clipBehavior: Clip.antiAlias,
+                    child: FocusRing(
+                      shape: AppShape.lg,
+                      child: PressSurface(
+                        fill: Colors.transparent,
+                        shape: AppShape.lg,
+                        look: PressLook.tint,
+                        onPressed: () => onChanged(mode),
+                        selected: value == mode,
+                        childFills: true,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: ShapeDecoration(
+                                shape: RoundedSuperellipseBorder(
+                                  borderRadius: AppRadius.lg,
+                                  side: BorderSide(
+                                    color: value == mode
+                                        ? scheme.primary
+                                        : dividerColorOf(context),
+                                    width: value == mode ? 2 : 1,
+                                  ),
+                                ),
+                              ),
+                              child: ClipRSuperellipse(
+                                borderRadius: AppRadius.md,
+                                child: SizedBox(
+                                  height: 88,
+                                  child: mode == AppThemePreference.system
+                                      ? Row(
+                                          children: [
+                                            Expanded(
+                                              child: _preview(Brightness.dark),
+                                            ),
+                                            Expanded(
+                                              child: _preview(Brightness.light),
+                                            ),
+                                          ],
+                                        )
+                                      : _preview(
+                                          mode == AppThemePreference.dark
+                                              ? Brightness.dark
+                                              : Brightness.light,
+                                        ),
                                 ),
                               ),
                             ),
-                            child: ClipRSuperellipse(
-                              borderRadius: AppRadius.md,
-                              child: SizedBox(
-                                height: 88,
-                                child: mode == AppThemePreference.system
-                                    ? Row(
-                                        children: [
-                                          Expanded(
-                                            child: _preview(Brightness.dark),
-                                          ),
-                                          Expanded(
-                                            child: _preview(Brightness.light),
-                                          ),
-                                        ],
-                                      )
-                                    : _preview(
-                                        mode == AppThemePreference.dark
-                                            ? Brightness.dark
-                                            : Brightness.light,
-                                      ),
+                            const SizedBox(height: 12),
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: Text(
+                                switch (mode) {
+                                  AppThemePreference.dark =>
+                                    l10n.settingsThemeDark,
+                                  AppThemePreference.light =>
+                                    l10n.settingsThemeLight,
+                                  AppThemePreference.system =>
+                                    l10n.settingsThemeSystem,
+                                },
+                                textAlign: TextAlign.center,
+                                style: AppTextStyle.footnote
+                                    .of(context, emphasized: value == mode)
+                                    .copyWith(
+                                      color: value == mode
+                                          ? scheme.primary
+                                          : scheme.onSurfaceVariant,
+                                    ),
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 12),
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: Text(
-                              switch (mode) {
-                                AppThemePreference.dark =>
-                                  l10n.settingsThemeDark,
-                                AppThemePreference.light =>
-                                  l10n.settingsThemeLight,
-                                AppThemePreference.system =>
-                                  l10n.settingsThemeSystem,
-                              },
-                              textAlign: TextAlign.center,
-                              style: AppTextStyle.footnote
-                                  .of(context, emphasized: value == mode)
-                                  .copyWith(
-                                    color: value == mode
-                                        ? scheme.primary
-                                        : scheme.onSurfaceVariant,
-                                  ),
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),

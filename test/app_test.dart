@@ -22,7 +22,7 @@ import 'package:flspeak/core/preferences.dart';
 import 'package:flspeak/core/update_check.dart';
 import 'package:flspeak/router.dart';
 import 'package:flspeak/widgets/app_navigation_sidebar.dart';
-import 'package:flspeak/widgets/prism.dart' show BannerHost;
+import 'package:flspeak/widgets/prism.dart' show BannerHost, Surface;
 import 'package:flspeak/widgets/update_dot.dart';
 
 class _PttSession extends SessionController {
@@ -407,16 +407,16 @@ void main() {
       container.read(routerProvider).go(AppRoutes.settings);
       await tester.pumpAndSettle();
 
-      Material sidebarMaterial() => tester.widget<Material>(
+      Surface sidebarSurface() => tester.widget<Surface>(
         find
             .descendant(
               of: find.byType(AppNavigationSidebar),
-              matching: find.byType(Material),
+              matching: find.byType(Surface),
             )
             .first,
       );
 
-      final baselineSidebarColor = sidebarMaterial().color;
+      final baselineSidebarColor = sidebarSurface().color;
       final baselineTheme = Theme.of(
         tester.element(find.byType(AppNavigationSidebar)),
       );
@@ -441,7 +441,7 @@ void main() {
         const Duration(milliseconds: 100),
       ]) {
         await tester.pump(step);
-        expect(sidebarMaterial().color, baselineSidebarColor);
+        expect(sidebarSurface().color, baselineSidebarColor);
         expect(
           identical(
             Theme.of(tester.element(find.byType(AppNavigationSidebar))),
@@ -455,7 +455,7 @@ void main() {
         );
       }
       await tester.pumpAndSettle();
-      expect(sidebarMaterial().color, baselineSidebarColor);
+      expect(sidebarSurface().color, baselineSidebarColor);
       expect(find.byKey(const ValueKey<String>('overview')), findsOneWidget);
     },
   );
