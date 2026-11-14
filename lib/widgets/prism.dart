@@ -32,6 +32,7 @@ export 'package:prism_ui/prism_ui.dart'
         CardSurface,
         Checkbox,
         Chip,
+        ContextMenuRegion,
         DecorationListItem,
         Divider,
         ElasticButton,
@@ -91,6 +92,24 @@ export 'package:prism_ui/prism_ui.dart'
         listRowMinHeight,
         listRowVerticalPadding,
         riseAndFall;
+
+export 'package:prism_ui/icons/icons.dart'
+    show
+        Glyph,
+        GlyphArc,
+        GlyphBox,
+        GlyphCircle,
+        GlyphIcon,
+        GlyphLink,
+        GlyphOval,
+        GlyphPath,
+        GlyphPolyline,
+        GlyphRole,
+        GlyphShape,
+        GlyphVertex,
+        Glyphs;
+
+export 'app_glyphs.dart' show AppGlyphs;
 
 typedef PrismTheme = prism.Theme;
 typedef PrismThemeData = prism.ThemeData;

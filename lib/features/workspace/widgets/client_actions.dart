@@ -5,6 +5,7 @@ import 'package:flutter/material.dart'
         FilledButton,
         IconButton,
         OutlinedButton,
+        PopupMenuItem,
         Switch,
         TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -93,12 +94,13 @@ class ClientActionsButton extends ConsumerWidget {
       moreSemanticLabel: l10n.memberActions(client.nickname),
       items: [
         if (stream != null)
-          MenuItemButton(
-            leadingIcon: Icon(
-              isWatchingStream
-                  ? Icons.stop_screen_share_rounded
-                  : Icons.screen_share_rounded,
-            ),
+          PopupMenuItem(
+            glyph: isWatchingStream
+                ? AppGlyphs.stopScreenShare
+                : AppGlyphs.screenShare,
+            label: isWatchingStream
+                ? l10n.streamStopWatching
+                : l10n.streamWatchScreen,
             onPressed: () {
               final controller = ref.read(sessionViewProvider.notifier);
               if (isWatchingStream) {
@@ -108,45 +110,42 @@ class ClientActionsButton extends ConsumerWidget {
               }
               ref.read(routerProvider).go(AppRoutes.workspace);
             },
-            child: Text(
-              isWatchingStream
-                  ? l10n.streamStopWatching
-                  : l10n.streamWatchScreen,
-            ),
           ),
-        MenuItemButton(
-          leadingIcon: const Icon(Icons.chat_bubble_outline_rounded),
+        PopupMenuItem(
+          glyph: AppGlyphs.chat,
+          label: l10n.chatDirectAction,
           onPressed: () {
             ref
                 .read(sessionViewProvider.notifier)
                 .selectDirectRecipient(client.uid, clientId: client.id);
             ref.read(routerProvider).go(AppRoutes.workspace);
           },
-          child: Text(l10n.chatDirectAction),
         ),
-        MenuItemButton(
-          leadingIcon: const Icon(Icons.touch_app_rounded),
+        PopupMenuItem(
+          glyph: AppGlyphs.poke,
+          label: l10n.pokeAction,
           onPressed: () => showAppModal<void>(
             context,
             title: l10n.pokeTitle(client.nickname),
             builder: (_) => _PokeForm(client: client),
           ),
-          child: Text(l10n.pokeAction),
         ),
-        MenuItemButton(
-          leadingIcon: const Icon(Icons.admin_panel_settings_outlined),
+        PopupMenuItem(
+          glyph: AppGlyphs.permissions,
+          label: l10n.memberPermissions,
           onPressed: canManage
               ? () => showMemberPermissions(context, client)
               : null,
-          child: Text(l10n.memberPermissions),
         ),
         for (final target in KickTarget.values)
-          MenuItemButton(
-            leadingIcon: Icon(
-              target == KickTarget.channel
-                  ? Icons.logout_rounded
-                  : Icons.person_remove_outlined,
-            ),
+          PopupMenuItem(
+            glyph: target == KickTarget.channel
+                ? AppGlyphs.logout
+                : AppGlyphs.personRemove,
+            label: target == KickTarget.channel
+                ? l10n.kickChannel
+                : l10n.kickServer,
+            danger: true,
             onPressed:
                 view.connected &&
                     !view.busy &&
@@ -162,9 +161,6 @@ class ClientActionsButton extends ConsumerWidget {
                     access!.connectionEpoch!,
                   )
                 : null,
-            child: Text(
-              target == KickTarget.channel ? l10n.kickChannel : l10n.kickServer,
-            ),
           ),
       ],
       builder: (_, _) => details,

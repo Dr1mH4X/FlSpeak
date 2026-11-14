@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart' hide ButtonStyle, IconButton;
+import 'package:flutter/material.dart'
+    hide ButtonStyle, IconButton, PopupMenuItem;
 
 import '../theme/app_motion.dart';
 import '../theme/app_theme.dart';
@@ -297,12 +298,12 @@ class _ModalPanel extends StatelessWidget {
 
 /// 全应用唯一的二级（弹出）菜单实现，所有弹出菜单都走这里，保证行为一致。
 ///
-/// - 右键菜单：[openOnSecondaryTap] 为 true 时在触发点弹出；[enabled] 为
-///   false 不响应右键（比如未连接的服务器、自己已在的频道）。
+/// - 右键与长按菜单：[openOnSecondaryTap] 为 true 时由 [ContextMenuRegion]
+///   在触发点呼出 [PopupMenu]；[enabled] 为 false 不响应。
 /// - 小屏「更多」按钮：传入 [moreSemanticLabel] 时，仅在窄屏（`< 768`）行尾
-///   渲染竖向三点按钮，并锚定在按钮自身位置打开菜单；桌面宽屏不渲染三点按钮，
-///   直接由整行右键呼出。
-/// - 按钮打开：[openOnSecondaryTap] 保持 false，[builder] 里拿到控制器，
+///   渲染竖向三点按钮，并经 [PopupAnchor] 锚定在按钮自身位置打开菜单；
+///   桌面宽屏不渲染三点按钮，直接由整行右键呼出。
+/// - 按钮打开：[openOnSecondaryTap] 保持 false 时通过 [PopupAnchor] 注入打开回调，
 ///   由子组件决定打开时机。
 class SecondaryMenu extends StatelessWidget {
   const SecondaryMenu({
@@ -315,12 +316,11 @@ class SecondaryMenu extends StatelessWidget {
     super.key,
   });
 
-  /// 菜单项，一般是 [MenuItemButton]。
-  final List<Widget> items;
+  /// 菜单项，使用 `prism_ui` [PopupMenuItem]。
+  final List<PopupMenuItem> items;
 
-  /// 菜单锚定的内容；[MenuController] 供子组件按需打开菜单。
-  final Widget Function(BuildContext context, MenuController controller)
-  builder;
+  /// 菜单锚定的内容；[openOnSecondaryTap] 为 false 时注入打开回调。
+  final Widget Function(BuildContext context, PopupOpen? openMenu) builder;
 
   final bool openOnSecondaryTap;
   final bool enabled;
@@ -333,67 +333,44 @@ class SecondaryMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (!openOnSecondaryTap) {
+      return PopupAnchor(
+        bare: true,
+        placement: PopupPlacement.overAnchorStart,
+        targetBuilder: (open) => builder(context, enabled ? open : null),
+        popupBuilder: (_) => PopupMenu(items: items),
+      );
+    }
+
     final showMore = moreSemanticLabel != null && context.isCompact;
-    return MenuAnchor(
-      clipBehavior: Clip.antiAlias,
-      menuChildren: items,
-      builder: (anchorContext, controller, child) {
-        Widget content = builder(anchorContext, controller);
-        if (showMore) {
-          content = Row(
-            children: [
-              Expanded(child: content),
-              Padding(
-                padding: morePadding,
-                child: Builder(
-                  builder: (buttonContext) => IconButton(
-                    onPressed: !enabled
-                        ? null
-                        : () {
-                            if (controller.isOpen) {
-                              controller.close();
-                              return;
-                            }
-                            final buttonBox =
-                                buttonContext.findRenderObject() as RenderBox?;
-                            final anchorBox =
-                                anchorContext.findRenderObject() as RenderBox?;
-                            final position =
-                                (buttonBox != null && anchorBox != null)
-                                ? buttonBox.localToGlobal(
-                                    Offset(0, buttonBox.size.height),
-                                    ancestor: anchorBox,
-                                  )
-                                : null;
-                            controller.open(position: position);
-                          },
-                    iconSize: IconSizes.medium,
-                    style: ButtonStyle.from(
-                      minimumSize: const Size(Sizes.touch, Sizes.touch),
-                      maximumSize: const Size(Sizes.touch, Sizes.touch),
-                      padding: EdgeInsets.zero,
-                    ),
-                    icon: Icon(
-                      Icons.more_vert_rounded,
-                      semanticLabel: moreSemanticLabel,
-                    ),
-                  ),
+    Widget content = builder(context, null);
+    if (showMore) {
+      content = Row(
+        children: [
+          Expanded(child: content),
+          Padding(
+            padding: morePadding,
+            child: PopupAnchor(
+              bare: true,
+              targetBuilder: (open) => IconButton(
+                onPressed: enabled ? open : null,
+                iconSize: IconSizes.toolbar,
+                style: ButtonStyle.from(
+                  minimumSize: const Size(Sizes.touch, Sizes.touch),
+                  maximumSize: const Size(Sizes.touch, Sizes.touch),
+                  padding: EdgeInsets.zero,
+                ),
+                icon: Semantics(
+                  label: moreSemanticLabel,
+                  child: const GlyphIcon(Glyphs.more, size: IconSizes.toolbar),
                 ),
               ),
-            ],
-          );
-        }
-        if (!openOnSecondaryTap) {
-          return content;
-        }
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onSecondaryTapUp: enabled
-              ? (details) => controller.open(position: details.localPosition)
-              : null,
-          child: content,
-        );
-      },
-    );
+              popupBuilder: (_) => PopupMenu(items: items),
+            ),
+          ),
+        ],
+      );
+    }
+    return ContextMenuRegion(menuItems: enabled ? items : null, child: content);
   }
 }

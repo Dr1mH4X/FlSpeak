@@ -8,6 +8,7 @@ import 'package:flutter/material.dart'
         FilledButton,
         IconButton,
         OutlinedButton,
+        PopupMenuItem,
         Switch,
         TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -69,32 +70,25 @@ void main() {
           ),
         ),
       );
-      expect(find.byIcon(Icons.more_vert_rounded), findsNothing);
+      expect(
+        find.byWidgetPredicate((w) => w is GlyphIcon && w.glyph == Glyphs.more),
+        findsNothing,
+      );
       expect(find.byIcon(Icons.more_horiz_rounded), findsNothing);
       await tester.tap(find.text('Peer'), buttons: kSecondaryButton);
       await tester.pumpAndSettle();
-      final menuButtons = tester
-          .widgetList<MenuItemButton>(find.byType(MenuItemButton))
-          .toList();
-      final menuItems = menuButtons
-          .map((item) => (item.child as Text).data)
-          .toList();
+      final popupMenu = tester.widget<PopupMenu>(find.byType(PopupMenu));
+      final menuItems = popupMenu.items.map((item) => item.label).toList();
       expect(menuItems, ['私信', '戳一戳', '权限管理', '踢出频道', '踢出服务器']);
-      final menuThemeStyle = MenuButtonTheme.of(
-        tester.element(find.byType(MenuItemButton).first),
-      ).style;
-      expect(menuThemeStyle?.iconSize?.resolve({}), IconSizes.medium);
-      expect(menuThemeStyle?.textStyle?.resolve({})?.fontSize, 12.5);
-      expect(
-        IconTheme.of(
-          tester.element(find.byIcon(Icons.chat_bubble_outline_rounded)),
-        ).size,
-        IconSizes.medium,
+      final chatIcon = tester.widget<GlyphIcon>(
+        find.descendant(
+          of: find.byType(PopupMenu),
+          matching: find.byWidgetPredicate(
+            (w) => w is GlyphIcon && w.glyph == AppGlyphs.chat,
+          ),
+        ),
       );
-      expect(
-        DefaultTextStyle.of(tester.element(find.text('私信'))).style.fontSize,
-        12.5,
-      );
+      expect(chatIcon.size, IconSizes.toolbar);
       await tester.tap(find.text('戳一戳'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), 'hello 🌍');
@@ -161,11 +155,14 @@ void main() {
           ),
         ),
       );
-      final moreFinder = find.byIcon(Icons.more_vert_rounded);
+      final moreFinder = find.byWidgetPredicate(
+        (w) => w is GlyphIcon && w.glyph == Glyphs.more,
+      );
       expect(moreFinder, findsOneWidget);
+      expect(tester.widget<GlyphIcon>(moreFinder).size, IconSizes.toolbar);
       await tester.tap(moreFinder);
       await tester.pumpAndSettle();
-      final menuLeft = tester.getTopLeft(find.byType(MenuItemButton).first).dx;
+      final menuLeft = tester.getTopLeft(find.byType(PopupMenu)).dx;
       expect(menuLeft, greaterThan(100));
     },
   );

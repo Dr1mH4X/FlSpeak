@@ -487,7 +487,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byIcon(Icons.more_vert_rounded), findsNothing);
+    expect(
+      find.byWidgetPredicate((w) => w is GlyphIcon && w.glyph == Glyphs.more),
+      findsNothing,
+    );
     final rowRect = tester.getRect(find.byType(ServerRow));
     final clickPoint = Offset(
       rowRect.left + rowRect.width * 0.65,
@@ -496,7 +499,7 @@ void main() {
     await tester.tapAt(clickPoint, buttons: kSecondaryButton);
     await tester.pumpAndSettle();
 
-    final menuLeft = tester.getTopLeft(find.byType(MenuItemButton).first).dx;
+    final menuLeft = tester.getTopLeft(find.byType(PopupMenu)).dx;
     expect(menuLeft, closeTo(clickPoint.dx, 4.0));
   });
 
@@ -529,12 +532,14 @@ void main() {
     await tester.pumpAndSettle();
 
     final rowRect = tester.getRect(find.byType(ServerRow));
-    final moreFinder = find.byIcon(Icons.more_vert_rounded);
+    final moreFinder = find.byWidgetPredicate(
+      (w) => w is GlyphIcon && w.glyph == Glyphs.more,
+    );
     expect(moreFinder, findsOneWidget);
     await tester.tap(moreFinder);
     await tester.pumpAndSettle();
 
-    final menuLeft = tester.getTopLeft(find.byType(MenuItemButton).first).dx;
+    final menuLeft = tester.getTopLeft(find.byType(PopupMenu)).dx;
     expect(menuLeft, greaterThan(rowRect.center.dx));
   });
 

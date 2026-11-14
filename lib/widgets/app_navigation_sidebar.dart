@@ -17,6 +17,7 @@ import 'package:flutter/material.dart'
         IconButton,
         LinearProgressIndicator,
         OutlinedButton,
+        PopupMenuItem,
         Switch,
         TextButton;
 import 'package:flutter/services.dart';
@@ -280,7 +281,6 @@ class _SidebarButton extends StatelessWidget {
     required this.child,
     this.selected = false,
     this.semanticLabel,
-    this.onLongPress,
   });
 
   final _SidebarColors colors;
@@ -289,12 +289,11 @@ class _SidebarButton extends StatelessWidget {
   final bool selected;
   final String? semanticLabel;
   final VoidCallback onTap;
-  final VoidCallback? onLongPress;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    Widget body = IconTheme.merge(
+    final Widget body = IconTheme.merge(
       data: IconThemeData(size: _iconSize, color: colors.icon),
       child: SizedBox(
         height: height,
@@ -320,13 +319,6 @@ class _SidebarButton extends StatelessWidget {
         ),
       ),
     );
-    if (onLongPress != null) {
-      body = GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onLongPress: onLongPress,
-        child: body,
-      );
-    }
     return Padding(
       padding: EdgeInsets.symmetric(
         horizontal: sideInset,
@@ -650,33 +642,32 @@ class _SidebarServerTile extends StatelessWidget {
     return SecondaryMenu(
       openOnSecondaryTap: true,
       items: [
-        MenuItemButton(
-          leadingIcon: const Icon(Icons.edit_outlined),
+        PopupMenuItem(
+          glyph: AppGlyphs.edit,
+          label: l10n.serverEdit,
           onPressed: loading
               ? null
               : () => showAddServerDialog(context, server: server),
-          child: Text(l10n.serverEdit),
         ),
-        MenuItemButton(
-          leadingIcon: const Icon(Icons.palette_outlined),
+        PopupMenuItem(
+          glyph: AppGlyphs.palette,
+          label: l10n.serverIconChange,
           onPressed: onChangeIcon,
-          child: Text(l10n.serverIconChange),
         ),
         if (connected)
-          MenuItemButton(
-            leadingIcon: const Icon(Icons.logout_rounded),
+          PopupMenuItem(
+            glyph: AppGlyphs.logout,
+            label: l10n.serverDisconnect,
             onPressed: onDisconnect,
-            child: Text(l10n.serverDisconnect),
           ),
       ],
-      builder: (context, menuController) => _SidebarButton(
+      builder: (context, _) => _SidebarButton(
         colors: colors,
         height: _itemSize,
         sideInset: sideInset,
         selected: selected,
         semanticLabel: '${server.label} · ${server.host}:${server.port}',
         onTap: () => onTap?.call(),
-        onLongPress: menuController.open,
         child: _SidebarServerRow(
           server: server,
           selected: selected,

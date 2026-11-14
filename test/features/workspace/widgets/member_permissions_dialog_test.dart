@@ -8,6 +8,7 @@ import 'package:flutter/material.dart'
         FilledButton,
         IconButton,
         OutlinedButton,
+        PopupMenuItem,
         Switch,
         TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -129,9 +130,10 @@ void main() {
     tester,
   ) async {
     await _mount(tester, allowed: false);
-    final button = tester.widget<MenuItemButton>(
-      find.widgetWithText(MenuItemButton, '权限管理'),
-    );
+    final button = tester
+        .widget<PopupMenu>(find.byType(PopupMenu))
+        .items
+        .firstWhere((item) => item.label == '权限管理');
     expect(button.onPressed, isNull);
   });
   testWidgets('authorized manager can change only assignable roles', (

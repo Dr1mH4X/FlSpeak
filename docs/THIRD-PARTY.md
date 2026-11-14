@@ -15,13 +15,14 @@
 
 原始许可证为 GNU General Public License v3.0，见 FlClash 仓库根 `LICENSE`，原文见 https://www.gnu.org/licenses/gpl-3.0.txt 。复制片段的版权归 FlClash 作者所有。
 
-复制内容来自 `lib/common/layout.dart` 的窗口尺寸与红绿灯区域、`lib/manager/window_manager.dart` 的 `WindowHeaderContainer`、`WindowHeaderLayout`、`WindowHeaderBar`、`WindowHeader`、`lib/ui/sidebar.dart`、`lib/ui/icons/caption_icon.dart`、`lib/ui/list_item.dart` 与 `lib/ui/setting_text_card.dart`。
+复制内容来自 `lib/common/layout.dart` 的窗口尺寸与红绿灯区域、`lib/manager/window_manager.dart` 的 `WindowHeaderContainer`、`WindowHeaderLayout`、`WindowHeaderBar`、`WindowHeader`、`lib/ui/sidebar.dart`、`lib/ui/icons/app_glyphs.dart`、`lib/ui/icons/caption_icon.dart`、`lib/ui/list_item.dart` 与 `lib/ui/setting_text_card.dart`。
 
 | 本仓库文件 | 原始文件 |
 | --- | --- |
 | `lib/core/window_metrics.dart` | `lib/common/layout.dart` |
 | `lib/widgets/window_header.dart` | `lib/manager/window_manager.dart`、`lib/ui/scaffold.dart` |
 | `lib/widgets/app_navigation_sidebar.dart` | `lib/ui/sidebar.dart` |
+| `lib/widgets/app_glyphs.dart` | `lib/ui/icons/app_glyphs.dart` |
 | `lib/widgets/caption_icon.dart` | `lib/ui/icons/caption_icon.dart` |
 | `lib/features/settings/widgets/list_item.dart` | `lib/ui/list_item.dart` |
 | `lib/features/settings/widgets/setting_text_card.dart` | `lib/ui/setting_text_card.dart` |

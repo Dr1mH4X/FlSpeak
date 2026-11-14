@@ -741,7 +741,7 @@ ThemeData buildAppTheme(Brightness brightness, {TargetPlatform? platform}) {
           splashFactory: NoSplash.splashFactory,
           overlayColor: buttonOverlay(),
           shape: WidgetStatePropertyAll(prism.AppShape.all(prism.AppCorner.md)),
-          iconSize: const WidgetStatePropertyAll(IconSizes.medium),
+          iconSize: const WidgetStatePropertyAll(IconSizes.toolbar),
           textStyle: WidgetStatePropertyAll(text.bodySmall),
         ),
       ),

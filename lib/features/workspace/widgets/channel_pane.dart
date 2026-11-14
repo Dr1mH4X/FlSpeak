@@ -8,6 +8,7 @@ import 'package:flutter/material.dart'
         FilledButton,
         IconButton,
         OutlinedButton,
+        PopupMenuItem,
         Switch,
         TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -387,13 +388,13 @@ class _ChannelTile extends StatelessWidget {
         enabled: canJoin,
         openOnSecondaryTap: true,
         items: [
-          MenuItemButton(
-            leadingIcon: const Icon(Icons.login_rounded),
+          PopupMenuItem(
+            glyph: AppGlyphs.login,
+            label: l10n.channelJoinMenu,
             onPressed: canJoin ? onJoin : null,
-            child: Text(l10n.channelJoinMenu),
           ),
         ],
-        builder: (context, menuController) => Semantics(
+        builder: (context, _) => Semantics(
           button: true,
           selected: selected,
           child: AnimatedContainer(

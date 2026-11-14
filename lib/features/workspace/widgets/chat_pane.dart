@@ -6,6 +6,7 @@ import 'package:flutter/material.dart'
         FilledButton,
         IconButton,
         OutlinedButton,
+        PopupMenuItem,
         Switch,
         TextButton;
 import 'package:flutter/rendering.dart' show ScrollDirection;
@@ -658,27 +659,26 @@ class _ChatPaneState extends State<ChatPane> {
                   ),
                   if (widget.onPickImage != null || widget.onPasteImage != null)
                     SecondaryMenu(
+                      enabled: !_sending && !widget.busy,
                       items: [
                         if (widget.onPickImage != null)
-                          MenuItemButton(
+                          PopupMenuItem(
+                            label: l10n.chatChooseImage,
                             onPressed: () => _selectImage(widget.onPickImage!),
-                            child: Text(l10n.chatChooseImage),
                           ),
                         if (widget.onPasteImage != null)
-                          MenuItemButton(
+                          PopupMenuItem(
+                            label: l10n.chatPasteImage,
                             onPressed: () => _selectImage(widget.onPasteImage!),
-                            child: Text(l10n.chatPasteImage),
                           ),
                         if (widget.onConfigureImageHost != null)
-                          MenuItemButton(
+                          PopupMenuItem(
+                            label: l10n.imageHostTitle,
                             onPressed: widget.onConfigureImageHost,
-                            child: Text(l10n.imageHostTitle),
                           ),
                       ],
-                      builder: (context, menu) => IconButton(
-                        onPressed: _sending || widget.busy
-                            ? null
-                            : () => menu.isOpen ? menu.close() : menu.open(),
+                      builder: (context, openMenu) => IconButton(
+                        onPressed: openMenu,
                         icon: Icon(
                           Icons.add_photo_alternate_outlined,
                           size: IconSizes.toolbar,

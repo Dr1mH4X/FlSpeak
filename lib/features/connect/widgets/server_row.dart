@@ -4,6 +4,7 @@ import 'package:flutter/material.dart'
         FilledButton,
         IconButton,
         OutlinedButton,
+        PopupMenuItem,
         Switch,
         TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -81,14 +82,15 @@ class _ServerRowState extends ConsumerState<ServerRow> {
               : MaterialLocalizations.of(context).showMenuTooltip,
           morePadding: const EdgeInsets.only(right: 8),
           items: [
-            MenuItemButton(
-              leadingIcon: const Icon(Icons.edit_outlined),
+            PopupMenuItem(
+              glyph: AppGlyphs.edit,
+              label: l10n.serverEdit,
               onPressed: () =>
                   showAddServerDialog(context, server: widget.profile),
-              child: Text(l10n.serverEdit),
             ),
-            MenuItemButton(
-              leadingIcon: const Icon(Icons.palette_outlined),
+            PopupMenuItem(
+              glyph: AppGlyphs.palette,
+              label: l10n.serverIconChange,
               onPressed: () async {
                 final current =
                     ref
@@ -109,12 +111,12 @@ class _ServerRowState extends ConsumerState<ServerRow> {
                       .setServerIcon(widget.profile.id, icon);
                 }
               },
-              child: Text(l10n.serverIconChange),
             ),
-            MenuItemButton(
-              leadingIcon: const Icon(Icons.delete_rounded),
+            PopupMenuItem(
+              glyph: AppGlyphs.delete,
+              label: l10n.serverRemoveFromList,
+              danger: !connected,
               onPressed: connected ? null : widget.onRemove,
-              child: Text(l10n.serverRemoveFromList),
             ),
           ],
           builder: (context, _) => Semantics(

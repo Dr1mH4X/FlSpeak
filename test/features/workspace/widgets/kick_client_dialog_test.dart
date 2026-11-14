@@ -10,6 +10,7 @@ import 'package:flutter/material.dart'
         FilledButton,
         IconButton,
         OutlinedButton,
+        PopupMenuItem,
         Switch,
         TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -84,7 +85,9 @@ class _Access {
 }
 
 Future<void> _openActionsMenu(WidgetTester tester) async {
-  final more = find.byIcon(Icons.more_vert_rounded);
+  final more = find.byWidgetPredicate(
+    (w) => w is GlyphIcon && w.glyph == Glyphs.more,
+  );
   if (more.evaluate().isNotEmpty) {
     await tester.tap(more);
   } else {
@@ -171,16 +174,22 @@ void main() {
     'ordinary users have both kick actions disabled; channel permission does not grant server kicks',
     (tester) async {
       final context = await _mount(tester, channel: 0, server: 0);
-      MenuItemButton menu(String label) => tester.widget<MenuItemButton>(
-        find.widgetWithText(MenuItemButton, label),
-      );
+      PopupMenuItem menu(String label) => tester
+          .widget<PopupMenu>(find.byType(PopupMenu))
+          .items
+          .firstWhere((item) => item.label == label);
       expect(menu('踢出频道').onPressed, isNull);
       expect(menu('踢出服务器').onPressed, isNull);
       context.access.channel = 50;
       context.container.invalidate(sessionAccessProvider);
       await tester.pumpAndSettle();
-      expect(menu('踢出频道').onPressed, isNotNull);
-      expect(menu('踢出服务器').onPressed, isNull);
+      // 菜单弹窗已按旧权限快照打开；关闭并重开以验证最新权限生效。
+      await tester.tapAt(Offset.zero);
+      await tester.pumpAndSettle();
+      await _openActionsMenu(tester);
+      await tester.tap(find.text('踢出频道'));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(FilledButton, '确认踢出'), findsOneWidget);
     },
   );
 

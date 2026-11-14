@@ -120,7 +120,7 @@ void main() {
     await tester.tap(find.byIcon(Icons.add_photo_alternate_outlined));
     await tester.pumpAndSettle();
     await tester.tap(find.text('选择图片'));
-    await tester.pump();
+    await tester.pumpAndSettle();
     key.currentState!.select('bob');
     await tester.pump();
     picked.complete(_picked());
@@ -251,9 +251,15 @@ void main() {
       var sends = 0;
       await tester.pumpWidget(
         MaterialApp(
+          theme: buildAppTheme(Brightness.light),
           locale: const Locale('zh'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: const [
+            ...AppLocalizations.localizationsDelegates,
+            PrismUiLocalizationsDelegate(),
+          ],
           supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
           home: Scaffold(
             body: ChatPane(
               channelName: 'Lobby',
@@ -313,9 +319,15 @@ void main() {
       String? chosen;
       await tester.pumpWidget(
         MaterialApp(
+          theme: buildAppTheme(Brightness.light),
           locale: const Locale('zh'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: const [
+            ...AppLocalizations.localizationsDelegates,
+            PrismUiLocalizationsDelegate(),
+          ],
           supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
           home: Scaffold(
             body: ChatPane(
               channelName: 'Lobby',
@@ -441,9 +453,15 @@ void main() {
       final sent = <String>[];
       await tester.pumpWidget(
         MaterialApp(
+          theme: buildAppTheme(Brightness.light),
           locale: const Locale('zh'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: const [
+            ...AppLocalizations.localizationsDelegates,
+            PrismUiLocalizationsDelegate(),
+          ],
           supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
           home: Scaffold(
             body: ChatPane(
               channelName: 'Lobby',
