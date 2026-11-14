@@ -149,12 +149,13 @@ impl Actor {
     /// TS6 服务器对推送进来的自己的行缺省 `cid`（官方客户端从别的渠道知道
     /// 自己在哪），访客又常被拒 `clientinfo`；`whoami` 免权限且带
     /// `client_channel_id`。补全结果由 refresh 的交叉检查写回会话状态。
-    async fn ensure_self_row(&self, client: &Arc<Client>, rows: &mut Vec<ClientView>) {
+    async fn ensure_self_row(&mut self, client: &Arc<Client>, rows: &mut Vec<ClientView>) {
         let Some(self_id) = self.self_client_id else {
             return;
         };
         let known = rows.iter().find(|row| row.id == self_id);
         if known.is_some_and(|row| row.channel_id != 0) {
+            self.patch_self_row(rows);
             return;
         }
         if self.self_channel_id != 0 {
@@ -220,19 +221,30 @@ impl Actor {
             Some(row) => *row = view,
             None => rows.push(view),
         }
+        self.patch_self_row(rows);
     }
 
     /// 已知自己频道时的无网修补：目录推送对 TS6 服务器永远给 0 频道的自己，
-    /// 用会话状态里确认过的频道与本地语音状态补齐，缺行则合成。
-    fn patch_self_row(&self, rows: &mut Vec<ClientView>) {
+    /// 用会话状态里确认过的频道与本地语音状态按 dirty 掩码合并补齐，缺行则合成。
+    fn patch_self_row(&mut self, rows: &mut Vec<ClientView>) {
         let Some(self_id) = self.self_client_id else {
             return;
         };
+        let local = VoiceFlagsSnapshot::from_voice_state(&self.voice_state);
         match rows.iter_mut().find(|row| row.id == self_id) {
             Some(row) => {
                 if row.channel_id == 0 {
                     row.channel_id = self.self_channel_id;
                 }
+                let resolved = self.voice_report.resolve_self_flags(
+                    local,
+                    row.input_muted,
+                    row.output_muted,
+                    row.away,
+                );
+                row.input_muted = Some(resolved.input_muted);
+                row.output_muted = Some(resolved.output_muted);
+                row.away = Some(resolved.away);
             }
             None => rows.push(ClientView {
                 id: self_id,
@@ -243,9 +255,9 @@ impl Actor {
                     .unwrap_or_default(),
                 uid: String::new(),
                 channel_id: self.self_channel_id,
-                input_muted: Some(self.voice_state.muted || self.voice_state.deafened),
-                output_muted: Some(self.voice_state.deafened),
-                away: Some(self.voice_state.away),
+                input_muted: Some(local.input_muted),
+                output_muted: Some(local.output_muted),
+                away: Some(local.away),
                 away_message: None,
                 client_type: ClientType::FlSpeak,
                 app_name: Some("FlSpeak".into()),

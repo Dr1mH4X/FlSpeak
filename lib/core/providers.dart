@@ -1025,7 +1025,13 @@ class SessionController extends Notifier<SessionView> {
       case CoreEvent_Snapshot(:final channels, :final clients):
         state = current.copyWith(
           channels: channels,
-          clients: clients,
+          clients: _syncSelfClientFlags(
+            clients,
+            selfClientId: current.selfClientId,
+            muted: current.muted,
+            deafened: current.deafened,
+            away: current.away,
+          ),
           accessRevision: current.accessRevision + 1,
         );
         final recipient = state.directRecipient;
@@ -1088,6 +1094,7 @@ class SessionController extends Notifier<SessionView> {
             )
             .firstOrNull;
         final others = current.clients.where((client) => client.id != id);
+        final isSelf = id == current.selfClientId;
         state = current.copyWith(
           clients: [
             ...others,
@@ -1096,6 +1103,9 @@ class SessionController extends Notifier<SessionView> {
               nickname: nickname,
               uid: uid,
               channelId: channelId,
+              inputMuted: isSelf ? (current.muted || current.deafened) : null,
+              outputMuted: isSelf ? current.deafened : null,
+              away: isSelf ? current.away : null,
               clientType: existing?.clientType ?? ClientType.standard,
               appName: existing?.appName,
               appVersion: existing?.appVersion,
@@ -1148,29 +1158,36 @@ class SessionController extends Notifier<SessionView> {
         :final away,
         :final awayMessage,
       ):
-        // 事件只带变化字段，null 表示本次没提，不清除已知值。
+        // 事件只带变化字段，null 表示本次没提，不清除已知值；自身行以本地语音意图为准。
+        final updatedClients = [
+          for (final client in current.clients)
+            if (client.id == id)
+              ClientView(
+                id: client.id,
+                nickname: client.nickname,
+                uid: client.uid,
+                channelId: client.channelId,
+                inputMuted: inputMuted ?? client.inputMuted,
+                outputMuted: outputMuted ?? client.outputMuted,
+                away: away ?? client.away,
+                awayMessage: awayMessage ?? client.awayMessage,
+                clientType: client.clientType,
+                appName: client.appName,
+                appVersion: client.appVersion,
+                capabilities: client.capabilities,
+                botCommands: client.botCommands,
+              )
+            else
+              client,
+        ];
         state = current.copyWith(
-          clients: [
-            for (final client in current.clients)
-              if (client.id == id)
-                ClientView(
-                  id: client.id,
-                  nickname: client.nickname,
-                  uid: client.uid,
-                  channelId: client.channelId,
-                  inputMuted: inputMuted ?? client.inputMuted,
-                  outputMuted: outputMuted ?? client.outputMuted,
-                  away: away ?? client.away,
-                  awayMessage: awayMessage ?? client.awayMessage,
-                  clientType: client.clientType,
-                  appName: client.appName,
-                  appVersion: client.appVersion,
-                  capabilities: client.capabilities,
-                  botCommands: client.botCommands,
-                )
-              else
-                client,
-          ],
+          clients: _syncSelfClientFlags(
+            updatedClients,
+            selfClientId: current.selfClientId,
+            muted: current.muted,
+            deafened: current.deafened,
+            away: current.away,
+          ),
         );
       case CoreEvent_Voice(state: final voice):
         state = current.copyWith(
@@ -1180,6 +1197,13 @@ class SessionController extends Notifier<SessionView> {
           pttMode: voice.pttMode,
           voiceInputReady: voice.inputReady,
           voiceOutputReady: voice.outputReady,
+          clients: _syncSelfClientFlags(
+            current.clients,
+            selfClientId: current.selfClientId,
+            muted: voice.muted,
+            deafened: voice.deafened,
+            away: voice.away,
+          ),
         );
         final message = voice.message;
         if (message == null) {
@@ -1377,6 +1401,40 @@ class SessionController extends Notifier<SessionView> {
           _notifyFailure(message);
         }
     }
+  }
+
+  List<ClientView> _syncSelfClientFlags(
+    List<ClientView> clients, {
+    required int? selfClientId,
+    required bool muted,
+    required bool deafened,
+    required bool away,
+  }) {
+    if (selfClientId == null) {
+      return clients;
+    }
+    final inputMuted = muted || deafened;
+    return [
+      for (final client in clients)
+        if (client.id == selfClientId)
+          ClientView(
+            id: client.id,
+            nickname: client.nickname,
+            uid: client.uid,
+            channelId: client.channelId,
+            inputMuted: inputMuted,
+            outputMuted: deafened,
+            away: away,
+            awayMessage: client.awayMessage,
+            clientType: client.clientType,
+            appName: client.appName,
+            appVersion: client.appVersion,
+            capabilities: client.capabilities,
+            botCommands: client.botCommands,
+          )
+        else
+          client,
+    ];
   }
 }
 

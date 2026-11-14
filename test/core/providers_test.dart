@@ -1398,4 +1398,127 @@ void main() {
     expect(view.visibleMessages(channelId: 7).single.text, 'Welcome aboard');
     expect(view.visibleMessages(channelId: 7).single.from, 'My Server');
   });
+
+  test(
+    'voice state keeps self row in sync across snapshots and client updates',
+    () async {
+      final events = StreamController<CoreEvent>.broadcast(sync: true);
+      final core = _Core(events);
+      final container = ProviderContainer(
+        overrides: [coreSessionProvider.overrideWithValue(core)],
+      );
+      addTearDown(() async {
+        container.dispose();
+        await events.close();
+      });
+
+      container.read(sessionViewProvider);
+      events.add(
+        const CoreEvent.state(
+          state: CoreSessionState.connected(clientId: 1, channelId: 5),
+        ),
+      );
+      events.add(
+        const CoreEvent.snapshot(
+          channels: [
+            ChannelView(id: 5, parentId: 0, name: 'Lobby', description: ''),
+          ],
+          clients: [
+            ClientView(
+              id: 1,
+              nickname: 'Self',
+              uid: 'self-uid',
+              channelId: 5,
+              inputMuted: false,
+              outputMuted: false,
+              away: false,
+              clientType: ClientType.flSpeak,
+              capabilities: [],
+            ),
+            ClientView(
+              id: 2,
+              nickname: 'Peer',
+              uid: 'peer-uid',
+              channelId: 5,
+              inputMuted: false,
+              outputMuted: false,
+              away: false,
+              clientType: ClientType.standard,
+              capabilities: [],
+            ),
+          ],
+        ),
+      );
+
+      events.add(
+        const CoreEvent.voice(
+          state: CoreVoiceState(
+            muted: true,
+            deafened: false,
+            away: true,
+            pttMode: false,
+            pttActive: false,
+            inputReady: true,
+            outputReady: true,
+          ),
+        ),
+      );
+
+      var view = container.read(sessionViewProvider);
+      var self = view.clients.singleWhere((c) => c.id == 1);
+      expect(self.inputMuted, isTrue);
+      expect(self.outputMuted, isFalse);
+      expect(self.away, isTrue);
+
+      // 服务器滞后快照与旧回显不会把自身行改回旧值，同时其他成员照常更新。
+      events.add(
+        const CoreEvent.snapshot(
+          channels: [
+            ChannelView(id: 5, parentId: 0, name: 'Lobby', description: ''),
+          ],
+          clients: [
+            ClientView(
+              id: 1,
+              nickname: 'Self',
+              uid: 'self-uid',
+              channelId: 5,
+              inputMuted: false,
+              outputMuted: false,
+              away: false,
+              clientType: ClientType.flSpeak,
+              capabilities: [],
+            ),
+            ClientView(
+              id: 2,
+              nickname: 'Peer',
+              uid: 'peer-uid',
+              channelId: 5,
+              inputMuted: false,
+              outputMuted: false,
+              away: false,
+              clientType: ClientType.standard,
+              capabilities: [],
+            ),
+          ],
+        ),
+      );
+      events.add(
+        const CoreEvent.clientUpdated(
+          id: 1,
+          inputMuted: false,
+          outputMuted: false,
+          away: false,
+        ),
+      );
+      events.add(const CoreEvent.clientUpdated(id: 2, inputMuted: true));
+
+      view = container.read(sessionViewProvider);
+      self = view.clients.singleWhere((c) => c.id == 1);
+      final peer = view.clients.singleWhere((c) => c.id == 2);
+      expect(self.inputMuted, isTrue);
+      expect(self.outputMuted, isFalse);
+      expect(self.away, isTrue);
+      expect(peer.inputMuted, isTrue);
+    },
+  );
 }

@@ -188,6 +188,10 @@ async fn dynamic_reset_triggers_clear_permission_flags() {
         .handle_signal(SessionSignal::ClientUpdated {
             epoch: actor.connection_epoch,
             id: 7,
+            input_muted: None,
+            output_muted: None,
+            away: None,
+            away_message: None,
             server_groups: vec!["8".into(), "6".into()],
         })
         .await;
@@ -197,6 +201,10 @@ async fn dynamic_reset_triggers_clear_permission_flags() {
         .handle_signal(SessionSignal::ClientUpdated {
             epoch: actor.connection_epoch,
             id: 7,
+            input_muted: None,
+            output_muted: None,
+            away: None,
+            away_message: None,
             server_groups: vec!["6".into(), "7".into(), "8".into()],
         })
         .await;

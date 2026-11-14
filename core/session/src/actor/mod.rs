@@ -74,10 +74,14 @@ pub(crate) enum SessionSignal {
         epoch: u64,
         snapshot: tsclient_rs::DirectorySnapshot,
     },
-    /// 成员状态或服务器组变更：用于检测本端 `server_groups` 变化。
+    /// 成员状态或服务器组变更：统一经 Actor 处理自端标志合并与权限组同步。
     ClientUpdated {
         epoch: u64,
         id: i32,
+        input_muted: Option<bool>,
+        output_muted: Option<bool>,
+        away: Option<bool>,
+        away_message: Option<String>,
         server_groups: Vec<String>,
     },
     Disconnected {
@@ -136,6 +140,11 @@ pub(crate) enum SessionSignal {
         mode: AnnounceAttemptMode,
         allow_failure_retry: bool,
         expected_seq: Option<u64>,
+    },
+    /// 节流/退避延迟后的自身语音状态上报。
+    ReportVoiceFlags {
+        epoch: u64,
+        seq: u64,
     },
 }
 
@@ -199,6 +208,7 @@ pub(crate) struct Actor {
     commands_fetching: HashSet<String>,
     ack_limiter: AckRateLimiter,
     announce_state: AnnounceState,
+    voice_report: VoiceReportState,
     pending_images: VecDeque<PendingImage>,
     active_image: Option<ActiveImage>,
     server_icons: HashMap<String, crate::server_icons::CachedServerIcon>,
@@ -287,6 +297,7 @@ impl Actor {
             commands_fetching: HashSet::new(),
             ack_limiter: AckRateLimiter::new(Instant::now()),
             announce_state: AnnounceState::default(),
+            voice_report: VoiceReportState::default(),
             pending_images: VecDeque::new(),
             active_image: None,
             server_icons,
@@ -589,13 +600,25 @@ impl Actor {
                 let _ = reply.send(result);
             }
             SessionCommand::SetMuted { muted, reply } => {
-                let _ = reply.send(self.set_muted(muted).await);
+                let res = self.apply_muted(muted);
+                let ok = res.is_ok();
+                let _ = reply.send(res);
+                if ok {
+                    self.request_state_update().await;
+                }
             }
             SessionCommand::SetDeafened { deafened, reply } => {
-                let _ = reply.send(self.set_deafened(deafened).await);
+                let res = self.apply_deafened(deafened);
+                let ok = res.is_ok();
+                let _ = reply.send(res);
+                if ok {
+                    self.request_state_update().await;
+                }
             }
             SessionCommand::SetAway { away, reply } => {
-                let _ = reply.send(self.set_away(away).await);
+                self.apply_away(away);
+                let _ = reply.send(Ok(()));
+                self.request_state_update().await;
             }
             SessionCommand::SetPttMode { enabled, reply } => {
                 let _ = reply.send(self.set_ptt_mode(enabled));
@@ -920,11 +943,47 @@ impl Actor {
             SessionSignal::ClientUpdated {
                 epoch,
                 id,
+                mut input_muted,
+                mut output_muted,
+                mut away,
+                away_message,
                 server_groups,
             } => {
-                if epoch == self.connection_epoch && self.self_client_id == Some(id) {
-                    self.sync_self_server_groups(&server_groups);
+                if epoch != self.connection_epoch {
+                    return;
                 }
+                if self.self_client_id == Some(id) {
+                    self.sync_self_server_groups(&server_groups);
+                    let local = VoiceFlagsSnapshot::from_voice_state(&self.voice_state);
+                    let resolved = self.voice_report.resolve_self_flags(
+                        local,
+                        input_muted,
+                        output_muted,
+                        away,
+                    );
+                    if input_muted.is_some() {
+                        input_muted = Some(resolved.input_muted);
+                    }
+                    if output_muted.is_some() {
+                        output_muted = Some(resolved.output_muted);
+                    }
+                    if away.is_some() {
+                        away = Some(resolved.away);
+                        if (self.voice_report.dirty_mask & DIRTY_AWAY) == 0
+                            && self.voice_state.away != resolved.away
+                        {
+                            self.voice_state.away = resolved.away;
+                            self.emit_voice_state();
+                        }
+                    }
+                }
+                self.emit(SessionEvent::ClientUpdated {
+                    id,
+                    input_muted,
+                    output_muted,
+                    away,
+                    away_message,
+                });
             }
             SessionSignal::Disconnected { epoch, message } => {
                 if epoch == self.connection_epoch {
@@ -1051,6 +1110,13 @@ impl Actor {
                     return;
                 }
                 self.announce_identity_step(mode, allow_failure_retry).await;
+            }
+            SessionSignal::ReportVoiceFlags { epoch, seq } => {
+                if epoch != self.connection_epoch {
+                    return;
+                }
+                self.report_voice_flags_step(VoiceReportMode::Timer { seq })
+                    .await;
             }
         }
     }

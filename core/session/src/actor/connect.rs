@@ -321,8 +321,11 @@ impl Actor {
                 }
                 self.maybe_announce_identity().await;
                 self.start_voice();
-                // 服务器端自己的标志在（重）连后是重置过的，把本地状态重新同步。
-                self.report_voice_flags().await;
+                // 服务器端自己的标志在（重）连后是重置过的，重置节流状态并把本地状态重新同步。
+                self.voice_report.reset();
+                self.voice_report
+                    .mark_dirty(DIRTY_ALL, ReportInstant::now());
+                self.request_state_update().await;
                 self.emit_voice_state();
                 self.emit_history().await;
                 if let Some(welcome) = welcome_message {
@@ -572,6 +575,7 @@ impl Actor {
         self.commands_fetching.clear();
         self.ack_limiter.reset(Instant::now());
         self.announce_state.reset();
+        self.voice_report.reset();
         self.reset_directory_permissions();
         self.subscribed_all_channels = false;
         self.self_server_groups.clear();
@@ -697,7 +701,6 @@ fn register_handlers(
         }
     }));
 
-    let channel = events.clone();
     let updated = signals.clone();
     let live = Arc::clone(&current);
     client.on_client_updated(Arc::new(move |event: ProtocolEvent| {
@@ -705,19 +708,13 @@ fn register_handlers(
             return;
         }
         if let ProtocolEvent::ClientUpdated(info) = event {
-            emit(
-                &channel,
-                SessionEvent::ClientUpdated {
-                    id: info.id,
-                    input_muted: info.input_muted,
-                    output_muted: info.output_muted,
-                    away: info.away,
-                    away_message: info.away_message,
-                },
-            );
             let _ = updated.send(SessionSignal::ClientUpdated {
                 epoch,
                 id: info.id,
+                input_muted: info.input_muted,
+                output_muted: info.output_muted,
+                away: info.away,
+                away_message: info.away_message,
                 server_groups: info.server_groups,
             });
         }
