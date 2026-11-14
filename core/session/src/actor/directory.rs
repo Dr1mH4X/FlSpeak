@@ -1,65 +1,7 @@
+use super::snapshot::*;
 use super::*;
 
-/// ServerQuery 单行消息上限。
-#[allow(dead_code)]
-const MAX_TEXT_MESSAGE_BYTES: usize = 8192;
-const NETWORK_SAMPLE_ERROR_LOG_INTERVAL: Duration = Duration::from_secs(30);
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-struct ChannelMetadata {
-    order: Option<u64>,
-    description: Option<String>,
-    codec: Option<i32>,
-    max_clients: Option<u16>,
-    max_clients_limited: Option<bool>,
-    password_protected: Option<bool>,
-}
-
-#[derive(Debug)]
-struct ChannelDirectory {
-    channels: Vec<ChannelView>,
-    codecs: Option<HashMap<u64, i32>>,
-    metadata_error: Option<String>,
-}
-
 impl Actor {
-    pub(super) async fn send_text(
-        &self,
-        target_mode: i32,
-        target_id: u64,
-        message: String,
-    ) -> Result<(), SessionError> {
-        let client = self.connected()?;
-        // 将 Markdown 转换为安全 BBCode，并在 Block 级别按转义后预算完成分片，
-        // 杜绝 BBCode 标签跨包断开和 ServerQuery 转义膨胀导致的截断。
-        let packets = crate::text_format::markdown_to_bbcode_packets(&message, 1024);
-        for chunk in packets {
-            client
-                .exec_command(
-                    &format!(
-                        "sendtextmessage targetmode={target_mode} target={target_id} msg={}",
-                        tsclient_rs::escape(&chunk).0
-                    ),
-                    5_000,
-                )
-                .await
-                .map_err(protocol_error)?;
-        }
-        Ok(())
-    }
-
-    pub(super) async fn move_to_channel(
-        &self,
-        client_id: i32,
-        channel_id: u64,
-        password: Option<String>,
-    ) -> Result<(), SessionError> {
-        let client = self.connected()?;
-        let password = crate::channel_tools::channel_password(&password.unwrap_or_default());
-        tsclient_rs::clientMove(&client, client_id, channel_id, &password)
-            .await
-            .map_err(crate::channel_tools::protocol_error)
-    }
-
     pub(super) async fn list_channels(&mut self) -> Result<Vec<ChannelView>, SessionError> {
         let client = self.connected()?;
         let directory = self.read_channel_directory(&client, false).await?;
@@ -70,23 +12,6 @@ impl Actor {
             });
         }
         Ok(directory.channels)
-    }
-
-    pub(super) async fn channel_description(
-        &self,
-        channel_id: u64,
-    ) -> Result<String, SessionError> {
-        let client = self.connected()?;
-        let desc = match tsclient_rs::get_channel_description(&client, channel_id).await {
-            Ok(desc) => desc,
-            Err(_) => {
-                let info = tsclient_rs::get_channel_info(&client, channel_id)
-                    .await
-                    .map_err(crate::channel_tools::protocol_error)?;
-                info.description
-            }
-        };
-        Ok(crate::text_format::bbcode_to_markdown(&desc))
     }
 
     pub(super) async fn list_clients(&mut self) -> Result<Vec<ClientView>, SessionError> {
@@ -370,18 +295,6 @@ impl Actor {
         .await;
     }
 
-    fn record_network_probe(&mut self, started: Instant, reached: bool) {
-        let round_trip = self.client.as_ref().and_then(|client| client.round_trip());
-        let packet_loss = self.client.as_ref().and_then(|client| client.packet_loss());
-        if let Some(monitor) = &mut self.network_monitor {
-            monitor.apply_round_trip(round_trip);
-            monitor.apply_packet_loss(packet_loss);
-            let round_trip_ms = reached.then(|| started.elapsed().as_secs_f64() * 1_000.0);
-            let telemetry = monitor.record(round_trip_ms, now_millis());
-            self.emit(SessionEvent::Network(telemetry));
-        }
-    }
-
     async fn read_channel_directory(
         &mut self,
         client: &Client,
@@ -483,79 +396,6 @@ impl Actor {
         }
     }
 
-    pub(super) fn build_welcome_message(
-        profile: &ServerProfile,
-        welcome_message: &str,
-        at: u64,
-    ) -> Option<TextMessageView> {
-        let trimmed = welcome_message.trim();
-        if trimmed.is_empty() {
-            return None;
-        }
-        let normalized = crate::text_format::bbcode_to_markdown(trimmed);
-        let normalized = normalized.trim();
-        if normalized.is_empty() {
-            return None;
-        }
-        let label = profile.label.trim();
-        let from = if label.is_empty() {
-            profile.host.clone()
-        } else {
-            label.to_string()
-        };
-        Some(TextMessageView {
-            from,
-            from_uid: String::new(),
-            from_id: 0,
-            message: normalized.to_string(),
-            target_mode: 3,
-            target_id: 0,
-            peer_uid: String::new(),
-            at,
-        })
-    }
-
-    pub(super) async fn emit_history(&self) {
-        let Some(server_id) = &self.active_server_id else {
-            return;
-        };
-        let path = store::history_path(&self.store_path);
-        match store::load_history(&path, server_id, crate::HISTORY_LIMIT).await {
-            Ok(messages) => self.emit(SessionEvent::History { messages }),
-            Err(message) => self.emit(SessionEvent::Log {
-                level: "warn".into(),
-                message: format!("历史消息读取失败: {message}"),
-            }),
-        }
-    }
-    /// 私聊对端 UID：收到的是发送者；自己发出的回显按目标客户端 id 查当前快照。
-    /// 频道与服务器广播没有单一对端，返回空串。
-    pub(super) fn direct_peer_uid(&self, message: &TextMessageView) -> String {
-        if message.target_mode != 1 {
-            return String::new();
-        }
-        let own = self.self_client_id == Some(message.from_id);
-        if !own {
-            return message.from_uid.clone();
-        }
-        self.last_snapshot
-            .as_ref()
-            .and_then(|(_, clients)| {
-                clients
-                    .iter()
-                    .find(|client| client.id as u64 == message.target_id)
-                    .map(|client| client.uid.clone())
-            })
-            .or_else(|| {
-                let snapshot = self.client.as_ref()?.directory_snapshot()?;
-                snapshot
-                    .clients
-                    .into_iter()
-                    .find(|client| client.id as u64 == message.target_id)
-                    .map(|client| client.uid)
-            })
-            .unwrap_or_default()
-    }
     pub(super) async fn on_self_moved(&mut self, channel_id: u64) {
         if self.self_channel_id == channel_id {
             return;
@@ -584,34 +424,7 @@ impl Actor {
             self.maybe_announce_identity().await;
         }
     }
-    /// 遥测面板打开时按需查询自身连接统计。命令写入仍在 actor 内串行执行，
-    /// 只等 `send_command_no_wait` 完成，不等待服务器回包；回包通过
-    /// `notifyconnectioninfo` 回到信号队列。
-    pub(super) async fn sample_network(&mut self) -> Result<(), SessionError> {
-        let client = self.connected()?;
-        let client_id = self.self_client_id.ok_or(SessionError::NotConnected)?;
-        let result = client
-            .send_command_no_wait(&format!("getconnectioninfo clid={client_id}"))
-            .await
-            .map_err(protocol_error);
-        match &result {
-            Ok(()) => self.last_network_sample_error = None,
-            Err(error) => {
-                let now = Instant::now();
-                let should_log = self.last_network_sample_error.is_none_or(|last| {
-                    now.duration_since(last) >= NETWORK_SAMPLE_ERROR_LOG_INTERVAL
-                });
-                if should_log {
-                    self.last_network_sample_error = Some(now);
-                    self.emit(SessionEvent::Log {
-                        level: "warn".into(),
-                        message: format!("网络遥测查询失败: {error}"),
-                    });
-                }
-            }
-        }
-        result
-    }
+
     pub(super) fn reset_directory_permissions(&mut self) {
         self.channel_list_allowed = None;
         self.channel_meta_allowed = None;
@@ -744,170 +557,6 @@ fn is_permission_denied(err: &tsclient_rs::Error) -> bool {
     matches!(err, tsclient_rs::Error::ServerError { id, .. } if id == "2568")
 }
 
-fn directory_from_channels(
-    channels: Vec<ChannelInfo>,
-    metadata_error: Option<String>,
-) -> ChannelDirectory {
-    let codecs: HashMap<u64, i32> = channels
-        .iter()
-        .filter_map(|channel| channel.codec.map(|codec| (channel.id, codec)))
-        .collect();
-    ChannelDirectory {
-        channels: channels
-            .into_iter()
-            .map(|channel| channel_view(channel, None))
-            .collect(),
-        codecs: (!codecs.is_empty()).then_some(codecs),
-        metadata_error,
-    }
-}
-
-fn merge_channels(
-    incoming_channels: Vec<ChannelView>,
-    incoming_codecs: HashMap<u64, i32>,
-    previous_channels: &[ChannelView],
-    existing_codecs: &HashMap<u64, i32>,
-) -> (Vec<ChannelView>, HashMap<u64, i32>) {
-    let prev_by_id: HashMap<u64, &ChannelView> = previous_channels
-        .iter()
-        .map(|channel| (channel.id, channel))
-        .collect();
-    let mut merged_channels = Vec::with_capacity(incoming_channels.len());
-    let mut merged_codecs = HashMap::new();
-
-    for mut channel in incoming_channels {
-        if let Some(prev) = prev_by_id.get(&channel.id) {
-            channel.order = channel.order.or(prev.order);
-            channel.icon_id = channel.icon_id.or(prev.icon_id);
-            channel.max_clients = channel.max_clients.or(prev.max_clients);
-            channel.max_clients_limited = channel.max_clients_limited.or(prev.max_clients_limited);
-            channel.password_protected = channel.password_protected.or(prev.password_protected);
-        }
-        if let Some(codec) = incoming_codecs
-            .get(&channel.id)
-            .copied()
-            .or_else(|| existing_codecs.get(&channel.id).copied())
-        {
-            merged_codecs.insert(channel.id, codec);
-        }
-        merged_channels.push(channel);
-    }
-
-    (merged_channels, merged_codecs)
-}
-
-fn merge_clients(
-    incoming_clients: Vec<ClientView>,
-    previous_clients: &[ClientView],
-    prune_departed: bool,
-    self_channel_id: u64,
-) -> Vec<ClientView> {
-    let prev_by_id: HashMap<i32, &ClientView> = previous_clients
-        .iter()
-        .map(|client| (client.id, client))
-        .collect();
-    let mut merged = Vec::with_capacity(incoming_clients.len());
-    let mut seen = HashSet::with_capacity(incoming_clients.len());
-
-    for mut client in incoming_clients {
-        seen.insert(client.id);
-        if let Some(prev) = prev_by_id.get(&client.id) {
-            if client.nickname.is_empty() && !prev.nickname.is_empty() {
-                client.nickname = prev.nickname.clone();
-            }
-            if client.uid.is_empty() && !prev.uid.is_empty() {
-                client.uid = prev.uid.clone();
-            }
-            if client.channel_id == 0 && prev.channel_id != 0 {
-                client.channel_id = prev.channel_id;
-            }
-            client.input_muted = client.input_muted.or(prev.input_muted);
-            client.output_muted = client.output_muted.or(prev.output_muted);
-            client.away = client.away.or(prev.away);
-            if client.away != Some(false) {
-                client.away_message = client.away_message.or_else(|| prev.away_message.clone());
-            }
-        }
-        merged.push(client);
-    }
-
-    if !prune_departed {
-        for prev in previous_clients {
-            if !seen.contains(&prev.id)
-                && prev.channel_id != self_channel_id
-                && prev.channel_id != 0
-            {
-                merged.push(prev.clone());
-            }
-        }
-    }
-
-    merged
-}
-
-fn parse_channel_metadata(rows: &[HashMap<String, String>]) -> HashMap<u64, ChannelMetadata> {
-    let mut channels = HashMap::new();
-    for row in rows {
-        let Some(cid) = row.get("cid").and_then(|value| value.parse::<u64>().ok()) else {
-            continue;
-        };
-        let max_clients_limited = match row
-            .get("channel_flag_maxclients_unlimited")
-            .map(String::as_str)
-        {
-            Some("0") => Some(true),
-            Some("1") => Some(false),
-            _ => None,
-        };
-        let password_protected = match row.get("channel_flag_password").map(String::as_str) {
-            Some("0") => Some(false),
-            Some("1") => Some(true),
-            _ => None,
-        };
-        channels.insert(
-            cid,
-            ChannelMetadata {
-                order: row
-                    .get("channel_order")
-                    .and_then(|value| value.parse::<u64>().ok()),
-                description: row
-                    .get("channel_description")
-                    .or_else(|| row.get("channel_topic"))
-                    .cloned(),
-                codec: row
-                    .get("channel_codec")
-                    .and_then(|value| value.parse::<i32>().ok()),
-                max_clients: row
-                    .get("channel_maxclients")
-                    .and_then(|value| value.parse::<u16>().ok()),
-                max_clients_limited,
-                password_protected,
-            },
-        );
-    }
-    channels
-}
-
-fn channel_view(channel: ChannelInfo, metadata: Option<&ChannelMetadata>) -> ChannelView {
-    let metadata = metadata.cloned().unwrap_or_default();
-    ChannelView {
-        icon_id: channel.icon_id,
-        id: channel.id,
-        parent_id: channel.parent_id,
-        order: metadata.order.or(Some(channel.order)),
-        name: channel.name,
-        description: crate::text_format::bbcode_to_markdown(
-            metadata
-                .description
-                .as_deref()
-                .unwrap_or(&channel.description),
-        ),
-        max_clients: metadata.max_clients.or(channel.max_clients),
-        max_clients_limited: metadata.max_clients_limited.or(channel.max_clients_limited),
-        password_protected: metadata.password_protected.or(channel.password_protected),
-    }
-}
-
 async fn fetch_channel_codec(
     client: &Client,
     channel_id: u64,
@@ -921,133 +570,10 @@ async fn fetch_channel_codec(
         .and_then(|row| row.get("channel_codec"))
         .and_then(|value| value.parse::<i32>().ok()))
 }
-/// 按 UTF-8 字节上限切分文本消息。
-///
-/// 优先在空白处断开；找不到合适空白时退到字符边界。单个字符本身超过上限时
-/// 独占一片，不切断 UTF-8。片与片之间的空白会被丢弃，语义与 TeamSpeakClaw 一致。
-#[allow(dead_code)]
-fn split_text_message(message: &str, max_bytes: usize) -> Vec<String> {
-    assert!(max_bytes > 0, "max_bytes must be > 0");
-    if message.len() <= max_bytes {
-        return vec![message.to_string()];
-    }
-
-    let mut chunks = Vec::new();
-    let mut start = 0;
-    let len = message.len();
-
-    while start < len {
-        let mut end = (start + max_bytes).min(len);
-        if end == len {
-            chunks.push(message[start..].to_string());
-            break;
-        }
-
-        while !message.is_char_boundary(end) {
-            end -= 1;
-        }
-        if end == start {
-            end = start + 1;
-            while !message.is_char_boundary(end) {
-                end += 1;
-            }
-        }
-
-        // 只在最近 256 字节里找空白，避免为了一个空格把整片缩得太短。
-        let lookback_start = end.saturating_sub(256).max(start);
-        if lookback_start < end
-            && let Some(relative) = message[lookback_start..end].rfind(char::is_whitespace)
-        {
-            let whitespace = lookback_start + relative;
-            if whitespace > start {
-                chunks.push(message[start..whitespace].to_string());
-                let width = message[whitespace..]
-                    .chars()
-                    .next()
-                    .map(char::len_utf8)
-                    .unwrap_or(1);
-                start = whitespace + width;
-                continue;
-            }
-        }
-
-        chunks.push(message[start..end].to_string());
-        start = end;
-    }
-
-    chunks
-}
-/// clientlist 与欢迎目录快照按 id 合并：clientlist 的标志更新，目录的
-/// 频道更准（clientlist 在部分 TS6 服务器上缺 `cid`）。两边都有的成员
-/// 用 clientlist 行、频道取目录；只在目录里的成员原样保留。
-fn merged_clients(listed: Vec<ClientInfo>, directory: Vec<ClientInfo>) -> Vec<ClientView> {
-    let mut directory_channels: HashMap<i32, u64> = directory
-        .iter()
-        .filter(|info| info.channel_id != 0)
-        .map(|info| (info.id, info.channel_id))
-        .collect();
-    let mut rows: Vec<ClientView> = listed.into_iter().map(ClientView::from).collect();
-    for row in &mut rows {
-        if row.channel_id == 0
-            && let Some(channel_id) = directory_channels.remove(&row.id)
-        {
-            row.channel_id = channel_id;
-        }
-    }
-    let mut seen: HashSet<i32> = rows.iter().map(|row| row.id).collect();
-    for info in directory {
-        if seen.insert(info.id) {
-            rows.push(ClientView::from(info));
-        }
-    }
-    rows
-}
-
-/// TeamSpeak 转义的常用子集；上游没导出 `unescape`，clientinfo 的原始行需要它。
-pub(crate) fn unescape_text(raw: &str) -> String {
-    let mut out = String::with_capacity(raw.len());
-    let mut chars = raw.chars();
-    while let Some(c) = chars.next() {
-        if c != '\\' {
-            out.push(c);
-            continue;
-        }
-        match chars.next() {
-            Some('s') => out.push(' '),
-            Some('p') => out.push('|'),
-            Some('/') => out.push('/'),
-            Some('\\') => out.push('\\'),
-            Some(other) => {
-                out.push('\\');
-                out.push(other);
-            }
-            None => out.push('\\'),
-        }
-    }
-    out
-}
-impl From<ClientInfo> for ClientView {
-    fn from(info: ClientInfo) -> Self {
-        Self {
-            id: info.id,
-            nickname: info.nickname,
-            uid: info.uid,
-            channel_id: info.channel_id,
-            input_muted: info.input_muted,
-            output_muted: info.output_muted,
-            away: info.away,
-            away_message: info.away_message,
-            client_type: ClientType::Standard,
-            app_name: None,
-            app_version: None,
-            capabilities: Vec::new(),
-            bot_commands: None,
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {
+    use super::super::messaging::split_text_message;
     use super::*;
     use crate::actor::test_support::*;
 

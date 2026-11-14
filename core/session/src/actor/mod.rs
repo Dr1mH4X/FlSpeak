@@ -2,8 +2,11 @@
 
 mod connect;
 mod directory;
+mod messaging;
 mod open_protocol;
+mod snapshot;
 mod streams;
+mod telemetry;
 #[cfg(test)]
 pub(super) mod test_support;
 #[cfg(test)]
