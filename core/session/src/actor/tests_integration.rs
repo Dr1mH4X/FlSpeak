@@ -130,7 +130,9 @@ fn invalidate_handlers_resets_open_protocol_caches_and_cooldowns() {
         },
     );
     actor.peer_commands.insert("bot-uid".into(), Vec::new());
-    actor.peer_command_prefixes.insert("bot-uid".into(), "!".into());
+    actor
+        .peer_command_prefixes
+        .insert("bot-uid".into(), "!".into());
     actor.commands_fetching.insert("other-uid".into());
     let now = Instant::now();
     assert!(
