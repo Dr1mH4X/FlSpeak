@@ -4,6 +4,9 @@
 <dict>
 	<key>com.apple.security.app-sandbox</key>
 	<true/>
+	<!-- tsclient-rs UDP 传输、DNS SRV 解析及 WebRTC ICE 需在 App Sandbox 下绑定本地 UDP 端口。 -->
+	<key>com.apple.security.network.server</key>
+	<true/>
 	<!-- 连 TeamSpeak 服务器需要出站 TCP/UDP。 -->
 	<key>com.apple.security.network.client</key>
 	<true/>
