@@ -851,7 +851,7 @@ impl Actor {
                 if epoch != self.connection_epoch {
                     return;
                 }
-                message.peer_uid = self.direct_peer_uid(&message);
+                self.resolve_text_message_routing(&mut message);
                 if let Some(server_id) = self.active_server_id.clone() {
                     let path = store::history_path(&self.store_path);
                     if let Err(message) = store::append_history(&path, &server_id, &message).await {

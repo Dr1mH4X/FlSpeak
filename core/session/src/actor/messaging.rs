@@ -108,6 +108,16 @@ impl Actor {
         }
     }
 
+    /// 补齐收到文本消息的路由归属：
+    /// TeamSpeak 的 `notifytextmessage` 在频道消息（`target_mode == 2`）下不携带 `target`，
+    /// `tsclient-rs` 会将其解析为 0；由于客户端只接收当前所在频道的消息，这里用 `self_channel_id` 补齐。
+    pub(super) fn resolve_text_message_routing(&self, message: &mut TextMessageView) {
+        if message.target_mode == 2 && message.target_id == 0 && self.self_channel_id != 0 {
+            message.target_id = self.self_channel_id;
+        }
+        message.peer_uid = self.direct_peer_uid(message);
+    }
+
     /// 私聊对端 UID：收到的是发送者；自己发出的回显按目标客户端 id 查当前快照。
     /// 频道与服务器广播没有单一对端，返回空串。
     pub(super) fn direct_peer_uid(&self, message: &TextMessageView) -> String {
@@ -272,6 +282,88 @@ mod tests {
             ..echo
         };
         assert_eq!(actor.direct_peer_uid(&broadcast), "");
+    }
+
+    #[test]
+    fn resolve_text_message_routing_fills_channel_id_when_missing() {
+        let mut actor = audio_actor();
+        actor.self_channel_id = 5;
+
+        let mut channel_msg = TextMessageView {
+            from: "Self".into(),
+            from_uid: "self".into(),
+            from_id: 1,
+            message: "hello channel".into(),
+            target_mode: 2,
+            target_id: 0,
+            peer_uid: String::new(),
+            at: 10,
+        };
+        actor.resolve_text_message_routing(&mut channel_msg);
+        assert_eq!(channel_msg.target_id, 5);
+        assert_eq!(channel_msg.peer_uid, "");
+
+        let mut explicit_channel_msg = TextMessageView {
+            target_id: 9,
+            ..channel_msg.clone()
+        };
+        actor.resolve_text_message_routing(&mut explicit_channel_msg);
+        assert_eq!(explicit_channel_msg.target_id, 9);
+
+        let mut server_msg = TextMessageView {
+            target_mode: 3,
+            target_id: 0,
+            ..channel_msg
+        };
+        actor.resolve_text_message_routing(&mut server_msg);
+        assert_eq!(server_msg.target_id, 0);
+    }
+
+    #[tokio::test]
+    async fn handle_signal_channel_text_message_persists_and_emits_channel_id() {
+        let dir = std::env::temp_dir().join("flspeak-session-channel-msg-routing-test");
+        let _ = tokio::fs::remove_dir_all(&dir).await;
+
+        let mut actor = audio_actor();
+        actor.store_path = dir.join("preferences.json");
+        actor.active_server_id = Some("ts.example.com:9987".into());
+        actor.self_channel_id = 42;
+        let mut events = actor.events.subscribe();
+
+        actor
+            .handle_signal(SessionSignal::TextMessage {
+                epoch: actor.connection_epoch,
+                message: TextMessageView {
+                    from: "Self".into(),
+                    from_uid: "self".into(),
+                    from_id: 1,
+                    message: "test".into(),
+                    target_mode: 2,
+                    target_id: 0,
+                    peer_uid: String::new(),
+                    at: 100,
+                },
+            })
+            .await;
+
+        let event = events.recv().await.unwrap();
+        match event {
+            SessionEvent::TextMessage(msg) => {
+                assert_eq!(msg.target_mode, 2);
+                assert_eq!(msg.target_id, 42);
+            }
+            other => panic!("expected TextMessage, got {other:?}"),
+        }
+
+        let history_path = store::history_path(&actor.store_path);
+        let loaded = store::load_history(&history_path, "ts.example.com:9987", 10)
+            .await
+            .unwrap();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].target_mode, 2);
+        assert_eq!(loaded[0].target_id, 42);
+
+        let _ = tokio::fs::remove_dir_all(&dir).await;
     }
 
     #[test]
