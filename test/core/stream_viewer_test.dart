@@ -1173,16 +1173,141 @@ void main() {
       },
     );
 
-    test('defaultStreamIceServers includes TeamSpeak official STUN and high-priority domestic candidates', () {
+    test('defaultStreamIceServers includes TeamSpeak official STUN and slim domestic fallback STUN servers', () {
       final urls = (defaultStreamIceServers.first['urls'] as List)
           .cast<String>();
-      expect(urls, contains('stun:turn.teamspeak.com:3478'));
-      expect(urls, contains('stun:turn2.teamspeak.com:3478'));
-      expect(urls, contains('stun:stun.miwifi.com:3478'));
-      expect(urls, contains('stun:stun.chat.bilibili.com:3478'));
-      expect(urls, contains('stun:stun.qq.com:3478'));
-      expect(urls, contains('stun:stun.aliyun.com:3478'));
-      expect(urls, contains('stun:stun.cloudflare.com:3478'));
+      expect(urls, [
+        'stun:turn.teamspeak.com:3478',
+        'stun:stun.cloudflare.com:3478',
+        'stun:stun.qq.com:3478',
+        'stun:stun.miwifi.com:3478',
+      ]);
+    });
+
+    test('shouldTrickleIceCandidate filters empty/passive TCP and deduplicates 5-tuples', () {
+      final seenKeys = <String>{};
+
+      expect(shouldTrickleIceCandidate('', seenKeys), isFalse);
+      expect(shouldTrickleIceCandidate('   ', seenKeys), isFalse);
+      expect(
+        shouldTrickleIceCandidate(
+          'candidate:1 1 tcp 1518280447 192.0.2.1 9 typ host tcptype passive',
+          seenKeys,
+        ),
+        isFalse,
+      );
+      expect(seenKeys, isEmpty);
+
+      expect(
+        shouldTrickleIceCandidate(
+          'a=candidate:1 1 UDP 2122252543 198.51.100.2 60000 typ srflx raddr 192.0.2.2 rport 50000',
+          seenKeys,
+        ),
+        isTrue,
+      );
+      // Same (component=1, transport=udp, ip=198.51.100.2, port=60000, type=srflx) with different foundation/prefix is deduplicated.
+      expect(
+        shouldTrickleIceCandidate(
+          'candidate:99 1 udp 1686052607 198.51.100.2 60000 typ srflx raddr 10.0.0.2 rport 50000',
+          seenKeys,
+        ),
+        isFalse,
+      );
+      // Different component (RTCP = 2) or different port is kept.
+      expect(
+        shouldTrickleIceCandidate(
+          'candidate:1 2 UDP 2122252542 198.51.100.2 60000 typ srflx raddr 192.0.2.2 rport 50000',
+          seenKeys,
+        ),
+        isTrue,
+      );
+      expect(
+        shouldTrickleIceCandidate(
+          'candidate:2 1 tcp 1518280447 198.51.100.2 60001 typ host tcptype active',
+          seenKeys,
+        ),
+        isTrue,
+      );
+    });
+
+    test('StreamViewerController filters passive TCP and duplicate local ICE candidates', () async {
+      final events = StreamController<CoreEvent>.broadcast();
+      final core = _FakeCoreSession(events);
+      final bindings = _FakeWebRtcBindings();
+
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(core),
+          webRtcBindingsProvider.overrideWithValue(bindings),
+        ],
+      );
+      addTearDown(() async {
+        await events.close();
+        container.dispose();
+      });
+
+      container.read(sessionViewProvider);
+      events.add(
+        const CoreEvent.state(
+          state: CoreSessionState.connected(clientId: 1, channelId: 10),
+        ),
+      );
+      const stream = StreamView(
+        id: 'stream-42',
+        clientId: 7,
+        name: 'Alice Screen',
+        hasAudio: false,
+      );
+      events.add(const CoreEvent.streams(streams: [stream]));
+      await _pumpEventQueue();
+
+      expect(
+        await container.read(sessionViewProvider.notifier).watchStream(stream),
+        isTrue,
+      );
+      events.add(
+        const CoreEvent.streamOffer(
+          streamId: 'stream-42',
+          sourceClientId: 7,
+          sdp: _sampleOfferSdp,
+        ),
+      );
+      await _pumpEventQueue();
+
+      final peer = bindings.createdPeers.single;
+      peer.onIceCandidate?.call(
+        RTCIceCandidate(
+          'candidate:tcp1 1 tcp 1518280447 192.0.2.1 9 typ host tcptype passive',
+          '0',
+          0,
+        ),
+      );
+      peer.onIceCandidate?.call(
+        RTCIceCandidate(
+          'candidate:udp1 1 udp 1686052607 203.0.113.5 55000 typ srflx raddr 192.0.2.1 rport 55000',
+          '0',
+          0,
+        ),
+      );
+      // Duplicate 5-tuple on MID 1 (bundled transport duplicate from secondary STUN server).
+      peer.onIceCandidate?.call(
+        RTCIceCandidate(
+          'candidate:udp2 1 UDP 1686052607 203.0.113.5 55000 typ srflx raddr 10.0.0.2 rport 55000',
+          '1',
+          1,
+        ),
+      );
+      await _pumpEventQueue();
+
+      expect(core.sentIceCandidates, [
+        (
+          streamId: 'stream-42',
+          targetClid: 7,
+          sdp: 'candidate:udp1 1 udp 1686052607 203.0.113.5 55000 typ srflx raddr 192.0.2.1 rport 55000',
+          mid: '0',
+          mLine: 0,
+        ),
+      ]);
     });
   });
 }

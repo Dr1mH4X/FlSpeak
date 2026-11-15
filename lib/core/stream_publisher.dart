@@ -164,6 +164,7 @@ class _ViewerPeerSession {
   bool failureReported = false;
   final List<RTCIceCandidate> pendingLocalCandidates = [];
   final List<RTCIceCandidate> pendingRemoteCandidates = [];
+  final Set<String> sentLocalCandidateKeys = <String>{};
 
   /// Serializes Answer/ICE handling so a candidate can never be added before the
   /// Answer that established the remote description.
@@ -503,7 +504,13 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
           return;
         }
         final candidateSdp = candidate.candidate;
-        if (candidateSdp == null || candidateSdp.isEmpty) return;
+        if (candidateSdp == null ||
+            !shouldTrickleIceCandidate(
+              candidateSdp,
+              viewerSession.sentLocalCandidateKeys,
+            )) {
+          return;
+        }
         // Trickle candidates only after the viewer's Answer established the remote
         // description; the official client otherwise receives a burst of signals
         // before it has a peer to apply them to.
@@ -602,13 +609,13 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
       }
 
       final rawSdp = rawOffer.sdp ?? '';
-      // Both known-working TS6 implementations hand libwebrtc's own offer to the
-      // viewer unchanged and only narrow codecs through `setCodecPreferences`.
-      // Rewriting the SDP is a last resort for the server's command-line limit.
-      var appliedSdp = _offerFitsOneCommand(rawSdp)
-          ? rawSdp
+      // Guarantee m=audio uses a=sendonly even when no audio track is attached,
+      // while keeping libwebrtc's own offer intact unless command-line pruning is needed.
+      final ensuredSdp = ensureAudioDirectionInSdp(rawSdp, 'sendonly');
+      var appliedSdp = _offerFitsOneCommand(ensuredSdp)
+          ? ensuredSdp
           : normalizeSdpForTs6(
-              rawSdp,
+              ensuredSdp,
               preferredVideoCodec: preferredCodec,
               fallbackAudioDirection: 'sendonly',
             );
@@ -763,19 +770,6 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
           )) {
             return;
           }
-          // Now that the Answer exists, trickle out the candidates gathered
-          // while the offer was in flight.
-          await _flushPendingLocalViewerCandidates(
-            currentGeneration: currentGeneration,
-            viewerSession: viewerSession,
-          );
-          if (!_isViewerSessionValid(
-            currentGeneration,
-            viewerClid,
-            peerGeneration,
-          )) {
-            return;
-          }
           // Safely reapply video sender parameters after answer negotiation.
           try {
             final senders = await peer.getSenders();
@@ -800,6 +794,21 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
             // Reapplying sender parameters is best-effort and must never
             // trigger viewer session teardown.
           }
+          if (!_isViewerSessionValid(
+            currentGeneration,
+            viewerClid,
+            peerGeneration,
+          )) {
+            return;
+          }
+          // Flush local candidates asynchronously so slow server command round-trips
+          // do not block incoming remote ICE candidates on `signalingTail`.
+          unawaited(
+            _flushPendingLocalViewerCandidates(
+              currentGeneration: currentGeneration,
+              viewerSession: viewerSession,
+            ),
+          );
         } catch (e, st) {
           logError(
             'Failed to set remote answer for viewer $viewerClid',
@@ -883,43 +892,12 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
       } catch (_) {}
       // Video transceiver is always added first (index 0 / MID 0).
       if (i == 0) {
-        await _preferPrimaryVideoCodecs(
+        await preferVideoCodecOnTransceiver(
           capabilities: capabilities,
           transceiver: transceiver,
           preferredMimeType: preferredMimeType,
         );
       }
-    }
-  }
-
-  /// Restricts the publisher's offer to H.264 and VP8 with the configured codec
-  /// ordered first. libwebrtc then writes the offer itself, so no SDP rewriting
-  /// is needed to stay inside the command line limit.
-  Future<void> _preferPrimaryVideoCodecs({
-    required RTCRtpCapabilities? capabilities,
-    required RTCRtpTransceiver transceiver,
-    required String preferredMimeType,
-  }) async {
-    final codecs = capabilities?.codecs;
-    if (codecs == null || codecs.isEmpty) return;
-    String mimeOf(RTCRtpCodecCapability codec) => codec.mimeType.toLowerCase();
-    final targetMime = preferredMimeType.toLowerCase();
-    final secondaryMime = targetMime == 'video/h264'
-        ? 'video/vp8'
-        : 'video/h264';
-    final preferred = [
-      for (final codec in codecs)
-        if (mimeOf(codec) == targetMime) codec,
-      for (final codec in codecs)
-        if (mimeOf(codec) == secondaryMime) codec,
-    ];
-    if (preferred.isEmpty) return;
-    try {
-      await transceiver.setCodecPreferences(preferred);
-    } catch (e) {
-      // Older native builds reject preference changes; the offer then keeps every
-      // codec and the size check prunes it before sending.
-      logWarn('setCodecPreferences failed', target: 'stream', error: e);
     }
   }
 
@@ -1110,6 +1088,7 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
     _clearViewerNegotiationTimer(session);
     session.pendingLocalCandidates.clear();
     session.pendingRemoteCandidates.clear();
+    session.sentLocalCandidateKeys.clear();
     _syncViewerIds();
 
     final peer = session.peer;
@@ -1155,6 +1134,7 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
       _clearViewerNegotiationTimer(session);
       session.pendingLocalCandidates.clear();
       session.pendingRemoteCandidates.clear();
+      session.sentLocalCandidateKeys.clear();
     }
 
     final localStream = _localStream;

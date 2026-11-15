@@ -759,7 +759,7 @@ void main() {
       (
         name: 'Display 1',
         audio: false,
-        bitrate: 5000,
+        bitrate: 2500,
         viewerLimit: defaultMaxStreamViewers,
       ),
     ]);

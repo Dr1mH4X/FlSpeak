@@ -9,28 +9,45 @@ import 'preferences.dart';
 import 'providers.dart';
 import 'window_chrome.dart';
 
-/// Default STUN server configuration for TS6 screen-share viewer connections.
-/// Prioritizes fast, widely reachable STUN servers (Cloudflare, QQ, MiWiFi,
-/// Syncthing) before Google STUN to avoid lengthy timeouts in restricted networks.
 /// Default STUN server configuration for TS6 screen-share viewer and publisher connections.
-/// Combines TeamSpeak official STUN servers with high-speed domestic and global STUN candidates
-/// for fast, reliable ICE candidate gathering across NATs.
+/// Uses a concise set of fast TeamSpeak and reachable public STUN servers so ICE gathering
+/// finishes promptly without flooding signaling.
 const List<Map<String, dynamic>> defaultStreamIceServers = [
   {
     'urls': [
       'stun:turn.teamspeak.com:3478',
-      'stun:turn2.teamspeak.com:3478',
-      'stun:stun.miwifi.com:3478',
-      'stun:stun.chat.bilibili.com:3478',
-      'stun:stun.qq.com:3478',
-      'stun:stun.aliyun.com:3478',
       'stun:stun.cloudflare.com:3478',
-      'stun:stun.bige0.com:3478',
-      'stun:stun.hitv.com:3478',
-      'stun:stun.syncthing.net:3478',
+      'stun:stun.qq.com:3478',
+      'stun:stun.miwifi.com:3478',
     ],
   },
 ];
+
+final RegExp _passiveTcpCandidateRegex = RegExp(
+  r'\btcp\b.*\btcptype\s+passive\b',
+  caseSensitive: false,
+);
+final RegExp _iceCandidateTupleRegex = RegExp(
+  r'^(?:a=)?candidate:\S+\s+(\d+)\s+(\S+)\s+\d+\s+(\S+)\s+(\d+)\s+typ\s+(\S+)',
+  caseSensitive: false,
+);
+
+/// Returns whether [candidateSdp] should be trickled over signaling, filtering
+/// out passive TCP candidates and deduplicating identical transport addresses
+/// in [seenKeys].
+bool shouldTrickleIceCandidate(String candidateSdp, Set<String> seenKeys) {
+  final trimmed = candidateSdp.trim();
+  if (trimmed.isEmpty) return false;
+  if (_passiveTcpCandidateRegex.hasMatch(trimmed)) return false;
+
+  final match = _iceCandidateTupleRegex.firstMatch(trimmed);
+  final key = match == null
+      ? trimmed
+      : '${match.group(1)}|${match.group(2)!.toLowerCase()}|'
+            '${match.group(3)!.toLowerCase()}|${match.group(4)}|'
+            '${match.group(5)!.toLowerCase()}';
+  return seenKeys.add(key);
+}
 
 /// Default timeout for WebRTC offer/answer + ICE negotiation.
 const Duration defaultStreamNegotiationTimeout = Duration(seconds: 15);
@@ -774,6 +791,7 @@ class StreamViewerController extends Notifier<StreamViewerState> {
   MediaStream? _fallbackStream;
   final List<RTCIceCandidate> _pendingLocalCandidates = [];
   final List<RTCIceCandidate> _pendingRemoteCandidates = [];
+  final Set<String> _sentLocalCandidateKeys = <String>{};
   final List<MediaStreamTrack> _remoteAudioTracks = [];
   Timer? _negotiationTimer;
   bool _remoteDescriptionSet = false;
@@ -924,7 +942,10 @@ class StreamViewerController extends Notifier<StreamViewerState> {
       peer.onIceCandidate = (candidate) {
         if (!_isCurrentGeneration(currentGeneration)) return;
         final candidateSdp = candidate.candidate;
-        if (candidateSdp == null || candidateSdp.isEmpty) return;
+        if (candidateSdp == null ||
+            !shouldTrickleIceCandidate(candidateSdp, _sentLocalCandidateKeys)) {
+          return;
+        }
         if (!_answerSent) {
           _pendingLocalCandidates.add(candidate);
           return;
@@ -1328,6 +1349,7 @@ class StreamViewerController extends Notifier<StreamViewerState> {
     _answerSent = false;
     _pendingLocalCandidates.clear();
     _pendingRemoteCandidates.clear();
+    _sentLocalCandidateKeys.clear();
     _remoteAudioTracks.clear();
 
     final peer = _peer;
