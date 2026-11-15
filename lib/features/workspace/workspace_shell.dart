@@ -87,7 +87,7 @@ class WorkspaceShell extends ConsumerWidget {
 
     if (compact) {
       return Scaffold(
-        backgroundColor: scheme.surface,
+        backgroundColor: context.pageColor,
         drawer: Drawer(
           width: math.min(compactWidth + Sizes.channelPanel, width - 24),
           backgroundColor: panelColor,
@@ -113,7 +113,7 @@ class WorkspaceShell extends ConsumerWidget {
     }
 
     return Scaffold(
-      backgroundColor: scheme.surface,
+      backgroundColor: context.pageColor,
       body: SafeArea(
         top: false,
         child: Row(
@@ -148,10 +148,8 @@ class _MainSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = context.scheme;
-
     return Surface(
-      color: scheme.surface,
+      color: context.pageColor,
       shape: AppShape.none,
       clipBehavior: Clip.antiAlias,
       child: child,

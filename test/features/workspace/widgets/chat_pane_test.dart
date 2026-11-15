@@ -814,9 +814,7 @@ void main() {
         clientType: ClientType.bot,
         capabilities: ['chat:slash_commands'],
         botCommandPrefix: '!',
-        botCommands: [
-          BotCommandView(name: 'ping', args: '', desc: '远程频道命令'),
-        ],
+        botCommands: [BotCommandView(name: 'ping', args: '', desc: '远程频道命令')],
       );
 
       await tester.pumpWidget(

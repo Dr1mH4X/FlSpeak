@@ -573,7 +573,7 @@ class _ChatPaneState extends State<ChatPane> {
               color: scheme.surfaceContainerHighest,
               clipBehavior: Clip.antiAlias,
               shape: AppShape.xl.copyWith(
-                side: BorderSide(color: scheme.outlineVariant),
+                side: BorderSide(color: scheme.outline),
               ),
               child: SurfaceScope(
                 level: floatingSurfaceLevelFor(scheme),
@@ -680,7 +680,7 @@ class _ChatPaneState extends State<ChatPane> {
               color: scheme.surfaceContainerHigh,
               shape: RoundedSuperellipseBorder(
                 borderRadius: AppRadius.xl,
-                side: BorderSide(color: scheme.outlineVariant),
+                side: BorderSide(color: scheme.outline),
               ),
             ),
             child: Padding(

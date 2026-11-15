@@ -117,7 +117,7 @@ class _IdentityDialogContentState extends State<_IdentityDialogContent> {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: ShapeDecoration(
-        color: surfaceColorFor(SurfaceLevel.block, scheme),
+        color: surfaceColorFor(context.raisedSurfaceLevel, scheme),
         shape: AppShape.xl,
       ),
       child: AnimatedSwitcher(
@@ -215,7 +215,18 @@ class _IdentityDialogContentState extends State<_IdentityDialogContent> {
                 horizontal: 8,
                 vertical: 8,
               ),
-              border: OutlineInputBorder(borderRadius: Radii.smallAll),
+              border: AppInputBorder(
+                borderRadius: AppRadius.sm,
+                borderSide: BorderSide(color: scheme.outline),
+              ),
+              enabledBorder: AppInputBorder(
+                borderRadius: AppRadius.sm,
+                borderSide: BorderSide(color: scheme.outline),
+              ),
+              focusedBorder: AppInputBorder(
+                borderRadius: AppRadius.sm,
+                borderSide: BorderSide(color: scheme.primary, width: 2),
+              ),
             ),
           ),
         ),

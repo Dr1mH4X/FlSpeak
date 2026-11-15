@@ -467,10 +467,9 @@ class _ChannelTile extends StatelessWidget {
   /// 官方 spacer 行不带频道图标，只有装饰内容本身；
   /// 颜色跟随行的前景（选中时用胶囊上的对比色）。
   Widget _spacerBody(BuildContext context, Color foreground) {
-    final scheme = context.scheme;
     if (spacer!.isLine) {
       // 官方按字符画线（_ 实线 / - 虚线 / . 点线），这里统一用一条分隔线表达。
-      return Align(child: Container(height: 1, color: scheme.outlineVariant));
+      return Align(child: Container(height: 1, color: dividerColorOf(context)));
     }
     if (spacer!.text.isEmpty) {
       // 纯前缀的空 spacer 在官方里占一个空行，不写任何内容。

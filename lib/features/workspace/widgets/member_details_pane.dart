@@ -165,7 +165,7 @@ class MemberDetailsPane extends ConsumerWidget {
                   Divider(
                     height: 1,
                     thickness: 1,
-                    color: scheme.outlineVariant,
+                    color: dividerColorOf(context),
                   ),
 
                   // 单行精炼属性列表

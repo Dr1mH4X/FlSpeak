@@ -617,9 +617,10 @@ class _ServerSearchControlState extends State<_ServerSearchControl>
             color: surfaceFill,
             shape: RoundedSuperellipseBorder(
               borderRadius: AppRadius.full,
-              side: _hasFocus
-                  ? BorderSide(color: scheme.primary, width: 2)
-                  : BorderSide.none,
+              side: BorderSide(
+                color: _hasFocus ? scheme.primary : scheme.outline,
+                width: _hasFocus ? 2 : 1,
+              ),
             ),
           ),
           child: ClipRSuperellipse(

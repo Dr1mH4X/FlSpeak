@@ -82,13 +82,12 @@ class _MediaTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final scheme = context.scheme;
     final name = mediaFileName(url);
     return Semantics(
       button: true,
       label: name.isEmpty ? l10n.mediaViewerTitle : name,
       child: Surface(
-        color: scheme.surfaceContainer,
+        color: context.cardColor,
         shape: AppShape.xl,
         clipBehavior: Clip.antiAlias,
         child: FocusRing(

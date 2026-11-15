@@ -1,8 +1,19 @@
 // ignore_for_file: depend_on_referenced_packages
 
+import 'dart:math' as math;
+
 import 'package:flspeak/theme/app_theme.dart';
+import 'package:flspeak/widgets/prism.dart' show SurfaceLevel;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+double _contrastRatio(Color a, Color b) {
+  final la = a.computeLuminance();
+  final lb = b.computeLuminance();
+  final hi = math.max(la, lb);
+  final lo = math.min(la, lb);
+  return (hi + 0.05) / (lo + 0.05);
+}
 
 void main() {
   group('AppTheme icon and button colors', () {
@@ -82,6 +93,39 @@ void main() {
             expect(scopeColor, isNot(Colors.black));
             expect(mediaColor, isNot(Colors.black));
           }
+        },
+      );
+    }
+
+    for (final brightness in [Brightness.dark, Brightness.light]) {
+      test(
+        'outline border tokens meet >= 3:1 UI boundary contrast in $brightness',
+        () {
+          final theme = buildAppTheme(brightness);
+          final scheme = theme.colorScheme;
+          final pageColor = surfaceColorFor(SurfaceLevel.page, scheme);
+          final cardColor = surfaceColorFor(SurfaceLevel.card, scheme);
+
+          expect(
+            _contrastRatio(scheme.outline, pageColor),
+            greaterThanOrEqualTo(3.0),
+          );
+          expect(
+            _contrastRatio(scheme.outline, cardColor),
+            greaterThanOrEqualTo(3.0),
+          );
+
+          final inputBorder =
+              theme.inputDecorationTheme.border as AppInputBorder;
+          final enabledInputBorder =
+              theme.inputDecorationTheme.enabledBorder as AppInputBorder;
+          expect(inputBorder.borderSide.color, scheme.outline);
+          expect(enabledInputBorder.borderSide.color, scheme.outline);
+
+          final outlinedSide = theme.outlinedButtonTheme.style?.side?.resolve(
+            const {},
+          );
+          expect(outlinedSide?.color, scheme.outline);
         },
       );
     }

@@ -242,10 +242,7 @@ class _AppNavigationSidebarState extends ConsumerState<AppNavigationSidebar>
       child: Surface(
         color: scheme.surfaceContainerLowest,
         shape: BorderDirectional(
-          end: BorderSide(
-            color: scheme.outlineVariant.withValues(alpha: 0.4),
-            width: 1,
-          ),
+          end: BorderSide(color: dividerColorOf(context), width: 1),
         ),
         child: TweenAnimationBuilder<double>(
           tween: Tween(end: (canExpandInPlace && _globalExpanded) ? 1.0 : 0.0),
@@ -800,10 +797,7 @@ class _SidebarOverlay extends StatelessWidget {
                 child: Surface(
                   color: scheme.surfaceContainerLowest,
                   shape: BorderDirectional(
-                    end: BorderSide(
-                      color: scheme.outlineVariant.withValues(alpha: 0.4),
-                      width: 1,
-                    ),
+                    end: BorderSide(color: dividerColorOf(context), width: 1),
                   ),
                   elevation: 8,
                   shadowColor: scheme.shadow,

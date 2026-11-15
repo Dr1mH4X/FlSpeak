@@ -22,7 +22,7 @@ import 'package:flspeak/features/workspace/widgets/members_pane.dart';
 import 'package:flspeak/features/workspace/workspace_page.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
 import 'package:flspeak/theme/app_theme.dart';
-import 'package:flspeak/widgets/prism.dart';
+import 'package:flspeak/widgets/prism.dart' hide Divider;
 
 const _peer = ClientView(
   id: 2,
@@ -362,6 +362,57 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('FlSpeak v0.1.12'), findsOneWidget);
       expect(find.text('stream:view'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'light mode MembersPane uses SurfaceCard and MemberDetailsPane divider uses dividerColorOf',
+    (tester) async {
+      final theme = buildAppTheme(Brightness.light);
+      final expectedCardColor = surfaceColorFor(
+        SurfaceLevel.card,
+        theme.colorScheme,
+      );
+      final expectedPageColor = surfaceColorFor(
+        SurfaceLevel.page,
+        theme.colorScheme,
+      );
+      expect(expectedCardColor, isNot(expectedPageColor));
+
+      await _mountWorkspace(
+        tester,
+        sidePanel: Builder(
+          builder: (context) =>
+              MembersPane(view: _Controller().build(), channelId: 1),
+        ),
+      );
+
+      final membersCardBox = tester.widget<DecoratedBox>(
+        find
+            .descendant(
+              of: find.descendant(
+                of: find.byType(MembersPane),
+                matching: find.byType(SurfaceCard),
+              ),
+              matching: find.byType(DecoratedBox),
+            )
+            .first,
+      );
+      final membersDecoration = membersCardBox.decoration as ShapeDecoration;
+      expect(membersDecoration.color, expectedCardColor);
+      expect(membersDecoration.shape, AppShape.lg);
+
+      await tester.tap(find.text('Peer'));
+      await tester.pumpAndSettle();
+
+      final divider = tester.widget<Divider>(
+        find.descendant(
+          of: find.byType(MemberDetailsPane),
+          matching: find.byType(Divider),
+        ),
+      );
+      final detailsContext = tester.element(find.byType(MemberDetailsPane));
+      expect(divider.color, dividerColorOf(detailsContext));
     },
   );
 }

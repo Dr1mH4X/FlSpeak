@@ -8,7 +8,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flspeak/core/models.dart';
 import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
+import 'package:flspeak/router.dart';
+import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/features/workspace/workspace_page.dart';
+import 'package:flspeak/features/workspace/workspace_shell.dart';
 import 'package:flspeak/features/workspace/workspace_state.dart';
 import 'package:flspeak/features/workspace/widgets/channel_details_pane.dart';
 import 'package:flspeak/features/workspace/widgets/media_grid.dart';
@@ -251,6 +254,80 @@ void main() {
       // Tab should still be media, not reset to chat
       expect(find.byType(MediaGrid), findsOneWidget);
       expect(find.text('Gaming Channel'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'light mode WorkspaceShell uses page surface distinct from ChannelDetailsPane SurfaceCard',
+    (tester) async {
+      final core = _FakeCore(descriptionResult: 'Visible channel details');
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(core),
+          sessionViewProvider.overrideWith(_Controller.new),
+          sessionAccessProvider.overrideWith((ref) async => const AccessView()),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final theme = buildAppTheme(Brightness.light);
+      final expectedPageColor = surfaceColorFor(
+        SurfaceLevel.page,
+        theme.colorScheme,
+      );
+      final expectedCardColor = surfaceColorFor(
+        SurfaceLevel.card,
+        theme.colorScheme,
+      );
+      expect(expectedCardColor, isNot(expectedPageColor));
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: theme,
+            locale: const Locale('zh'),
+            localizationsDelegates: const [
+              ...AppLocalizations.localizationsDelegates,
+              PrismUiLocalizationsDelegate(),
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) =>
+                PrismRootScope(brightness: Brightness.light, child: child!),
+            home: const WorkspaceShell(
+              location: AppRoutes.workspace,
+              child: ChannelDetailsPane(channel: testChannel),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final shellScaffold = tester.widget<Scaffold>(
+        find
+            .descendant(
+              of: find.byType(WorkspaceShell),
+              matching: find.byType(Scaffold),
+            )
+            .first,
+      );
+      expect(shellScaffold.backgroundColor, expectedPageColor);
+
+      final cardBoxes = tester.widgetList<DecoratedBox>(
+        find.descendant(
+          of: find.descendant(
+            of: find.byType(ChannelDetailsPane),
+            matching: find.byType(SurfaceCard),
+          ),
+          matching: find.byType(DecoratedBox),
+        ),
+      );
+      expect(cardBoxes, isNotEmpty);
+      for (final box in cardBoxes) {
+        final decoration = box.decoration as ShapeDecoration;
+        expect(decoration.color, expectedCardColor);
+        expect(decoration.color, isNot(shellScaffold.backgroundColor));
+      }
     },
   );
 }

@@ -84,6 +84,57 @@ prism.ColorScheme _toPrismColorScheme(ColorScheme s) => prism.ColorScheme(
   surfaceTint: s.surfaceTint,
 );
 
+ColorScheme _fromPrismColorScheme(prism.ColorScheme s) => ColorScheme(
+  brightness: s.brightness,
+  primary: s.primary,
+  onPrimary: s.onPrimary,
+  primaryContainer: s.primaryContainer,
+  onPrimaryContainer: s.onPrimaryContainer,
+  primaryFixed: s.primaryFixed,
+  primaryFixedDim: s.primaryFixedDim,
+  onPrimaryFixed: s.onPrimaryFixed,
+  onPrimaryFixedVariant: s.onPrimaryFixedVariant,
+  secondary: s.secondary,
+  onSecondary: s.onSecondary,
+  secondaryContainer: s.secondaryContainer,
+  onSecondaryContainer: s.onSecondaryContainer,
+  secondaryFixed: s.secondaryFixed,
+  secondaryFixedDim: s.secondaryFixedDim,
+  onSecondaryFixed: s.onSecondaryFixed,
+  onSecondaryFixedVariant: s.onSecondaryFixedVariant,
+  tertiary: s.tertiary,
+  onTertiary: s.onTertiary,
+  tertiaryContainer: s.tertiaryContainer,
+  onTertiaryContainer: s.onTertiaryContainer,
+  tertiaryFixed: s.tertiaryFixed,
+  tertiaryFixedDim: s.tertiaryFixedDim,
+  onTertiaryFixed: s.onTertiaryFixed,
+  onTertiaryFixedVariant: s.onTertiaryFixedVariant,
+  error: s.error,
+  onError: s.onError,
+  errorContainer: s.errorContainer,
+  onErrorContainer: s.onErrorContainer,
+  surface: s.surface,
+  onSurface: s.onSurface,
+  surfaceDim: s.surfaceDim,
+  surfaceBright: s.surfaceBright,
+  surfaceContainerLowest: s.surfaceContainerLowest,
+  surfaceContainerLow: s.surfaceContainerLow,
+  surfaceContainer: s.surfaceContainer,
+  surfaceContainerHigh: s.surfaceContainerHigh,
+  surfaceContainerHighest: s.surfaceContainerHighest,
+  onSurfaceVariant: s.onSurfaceVariant,
+  outline: s.outline,
+  outlineVariant: s.outlineVariant,
+  shadow: s.shadow,
+  scrim: s.scrim,
+  inverseSurface: s.inverseSurface,
+  onInverseSurface: s.onInverseSurface,
+  inversePrimary: s.inversePrimary,
+  // 面板底色已由 surfaceContainer 家族分层，M3 的 elevation tint 一律关掉。
+  surfaceTint: Colors.transparent,
+);
+
 /// 连接与错误使用独立语义色，避免与导航的蓝紫强调色混淆。
 @immutable
 class StatusColors extends ThemeExtension<StatusColors> {
@@ -403,80 +454,25 @@ TextTheme _textTheme(Brightness brightness) {
 }
 
 ColorScheme _scheme(Brightness brightness) {
-  final dark = brightness == Brightness.dark;
-  final seeded = ColorScheme.fromSeed(
-    seedColor: const Color(0xFF5556C9),
-    brightness: brightness,
-    dynamicSchemeVariant: DynamicSchemeVariant.tonalSpot,
-  );
   final prismSeeded = prism.seededColorScheme(
     seedColor: const Color(0xFF5556C9),
     brightness: brightness,
-    style: prism.ColorStyle.soft,
+    style: prism.ColorStyle.vivid,
   );
-
-  if (dark) {
-    return seeded.copyWith(
-      primary: const Color(0xFFC2C1FF),
-      onPrimary: const Color(0xFF29277D),
-      primaryContainer: const Color(0xFF383765),
-      onPrimaryContainer: const Color(0xFFE5E1FF),
-      secondaryContainer: const Color(0xFF30313C),
-      onSecondaryContainer: const Color(0xFFE2E1EC),
-      surface: prismSeeded.surface,
-      surfaceDim: prismSeeded.surfaceDim,
-      surfaceBright: prismSeeded.surfaceBright,
-      surfaceContainerLowest: prismSeeded.surfaceContainerLowest,
-      surfaceContainerLow: prismSeeded.surfaceContainerLow,
-      surfaceContainer: prismSeeded.surfaceContainer,
-      surfaceContainerHigh: prismSeeded.surfaceContainerHigh,
-      surfaceContainerHighest: prismSeeded.surfaceContainerHighest,
-      onSurface: prismSeeded.onSurface,
-      onSurfaceVariant: prismSeeded.onSurfaceVariant,
-      outline: const Color(0xFF8D8E9F),
-      outlineVariant: prismSeeded.outlineVariant,
-      error: const Color(0xFFFFB4AB),
-      onError: const Color(0xFF690005),
-      errorContainer: const Color(0xFF93000A),
-      onErrorContainer: const Color(0xFFFFDAD6),
-      inverseSurface: const Color(0xFFEEEFF7),
-      onInverseSurface: const Color(0xFF30313C),
-      // 面板底色已由 surfaceContainer 家族分层，M3 的 elevation tint 一律关掉。
-      surfaceTint: Colors.transparent,
-      shadow: Colors.black,
-      scrim: Colors.black,
-    );
+  final scheme = _fromPrismColorScheme(prismSeeded);
+  if (brightness == Brightness.dark &&
+      _contrast(scheme.onPrimary, scheme.primary) < 4.5) {
+    // 保证暗色模式主按钮白字（onPrimary）满足 WCAG AA ≥ 4.5:1 对比度。
+    var primary = scheme.primary;
+    for (var step = 0; step < 16; step++) {
+      if (_contrast(scheme.onPrimary, primary) >= 4.55) {
+        break;
+      }
+      primary = Color.lerp(primary, Colors.black, 0.02)!;
+    }
+    return scheme.copyWith(primary: primary);
   }
-
-  return seeded.copyWith(
-    primary: const Color(0xFF5556C9),
-    onPrimary: Colors.white,
-    primaryContainer: const Color(0xFFE4DFFF),
-    onPrimaryContainer: const Color(0xFF1D1857),
-    secondaryContainer: const Color(0xFFE5E5EF),
-    onSecondaryContainer: const Color(0xFF252531),
-    surface: prismSeeded.surface,
-    surfaceDim: prismSeeded.surfaceDim,
-    surfaceBright: prismSeeded.surfaceBright,
-    surfaceContainerLowest: prismSeeded.surfaceContainerLowest,
-    surfaceContainerLow: prismSeeded.surfaceContainerLow,
-    surfaceContainer: prismSeeded.surfaceContainer,
-    surfaceContainerHigh: prismSeeded.surfaceContainerHigh,
-    surfaceContainerHighest: prismSeeded.surfaceContainerHighest,
-    onSurface: prismSeeded.onSurface,
-    onSurfaceVariant: prismSeeded.onSurfaceVariant,
-    outline: const Color(0xFF77788C),
-    outlineVariant: prismSeeded.outlineVariant,
-    error: const Color(0xFFBA1A1A),
-    onError: Colors.white,
-    errorContainer: const Color(0xFFFFDAD6),
-    onErrorContainer: const Color(0xFF410002),
-    inverseSurface: const Color(0xFF30313C),
-    onInverseSurface: const Color(0xFFF2F1FA),
-    surfaceTint: Colors.transparent,
-    shadow: Colors.black,
-    scrim: Colors.black,
-  );
+  return scheme;
 }
 
 final Map<(Brightness, TargetPlatform), ThemeData> _materialThemeCache = {};
@@ -603,11 +599,11 @@ ThemeData buildAppTheme(Brightness brightness, {TargetPlatform? platform}) {
         ),
         border: AppInputBorder(
           borderRadius: prism.AppRadius.md,
-          borderSide: BorderSide(color: scheme.outlineVariant),
+          borderSide: BorderSide(color: scheme.outline),
         ),
         enabledBorder: AppInputBorder(
           borderRadius: prism.AppRadius.md,
-          borderSide: BorderSide(color: scheme.outlineVariant),
+          borderSide: BorderSide(color: scheme.outline),
         ),
         focusedBorder: AppInputBorder(
           borderRadius: prism.AppRadius.md,
@@ -651,14 +647,17 @@ ThemeData buildAppTheme(Brightness brightness, {TargetPlatform? platform}) {
           ),
           shape: const WidgetStatePropertyAll(prism.AppShape.full),
           textStyle: WidgetStatePropertyAll(text.labelLarge),
-          side: WidgetStateProperty.resolveWith(
-            (states) => BorderSide(
-              color: states.contains(WidgetState.focused)
-                  ? scheme.primary
-                  : scheme.outlineVariant,
-              width: states.contains(WidgetState.focused) ? 2 : 1,
-            ),
-          ),
+          side: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.focused)) {
+              return BorderSide(color: scheme.primary, width: 2);
+            }
+            if (states.contains(WidgetState.disabled)) {
+              return BorderSide(
+                color: scheme.onSurface.withValues(alpha: 0.12),
+              );
+            }
+            return BorderSide(color: scheme.outline);
+          }),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
@@ -922,7 +921,11 @@ extension AppShapeThemeExt on ThemeData {
       ),
     ),
     inputDecorationTheme: inputDecorationTheme.copyWith(
-      border: const AppInputBorder(),
+      border: AppInputBorder(
+        borderSide:
+            inputDecorationTheme.border?.borderSide ??
+            BorderSide(color: colorScheme.outline),
+      ),
     ),
     floatingActionButtonTheme: floatingActionButtonTheme.copyWith(
       shape: prism.AppShape.md,

@@ -265,7 +265,7 @@ class _MessageContentState extends State<MessageContent> {
       h5: style.copyWith(fontSize: 14, fontWeight: FontWeight.w600),
       h6: style.copyWith(fontSize: 13, fontWeight: FontWeight.w600),
       horizontalRuleDecoration: BoxDecoration(
-        border: Border(top: BorderSide(color: scheme.outlineVariant)),
+        border: Border(top: BorderSide(color: dividerColorOf(context))),
       ),
     );
 
@@ -555,10 +555,12 @@ class _ImageFrame extends StatelessWidget {
       constraints: const BoxConstraints(maxWidth: 460, maxHeight: 360),
       margin: const EdgeInsets.symmetric(vertical: 4),
       padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: scheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(Radii.medium),
-        border: Border.all(color: scheme.outlineVariant),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: Radii.mediumAll,
+          side: BorderSide(color: scheme.outline),
+        ),
       ),
       child: child,
     );
@@ -579,10 +581,12 @@ class _AttachmentCard extends StatelessWidget {
     return Container(
       constraints: const BoxConstraints(maxWidth: 460),
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
+      decoration: ShapeDecoration(
         color: scheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(Radii.medium),
-        border: Border.all(color: scheme.outlineVariant),
+        shape: RoundedSuperellipseBorder(
+          borderRadius: Radii.mediumAll,
+          side: BorderSide(color: scheme.outline),
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,

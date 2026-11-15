@@ -1,4 +1,13 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        ButtonStyle,
+        Card,
+        Divider,
+        FilledButton,
+        IconButton,
+        OutlinedButton,
+        Switch,
+        TextButton;
 
 import '../../../core/preferences.dart';
 import '../../../l10n/app_localizations.dart';
@@ -19,6 +28,14 @@ class AppearancePicker extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
+    final cardColor = surfaceColorFor(SurfaceLevel.card, scheme);
+    final previewBorderRadius = AppRadius.all(Radii.inner(AppCorner.lg, 4));
+    final previewBorder = ShapeDecoration(
+      shape: RoundedSuperellipseBorder(
+        borderRadius: previewBorderRadius,
+        side: BorderSide(color: dividerColorOf(context)),
+      ),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -40,49 +57,35 @@ class AppearancePicker extends StatelessWidget {
                 child: Semantics(
                   selected: value == mode,
                   button: true,
-                  child: Surface(
-                    color: Colors.transparent,
+                  child: PressSurface(
+                    fill: cardColor,
                     shape: AppShape.lg,
-                    clipBehavior: Clip.antiAlias,
-                    child: FocusRing(
-                      shape: AppShape.lg,
-                      child: PressSurface(
-                        fill: Colors.transparent,
-                        shape: AppShape.lg,
-                        look: PressLook.tint,
-                        onPressed: () => onChanged(mode),
-                        selected: value == mode,
-                        childFills: true,
+                    side: value == mode
+                        ? BorderSide(color: scheme.primary, width: 2)
+                        : BorderSide.none,
+                    look: PressLook.tint,
+                    onPressed: () => onChanged(mode),
+                    selected: value == mode,
+                    childFills: true,
+                    clipsChild: true,
+                    child: SurfaceScope(
+                      level: SurfaceLevel.card,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(4, 4, 4, 12),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: ShapeDecoration(
-                                shape: RoundedSuperellipseBorder(
-                                  borderRadius: AppRadius.lg,
-                                  side: BorderSide(
-                                    color: value == mode
-                                        ? scheme.primary
-                                        : dividerColorOf(context),
-                                    width: value == mode ? 2 : 1,
-                                  ),
-                                ),
-                              ),
+                            DecoratedBox(
+                              position: DecorationPosition.foreground,
+                              decoration: previewBorder,
                               child: ClipRSuperellipse(
-                                borderRadius: AppRadius.md,
+                                borderRadius: previewBorderRadius,
                                 child: SizedBox(
                                   height: 88,
                                   child: mode == AppThemePreference.system
-                                      ? Row(
-                                          children: [
-                                            Expanded(
-                                              child: _preview(Brightness.dark),
-                                            ),
-                                            Expanded(
-                                              child: _preview(Brightness.light),
-                                            ),
-                                          ],
+                                      ? _SplitPreview(
+                                          light: _preview(Brightness.light),
+                                          dark: _preview(Brightness.dark),
                                         )
                                       : _preview(
                                           mode == AppThemePreference.dark
@@ -92,27 +95,24 @@ class AppearancePicker extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 12),
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: Text(
-                                switch (mode) {
-                                  AppThemePreference.dark =>
-                                    l10n.settingsThemeDark,
-                                  AppThemePreference.light =>
-                                    l10n.settingsThemeLight,
-                                  AppThemePreference.system =>
-                                    l10n.settingsThemeSystem,
-                                },
-                                textAlign: TextAlign.center,
-                                style: AppTextStyle.footnote
-                                    .of(context, emphasized: value == mode)
-                                    .copyWith(
-                                      color: value == mode
-                                          ? scheme.primary
-                                          : scheme.onSurfaceVariant,
-                                    ),
-                              ),
+                            const SizedBox(height: 10),
+                            Text(
+                              switch (mode) {
+                                AppThemePreference.dark =>
+                                  l10n.settingsThemeDark,
+                                AppThemePreference.light =>
+                                  l10n.settingsThemeLight,
+                                AppThemePreference.system =>
+                                  l10n.settingsThemeSystem,
+                              },
+                              textAlign: TextAlign.center,
+                              style: AppTextStyle.footnote
+                                  .of(context, emphasized: value == mode)
+                                  .copyWith(
+                                    color: value == mode
+                                        ? scheme.primary
+                                        : scheme.onSurfaceVariant,
+                                  ),
                             ),
                           ],
                         ),
@@ -132,6 +132,9 @@ class AppearancePicker extends StatelessWidget {
     final scheme = buildAppTheme(brightness).colorScheme;
     final pageColor = surfaceColorFor(SurfaceLevel.page, scheme);
     final cardColor = surfaceColorFor(SurfaceLevel.card, scheme);
+    final lineStrong = scheme.onSurface.withValues(alpha: 0.72);
+    final lineSoft = scheme.onSurfaceVariant.withValues(alpha: 0.4);
+    final lineFaint = scheme.onSurfaceVariant.withValues(alpha: 0.16);
     return ExcludeSemantics(
       child: ColoredBox(
         color: pageColor,
@@ -148,7 +151,32 @@ class AppearancePicker extends StatelessWidget {
               flex: 2,
               child: ColoredBox(
                 color: scheme.surfaceContainerLow,
-                child: const SizedBox.expand(),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 8,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Container(
+                        height: 4,
+                        decoration: ShapeDecoration(
+                          color: lineSoft,
+                          shape: AppShape.full,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Container(
+                        height: 4,
+                        decoration: ShapeDecoration(
+                          color: lineFaint,
+                          shape: AppShape.full,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
             Expanded(
@@ -166,15 +194,35 @@ class AppearancePicker extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Container(height: 4, color: scheme.outlineVariant),
+                    Container(
+                      height: 4,
+                      decoration: ShapeDecoration(
+                        color: lineStrong,
+                        shape: AppShape.full,
+                      ),
+                    ),
                     const SizedBox(height: 5),
-                    Container(height: 4, color: scheme.outlineVariant),
+                    FractionallySizedBox(
+                      alignment: AlignmentDirectional.centerStart,
+                      widthFactor: 0.72,
+                      child: Container(
+                        height: 4,
+                        decoration: ShapeDecoration(
+                          color: lineSoft,
+                          shape: AppShape.full,
+                        ),
+                      ),
+                    ),
                     const Spacer(),
                     Container(
                       height: 12,
                       decoration: ShapeDecoration(
                         color: cardColor,
-                        shape: AppShape.sm,
+                        shape: AppShape.sm.copyWith(
+                          side: BorderSide(
+                            color: scheme.onSurface.withValues(alpha: 0.14),
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -186,4 +234,37 @@ class AppearancePicker extends StatelessWidget {
       ),
     );
   }
+}
+
+class _SplitPreview extends StatelessWidget {
+  const _SplitPreview({required this.light, required this.dark});
+
+  final Widget light;
+  final Widget dark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        light,
+        ClipPath(clipper: _DiagonalClipper(), child: dark),
+      ],
+    );
+  }
+}
+
+class _DiagonalClipper extends CustomClipper<Path> {
+  @override
+  Path getClip(Size size) {
+    return Path()
+      ..moveTo(size.width * 0.7, 0)
+      ..lineTo(size.width, 0)
+      ..lineTo(size.width, size.height)
+      ..lineTo(size.width * 0.3, size.height)
+      ..close();
+  }
+
+  @override
+  bool shouldReclip(_DiagonalClipper oldClipper) => false;
 }
