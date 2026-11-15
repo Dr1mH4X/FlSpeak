@@ -43,6 +43,7 @@ class ChatPane extends StatefulWidget {
     required this.onRecipientChanged,
     required this.onReply,
     this.selfClientId,
+    this.selfChannelId,
     this.recipientId,
     this.onRecipientSelected,
     this.unreadScopes = const <ChatScope>{},
@@ -66,6 +67,7 @@ class ChatPane extends StatefulWidget {
   final Future<bool> Function(String) onSend;
   final String selfUid;
   final int? selfClientId;
+  final int? selfChannelId;
   final List<ClientView> recipients;
   final String? recipientUid;
   final int? recipientId;
@@ -185,15 +187,46 @@ class _ChatPaneState extends State<ChatPane> {
   /// 私聊对象离线后仍保留会话标题，历史还能读。
   String? _recipientName;
 
+  String _commandPrefixFor(ClientView bot) {
+    final prefix = bot.botCommandPrefix;
+    return (prefix != null && prefix.isNotEmpty) ? prefix : '/';
+  }
+
+  List<ClientView> get _commandBots {
+    switch (widget.scope) {
+      case ChatScope.direct:
+        final recipient = _selectedRecipient;
+        if (recipient == null ||
+            !recipient.capabilities.contains('chat:slash_commands')) {
+          return const [];
+        }
+        return [recipient];
+      case ChatScope.channel:
+        if (!widget.canSendChannel || widget.selfChannelId == null) {
+          return const [];
+        }
+        return widget.recipients
+            .where(
+              (peer) =>
+                  peer.channelId == widget.selfChannelId &&
+                  peer.id != widget.selfClientId &&
+                  peer.capabilities.contains('chat:slash_commands'),
+            )
+            .toList();
+      case ChatScope.server:
+        return const [];
+    }
+  }
+
   void _onInputChanged() {
-    if (widget.scope != ChatScope.direct || !_input.text.startsWith('/')) {
+    final text = _input.text;
+    if (text.isEmpty || text.contains(' ')) {
       return;
     }
-    final recipient = _selectedRecipient;
-    if (recipient != null &&
-        recipient.capabilities.contains('chat:slash_commands') &&
-        recipient.botCommands == null) {
-      widget.onFetchBotCommands?.call(recipient);
+    for (final bot in _commandBots) {
+      if (bot.botCommands == null) {
+        widget.onFetchBotCommands?.call(bot);
+      }
     }
   }
 
@@ -489,40 +522,37 @@ class _ChatPaneState extends State<ChatPane> {
           ),
         ValueListenableBuilder<TextEditingValue>(
           valueListenable: _input,
-          builder: (context, value, _) => _buildSlashCommandAutocomplete(
-            context,
-            _selectedRecipient,
-            value.text,
-          ),
+          builder: (context, value, _) =>
+              _buildSlashCommandAutocomplete(context, value.text),
         ),
         _buildComposer(context, l10n),
       ],
     );
   }
 
-  Widget _buildSlashCommandAutocomplete(
-    BuildContext context,
-    ClientView? recipient,
-    String text,
-  ) {
-    if (!text.startsWith('/') ||
-        widget.scope != ChatScope.direct ||
-        text.contains(' ')) {
+  Widget _buildSlashCommandAutocomplete(BuildContext context, String text) {
+    if (text.isEmpty || text.contains(' ')) {
       return const SizedBox.shrink();
     }
-    if (recipient == null ||
-        !recipient.capabilities.contains('chat:slash_commands')) {
-      return const SizedBox.shrink();
-    }
-    final commands = recipient.botCommands;
-    if (commands == null || commands.isEmpty) {
+    final bots = _commandBots;
+    if (bots.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    final query = text.substring(1).toLowerCase();
-    final matched = commands
-        .where((c) => c.name.toLowerCase().startsWith(query))
-        .toList();
+    final matched =
+        <({ClientView bot, String prefix, BotCommandView command})>[];
+    for (final bot in bots) {
+      final commands = bot.botCommands;
+      if (commands == null || commands.isEmpty) continue;
+      final prefix = _commandPrefixFor(bot);
+      if (!text.startsWith(prefix)) continue;
+      final query = text.substring(prefix.length).toLowerCase();
+      for (final cmd in commands) {
+        if (cmd.name.toLowerCase().startsWith(query)) {
+          matched.add((bot: bot, prefix: prefix, command: cmd));
+        }
+      }
+    }
     if (matched.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -552,11 +582,12 @@ class _ChatPaneState extends State<ChatPane> {
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   itemCount: matched.length,
                   itemBuilder: (context, index) {
-                    final cmd = matched[index];
+                    final item = matched[index];
+                    final cmd = item.command;
                     return AnimatedInkWell(
                       customBorder: AppShape.sm,
                       onTap: () {
-                        final completed = '/${cmd.name} ';
+                        final completed = '${item.prefix}${cmd.name} ';
                         _input.value = TextEditingValue(
                           text: completed,
                           selection: TextSelection.collapsed(
@@ -573,7 +604,7 @@ class _ChatPaneState extends State<ChatPane> {
                         child: Row(
                           children: [
                             Text(
-                              '/${cmd.name}',
+                              '${item.prefix}${cmd.name}',
                               style: context.texts.labelLarge?.copyWith(
                                 color: scheme.primary,
                                 fontWeight: FontWeight.w600,
@@ -599,6 +630,17 @@ class _ChatPaneState extends State<ChatPane> {
                                 ),
                               ),
                             ),
+                            if (widget.scope == ChatScope.channel) ...[
+                              const SizedBox(width: 8),
+                              Text(
+                                item.bot.nickname,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: context.texts.labelSmall?.copyWith(
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),

@@ -2892,8 +2892,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ClientView dco_decode_client_view(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 13)
-      throw Exception('unexpected arr length: expect 13 but see ${arr.length}');
+    if (arr.length != 14)
+      throw Exception('unexpected arr length: expect 14 but see ${arr.length}');
     return ClientView(
       id: dco_decode_i_32(arr[0]),
       nickname: dco_decode_String(arr[1]),
@@ -2908,6 +2908,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       appVersion: dco_decode_opt_String(arr[10]),
       capabilities: dco_decode_list_String(arr[11]),
       botCommands: dco_decode_opt_list_bot_command_view(arr[12]),
+      botCommandPrefix: dco_decode_opt_String(arr[13]),
     );
   }
 
@@ -3720,6 +3721,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_appVersion = sse_decode_opt_String(deserializer);
     var var_capabilities = sse_decode_list_String(deserializer);
     var var_botCommands = sse_decode_opt_list_bot_command_view(deserializer);
+    var var_botCommandPrefix = sse_decode_opt_String(deserializer);
     return ClientView(
       id: var_id,
       nickname: var_nickname,
@@ -3734,6 +3736,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       appVersion: var_appVersion,
       capabilities: var_capabilities,
       botCommands: var_botCommands,
+      botCommandPrefix: var_botCommandPrefix,
     );
   }
 
@@ -4749,6 +4752,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_String(self.appVersion, serializer);
     sse_encode_list_String(self.capabilities, serializer);
     sse_encode_opt_list_bot_command_view(self.botCommands, serializer);
+    sse_encode_opt_String(self.botCommandPrefix, serializer);
   }
 
   @protected

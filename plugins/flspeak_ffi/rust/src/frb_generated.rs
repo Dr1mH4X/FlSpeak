@@ -3567,6 +3567,7 @@ impl SseDecode for crate::api::session::ClientView {
         let mut var_capabilities = <Vec<String>>::sse_decode(deserializer);
         let mut var_botCommands =
             <Option<Vec<crate::api::session::BotCommandView>>>::sse_decode(deserializer);
+        let mut var_botCommandPrefix = <Option<String>>::sse_decode(deserializer);
         return crate::api::session::ClientView {
             id: var_id,
             nickname: var_nickname,
@@ -3581,6 +3582,7 @@ impl SseDecode for crate::api::session::ClientView {
             app_version: var_appVersion,
             capabilities: var_capabilities,
             bot_commands: var_botCommands,
+            bot_command_prefix: var_botCommandPrefix,
         };
     }
 }
@@ -4990,6 +4992,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::session::ClientView {
             self.app_version.into_into_dart().into_dart(),
             self.capabilities.into_into_dart().into_dart(),
             self.bot_commands.into_into_dart().into_dart(),
+            self.bot_command_prefix.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -5792,6 +5795,7 @@ impl SseEncode for crate::api::session::ClientView {
             self.bot_commands,
             serializer,
         );
+        <Option<String>>::sse_encode(self.bot_command_prefix, serializer);
     }
 }
 

@@ -459,6 +459,7 @@ class ClientView {
   final String? appVersion;
   final List<String> capabilities;
   final List<BotCommandView>? botCommands;
+  final String? botCommandPrefix;
 
   const ClientView({
     required this.id,
@@ -474,6 +475,7 @@ class ClientView {
     this.appVersion,
     this.capabilities = const [],
     this.botCommands,
+    this.botCommandPrefix,
   });
 
   @override
@@ -490,7 +492,8 @@ class ClientView {
       appName.hashCode ^
       appVersion.hashCode ^
       capabilities.hashCode ^
-      botCommands.hashCode;
+      botCommands.hashCode ^
+      botCommandPrefix.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -509,7 +512,8 @@ class ClientView {
           appName == other.appName &&
           appVersion == other.appVersion &&
           capabilities == other.capabilities &&
-          botCommands == other.botCommands;
+          botCommands == other.botCommands &&
+          botCommandPrefix == other.botCommandPrefix;
 }
 
 @freezed

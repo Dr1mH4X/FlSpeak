@@ -574,6 +574,7 @@ impl Actor {
         self.last_network_sample_error = None;
         self.peer_identities.clear();
         self.peer_commands.clear();
+        self.peer_command_prefixes.clear();
         self.commands_fetching.clear();
         self.ack_limiter.reset(Instant::now());
         self.announce_state.reset();

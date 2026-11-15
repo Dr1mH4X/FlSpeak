@@ -130,6 +130,7 @@ fn invalidate_handlers_resets_open_protocol_caches_and_cooldowns() {
         },
     );
     actor.peer_commands.insert("bot-uid".into(), Vec::new());
+    actor.peer_command_prefixes.insert("bot-uid".into(), "!".into());
     actor.commands_fetching.insert("other-uid".into());
     let now = Instant::now();
     assert!(
@@ -149,6 +150,7 @@ fn invalidate_handlers_resets_open_protocol_caches_and_cooldowns() {
 
     assert!(actor.peer_identities.is_empty());
     assert!(actor.peer_commands.is_empty());
+    assert!(actor.peer_command_prefixes.is_empty());
     assert!(actor.commands_fetching.is_empty());
     assert!(actor.ack_limiter.cooldowns.is_empty());
     assert_eq!(actor.ack_limiter.tokens, ACK_GLOBAL_BURST);

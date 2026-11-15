@@ -221,6 +221,7 @@ mod tests {
                     app_version: Some("0.1.12".into()),
                     capabilities: Vec::new(),
                     bot_commands: None,
+                    bot_command_prefix: None,
                 },
                 ClientView {
                     id: 9,
@@ -236,6 +237,7 @@ mod tests {
                     app_version: None,
                     capabilities: Vec::new(),
                     bot_commands: None,
+                    bot_command_prefix: None,
                 },
             ],
         ));

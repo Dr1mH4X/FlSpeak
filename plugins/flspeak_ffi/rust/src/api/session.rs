@@ -87,6 +87,7 @@ pub struct ClientView {
     #[frb(default = "const []")]
     pub capabilities: Vec<String>,
     pub bot_commands: Option<Vec<BotCommandView>>,
+    pub bot_command_prefix: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -936,6 +937,7 @@ impl From<CoreClientView> for ClientView {
             bot_commands: view
                 .bot_commands
                 .map(|cmds| cmds.into_iter().map(BotCommandView::from).collect()),
+            bot_command_prefix: view.bot_command_prefix,
         }
     }
 }

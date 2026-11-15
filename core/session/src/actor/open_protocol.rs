@@ -13,6 +13,7 @@ const MAX_PAYLOAD_BYTES: usize = 1024;
 const MAX_IDENTITY_FIELD_CHARS: usize = 32;
 const MAX_CAPABILITIES: usize = 16;
 const MAX_BOT_COMMANDS: usize = 16;
+const MAX_COMMAND_PREFIX_CHARS: usize = 8;
 const MAX_COMMAND_NAME_CHARS: usize = 24;
 const MAX_COMMAND_ARGS_CHARS: usize = 32;
 const MAX_COMMAND_DESC_CHARS: usize = 64;
@@ -35,6 +36,8 @@ pub(super) struct IdentityPayload {
 struct CommandsPayload {
     v: u8,
     action: String,
+    #[serde(default)]
+    command_prefix: Option<String>,
     #[serde(default)]
     commands: Vec<BotCommandView>,
 }
@@ -233,6 +236,7 @@ impl Actor {
             client.app_version = Some(env!("CARGO_PKG_VERSION").into());
             client.capabilities = self_capabilities();
             client.bot_commands = None;
+            client.bot_command_prefix = None;
             return;
         }
         if client.uid.is_empty() {
@@ -246,6 +250,9 @@ impl Actor {
         }
         if let Some(commands) = self.peer_commands.get(&client.uid) {
             client.bot_commands = Some(commands.clone());
+        }
+        if let Some(prefix) = self.peer_command_prefixes.get(&client.uid) {
+            client.bot_command_prefix = Some(prefix.clone());
         }
     }
 
@@ -486,7 +493,12 @@ impl Actor {
         }
         self.commands_fetching.remove(&peer_uid);
         let sanitized = sanitize_bot_commands(payload.commands);
-        self.peer_commands.insert(peer_uid, sanitized);
+        self.peer_commands.insert(peer_uid.clone(), sanitized);
+        if let Some(prefix) = sanitize_command_prefix(payload.command_prefix.as_deref()) {
+            self.peer_command_prefixes.insert(peer_uid, prefix);
+        } else {
+            self.peer_command_prefixes.remove(&peer_uid);
+        }
         self.sync_peer_metadata_to_snapshot();
     }
 
@@ -555,6 +567,20 @@ pub(super) fn sanitize_identity_payload(payload: &IdentityPayload) -> CachedPeer
         app_name,
         app_version,
         capabilities,
+    }
+}
+
+pub(super) fn sanitize_command_prefix(raw: Option<&str>) -> Option<String> {
+    let trimmed: String = raw?
+        .trim()
+        .chars()
+        .filter(|c| !c.is_control() && !c.is_whitespace())
+        .take(MAX_COMMAND_PREFIX_CHARS)
+        .collect();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed)
     }
 }
 
@@ -892,6 +918,7 @@ mod tests {
         let payload = serde_json::json!({
             "v": 1,
             "action": "list_ack",
+            "command_prefix": "!",
             "commands": raw_commands,
         })
         .to_string();
@@ -916,6 +943,7 @@ mod tests {
         };
         let bot = clients.iter().find(|c| c.id == 12).expect("bot row");
         assert_eq!(bot.bot_commands.as_ref().map(Vec::len), Some(16));
+        assert_eq!(bot.bot_command_prefix.as_deref(), Some("!"));
 
         // 命中本地缓存时 fetch_bot_commands 直接返回 Ok(())，跳过网络请求。
         assert!(actor.fetch_bot_commands(12, "bot-uid").await.is_ok());

@@ -306,6 +306,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
           unreadPeers: view.unreadPeers,
           selfUid: view.selfUid,
           selfClientId: view.selfClientId,
+          selfChannelId: view.selfChannelId,
           onRecipientChanged: controller.selectDirectRecipient,
           onRecipientSelected: (peer) =>
               controller.selectDirectRecipient(peer.uid, clientId: peer.id),

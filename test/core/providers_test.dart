@@ -1285,6 +1285,7 @@ void main() {
             appVersion: '1.2.0',
             capabilities: ['chat:slash_commands'],
             botCommands: [playCmd],
+            botCommandPrefix: '!',
           ),
         ],
       ),
@@ -1303,7 +1304,63 @@ void main() {
     expect(bot.appVersion, '1.2.0');
     expect(bot.capabilities, ['chat:slash_commands']);
     expect(bot.botCommands, [playCmd]);
+    expect(bot.botCommandPrefix, '!');
   });
+
+  test(
+    'channel scope auto-fetches commands for bots in current channel only',
+    () async {
+      final events = StreamController<CoreEvent>.broadcast(sync: true);
+      final core = _Core(events);
+      final container = ProviderContainer(
+        overrides: [coreSessionProvider.overrideWithValue(core)],
+      );
+      addTearDown(() async {
+        container.dispose();
+        await events.close();
+      });
+
+      final controller = container.read(sessionViewProvider.notifier);
+      events.add(
+        const CoreEvent.state(
+          state: CoreSessionState.connected(clientId: 1, channelId: 5),
+        ),
+      );
+      events.add(
+        const CoreEvent.snapshot(
+          channels: [
+            ChannelView(id: 5, parentId: 0, name: 'Lobby', description: ''),
+            ChannelView(id: 8, parentId: 0, name: 'Other', description: ''),
+          ],
+          clients: [
+            ClientView(id: 1, nickname: 'Self', uid: 'self', channelId: 5),
+            ClientView(
+              id: 9,
+              nickname: 'MusicBot',
+              uid: 'bot-uid',
+              channelId: 5,
+              clientType: ClientType.bot,
+              capabilities: ['chat:slash_commands'],
+            ),
+            ClientView(
+              id: 10,
+              nickname: 'OtherBot',
+              uid: 'other-bot-uid',
+              channelId: 8,
+              clientType: ClientType.bot,
+              capabilities: ['chat:slash_commands'],
+            ),
+          ],
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(core.fetchedBotCommands, isEmpty);
+
+      controller.selectChatScope(ChatScope.channel);
+      await Future<void>.delayed(Duration.zero);
+      expect(core.fetchedBotCommands, [(targetClid: 9, targetUid: 'bot-uid')]);
+    },
+  );
 
   test(
     'joinChannel moves without triggering a redundant requestSnapshot',

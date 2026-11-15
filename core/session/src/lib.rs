@@ -136,6 +136,7 @@ pub struct ClientView {
     pub app_version: Option<String>,
     pub capabilities: Vec<String>,
     pub bot_commands: Option<Vec<BotCommandView>>,
+    pub bot_command_prefix: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

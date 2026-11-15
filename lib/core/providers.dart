@@ -263,6 +263,9 @@ class SessionController extends Notifier<SessionView> {
           ? _clearPeerUnread(state.unreadPeers, state.directRecipientUid)
           : state.unreadPeers,
     );
+    if (scope == ChatScope.channel) {
+      _probeChannelBots();
+    }
   }
 
   void selectDirectRecipient(String uid, {int? clientId}) {
@@ -284,6 +287,23 @@ class SessionController extends Notifier<SessionView> {
     } else if (recipient.capabilities.contains('chat:slash_commands') &&
         recipient.botCommands == null) {
       unawaited(fetchBotCommands(recipient.id, recipient.uid));
+    }
+  }
+
+  void _probeChannelBots() {
+    if (!state.connected || state.chatScope != ChatScope.channel) return;
+    final channelId = state.selfChannelId;
+    if (channelId == null) return;
+    for (final client in state.clients) {
+      if (client.channelId != channelId ||
+          client.id == state.selfClientId ||
+          client.uid.isEmpty) {
+        continue;
+      }
+      if (client.capabilities.contains('chat:slash_commands') &&
+          client.botCommands == null) {
+        unawaited(fetchBotCommands(client.id, client.uid));
+      }
     }
   }
 
@@ -1040,6 +1060,8 @@ class SessionController extends Notifier<SessionView> {
             recipient.capabilities.contains('chat:slash_commands') &&
             recipient.botCommands == null) {
           unawaited(fetchBotCommands(recipient.id, recipient.uid));
+        } else if (state.chatScope == ChatScope.channel) {
+          _probeChannelBots();
         }
       case CoreEvent_History(:final messages):
         state = current.copyWith(
@@ -1111,6 +1133,7 @@ class SessionController extends Notifier<SessionView> {
               appVersion: existing?.appVersion,
               capabilities: existing?.capabilities ?? const [],
               botCommands: existing?.botCommands,
+              botCommandPrefix: existing?.botCommandPrefix,
             ),
           ],
         );
@@ -1146,11 +1169,16 @@ class SessionController extends Notifier<SessionView> {
                   appVersion: client.appVersion,
                   capabilities: client.capabilities,
                   botCommands: client.botCommands,
+                  botCommandPrefix: client.botCommandPrefix,
                 )
               else
                 client,
           ],
         );
+        if (state.chatScope == ChatScope.channel &&
+            channelId == state.selfChannelId) {
+          _probeChannelBots();
+        }
       case CoreEvent_ClientUpdated(
         :final id,
         :final inputMuted,
@@ -1176,6 +1204,7 @@ class SessionController extends Notifier<SessionView> {
                 appVersion: client.appVersion,
                 capabilities: client.capabilities,
                 botCommands: client.botCommands,
+                botCommandPrefix: client.botCommandPrefix,
               )
             else
               client,
@@ -1431,6 +1460,7 @@ class SessionController extends Notifier<SessionView> {
             appVersion: client.appVersion,
             capabilities: client.capabilities,
             botCommands: client.botCommands,
+            botCommandPrefix: client.botCommandPrefix,
           )
         else
           client,

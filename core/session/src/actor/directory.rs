@@ -141,6 +141,7 @@ impl Actor {
             app_version: Some(env!("CARGO_PKG_VERSION").into()),
             capabilities: self_capabilities(),
             bot_commands: None,
+            bot_command_prefix: None,
         };
         match rows.iter_mut().find(|row| row.id == self_id) {
             Some(row) => *row = view,
@@ -189,6 +190,7 @@ impl Actor {
                 app_version: Some(env!("CARGO_PKG_VERSION").into()),
                 capabilities: self_capabilities(),
                 bot_commands: None,
+                bot_command_prefix: None,
             }),
         }
     }
@@ -648,6 +650,7 @@ mod tests {
                     app_version: Some(env!("CARGO_PKG_VERSION").into()),
                     capabilities: Vec::new(),
                     bot_commands: None,
+                    bot_command_prefix: None,
                 },
                 ClientView {
                     id: 2,
@@ -663,6 +666,7 @@ mod tests {
                     app_version: Some("0.1.12".into()),
                     capabilities: vec!["chat".into()],
                     bot_commands: None,
+                    bot_command_prefix: None,
                 },
             ],
         ));

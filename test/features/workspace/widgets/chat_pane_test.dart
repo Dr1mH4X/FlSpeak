@@ -703,4 +703,167 @@ void main() {
       expect(find.text('点播指定歌曲或音频流'), findsNothing);
     },
   );
+
+  testWidgets(
+    'command autocomplete strictly matches declared botCommandPrefix and completes with it',
+    (tester) async {
+      const botRecipient = ClientView(
+        id: 9,
+        nickname: 'TSMusicBot',
+        uid: 'bot-uid',
+        channelId: 5,
+        clientType: ClientType.bot,
+        capabilities: ['chat:slash_commands'],
+        botCommandPrefix: '!',
+        botCommands: [
+          BotCommandView(name: 'play', args: '<url>', desc: '播放音乐'),
+          BotCommandView(name: 'skip', args: '', desc: '下一首'),
+        ],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: SizedBox(
+              width: 480,
+              height: 600,
+              child: ChatPane(
+                channelName: 'Lobby',
+                messages: const [],
+                scope: ChatScope.direct,
+                canSendChannel: true,
+                busy: false,
+                selfUid: 'self',
+                selfClientId: 1,
+                selfChannelId: 5,
+                recipients: const [botRecipient],
+                recipientUid: 'bot-uid',
+                recipientId: 9,
+                onRecipientChanged: (_) {},
+                onReply: (_) {},
+                onScopeChanged: (_) {},
+                onSend: (_) async => true,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // 声明了 "!" 前缀的机器人不响应 "/"。
+      await tester.enterText(find.byType(TextField), '/');
+      await tester.pump();
+      expect(find.text('/play'), findsNothing);
+      expect(find.text('!play'), findsNothing);
+
+      // 键入 "!" 后匹配并展示 "!play" 与 "!skip"。
+      await tester.enterText(find.byType(TextField), '!');
+      await tester.pumpAndSettle();
+      expect(find.text('!play'), findsOneWidget);
+      expect(find.text('!skip'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), '!pl');
+      await tester.pump();
+      expect(find.text('!play'), findsOneWidget);
+      expect(find.text('!skip'), findsNothing);
+
+      await tester.tap(find.text('!play'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        '!play ',
+      );
+      expect(find.text('播放音乐'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'channel chat merges commands from same-channel bots with matching prefix and shows bot label',
+    (tester) async {
+      const musicBot = ClientView(
+        id: 9,
+        nickname: 'TSMusicBot',
+        uid: 'music-uid',
+        channelId: 5,
+        clientType: ClientType.bot,
+        capabilities: ['chat:slash_commands'],
+        botCommandPrefix: '!',
+        botCommands: [
+          BotCommandView(name: 'play', args: '<url>', desc: '播放音乐'),
+        ],
+      );
+      const clawBot = ClientView(
+        id: 10,
+        nickname: 'ClawBot',
+        uid: 'claw-uid',
+        channelId: 5,
+        clientType: ClientType.bot,
+        capabilities: ['chat:slash_commands'],
+        botCommands: [
+          BotCommandView(name: 'ask', args: '<prompt>', desc: '向助手提问'),
+        ],
+      );
+      const remoteBot = ClientView(
+        id: 11,
+        nickname: 'RemoteBot',
+        uid: 'remote-uid',
+        channelId: 8,
+        clientType: ClientType.bot,
+        capabilities: ['chat:slash_commands'],
+        botCommandPrefix: '!',
+        botCommands: [
+          BotCommandView(name: 'ping', args: '', desc: '远程频道命令'),
+        ],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: SizedBox(
+              width: 480,
+              height: 600,
+              child: ChatPane(
+                channelName: 'Lobby',
+                messages: const [],
+                scope: ChatScope.channel,
+                canSendChannel: true,
+                busy: false,
+                selfUid: 'self',
+                selfClientId: 1,
+                selfChannelId: 5,
+                recipients: const [musicBot, clawBot, remoteBot],
+                recipientUid: null,
+                onRecipientChanged: (_) {},
+                onReply: (_) {},
+                onScopeChanged: (_) {},
+                onSend: (_) async => true,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // 键入 "!" 只匹配当前频道且前缀为 "!" 的 TSMusicBot，并显示机器人名称标签。
+      await tester.enterText(find.byType(TextField), '!');
+      await tester.pumpAndSettle();
+      expect(find.text('!play'), findsOneWidget);
+      expect(find.text('TSMusicBot'), findsOneWidget);
+      expect(find.text('/ask'), findsNothing);
+      expect(find.text('!ping'), findsNothing);
+
+      // 键入 "/" 只匹配未声明前缀（默认 "/"）的 ClawBot。
+      await tester.enterText(find.byType(TextField), '/');
+      await tester.pumpAndSettle();
+      expect(find.text('/ask'), findsOneWidget);
+      expect(find.text('ClawBot'), findsOneWidget);
+      expect(find.text('!play'), findsNothing);
+    },
+  );
 }

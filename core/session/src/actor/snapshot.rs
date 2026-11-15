@@ -255,6 +255,7 @@ impl From<ClientInfo> for ClientView {
             app_version: None,
             capabilities: Vec::new(),
             bot_commands: None,
+            bot_command_prefix: None,
         }
     }
 }
