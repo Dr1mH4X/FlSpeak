@@ -74,6 +74,13 @@ set_target_properties(${BINARY_NAME}
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+if(TARGET flutter_webrtc_plugin)
+  # Use SHELL: so CMake keeps this -include alongside flutter_webrtc's -include cstdint.
+  target_compile_options(flutter_webrtc_plugin PRIVATE
+    "SHELL:-include \"${CMAKE_CURRENT_SOURCE_DIR}/runner/webrtc_desktop_capture_override.h\""
+  )
+endif()
+
 
 # === Installation ===
 # By default, "installing" just makes a relocatable bundle in the build

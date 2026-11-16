@@ -57,6 +57,12 @@ add_subdirectory("runner")
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+if(TARGET flutter_webrtc_plugin)
+  target_compile_options(flutter_webrtc_plugin PRIVATE
+    "/FI${CMAKE_CURRENT_SOURCE_DIR}/runner/webrtc_desktop_capture_override.h"
+  )
+endif()
+
 
 # === Installation ===
 # Support files are copied into place next to the executable, so that it can

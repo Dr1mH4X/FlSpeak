@@ -36,6 +36,7 @@ class MainFlutterWindow: NSWindow {
     self.styleMask.insert(.fullSizeContentView)
 
     RegisterGeneratedPlugins(registry: flutterViewController)
+    DesktopCaptureFocusGuard.installIfNeeded()
     setupGlobalHotkey(flutterViewController)
     setupWindowChannel(flutterViewController)
     NotificationCenter.default.addObserver(
@@ -178,5 +179,92 @@ class MainFlutterWindow: NSWindow {
       UnregisterEventHotKey(ref)
       hotkeyRef = nil
     }
+  }
+}
+
+/// 窗口共享启动时拦截外部应用激活，避免 WebRTC `RTCDesktopCapturer` 将被共享应用切到前台。
+///
+/// `webrtc::WindowCapturerMac::FocusOnSelectedSource()` 会对目标进程调用
+/// `-[NSRunningApplication activateWithOptions:]` 并在返回 `NO` 时中止采集；
+/// 在 `startCapture` / `startCaptureWithFPS:` 调用栈内对该调用直接返回 `true`，
+/// 既保留窗口后台采集，又不抢占当前前台焦点。
+private enum DesktopCaptureFocusGuard {
+  private static let suppressionKey = "fls.suppressExternalAppActivation"
+  private static var installed = false
+
+  static var isSuppressing: Bool {
+    (Thread.current.threadDictionary[suppressionKey] as? Int ?? 0) > 0
+  }
+
+  static func withSuppression<T>(_ body: () -> T) -> T {
+    let dict = Thread.current.threadDictionary
+    let depth = dict[suppressionKey] as? Int ?? 0
+    dict[suppressionKey] = depth + 1
+    defer {
+      if depth == 0 {
+        dict.removeObject(forKey: suppressionKey)
+      } else {
+        dict[suppressionKey] = depth
+      }
+    }
+    return body()
+  }
+
+  static func installIfNeeded() {
+    guard !installed else { return }
+    installed = true
+
+    let originalSelector = #selector(NSRunningApplication.activate(options:))
+    let swizzledSelector = #selector(NSRunningApplication.fls_activate(options:))
+    if let originalMethod = class_getInstanceMethod(NSRunningApplication.self, originalSelector),
+      let swizzledMethod = class_getInstanceMethod(NSRunningApplication.self, swizzledSelector)
+    {
+      method_exchangeImplementations(originalMethod, swizzledMethod)
+    }
+
+    guard let capturerClass: AnyClass = NSClassFromString("RTCDesktopCapturer") else { return }
+
+    wrapMethod(capturerClass, selectorName: "startCaptureWithFPS:") { originalIMP, selector in
+      typealias StartWithFPSIMP = @convention(c) (AnyObject, Selector, Int) -> Void
+      let original = unsafeBitCast(originalIMP, to: StartWithFPSIMP.self)
+      let block: @convention(block) (AnyObject, Int) -> Void = { receiver, fps in
+        DesktopCaptureFocusGuard.withSuppression {
+          original(receiver, selector, fps)
+        }
+      }
+      return block
+    }
+
+    wrapMethod(capturerClass, selectorName: "startCapture") { originalIMP, selector in
+      typealias StartIMP = @convention(c) (AnyObject, Selector) -> Void
+      let original = unsafeBitCast(originalIMP, to: StartIMP.self)
+      let block: @convention(block) (AnyObject) -> Void = { receiver in
+        DesktopCaptureFocusGuard.withSuppression {
+          original(receiver, selector)
+        }
+      }
+      return block
+    }
+  }
+
+  private static func wrapMethod(
+    _ cls: AnyClass,
+    selectorName: String,
+    makeWrapper: (_ original: IMP, _ selector: Selector) -> Any
+  ) {
+    let selector = NSSelectorFromString(selectorName)
+    guard let method = class_getInstanceMethod(cls, selector) else { return }
+    let originalIMP = method_getImplementation(method)
+    let block = makeWrapper(originalIMP, selector)
+    method_setImplementation(method, imp_implementationWithBlock(block))
+  }
+}
+
+private extension NSRunningApplication {
+  @objc func fls_activate(options: NSApplication.ActivationOptions) -> Bool {
+    if DesktopCaptureFocusGuard.isSuppressing && self != NSRunningApplication.current {
+      return true
+    }
+    return fls_activate(options: options)
   }
 }
