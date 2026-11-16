@@ -188,6 +188,7 @@ pub(crate) struct Actor {
     input_device: Option<String>,
     output_device: Option<String>,
     capture_active: bool,
+    mic_permitted: bool,
     audio_since: Instant,
     audio_enabled: bool,
     voice_tx_gate: Rc<RefCell<VoiceTxGate>>,
@@ -281,6 +282,7 @@ impl Actor {
             input_device: None,
             output_device: None,
             capture_active: false,
+            mic_permitted: true,
             audio_since: Instant::now(),
             audio_enabled,
             voice_tx_gate: Rc::new(RefCell::new(VoiceTxGate::default())),
@@ -708,6 +710,9 @@ impl Actor {
                 reply,
             } => {
                 let _ = reply.send(self.set_audio_devices(input, output));
+            }
+            SessionCommand::SetMicPermitted { granted, reply } => {
+                let _ = reply.send(self.set_mic_permitted(granted));
             }
             SessionCommand::UploadFile {
                 local_path,

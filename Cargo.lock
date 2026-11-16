@@ -776,6 +776,8 @@ version = "0.1.13"
 dependencies = [
  "audio",
  "flutter_rust_bridge",
+ "jni",
+ "ndk-context",
  "proto",
  "server",
  "session",

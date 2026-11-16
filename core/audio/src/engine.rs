@@ -15,6 +15,7 @@ use crate::device::{CaptureStream, PlaybackStream, start_capture, start_playback
 use crate::format::OPUS_STEREO;
 use crate::level::{LevelMeter, LevelReading, MeterClock, SharedMeter, rms};
 use crate::playback::{MIX_FRAME_MS, PlaybackPipeline, VoiceFrame};
+use crate::recovery::{RecoveryFailure, RecoveryState, StreamError, StreamErrorKind};
 
 const CONTROL_CAPACITY: usize = 64;
 const INCOMING_CAPACITY: usize = 256;
@@ -50,6 +51,10 @@ pub enum AudioEvent {
     },
     PlaybackState {
         ready: bool,
+    },
+    /// 用户指定的设备在重连或断流时已不存在，已回退为系统默认设备。
+    DeviceFallback {
+        stage: AudioStage,
     },
     Error {
         stage: AudioStage,
@@ -257,6 +262,8 @@ struct CaptureLoopState {
     pipeline: CapturePipeline,
     stream: Option<CaptureStream>,
     device: Option<String>,
+    want_active: bool,
+    recovery: RecoveryState,
     speaking: bool,
     capture_epoch: u64,
     pacer: VoicePacer,
@@ -267,32 +274,134 @@ struct CaptureLoopState {
 
 impl CaptureLoopState {
     fn handle_command(&mut self, command: CaptureCommand) -> bool {
-        match &command {
-            CaptureCommand::Start { epoch, .. } => {
-                self.capture_epoch = *epoch;
+        let now = Instant::now();
+        match command {
+            CaptureCommand::Shutdown => return false,
+            CaptureCommand::Start { device, epoch } => {
+                self.capture_epoch = epoch;
                 self.mic_meter.silence();
                 self.meter.clear_mic();
+                self.want_active = true;
+                self.device = device;
+                self.recovery.reset();
+                self.open_stream(now);
+                self.speaking = false;
+                self.pacer.reset();
             }
             CaptureCommand::Stop => {
                 self.capture_epoch = 0;
                 self.mic_meter.silence();
                 self.meter.clear_mic();
+                self.want_active = false;
+                self.recovery.reset();
+                drop(self.stream.take());
+                self.pipeline.end();
+                self.speaking = false;
+                self.pacer.reset();
+                (self.sink)(AudioEvent::CaptureState { ready: false });
             }
-            CaptureCommand::SetDevice { .. } => {
+            CaptureCommand::SetDevice { device } => {
                 self.mic_meter.silence();
                 self.meter.clear_mic();
+                self.device = device;
+                if self.want_active {
+                    self.recovery.reset();
+                    self.open_stream(now);
+                    self.speaking = false;
+                    self.pacer.reset();
+                }
             }
-            _ => {}
+            CaptureCommand::SetMuted(next) => {
+                self.pipeline.set_muted(next);
+                if next {
+                    self.pacer.reset();
+                }
+            }
+            CaptureCommand::SetDeafened(deafened) => {
+                self.pipeline.set_deafened(deafened);
+                if deafened {
+                    self.pacer.reset();
+                }
+            }
+            CaptureCommand::SetPttMode(next) => {
+                self.pipeline.set_ptt_mode(next);
+                self.pacer.reset();
+                (self.sink)(AudioEvent::CaptureState {
+                    ready: self.stream.is_some(),
+                });
+            }
+            CaptureCommand::SetPttActive(next) => {
+                self.pipeline.set_ptt_active(next);
+                if !next {
+                    self.pacer.reset();
+                }
+                (self.sink)(AudioEvent::CaptureState {
+                    ready: self.stream.is_some(),
+                });
+            }
+            CaptureCommand::SetCodec(codec) => match self.pipeline.set_codec(codec) {
+                Ok(()) => {
+                    self.pacer.reset();
+                }
+                Err(err) => (self.sink)(AudioEvent::Error {
+                    stage: AudioStage::Codec,
+                    message: err.to_string(),
+                }),
+            },
         }
-        handle_capture_command(
-            command,
-            &mut self.pipeline,
-            &mut self.stream,
+        true
+    }
+
+    fn open_stream(&mut self, now: Instant) {
+        drop(self.stream.take());
+        match attempt_open_stream(
             &mut self.device,
-            &mut self.speaking,
+            AudioStage::Capture,
+            &mut self.recovery,
             &self.sink,
-            &mut self.pacer,
-        )
+            now,
+            start_capture,
+        ) {
+            Some(next) => {
+                self.pipeline.begin();
+                self.stream = Some(next);
+                (self.sink)(AudioEvent::CaptureState { ready: true });
+            }
+            None => {
+                self.pipeline.end();
+                (self.sink)(AudioEvent::CaptureState { ready: false });
+            }
+        }
+    }
+
+    fn handle_stream_error(&mut self, error: StreamError, now: Instant) {
+        let action = classify_active_stream_error(AudioStage::Capture, error);
+        match action {
+            ActiveErrorAction::Keep => {}
+            ActiveErrorAction::FailPermanent(message) => {
+                drop(self.stream.take());
+                self.pipeline.end();
+                self.speaking = false;
+                self.pacer.reset();
+                self.recovery.on_open_failed(now, false);
+                (self.sink)(AudioEvent::CaptureState { ready: false });
+                (self.sink)(AudioEvent::Error {
+                    stage: AudioStage::Capture,
+                    message,
+                });
+            }
+            ActiveErrorAction::Rebuild => {
+                drop(self.stream.take());
+                self.pipeline.end();
+                self.speaking = false;
+                self.pacer.reset();
+                (self.sink)(AudioEvent::CaptureState { ready: false });
+                if self.want_active {
+                    self.recovery.reset();
+                    self.open_stream(now);
+                }
+            }
+        }
     }
 }
 
@@ -311,6 +420,8 @@ fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, meter: Arc<
         pipeline,
         stream: None,
         device: None,
+        want_active: false,
+        recovery: RecoveryState::default(),
         speaking: false,
         capture_epoch: 0,
         pacer: VoicePacer::default(),
@@ -325,7 +436,9 @@ fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, meter: Arc<
 
     'capture: loop {
         let now = Instant::now();
-        let wait = if state.stream.is_none() {
+        let wait = if let Some(deadline) = state.recovery.next_deadline() {
+            deadline.saturating_duration_since(now).min(idle_tick)
+        } else if state.stream.is_none() {
             idle_tick
         } else if state.pipeline.has_ready_frame() && state.pipeline.is_transmitting() {
             match state.pacer.next_due_at() {
@@ -351,6 +464,11 @@ fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, meter: Arc<
             Err(RecvTimeoutError::Disconnected) => break 'capture,
         }
 
+        let now = Instant::now();
+        if state.want_active && state.stream.is_none() && state.recovery.due_for_retry(now) {
+            state.open_stream(now);
+        }
+
         if let Some(stream) = &state.stream {
             raw.clear();
             let max_drain = (stream.format.sample_rate_hz as usize)
@@ -360,11 +478,8 @@ fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, meter: Arc<
             if !raw.is_empty() {
                 state.pipeline.push_capture(&raw, stream.format);
             }
-            if let Some(message) = stream.take_error() {
-                (state.sink)(AudioEvent::Error {
-                    stage: AudioStage::Capture,
-                    message,
-                });
+            if let Some(error) = stream.take_error() {
+                state.handle_stream_error(error, now);
             }
         }
 
@@ -426,104 +541,108 @@ fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, meter: Arc<
     (state.sink)(AudioEvent::CaptureState { ready: false });
 }
 
-fn handle_capture_command(
-    command: CaptureCommand,
-    pipeline: &mut CapturePipeline,
-    stream: &mut Option<CaptureStream>,
-    device: &mut Option<String>,
-    speaking: &mut bool,
-    sink: &EventSink,
-    pacer: &mut VoicePacer,
-) -> bool {
-    match command {
-        CaptureCommand::Shutdown => return false,
-        CaptureCommand::Start { device: next, .. } => {
-            *device = next;
-            open_capture(stream, pipeline, (*device).clone(), sink);
-            *speaking = false;
-            pacer.reset();
-        }
-        CaptureCommand::Stop => {
-            if let Some(stream) = stream.take() {
-                drop(stream);
-            }
-            pipeline.end();
-            *speaking = false;
-            pacer.reset();
-            sink(AudioEvent::CaptureState { ready: false });
-        }
-        CaptureCommand::SetDevice { device: next } => {
-            let was_active = stream.is_some();
-            *device = next;
-            if was_active {
-                open_capture(stream, pipeline, (*device).clone(), sink);
-                *speaking = false;
-                pacer.reset();
-            }
-        }
-        CaptureCommand::SetMuted(next) => {
-            pipeline.set_muted(next);
-            if next {
-                pacer.reset();
-            }
-        }
-        CaptureCommand::SetDeafened(deafened) => {
-            pipeline.set_deafened(deafened);
-            if deafened {
-                pacer.reset();
-            }
-        }
-        CaptureCommand::SetPttMode(next) => {
-            pipeline.set_ptt_mode(next);
-            pacer.reset();
-            sink(AudioEvent::CaptureState {
-                ready: stream.is_some(),
-            });
-        }
-        CaptureCommand::SetPttActive(next) => {
-            pipeline.set_ptt_active(next);
-            if !next {
-                pacer.reset();
-            }
-            sink(AudioEvent::CaptureState {
-                ready: stream.is_some(),
-            });
-        }
-        CaptureCommand::SetCodec(codec) => match pipeline.set_codec(codec) {
-            Ok(()) => {
-                pacer.reset();
-            }
-            Err(err) => sink(AudioEvent::Error {
-                stage: AudioStage::Codec,
-                message: err.to_string(),
-            }),
-        },
-    }
-    true
+struct PlaybackLoopState {
+    pipeline: PlaybackPipeline,
+    stream: Option<PlaybackStream>,
+    converter: Option<FormatConverter>,
+    device: Option<String>,
+    want_active: bool,
+    recovery: RecoveryState,
+    sink: EventSink,
+    levels: LevelSink,
+    meter: Arc<SharedMeter>,
+    received_meter: LevelMeter,
+    received_clock: MeterClock,
+    playback_epoch: u64,
+    last_talkers: Vec<i32>,
 }
 
-fn open_capture(
-    stream: &mut Option<CaptureStream>,
-    pipeline: &mut CapturePipeline,
-    device: Option<String>,
-    sink: &EventSink,
-) {
-    if let Some(old) = stream.take() {
-        drop(old);
-    }
-    match start_capture(device.as_deref()) {
-        Ok(next) => {
-            pipeline.begin();
-            *stream = Some(next);
-            sink(AudioEvent::CaptureState { ready: true });
+impl PlaybackLoopState {
+    fn handle_command(&mut self, command: PlaybackCommand) -> bool {
+        let now = Instant::now();
+        match command {
+            PlaybackCommand::Shutdown => return false,
+            PlaybackCommand::Start { device, epoch } => {
+                self.playback_epoch = epoch;
+                self.received_meter.silence();
+                self.received_clock = MeterClock::default();
+                self.pipeline.restart();
+                self.want_active = true;
+                self.device = device;
+                self.recovery.reset();
+                self.open_stream(now);
+            }
+            PlaybackCommand::Stop => {
+                self.playback_epoch = 0;
+                self.received_meter.silence();
+                self.want_active = false;
+                self.recovery.reset();
+                drop(self.stream.take());
+                self.converter = None;
+                self.pipeline = PlaybackPipeline::new();
+                (self.sink)(AudioEvent::PlaybackState { ready: false });
+            }
+            PlaybackCommand::SetDevice { device } => {
+                self.received_meter.silence();
+                self.device = device;
+                if self.want_active {
+                    self.recovery.reset();
+                    self.open_stream(now);
+                }
+            }
+            PlaybackCommand::SetDeafened(deafened) => self.pipeline.set_deafened(deafened),
+            PlaybackCommand::Incoming(frame) => {
+                self.pipeline.push_incoming(frame, now);
+            }
         }
-        Err(err) => {
-            pipeline.end();
-            sink(AudioEvent::Error {
-                stage: AudioStage::Capture,
-                message: err.to_string(),
-            });
-            sink(AudioEvent::CaptureState { ready: false });
+        true
+    }
+
+    fn open_stream(&mut self, now: Instant) {
+        drop(self.stream.take());
+        match attempt_open_stream(
+            &mut self.device,
+            AudioStage::Playback,
+            &mut self.recovery,
+            &self.sink,
+            now,
+            start_playback,
+        ) {
+            Some(next) => {
+                self.converter = Some(FormatConverter::new(OPUS_STEREO, next.format));
+                self.stream = Some(next);
+                (self.sink)(AudioEvent::PlaybackState { ready: true });
+            }
+            None => {
+                self.converter = None;
+                (self.sink)(AudioEvent::PlaybackState { ready: false });
+            }
+        }
+    }
+
+    fn handle_stream_error(&mut self, error: StreamError, now: Instant) {
+        let action = classify_active_stream_error(AudioStage::Playback, error);
+        match action {
+            ActiveErrorAction::Keep => {}
+            ActiveErrorAction::FailPermanent(message) => {
+                drop(self.stream.take());
+                self.converter = None;
+                self.recovery.on_open_failed(now, false);
+                (self.sink)(AudioEvent::PlaybackState { ready: false });
+                (self.sink)(AudioEvent::Error {
+                    stage: AudioStage::Playback,
+                    message,
+                });
+            }
+            ActiveErrorAction::Rebuild => {
+                drop(self.stream.take());
+                self.converter = None;
+                (self.sink)(AudioEvent::PlaybackState { ready: false });
+                if self.want_active {
+                    self.recovery.reset();
+                    self.open_stream(now);
+                }
+            }
         }
     }
 }
@@ -535,48 +654,48 @@ fn playback_loop(
     levels: LevelSink,
     meter: Arc<SharedMeter>,
 ) {
-    let mut pipeline = PlaybackPipeline::new();
-    let mut stream: Option<PlaybackStream> = None;
-    let mut converter: Option<FormatConverter> = None;
+    let mut state = PlaybackLoopState {
+        pipeline: PlaybackPipeline::new(),
+        stream: None,
+        converter: None,
+        device: None,
+        want_active: false,
+        recovery: RecoveryState::default(),
+        sink,
+        levels,
+        meter,
+        received_meter: LevelMeter::default(),
+        received_clock: MeterClock::default(),
+        playback_epoch: 0,
+        last_talkers: Vec::new(),
+    };
     let mut next_tick = Instant::now();
-    let mut last_talkers: Vec<i32> = Vec::new();
-    let mut received_meter = LevelMeter::default();
-    let mut received_clock = MeterClock::default();
-    let mut playback_epoch = 0;
 
     loop {
         let now = Instant::now();
-        let wait = next_tick.saturating_duration_since(now);
-        match commands.recv_timeout(wait.min(Duration::from_millis(IO_TICK_MS))) {
+        let deadline_wait = state
+            .recovery
+            .next_deadline()
+            .map(|deadline| deadline.saturating_duration_since(now))
+            .unwrap_or(Duration::from_millis(IO_TICK_MS));
+        let wait = next_tick
+            .saturating_duration_since(now)
+            .min(deadline_wait)
+            .min(Duration::from_millis(IO_TICK_MS));
+        match commands.recv_timeout(wait) {
             Ok(PlaybackCommand::Shutdown) => break,
             Ok(command) => {
-                match &command {
-                    PlaybackCommand::Start { epoch, .. } => {
-                        playback_epoch = *epoch;
-                        received_meter.silence();
-                        received_clock = MeterClock::default();
-                    }
-                    PlaybackCommand::Stop => {
-                        playback_epoch = 0;
-                        received_meter.silence();
-                    }
-                    PlaybackCommand::SetDevice { .. } => {
-                        received_meter.silence();
-                    }
-                    _ => {}
-                }
-                if !handle_playback_command(
-                    command,
-                    &mut pipeline,
-                    &mut stream,
-                    &mut converter,
-                    &sink,
-                ) {
+                if !state.handle_command(command) {
                     break;
                 }
             }
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => break,
+        }
+
+        let now = Instant::now();
+        if state.want_active && state.stream.is_none() && state.recovery.due_for_retry(now) {
+            state.open_stream(now);
         }
 
         // 收包通道与混音节拍解耦：每个 tick 前把已到达的包全部喂给 jitter buffer。
@@ -586,7 +705,7 @@ fn playback_loop(
             while drained < 128 {
                 match incoming.try_recv() {
                     Ok(PlaybackCommand::Incoming(frame)) => {
-                        pipeline.push_incoming(frame, now);
+                        state.pipeline.push_incoming(frame, now);
                         drained += 1;
                     }
                     Ok(PlaybackCommand::Shutdown) => return,
@@ -600,116 +719,122 @@ fn playback_loop(
                 next_tick = now + Duration::from_millis(MIX_FRAME_MS);
             }
 
-            let tick = pipeline.tick(now, crate::playback::MIX_SAMPLES_PER_CHANNEL);
-            let received_level = if stream.is_some() && !tick.talkers.is_empty() {
-                received_meter.update(rms(&tick.samples))
+            let tick = state
+                .pipeline
+                .tick(now, crate::playback::MIX_SAMPLES_PER_CHANNEL);
+            let received_level = if state.stream.is_some() && !tick.talkers.is_empty() {
+                state.received_meter.update(rms(&tick.samples))
             } else {
-                received_meter.silence()
+                state.received_meter.silence()
             };
-            if received_clock.due(now) {
-                let epoch = meter.epoch();
-                let received = if epoch == playback_epoch {
+            if state.received_clock.due(now) {
+                let epoch = state.meter.epoch();
+                let received = if epoch == state.playback_epoch {
                     received_level
                 } else {
                     0.0
                 };
-                if let Some(reading) = meter.reading(epoch, received) {
-                    levels(reading);
+                if let Some(reading) = state.meter.reading(epoch, received) {
+                    (state.levels)(reading);
                 }
             }
-            if tick.talkers != last_talkers {
-                last_talkers = tick.talkers.clone();
-                sink(AudioEvent::Talkers {
-                    client_ids: last_talkers.clone(),
+            if tick.talkers != state.last_talkers {
+                state.last_talkers = tick.talkers.clone();
+                (state.sink)(AudioEvent::Talkers {
+                    client_ids: state.last_talkers.clone(),
                 });
             }
-            if let (Some(stream), Some(converter)) = (&stream, &mut converter) {
+            if let (Some(stream), Some(converter)) = (&state.stream, &mut state.converter) {
                 let mut converted = Vec::new();
                 converter.process(&tick.samples, &mut converted);
                 stream.push(&converted);
-                if let Some(message) = stream.take_error() {
-                    sink(AudioEvent::Error {
-                        stage: AudioStage::Playback,
-                        message,
-                    });
+                if let Some(error) = stream.take_error() {
+                    state.handle_stream_error(error, now);
                 }
             }
         }
     }
 
-    if let Some(stream) = stream.take() {
-        drop(stream);
-    }
-    sink(AudioEvent::PlaybackState { ready: false });
+    drop(state.stream.take());
+    (state.sink)(AudioEvent::PlaybackState { ready: false });
 }
 
-fn handle_playback_command(
-    command: PlaybackCommand,
-    pipeline: &mut PlaybackPipeline,
-    stream: &mut Option<PlaybackStream>,
-    converter: &mut Option<FormatConverter>,
-    sink: &EventSink,
-) -> bool {
-    match command {
-        PlaybackCommand::Shutdown => return false,
-        PlaybackCommand::Start { device, .. } => {
-            pipeline.restart();
-            if let Some(old) = stream.take() {
-                drop(old);
-            }
-            match start_playback(device.as_deref()) {
-                Ok(next) => {
-                    *converter = Some(FormatConverter::new(OPUS_STEREO, next.format));
-                    *stream = Some(next);
-                    sink(AudioEvent::PlaybackState { ready: true });
+enum ActiveErrorAction {
+    Keep,
+    Rebuild,
+    FailPermanent(String),
+}
+
+fn classify_active_stream_error(stage: AudioStage, error: StreamError) -> ActiveErrorAction {
+    match error.kind {
+        StreamErrorKind::DeviceChanged => {
+            match stage {
+                AudioStage::Capture => {
+                    crate::log_info!("capture stream automatically rerouted by host");
                 }
-                Err(err) => {
-                    *converter = None;
-                    sink(AudioEvent::Error {
-                        stage: AudioStage::Playback,
-                        message: err.to_string(),
-                    });
-                    sink(AudioEvent::PlaybackState { ready: false });
+                AudioStage::Playback => {
+                    crate::log_info!("playback stream automatically rerouted by host");
                 }
+                AudioStage::Codec => {}
             }
+            ActiveErrorAction::Keep
         }
-        PlaybackCommand::Stop => {
-            if let Some(stream) = stream.take() {
-                drop(stream);
-            }
-            *converter = None;
-            *pipeline = PlaybackPipeline::new();
-            sink(AudioEvent::PlaybackState { ready: false });
-        }
-        PlaybackCommand::SetDevice { device } => {
-            let was_active = stream.is_some();
-            if was_active {
-                if let Some(old) = stream.take() {
-                    drop(old);
+        StreamErrorKind::NonFatal => ActiveErrorAction::Keep,
+        StreamErrorKind::PermissionDenied => ActiveErrorAction::FailPermanent(error.message),
+        StreamErrorKind::Disconnected | StreamErrorKind::Other => {
+            match stage {
+                AudioStage::Capture => {
+                    crate::log_warn!("capture stream disconnected, scheduling rebuild");
                 }
-                match start_playback(device.as_deref()) {
-                    Ok(next) => {
-                        *converter = Some(FormatConverter::new(OPUS_STEREO, next.format));
-                        *stream = Some(next);
-                        sink(AudioEvent::PlaybackState { ready: true });
-                    }
-                    Err(err) => {
-                        *converter = None;
-                        sink(AudioEvent::Error {
-                            stage: AudioStage::Playback,
-                            message: err.to_string(),
-                        });
-                        sink(AudioEvent::PlaybackState { ready: false });
-                    }
+                AudioStage::Playback => {
+                    crate::log_warn!("playback stream disconnected, scheduling rebuild");
                 }
+                AudioStage::Codec => {}
             }
-        }
-        PlaybackCommand::SetDeafened(deafened) => pipeline.set_deafened(deafened),
-        PlaybackCommand::Incoming(frame) => {
-            pipeline.push_incoming(frame, Instant::now());
+            ActiveErrorAction::Rebuild
         }
     }
-    true
+}
+
+fn attempt_open_stream<S, F>(
+    device: &mut Option<String>,
+    stage: AudioStage,
+    recovery: &mut RecoveryState,
+    sink: &EventSink,
+    now: Instant,
+    open: F,
+) -> Option<S>
+where
+    F: Fn(Option<&str>) -> Result<S, AudioError>,
+{
+    let first = open(device.as_deref());
+    let result = match first {
+        Err(AudioError::DeviceNotFound(_)) if device.is_some() => {
+            *device = None;
+            sink(AudioEvent::DeviceFallback { stage });
+            open(None)
+        }
+        other => other,
+    };
+    match result {
+        Ok(stream) => {
+            recovery.on_open_succeeded();
+            Some(stream)
+        }
+        Err(err) => {
+            let retryable = !matches!(err, AudioError::PermissionDenied(_));
+            if matches!(
+                recovery.on_open_failed(now, retryable),
+                RecoveryFailure::Exhausted
+            ) {
+                sink(AudioEvent::Error {
+                    stage,
+                    message: err.to_string(),
+                });
+            }
+            None
+        }
+    }
 }
 
 #[cfg(test)]
@@ -742,6 +867,135 @@ mod tests {
         assert!(matches!(
             pending.try_recv(),
             Ok(AudioEvent::SelfSpeaking { speaking: false })
+        ));
+    }
+
+    #[test]
+    fn active_stream_error_classification_keeps_reroute_and_xruns() {
+        assert!(matches!(
+            classify_active_stream_error(
+                AudioStage::Playback,
+                StreamError {
+                    kind: StreamErrorKind::DeviceChanged,
+                    message: "rerouted".into(),
+                }
+            ),
+            ActiveErrorAction::Keep
+        ));
+        assert!(matches!(
+            classify_active_stream_error(
+                AudioStage::Capture,
+                StreamError {
+                    kind: StreamErrorKind::NonFatal,
+                    message: "xrun".into(),
+                }
+            ),
+            ActiveErrorAction::Keep
+        ));
+        assert!(matches!(
+            classify_active_stream_error(
+                AudioStage::Playback,
+                StreamError {
+                    kind: StreamErrorKind::Disconnected,
+                    message: "disconnected".into(),
+                }
+            ),
+            ActiveErrorAction::Rebuild
+        ));
+        assert!(matches!(
+            classify_active_stream_error(
+                AudioStage::Capture,
+                StreamError {
+                    kind: StreamErrorKind::PermissionDenied,
+                    message: "denied".into(),
+                }
+            ),
+            ActiveErrorAction::FailPermanent(_)
+        ));
+    }
+
+    #[test]
+    fn open_stream_falls_back_from_missing_device_and_retries_before_emitting_error() {
+        let events = Arc::new(std::sync::Mutex::new(Vec::<AudioEvent>::new()));
+        let sink: EventSink = {
+            let events = Arc::clone(&events);
+            Arc::new(move |event| events.lock().unwrap().push(event))
+        };
+
+        let mut device = Some("aaudio:99".to_string());
+        let mut recovery = RecoveryState::default();
+        let t0 = Instant::now();
+        let opened = attempt_open_stream(
+            &mut device,
+            AudioStage::Playback,
+            &mut recovery,
+            &sink,
+            t0,
+            |dev| match dev {
+                Some(id) => Err(AudioError::DeviceNotFound(id.to_string())),
+                None => Ok(42),
+            },
+        );
+        assert_eq!(opened, Some(42));
+        assert_eq!(device, None);
+        assert_eq!(recovery, RecoveryState::Active);
+        {
+            let recorded = events.lock().unwrap();
+            assert_eq!(recorded.len(), 1);
+            assert!(matches!(
+                recorded[0],
+                AudioEvent::DeviceFallback {
+                    stage: AudioStage::Playback
+                }
+            ));
+        }
+
+        // 瞬态失败在重试耗尽前不发 Error，耗尽后仅发一次。
+        events.lock().unwrap().clear();
+        recovery.reset();
+        for attempt in 0..=crate::recovery::RECOVERY_BACKOFF.len() {
+            let result: Option<i32> = attempt_open_stream(
+                &mut device,
+                AudioStage::Playback,
+                &mut recovery,
+                &sink,
+                t0,
+                |_| Err(AudioError::Device("busy".into())),
+            );
+            assert_eq!(result, None);
+            let error_count = events
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|ev| matches!(ev, AudioEvent::Error { .. }))
+                .count();
+            if attempt < crate::recovery::RECOVERY_BACKOFF.len() {
+                assert_eq!(error_count, 0);
+            } else {
+                assert_eq!(error_count, 1);
+            }
+        }
+
+        // 权限拒绝立即失败，不排入重试。
+        events.lock().unwrap().clear();
+        recovery.reset();
+        let result: Option<i32> = attempt_open_stream(
+            &mut device,
+            AudioStage::Capture,
+            &mut recovery,
+            &sink,
+            t0,
+            |_| Err(AudioError::PermissionDenied("denied".into())),
+        );
+        assert_eq!(result, None);
+        assert_eq!(recovery, RecoveryState::Failed);
+        assert_eq!(events.lock().unwrap().len(), 1);
+        assert!(matches!(
+            events.lock().unwrap()[0],
+            AudioEvent::Error {
+                stage: AudioStage::Capture,
+                ..
+            }
         ));
     }
 }

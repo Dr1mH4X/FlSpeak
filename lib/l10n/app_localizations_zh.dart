@@ -253,6 +253,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get voiceSpeakerUnavailable => '扬声器不可用';
 
   @override
+  String get voiceMicPermissionDenied => '未授予麦克风权限，当前仅可收听';
+
+  @override
+  String get voiceMicPermissionSettings => '请在系统设置中开启麦克风权限';
+
+  @override
   String voiceReconnectingAttempt(int attempt) {
     return '正在重连（第 $attempt 次）…';
   }

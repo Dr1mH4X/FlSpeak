@@ -123,6 +123,8 @@
   "voiceUnaway": "Unset away",
   "voiceMicUnavailable": "Microphone unavailable",
   "voiceSpeakerUnavailable": "Speaker unavailable",
+  "voiceMicPermissionDenied": "Microphone permission denied; listening only",
+  "voiceMicPermissionSettings": "Enable microphone permission in system settings",
   "voiceReconnectingAttempt": "Reconnecting (attempt {attempt})…",
   "@voiceReconnectingAttempt": {
     "placeholders": {

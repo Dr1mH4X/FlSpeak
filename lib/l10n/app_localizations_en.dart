@@ -255,6 +255,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get voiceSpeakerUnavailable => 'Speaker unavailable';
 
   @override
+  String get voiceMicPermissionDenied =>
+      'Microphone permission denied; listening only';
+
+  @override
+  String get voiceMicPermissionSettings =>
+      'Enable microphone permission in system settings';
+
+  @override
   String voiceReconnectingAttempt(int attempt) {
     return 'Reconnecting (attempt $attempt)…';
   }

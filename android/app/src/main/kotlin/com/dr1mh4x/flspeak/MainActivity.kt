@@ -1,13 +1,18 @@
 package com.dr1mh4x.flspeak
 
+import android.Manifest
 import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.LinkProperties
 import android.net.Network
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -15,17 +20,101 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
 class MainActivity : FlutterActivity() {
+    companion object {
+        private const val MIC_PERMISSION_REQUEST_CODE = 1001
+
+        init {
+            System.loadLibrary("flspeak_ffi")
+        }
+    }
+
     private var dnsCallback: ConnectivityManager.NetworkCallback? = null
+    private var pendingMicPermissionResult: MethodChannel.Result? = null
+
+    private external fun nativeInitAndroidContext(context: Context)
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        nativeInitAndroidContext(applicationContext)
         super.configureFlutterEngine(flutterEngine)
         registerFilesChannel(flutterEngine)
         registerNetworkDnsChannels(flutterEngine)
+        registerAudioPermissionChannel(flutterEngine)
     }
 
     override fun onDestroy() {
+        pendingMicPermissionResult?.success("denied")
+        pendingMicPermissionResult = null
         unregisterDnsCallback()
         super.onDestroy()
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != MIC_PERMISSION_REQUEST_CODE) {
+            return
+        }
+        val result = pendingMicPermissionResult ?: return
+        pendingMicPermissionResult = null
+        val granted =
+            grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
+        val status =
+            when {
+                granted -> "granted"
+                !shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO) ->
+                    "permanentlyDenied"
+                else -> "denied"
+            }
+        result.success(status)
+    }
+
+    private fun registerAudioPermissionChannel(flutterEngine: FlutterEngine) {
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "flspeak/audio_permissions")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "requestMicrophonePermission" -> {
+                        if (
+                            checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
+                                PackageManager.PERMISSION_GRANTED
+                        ) {
+                            result.success("granted")
+                            return@setMethodCallHandler
+                        }
+                        if (pendingMicPermissionResult != null) {
+                            result.error(
+                                "permission_in_progress",
+                                "Microphone permission request already in progress",
+                                null,
+                            )
+                            return@setMethodCallHandler
+                        }
+                        pendingMicPermissionResult = result
+                        requestPermissions(
+                            arrayOf(Manifest.permission.RECORD_AUDIO),
+                            MIC_PERMISSION_REQUEST_CODE,
+                        )
+                    }
+                    "openAppSettings" -> {
+                        val intent =
+                            Intent(
+                                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                Uri.fromParts("package", packageName, null),
+                            )
+                        val launched =
+                            try {
+                                startActivity(intent)
+                                true
+                            } catch (_: Exception) {
+                                false
+                            }
+                        result.success(launched)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
     }
 
     private fun registerFilesChannel(flutterEngine: FlutterEngine) {

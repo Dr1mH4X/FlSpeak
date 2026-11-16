@@ -251,6 +251,11 @@ pub enum CoreEvent {
     Voice {
         state: CoreVoiceState,
     },
+    /// 指定的音频设备已不可用，后端已自动回退到系统默认设备。
+    AudioDevicesReset {
+        input: bool,
+        output: bool,
+    },
     Speaking {
         client_ids: Vec<i32>,
     },
@@ -568,6 +573,10 @@ impl CoreSession {
         output: Option<String>,
     ) -> Result<(), CoreError> {
         Ok(self.handle.set_audio_devices(input, output).await?)
+    }
+
+    pub async fn set_microphone_permission(&self, granted: bool) -> Result<(), CoreError> {
+        Ok(self.handle.set_mic_permitted(granted).await?)
     }
 
     pub async fn upload_file(
@@ -1126,6 +1135,9 @@ impl From<SessionEvent> for CoreEvent {
             SessionEvent::Voice(state) => CoreEvent::Voice {
                 state: state.into(),
             },
+            SessionEvent::AudioDevicesReset { input, output } => {
+                CoreEvent::AudioDevicesReset { input, output }
+            }
             SessionEvent::Speaking { client_ids } => CoreEvent::Speaking { client_ids },
             SessionEvent::SelfSpeaking { speaking } => CoreEvent::SelfSpeaking { speaking },
             SessionEvent::Levels { mic, received } => CoreEvent::Levels {

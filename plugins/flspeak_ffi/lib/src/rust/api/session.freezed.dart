@@ -610,7 +610,7 @@ extension CoreEventPatterns on CoreEvent {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( CoreEvent_Network value)?  network,TResult Function( CoreEvent_AccessChanged value)?  accessChanged,TResult Function( CoreEvent_State value)?  state,TResult Function( CoreEvent_Servers value)?  servers,TResult Function( CoreEvent_ServerIconUpdated value)?  serverIconUpdated,TResult Function( CoreEvent_Snapshot value)?  snapshot,TResult Function( CoreEvent_History value)?  history,TResult Function( CoreEvent_TextMessage value)?  textMessage,TResult Function( CoreEvent_Poked value)?  poked,TResult Function( CoreEvent_ClientJoined value)?  clientJoined,TResult Function( CoreEvent_ClientLeft value)?  clientLeft,TResult Function( CoreEvent_ClientMoved value)?  clientMoved,TResult Function( CoreEvent_ClientUpdated value)?  clientUpdated,TResult Function( CoreEvent_Voice value)?  voice,TResult Function( CoreEvent_Speaking value)?  speaking,TResult Function( CoreEvent_SelfSpeaking value)?  selfSpeaking,TResult Function( CoreEvent_Levels value)?  levels,TResult Function( CoreEvent_IdentityUpgrade value)?  identityUpgrade,TResult Function( CoreEvent_IdentityUpgraded value)?  identityUpgraded,TResult Function( CoreEvent_TransferStarted value)?  transferStarted,TResult Function( CoreEvent_TransferProgress value)?  transferProgress,TResult Function( CoreEvent_TransferFinished value)?  transferFinished,TResult Function( CoreEvent_Streams value)?  streams,TResult Function( CoreEvent_StreamOffer value)?  streamOffer,TResult Function( CoreEvent_StreamIceCandidate value)?  streamIceCandidate,TResult Function( CoreEvent_StreamEnded value)?  streamEnded,TResult Function( CoreEvent_ScreenSharePublished value)?  screenSharePublished,TResult Function( CoreEvent_ScreenShareStopped value)?  screenShareStopped,TResult Function( CoreEvent_StreamViewerJoinRequested value)?  streamViewerJoinRequested,TResult Function( CoreEvent_PublisherSignalReceived value)?  publisherSignalReceived,TResult Function( CoreEvent_StreamViewerLeft value)?  streamViewerLeft,TResult Function( CoreEvent_Log value)?  log,TResult Function( CoreEvent_Denied value)?  denied,TResult Function( CoreEvent_Failed value)?  failed,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( CoreEvent_Network value)?  network,TResult Function( CoreEvent_AccessChanged value)?  accessChanged,TResult Function( CoreEvent_State value)?  state,TResult Function( CoreEvent_Servers value)?  servers,TResult Function( CoreEvent_ServerIconUpdated value)?  serverIconUpdated,TResult Function( CoreEvent_Snapshot value)?  snapshot,TResult Function( CoreEvent_History value)?  history,TResult Function( CoreEvent_TextMessage value)?  textMessage,TResult Function( CoreEvent_Poked value)?  poked,TResult Function( CoreEvent_ClientJoined value)?  clientJoined,TResult Function( CoreEvent_ClientLeft value)?  clientLeft,TResult Function( CoreEvent_ClientMoved value)?  clientMoved,TResult Function( CoreEvent_ClientUpdated value)?  clientUpdated,TResult Function( CoreEvent_Voice value)?  voice,TResult Function( CoreEvent_AudioDevicesReset value)?  audioDevicesReset,TResult Function( CoreEvent_Speaking value)?  speaking,TResult Function( CoreEvent_SelfSpeaking value)?  selfSpeaking,TResult Function( CoreEvent_Levels value)?  levels,TResult Function( CoreEvent_IdentityUpgrade value)?  identityUpgrade,TResult Function( CoreEvent_IdentityUpgraded value)?  identityUpgraded,TResult Function( CoreEvent_TransferStarted value)?  transferStarted,TResult Function( CoreEvent_TransferProgress value)?  transferProgress,TResult Function( CoreEvent_TransferFinished value)?  transferFinished,TResult Function( CoreEvent_Streams value)?  streams,TResult Function( CoreEvent_StreamOffer value)?  streamOffer,TResult Function( CoreEvent_StreamIceCandidate value)?  streamIceCandidate,TResult Function( CoreEvent_StreamEnded value)?  streamEnded,TResult Function( CoreEvent_ScreenSharePublished value)?  screenSharePublished,TResult Function( CoreEvent_ScreenShareStopped value)?  screenShareStopped,TResult Function( CoreEvent_StreamViewerJoinRequested value)?  streamViewerJoinRequested,TResult Function( CoreEvent_PublisherSignalReceived value)?  publisherSignalReceived,TResult Function( CoreEvent_StreamViewerLeft value)?  streamViewerLeft,TResult Function( CoreEvent_Log value)?  log,TResult Function( CoreEvent_Denied value)?  denied,TResult Function( CoreEvent_Failed value)?  failed,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case CoreEvent_Network() when network != null:
@@ -627,7 +627,8 @@ return clientJoined(_that);case CoreEvent_ClientLeft() when clientLeft != null:
 return clientLeft(_that);case CoreEvent_ClientMoved() when clientMoved != null:
 return clientMoved(_that);case CoreEvent_ClientUpdated() when clientUpdated != null:
 return clientUpdated(_that);case CoreEvent_Voice() when voice != null:
-return voice(_that);case CoreEvent_Speaking() when speaking != null:
+return voice(_that);case CoreEvent_AudioDevicesReset() when audioDevicesReset != null:
+return audioDevicesReset(_that);case CoreEvent_Speaking() when speaking != null:
 return speaking(_that);case CoreEvent_SelfSpeaking() when selfSpeaking != null:
 return selfSpeaking(_that);case CoreEvent_Levels() when levels != null:
 return levels(_that);case CoreEvent_IdentityUpgrade() when identityUpgrade != null:
@@ -665,7 +666,7 @@ return failed(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( CoreEvent_Network value)  network,required TResult Function( CoreEvent_AccessChanged value)  accessChanged,required TResult Function( CoreEvent_State value)  state,required TResult Function( CoreEvent_Servers value)  servers,required TResult Function( CoreEvent_ServerIconUpdated value)  serverIconUpdated,required TResult Function( CoreEvent_Snapshot value)  snapshot,required TResult Function( CoreEvent_History value)  history,required TResult Function( CoreEvent_TextMessage value)  textMessage,required TResult Function( CoreEvent_Poked value)  poked,required TResult Function( CoreEvent_ClientJoined value)  clientJoined,required TResult Function( CoreEvent_ClientLeft value)  clientLeft,required TResult Function( CoreEvent_ClientMoved value)  clientMoved,required TResult Function( CoreEvent_ClientUpdated value)  clientUpdated,required TResult Function( CoreEvent_Voice value)  voice,required TResult Function( CoreEvent_Speaking value)  speaking,required TResult Function( CoreEvent_SelfSpeaking value)  selfSpeaking,required TResult Function( CoreEvent_Levels value)  levels,required TResult Function( CoreEvent_IdentityUpgrade value)  identityUpgrade,required TResult Function( CoreEvent_IdentityUpgraded value)  identityUpgraded,required TResult Function( CoreEvent_TransferStarted value)  transferStarted,required TResult Function( CoreEvent_TransferProgress value)  transferProgress,required TResult Function( CoreEvent_TransferFinished value)  transferFinished,required TResult Function( CoreEvent_Streams value)  streams,required TResult Function( CoreEvent_StreamOffer value)  streamOffer,required TResult Function( CoreEvent_StreamIceCandidate value)  streamIceCandidate,required TResult Function( CoreEvent_StreamEnded value)  streamEnded,required TResult Function( CoreEvent_ScreenSharePublished value)  screenSharePublished,required TResult Function( CoreEvent_ScreenShareStopped value)  screenShareStopped,required TResult Function( CoreEvent_StreamViewerJoinRequested value)  streamViewerJoinRequested,required TResult Function( CoreEvent_PublisherSignalReceived value)  publisherSignalReceived,required TResult Function( CoreEvent_StreamViewerLeft value)  streamViewerLeft,required TResult Function( CoreEvent_Log value)  log,required TResult Function( CoreEvent_Denied value)  denied,required TResult Function( CoreEvent_Failed value)  failed,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( CoreEvent_Network value)  network,required TResult Function( CoreEvent_AccessChanged value)  accessChanged,required TResult Function( CoreEvent_State value)  state,required TResult Function( CoreEvent_Servers value)  servers,required TResult Function( CoreEvent_ServerIconUpdated value)  serverIconUpdated,required TResult Function( CoreEvent_Snapshot value)  snapshot,required TResult Function( CoreEvent_History value)  history,required TResult Function( CoreEvent_TextMessage value)  textMessage,required TResult Function( CoreEvent_Poked value)  poked,required TResult Function( CoreEvent_ClientJoined value)  clientJoined,required TResult Function( CoreEvent_ClientLeft value)  clientLeft,required TResult Function( CoreEvent_ClientMoved value)  clientMoved,required TResult Function( CoreEvent_ClientUpdated value)  clientUpdated,required TResult Function( CoreEvent_Voice value)  voice,required TResult Function( CoreEvent_AudioDevicesReset value)  audioDevicesReset,required TResult Function( CoreEvent_Speaking value)  speaking,required TResult Function( CoreEvent_SelfSpeaking value)  selfSpeaking,required TResult Function( CoreEvent_Levels value)  levels,required TResult Function( CoreEvent_IdentityUpgrade value)  identityUpgrade,required TResult Function( CoreEvent_IdentityUpgraded value)  identityUpgraded,required TResult Function( CoreEvent_TransferStarted value)  transferStarted,required TResult Function( CoreEvent_TransferProgress value)  transferProgress,required TResult Function( CoreEvent_TransferFinished value)  transferFinished,required TResult Function( CoreEvent_Streams value)  streams,required TResult Function( CoreEvent_StreamOffer value)  streamOffer,required TResult Function( CoreEvent_StreamIceCandidate value)  streamIceCandidate,required TResult Function( CoreEvent_StreamEnded value)  streamEnded,required TResult Function( CoreEvent_ScreenSharePublished value)  screenSharePublished,required TResult Function( CoreEvent_ScreenShareStopped value)  screenShareStopped,required TResult Function( CoreEvent_StreamViewerJoinRequested value)  streamViewerJoinRequested,required TResult Function( CoreEvent_PublisherSignalReceived value)  publisherSignalReceived,required TResult Function( CoreEvent_StreamViewerLeft value)  streamViewerLeft,required TResult Function( CoreEvent_Log value)  log,required TResult Function( CoreEvent_Denied value)  denied,required TResult Function( CoreEvent_Failed value)  failed,}){
 final _that = this;
 switch (_that) {
 case CoreEvent_Network():
@@ -682,7 +683,8 @@ return clientJoined(_that);case CoreEvent_ClientLeft():
 return clientLeft(_that);case CoreEvent_ClientMoved():
 return clientMoved(_that);case CoreEvent_ClientUpdated():
 return clientUpdated(_that);case CoreEvent_Voice():
-return voice(_that);case CoreEvent_Speaking():
+return voice(_that);case CoreEvent_AudioDevicesReset():
+return audioDevicesReset(_that);case CoreEvent_Speaking():
 return speaking(_that);case CoreEvent_SelfSpeaking():
 return selfSpeaking(_that);case CoreEvent_Levels():
 return levels(_that);case CoreEvent_IdentityUpgrade():
@@ -716,7 +718,7 @@ return failed(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( CoreEvent_Network value)?  network,TResult? Function( CoreEvent_AccessChanged value)?  accessChanged,TResult? Function( CoreEvent_State value)?  state,TResult? Function( CoreEvent_Servers value)?  servers,TResult? Function( CoreEvent_ServerIconUpdated value)?  serverIconUpdated,TResult? Function( CoreEvent_Snapshot value)?  snapshot,TResult? Function( CoreEvent_History value)?  history,TResult? Function( CoreEvent_TextMessage value)?  textMessage,TResult? Function( CoreEvent_Poked value)?  poked,TResult? Function( CoreEvent_ClientJoined value)?  clientJoined,TResult? Function( CoreEvent_ClientLeft value)?  clientLeft,TResult? Function( CoreEvent_ClientMoved value)?  clientMoved,TResult? Function( CoreEvent_ClientUpdated value)?  clientUpdated,TResult? Function( CoreEvent_Voice value)?  voice,TResult? Function( CoreEvent_Speaking value)?  speaking,TResult? Function( CoreEvent_SelfSpeaking value)?  selfSpeaking,TResult? Function( CoreEvent_Levels value)?  levels,TResult? Function( CoreEvent_IdentityUpgrade value)?  identityUpgrade,TResult? Function( CoreEvent_IdentityUpgraded value)?  identityUpgraded,TResult? Function( CoreEvent_TransferStarted value)?  transferStarted,TResult? Function( CoreEvent_TransferProgress value)?  transferProgress,TResult? Function( CoreEvent_TransferFinished value)?  transferFinished,TResult? Function( CoreEvent_Streams value)?  streams,TResult? Function( CoreEvent_StreamOffer value)?  streamOffer,TResult? Function( CoreEvent_StreamIceCandidate value)?  streamIceCandidate,TResult? Function( CoreEvent_StreamEnded value)?  streamEnded,TResult? Function( CoreEvent_ScreenSharePublished value)?  screenSharePublished,TResult? Function( CoreEvent_ScreenShareStopped value)?  screenShareStopped,TResult? Function( CoreEvent_StreamViewerJoinRequested value)?  streamViewerJoinRequested,TResult? Function( CoreEvent_PublisherSignalReceived value)?  publisherSignalReceived,TResult? Function( CoreEvent_StreamViewerLeft value)?  streamViewerLeft,TResult? Function( CoreEvent_Log value)?  log,TResult? Function( CoreEvent_Denied value)?  denied,TResult? Function( CoreEvent_Failed value)?  failed,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( CoreEvent_Network value)?  network,TResult? Function( CoreEvent_AccessChanged value)?  accessChanged,TResult? Function( CoreEvent_State value)?  state,TResult? Function( CoreEvent_Servers value)?  servers,TResult? Function( CoreEvent_ServerIconUpdated value)?  serverIconUpdated,TResult? Function( CoreEvent_Snapshot value)?  snapshot,TResult? Function( CoreEvent_History value)?  history,TResult? Function( CoreEvent_TextMessage value)?  textMessage,TResult? Function( CoreEvent_Poked value)?  poked,TResult? Function( CoreEvent_ClientJoined value)?  clientJoined,TResult? Function( CoreEvent_ClientLeft value)?  clientLeft,TResult? Function( CoreEvent_ClientMoved value)?  clientMoved,TResult? Function( CoreEvent_ClientUpdated value)?  clientUpdated,TResult? Function( CoreEvent_Voice value)?  voice,TResult? Function( CoreEvent_AudioDevicesReset value)?  audioDevicesReset,TResult? Function( CoreEvent_Speaking value)?  speaking,TResult? Function( CoreEvent_SelfSpeaking value)?  selfSpeaking,TResult? Function( CoreEvent_Levels value)?  levels,TResult? Function( CoreEvent_IdentityUpgrade value)?  identityUpgrade,TResult? Function( CoreEvent_IdentityUpgraded value)?  identityUpgraded,TResult? Function( CoreEvent_TransferStarted value)?  transferStarted,TResult? Function( CoreEvent_TransferProgress value)?  transferProgress,TResult? Function( CoreEvent_TransferFinished value)?  transferFinished,TResult? Function( CoreEvent_Streams value)?  streams,TResult? Function( CoreEvent_StreamOffer value)?  streamOffer,TResult? Function( CoreEvent_StreamIceCandidate value)?  streamIceCandidate,TResult? Function( CoreEvent_StreamEnded value)?  streamEnded,TResult? Function( CoreEvent_ScreenSharePublished value)?  screenSharePublished,TResult? Function( CoreEvent_ScreenShareStopped value)?  screenShareStopped,TResult? Function( CoreEvent_StreamViewerJoinRequested value)?  streamViewerJoinRequested,TResult? Function( CoreEvent_PublisherSignalReceived value)?  publisherSignalReceived,TResult? Function( CoreEvent_StreamViewerLeft value)?  streamViewerLeft,TResult? Function( CoreEvent_Log value)?  log,TResult? Function( CoreEvent_Denied value)?  denied,TResult? Function( CoreEvent_Failed value)?  failed,}){
 final _that = this;
 switch (_that) {
 case CoreEvent_Network() when network != null:
@@ -733,7 +735,8 @@ return clientJoined(_that);case CoreEvent_ClientLeft() when clientLeft != null:
 return clientLeft(_that);case CoreEvent_ClientMoved() when clientMoved != null:
 return clientMoved(_that);case CoreEvent_ClientUpdated() when clientUpdated != null:
 return clientUpdated(_that);case CoreEvent_Voice() when voice != null:
-return voice(_that);case CoreEvent_Speaking() when speaking != null:
+return voice(_that);case CoreEvent_AudioDevicesReset() when audioDevicesReset != null:
+return audioDevicesReset(_that);case CoreEvent_Speaking() when speaking != null:
 return speaking(_that);case CoreEvent_SelfSpeaking() when selfSpeaking != null:
 return selfSpeaking(_that);case CoreEvent_Levels() when levels != null:
 return levels(_that);case CoreEvent_IdentityUpgrade() when identityUpgrade != null:
@@ -770,7 +773,7 @@ return failed(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( NetworkTelemetry telemetry)?  network,TResult Function()?  accessChanged,TResult Function( CoreSessionState state)?  state,TResult Function( List<ServerProfileView> profiles)?  servers,TResult Function( String serverId,  Uint8List? bytes)?  serverIconUpdated,TResult Function( List<ChannelView> channels,  List<ClientView> clients)?  snapshot,TResult Function( List<CoreMessage> messages)?  history,TResult Function( String from,  String fromUid,  int fromId,  String message,  int targetMode,  int targetId,  String peerUid,  int at)?  textMessage,TResult Function( String from,  String message)?  poked,TResult Function( int id,  String nickname,  String uid,  int channelId)?  clientJoined,TResult Function( int id)?  clientLeft,TResult Function( int id,  int channelId)?  clientMoved,TResult Function( int id,  bool? inputMuted,  bool? outputMuted,  bool? away,  String? awayMessage)?  clientUpdated,TResult Function( CoreVoiceState state)?  voice,TResult Function( Int32List clientIds)?  speaking,TResult Function( bool speaking)?  selfSpeaking,TResult Function( double mic,  double received)?  levels,TResult Function( int from,  int to)?  identityUpgrade,TResult Function( int level)?  identityUpgraded,TResult Function( int id,  CoreTransferDirection direction,  String remotePath,  int total)?  transferStarted,TResult Function( int id,  int transferred,  int total)?  transferProgress,TResult Function( int id,  String? error)?  transferFinished,TResult Function( List<StreamView> streams,  String? watching)?  streams,TResult Function( String streamId,  int sourceClientId,  String sdp)?  streamOffer,TResult Function( String streamId,  int sourceClientId,  String sdp,  String? mid,  int? mLine)?  streamIceCandidate,TResult Function( String streamId,  StreamEndReason reason)?  streamEnded,TResult Function( String streamId)?  screenSharePublished,TResult Function()?  screenShareStopped,TResult Function( String streamId,  int viewerClid)?  streamViewerJoinRequested,TResult Function( String streamId,  int viewerClid,  PublisherSignal signal)?  publisherSignalReceived,TResult Function( String streamId,  int viewerClid)?  streamViewerLeft,TResult Function( String level,  String message)?  log,TResult Function( String message)?  denied,TResult Function( String message)?  failed,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( NetworkTelemetry telemetry)?  network,TResult Function()?  accessChanged,TResult Function( CoreSessionState state)?  state,TResult Function( List<ServerProfileView> profiles)?  servers,TResult Function( String serverId,  Uint8List? bytes)?  serverIconUpdated,TResult Function( List<ChannelView> channels,  List<ClientView> clients)?  snapshot,TResult Function( List<CoreMessage> messages)?  history,TResult Function( String from,  String fromUid,  int fromId,  String message,  int targetMode,  int targetId,  String peerUid,  int at)?  textMessage,TResult Function( String from,  String message)?  poked,TResult Function( int id,  String nickname,  String uid,  int channelId)?  clientJoined,TResult Function( int id)?  clientLeft,TResult Function( int id,  int channelId)?  clientMoved,TResult Function( int id,  bool? inputMuted,  bool? outputMuted,  bool? away,  String? awayMessage)?  clientUpdated,TResult Function( CoreVoiceState state)?  voice,TResult Function( bool input,  bool output)?  audioDevicesReset,TResult Function( Int32List clientIds)?  speaking,TResult Function( bool speaking)?  selfSpeaking,TResult Function( double mic,  double received)?  levels,TResult Function( int from,  int to)?  identityUpgrade,TResult Function( int level)?  identityUpgraded,TResult Function( int id,  CoreTransferDirection direction,  String remotePath,  int total)?  transferStarted,TResult Function( int id,  int transferred,  int total)?  transferProgress,TResult Function( int id,  String? error)?  transferFinished,TResult Function( List<StreamView> streams,  String? watching)?  streams,TResult Function( String streamId,  int sourceClientId,  String sdp)?  streamOffer,TResult Function( String streamId,  int sourceClientId,  String sdp,  String? mid,  int? mLine)?  streamIceCandidate,TResult Function( String streamId,  StreamEndReason reason)?  streamEnded,TResult Function( String streamId)?  screenSharePublished,TResult Function()?  screenShareStopped,TResult Function( String streamId,  int viewerClid)?  streamViewerJoinRequested,TResult Function( String streamId,  int viewerClid,  PublisherSignal signal)?  publisherSignalReceived,TResult Function( String streamId,  int viewerClid)?  streamViewerLeft,TResult Function( String level,  String message)?  log,TResult Function( String message)?  denied,TResult Function( String message)?  failed,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case CoreEvent_Network() when network != null:
 return network(_that.telemetry);case CoreEvent_AccessChanged() when accessChanged != null:
@@ -786,7 +789,8 @@ return clientJoined(_that.id,_that.nickname,_that.uid,_that.channelId);case Core
 return clientLeft(_that.id);case CoreEvent_ClientMoved() when clientMoved != null:
 return clientMoved(_that.id,_that.channelId);case CoreEvent_ClientUpdated() when clientUpdated != null:
 return clientUpdated(_that.id,_that.inputMuted,_that.outputMuted,_that.away,_that.awayMessage);case CoreEvent_Voice() when voice != null:
-return voice(_that.state);case CoreEvent_Speaking() when speaking != null:
+return voice(_that.state);case CoreEvent_AudioDevicesReset() when audioDevicesReset != null:
+return audioDevicesReset(_that.input,_that.output);case CoreEvent_Speaking() when speaking != null:
 return speaking(_that.clientIds);case CoreEvent_SelfSpeaking() when selfSpeaking != null:
 return selfSpeaking(_that.speaking);case CoreEvent_Levels() when levels != null:
 return levels(_that.mic,_that.received);case CoreEvent_IdentityUpgrade() when identityUpgrade != null:
@@ -824,7 +828,7 @@ return failed(_that.message);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( NetworkTelemetry telemetry)  network,required TResult Function()  accessChanged,required TResult Function( CoreSessionState state)  state,required TResult Function( List<ServerProfileView> profiles)  servers,required TResult Function( String serverId,  Uint8List? bytes)  serverIconUpdated,required TResult Function( List<ChannelView> channels,  List<ClientView> clients)  snapshot,required TResult Function( List<CoreMessage> messages)  history,required TResult Function( String from,  String fromUid,  int fromId,  String message,  int targetMode,  int targetId,  String peerUid,  int at)  textMessage,required TResult Function( String from,  String message)  poked,required TResult Function( int id,  String nickname,  String uid,  int channelId)  clientJoined,required TResult Function( int id)  clientLeft,required TResult Function( int id,  int channelId)  clientMoved,required TResult Function( int id,  bool? inputMuted,  bool? outputMuted,  bool? away,  String? awayMessage)  clientUpdated,required TResult Function( CoreVoiceState state)  voice,required TResult Function( Int32List clientIds)  speaking,required TResult Function( bool speaking)  selfSpeaking,required TResult Function( double mic,  double received)  levels,required TResult Function( int from,  int to)  identityUpgrade,required TResult Function( int level)  identityUpgraded,required TResult Function( int id,  CoreTransferDirection direction,  String remotePath,  int total)  transferStarted,required TResult Function( int id,  int transferred,  int total)  transferProgress,required TResult Function( int id,  String? error)  transferFinished,required TResult Function( List<StreamView> streams,  String? watching)  streams,required TResult Function( String streamId,  int sourceClientId,  String sdp)  streamOffer,required TResult Function( String streamId,  int sourceClientId,  String sdp,  String? mid,  int? mLine)  streamIceCandidate,required TResult Function( String streamId,  StreamEndReason reason)  streamEnded,required TResult Function( String streamId)  screenSharePublished,required TResult Function()  screenShareStopped,required TResult Function( String streamId,  int viewerClid)  streamViewerJoinRequested,required TResult Function( String streamId,  int viewerClid,  PublisherSignal signal)  publisherSignalReceived,required TResult Function( String streamId,  int viewerClid)  streamViewerLeft,required TResult Function( String level,  String message)  log,required TResult Function( String message)  denied,required TResult Function( String message)  failed,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( NetworkTelemetry telemetry)  network,required TResult Function()  accessChanged,required TResult Function( CoreSessionState state)  state,required TResult Function( List<ServerProfileView> profiles)  servers,required TResult Function( String serverId,  Uint8List? bytes)  serverIconUpdated,required TResult Function( List<ChannelView> channels,  List<ClientView> clients)  snapshot,required TResult Function( List<CoreMessage> messages)  history,required TResult Function( String from,  String fromUid,  int fromId,  String message,  int targetMode,  int targetId,  String peerUid,  int at)  textMessage,required TResult Function( String from,  String message)  poked,required TResult Function( int id,  String nickname,  String uid,  int channelId)  clientJoined,required TResult Function( int id)  clientLeft,required TResult Function( int id,  int channelId)  clientMoved,required TResult Function( int id,  bool? inputMuted,  bool? outputMuted,  bool? away,  String? awayMessage)  clientUpdated,required TResult Function( CoreVoiceState state)  voice,required TResult Function( bool input,  bool output)  audioDevicesReset,required TResult Function( Int32List clientIds)  speaking,required TResult Function( bool speaking)  selfSpeaking,required TResult Function( double mic,  double received)  levels,required TResult Function( int from,  int to)  identityUpgrade,required TResult Function( int level)  identityUpgraded,required TResult Function( int id,  CoreTransferDirection direction,  String remotePath,  int total)  transferStarted,required TResult Function( int id,  int transferred,  int total)  transferProgress,required TResult Function( int id,  String? error)  transferFinished,required TResult Function( List<StreamView> streams,  String? watching)  streams,required TResult Function( String streamId,  int sourceClientId,  String sdp)  streamOffer,required TResult Function( String streamId,  int sourceClientId,  String sdp,  String? mid,  int? mLine)  streamIceCandidate,required TResult Function( String streamId,  StreamEndReason reason)  streamEnded,required TResult Function( String streamId)  screenSharePublished,required TResult Function()  screenShareStopped,required TResult Function( String streamId,  int viewerClid)  streamViewerJoinRequested,required TResult Function( String streamId,  int viewerClid,  PublisherSignal signal)  publisherSignalReceived,required TResult Function( String streamId,  int viewerClid)  streamViewerLeft,required TResult Function( String level,  String message)  log,required TResult Function( String message)  denied,required TResult Function( String message)  failed,}) {final _that = this;
 switch (_that) {
 case CoreEvent_Network():
 return network(_that.telemetry);case CoreEvent_AccessChanged():
@@ -840,7 +844,8 @@ return clientJoined(_that.id,_that.nickname,_that.uid,_that.channelId);case Core
 return clientLeft(_that.id);case CoreEvent_ClientMoved():
 return clientMoved(_that.id,_that.channelId);case CoreEvent_ClientUpdated():
 return clientUpdated(_that.id,_that.inputMuted,_that.outputMuted,_that.away,_that.awayMessage);case CoreEvent_Voice():
-return voice(_that.state);case CoreEvent_Speaking():
+return voice(_that.state);case CoreEvent_AudioDevicesReset():
+return audioDevicesReset(_that.input,_that.output);case CoreEvent_Speaking():
 return speaking(_that.clientIds);case CoreEvent_SelfSpeaking():
 return selfSpeaking(_that.speaking);case CoreEvent_Levels():
 return levels(_that.mic,_that.received);case CoreEvent_IdentityUpgrade():
@@ -874,7 +879,7 @@ return failed(_that.message);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( NetworkTelemetry telemetry)?  network,TResult? Function()?  accessChanged,TResult? Function( CoreSessionState state)?  state,TResult? Function( List<ServerProfileView> profiles)?  servers,TResult? Function( String serverId,  Uint8List? bytes)?  serverIconUpdated,TResult? Function( List<ChannelView> channels,  List<ClientView> clients)?  snapshot,TResult? Function( List<CoreMessage> messages)?  history,TResult? Function( String from,  String fromUid,  int fromId,  String message,  int targetMode,  int targetId,  String peerUid,  int at)?  textMessage,TResult? Function( String from,  String message)?  poked,TResult? Function( int id,  String nickname,  String uid,  int channelId)?  clientJoined,TResult? Function( int id)?  clientLeft,TResult? Function( int id,  int channelId)?  clientMoved,TResult? Function( int id,  bool? inputMuted,  bool? outputMuted,  bool? away,  String? awayMessage)?  clientUpdated,TResult? Function( CoreVoiceState state)?  voice,TResult? Function( Int32List clientIds)?  speaking,TResult? Function( bool speaking)?  selfSpeaking,TResult? Function( double mic,  double received)?  levels,TResult? Function( int from,  int to)?  identityUpgrade,TResult? Function( int level)?  identityUpgraded,TResult? Function( int id,  CoreTransferDirection direction,  String remotePath,  int total)?  transferStarted,TResult? Function( int id,  int transferred,  int total)?  transferProgress,TResult? Function( int id,  String? error)?  transferFinished,TResult? Function( List<StreamView> streams,  String? watching)?  streams,TResult? Function( String streamId,  int sourceClientId,  String sdp)?  streamOffer,TResult? Function( String streamId,  int sourceClientId,  String sdp,  String? mid,  int? mLine)?  streamIceCandidate,TResult? Function( String streamId,  StreamEndReason reason)?  streamEnded,TResult? Function( String streamId)?  screenSharePublished,TResult? Function()?  screenShareStopped,TResult? Function( String streamId,  int viewerClid)?  streamViewerJoinRequested,TResult? Function( String streamId,  int viewerClid,  PublisherSignal signal)?  publisherSignalReceived,TResult? Function( String streamId,  int viewerClid)?  streamViewerLeft,TResult? Function( String level,  String message)?  log,TResult? Function( String message)?  denied,TResult? Function( String message)?  failed,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( NetworkTelemetry telemetry)?  network,TResult? Function()?  accessChanged,TResult? Function( CoreSessionState state)?  state,TResult? Function( List<ServerProfileView> profiles)?  servers,TResult? Function( String serverId,  Uint8List? bytes)?  serverIconUpdated,TResult? Function( List<ChannelView> channels,  List<ClientView> clients)?  snapshot,TResult? Function( List<CoreMessage> messages)?  history,TResult? Function( String from,  String fromUid,  int fromId,  String message,  int targetMode,  int targetId,  String peerUid,  int at)?  textMessage,TResult? Function( String from,  String message)?  poked,TResult? Function( int id,  String nickname,  String uid,  int channelId)?  clientJoined,TResult? Function( int id)?  clientLeft,TResult? Function( int id,  int channelId)?  clientMoved,TResult? Function( int id,  bool? inputMuted,  bool? outputMuted,  bool? away,  String? awayMessage)?  clientUpdated,TResult? Function( CoreVoiceState state)?  voice,TResult? Function( bool input,  bool output)?  audioDevicesReset,TResult? Function( Int32List clientIds)?  speaking,TResult? Function( bool speaking)?  selfSpeaking,TResult? Function( double mic,  double received)?  levels,TResult? Function( int from,  int to)?  identityUpgrade,TResult? Function( int level)?  identityUpgraded,TResult? Function( int id,  CoreTransferDirection direction,  String remotePath,  int total)?  transferStarted,TResult? Function( int id,  int transferred,  int total)?  transferProgress,TResult? Function( int id,  String? error)?  transferFinished,TResult? Function( List<StreamView> streams,  String? watching)?  streams,TResult? Function( String streamId,  int sourceClientId,  String sdp)?  streamOffer,TResult? Function( String streamId,  int sourceClientId,  String sdp,  String? mid,  int? mLine)?  streamIceCandidate,TResult? Function( String streamId,  StreamEndReason reason)?  streamEnded,TResult? Function( String streamId)?  screenSharePublished,TResult? Function()?  screenShareStopped,TResult? Function( String streamId,  int viewerClid)?  streamViewerJoinRequested,TResult? Function( String streamId,  int viewerClid,  PublisherSignal signal)?  publisherSignalReceived,TResult? Function( String streamId,  int viewerClid)?  streamViewerLeft,TResult? Function( String level,  String message)?  log,TResult? Function( String message)?  denied,TResult? Function( String message)?  failed,}) {final _that = this;
 switch (_that) {
 case CoreEvent_Network() when network != null:
 return network(_that.telemetry);case CoreEvent_AccessChanged() when accessChanged != null:
@@ -890,7 +895,8 @@ return clientJoined(_that.id,_that.nickname,_that.uid,_that.channelId);case Core
 return clientLeft(_that.id);case CoreEvent_ClientMoved() when clientMoved != null:
 return clientMoved(_that.id,_that.channelId);case CoreEvent_ClientUpdated() when clientUpdated != null:
 return clientUpdated(_that.id,_that.inputMuted,_that.outputMuted,_that.away,_that.awayMessage);case CoreEvent_Voice() when voice != null:
-return voice(_that.state);case CoreEvent_Speaking() when speaking != null:
+return voice(_that.state);case CoreEvent_AudioDevicesReset() when audioDevicesReset != null:
+return audioDevicesReset(_that.input,_that.output);case CoreEvent_Speaking() when speaking != null:
 return speaking(_that.clientIds);case CoreEvent_SelfSpeaking() when selfSpeaking != null:
 return selfSpeaking(_that.speaking);case CoreEvent_Levels() when levels != null:
 return levels(_that.mic,_that.received);case CoreEvent_IdentityUpgrade() when identityUpgrade != null:
@@ -1898,6 +1904,76 @@ class _$CoreEvent_VoiceCopyWithImpl<$Res>
   return _then(CoreEvent_Voice(
 state: null == state ? _self.state : state // ignore: cast_nullable_to_non_nullable
 as CoreVoiceState,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class CoreEvent_AudioDevicesReset extends CoreEvent {
+  const CoreEvent_AudioDevicesReset({required this.input, required this.output}): super._();
+  
+
+ final  bool input;
+ final  bool output;
+
+/// Create a copy of CoreEvent
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$CoreEvent_AudioDevicesResetCopyWith<CoreEvent_AudioDevicesReset> get copyWith => _$CoreEvent_AudioDevicesResetCopyWithImpl<CoreEvent_AudioDevicesReset>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is CoreEvent_AudioDevicesReset&&(identical(other.input, input) || other.input == input)&&(identical(other.output, output) || other.output == output));
+}
+
+
+@override
+int get hashCode {
+    return Object.hash(runtimeType,input,output);
+}
+
+@override
+String toString() {
+    return 'CoreEvent.audioDevicesReset(input: $input, output: $output)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $CoreEvent_AudioDevicesResetCopyWith<$Res> implements $CoreEventCopyWith<$Res> {
+  factory $CoreEvent_AudioDevicesResetCopyWith(CoreEvent_AudioDevicesReset value, $Res Function(CoreEvent_AudioDevicesReset) _then) = _$CoreEvent_AudioDevicesResetCopyWithImpl;
+@useResult
+$Res call({
+ bool input, bool output
+});
+
+
+
+
+}
+/// @nodoc
+class _$CoreEvent_AudioDevicesResetCopyWithImpl<$Res>
+    implements $CoreEvent_AudioDevicesResetCopyWith<$Res> {
+  _$CoreEvent_AudioDevicesResetCopyWithImpl(this._self, this._then);
+
+  final CoreEvent_AudioDevicesReset _self;
+  final $Res Function(CoreEvent_AudioDevicesReset) _then;
+
+/// Create a copy of CoreEvent
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? input = null,Object? output = null,}) {
+  return _then(CoreEvent_AudioDevicesReset(
+input: null == input ? _self.input : input // ignore: cast_nullable_to_non_nullable
+as bool,output: null == output ? _self.output : output // ignore: cast_nullable_to_non_nullable
+as bool,
   ));
 }
 

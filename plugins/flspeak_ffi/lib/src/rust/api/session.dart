@@ -217,6 +217,8 @@ abstract class CoreSession implements RustOpaqueInterface {
     required bool enabled,
   });
 
+  Future<void> setMicrophonePermission({required bool granted});
+
   Future<void> setMuted({required bool muted});
 
   Future<void> setPttActive({required bool active});
@@ -603,6 +605,12 @@ sealed class CoreEvent with _$CoreEvent {
   }) = CoreEvent_ClientUpdated;
   const factory CoreEvent.voice({required CoreVoiceState state}) =
       CoreEvent_Voice;
+
+  /// 指定的音频设备已不可用，后端已自动回退到系统默认设备。
+  const factory CoreEvent.audioDevicesReset({
+    required bool input,
+    required bool output,
+  }) = CoreEvent_AudioDevicesReset;
   const factory CoreEvent.speaking({required Int32List clientIds}) =
       CoreEvent_Speaking;
   const factory CoreEvent.selfSpeaking({required bool speaking}) =

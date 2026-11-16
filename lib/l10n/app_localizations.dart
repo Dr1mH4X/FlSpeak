@@ -542,6 +542,18 @@ abstract class AppLocalizations {
   /// **'Speaker unavailable'**
   String get voiceSpeakerUnavailable;
 
+  /// No description provided for @voiceMicPermissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone permission denied; listening only'**
+  String get voiceMicPermissionDenied;
+
+  /// No description provided for @voiceMicPermissionSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable microphone permission in system settings'**
+  String get voiceMicPermissionSettings;
+
   /// No description provided for @voiceReconnectingAttempt.
   ///
   /// In en, this message translates to:

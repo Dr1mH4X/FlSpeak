@@ -219,6 +219,11 @@ pub enum SessionEvent {
         away_message: Option<String>,
     },
     Voice(VoiceStateView),
+    /// 指定的输入或输出音频设备失效，已回退到系统默认设备。
+    AudioDevicesReset {
+        input: bool,
+        output: bool,
+    },
     Speaking {
         client_ids: Vec<i32>,
     },
@@ -417,6 +422,10 @@ pub enum SessionCommand {
     SetAudioDevices {
         input: Option<String>,
         output: Option<String>,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
+    SetMicPermitted {
+        granted: bool,
         reply: oneshot::Sender<Result<(), SessionError>>,
     },
     UploadFile {
@@ -899,6 +908,12 @@ impl SessionHandle {
             output,
             reply,
         })?;
+        rx.await.map_err(|_| SessionError::Closed)?
+    }
+
+    pub async fn set_mic_permitted(&self, granted: bool) -> Result<(), SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::SetMicPermitted { granted, reply })?;
         rx.await.map_err(|_| SessionError::Closed)?
     }
 

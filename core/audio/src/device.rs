@@ -7,11 +7,15 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{FromSample, Sample, SampleFormat, SizedSample};
+use cpal::{DeviceType, FromSample, InterfaceType, Sample, SampleFormat, SizedSample};
 use crossbeam_queue::ArrayQueue;
 
 use crate::AudioError;
 use crate::format::AudioFormat;
+use crate::recovery::{
+    DeviceCandidate, StreamError, StreamErrorKind, is_virtual_default_device_id,
+    pick_fallback_default_index,
+};
 
 /// 采集/播放环形队列容量：2 秒 48kHz 立体声 f32。
 const SAMPLE_QUEUE_CAPACITY: usize = 48_000 * 2 * 2;
@@ -24,16 +28,28 @@ pub struct DeviceInfo {
 }
 
 #[derive(Clone, Default)]
-struct ErrorSlot(Arc<Mutex<Option<String>>>);
+struct ErrorSlot(Arc<Mutex<Option<StreamError>>>);
 
 impl ErrorSlot {
-    fn set(&self, message: String) {
+    fn set(&self, err: StreamError) {
+        if err.kind == StreamErrorKind::NonFatal {
+            return;
+        }
         if let Ok(mut slot) = self.0.lock() {
-            *slot = Some(message);
+            let keep_existing = matches!(
+                slot.as_ref().map(|existing| existing.kind),
+                Some(StreamErrorKind::Disconnected | StreamErrorKind::PermissionDenied)
+            ) && matches!(
+                err.kind,
+                StreamErrorKind::DeviceChanged | StreamErrorKind::Other
+            );
+            if !keep_existing {
+                *slot = Some(err);
+            }
         }
     }
 
-    fn take(&self) -> Option<String> {
+    fn take(&self) -> Option<StreamError> {
         self.0.lock().ok().and_then(|mut slot| slot.take())
     }
 }
@@ -76,7 +92,7 @@ impl CaptureStream {
         self.samples.len()
     }
 
-    pub fn take_error(&self) -> Option<String> {
+    pub fn take_error(&self) -> Option<StreamError> {
         self.errors.take()
     }
 }
@@ -102,7 +118,7 @@ impl PlaybackStream {
         self.samples.len()
     }
 
-    pub fn take_error(&self) -> Option<String> {
+    pub fn take_error(&self) -> Option<StreamError> {
         self.errors.take()
     }
 }
@@ -173,22 +189,59 @@ fn list_devices(input: bool) -> Result<Vec<DeviceInfo>, AudioError> {
         host.output_devices().map_err(device_error)?.collect()
     };
 
-    devices
-        .into_iter()
-        .map(|device| {
-            let id = device.id().map_err(device_error)?.to_string();
-            let name = device
-                .description()
-                .map(|description| description.name().to_string())
-                .unwrap_or_else(|_| id.clone());
-            let is_default = default_id.as_deref() == Some(id.as_str());
-            Ok(DeviceInfo {
-                id,
-                name,
-                is_default,
-            })
-        })
-        .collect()
+    let mut entries = Vec::with_capacity(devices.len());
+    let mut candidates = Vec::with_capacity(devices.len());
+    let mut matched_default = false;
+    for device in devices {
+        let id = device.id().map_err(device_error)?.to_string();
+        let description = device.description().ok();
+        let name = description
+            .as_ref()
+            .map(|description| description.name().to_string())
+            .unwrap_or_else(|| id.clone());
+        let candidate = description.as_ref().map_or(
+            DeviceCandidate {
+                is_builtin: false,
+                is_speaker: false,
+                is_microphone: false,
+            },
+            |desc| DeviceCandidate {
+                is_builtin: desc.interface_type() == InterfaceType::BuiltIn,
+                is_speaker: desc.device_type() == DeviceType::Speaker,
+                is_microphone: desc.device_type() == DeviceType::Microphone,
+            },
+        );
+        let is_default = default_id.as_deref() == Some(id.as_str());
+        if is_default {
+            matched_default = true;
+        }
+        candidates.push(candidate);
+        entries.push(DeviceInfo {
+            id,
+            name,
+            is_default,
+        });
+    }
+
+    if !matched_default
+        && default_id
+            .as_deref()
+            .is_some_and(is_virtual_default_device_id)
+        && let Some(index) = pick_fallback_default_index(input, &candidates)
+    {
+        entries[index].is_default = true;
+    }
+
+    Ok(entries)
+}
+
+fn default_device(host: &cpal::Host, input: bool) -> Result<cpal::Device, AudioError> {
+    let device = if input {
+        host.default_input_device()
+    } else {
+        host.default_output_device()
+    };
+    device.ok_or_else(|| AudioError::Device("没有可用的默认音频设备".into()))
 }
 
 fn select_device(input: bool, device_id: Option<&str>) -> Result<cpal::Device, AudioError> {
@@ -197,16 +250,14 @@ fn select_device(input: bool, device_id: Option<&str>) -> Result<cpal::Device, A
         let id = raw
             .parse::<cpal::DeviceId>()
             .map_err(|_| AudioError::Device(format!("设备 ID 非法: {raw}")))?;
+        if is_virtual_default_device_id(id.id()) {
+            return default_device(&host, input);
+        }
         return host
             .device_by_id(&id)
-            .ok_or_else(|| AudioError::Device(format!("找不到设备 {raw}")));
+            .ok_or_else(|| AudioError::DeviceNotFound(raw.to_string()));
     }
-    let device = if input {
-        host.default_input_device()
-    } else {
-        host.default_output_device()
-    };
-    device.ok_or_else(|| AudioError::Device("没有可用的默认音频设备".into()))
+    default_device(&host, input)
 }
 
 fn build_input_stream(
@@ -249,7 +300,12 @@ where
                     }
                 }
             },
-            move |err: cpal::Error| error_slot.set(err.to_string()),
+            move |err: cpal::Error| {
+                error_slot.set(StreamError {
+                    kind: classify_cpal_error(&err),
+                    message: err.to_string(),
+                });
+            },
             None,
         )
         .map_err(device_error)
@@ -290,12 +346,32 @@ where
                     *target = T::from_sample(sample);
                 }
             },
-            move |err: cpal::Error| error_slot.set(err.to_string()),
+            move |err: cpal::Error| {
+                error_slot.set(StreamError {
+                    kind: classify_cpal_error(&err),
+                    message: err.to_string(),
+                });
+            },
             None,
         )
         .map_err(device_error)
 }
 
+fn classify_cpal_error(err: &cpal::Error) -> StreamErrorKind {
+    match err.kind() {
+        cpal::ErrorKind::DeviceChanged => StreamErrorKind::DeviceChanged,
+        cpal::ErrorKind::DeviceNotAvailable | cpal::ErrorKind::StreamInvalidated => {
+            StreamErrorKind::Disconnected
+        }
+        cpal::ErrorKind::PermissionDenied => StreamErrorKind::PermissionDenied,
+        cpal::ErrorKind::Xrun | cpal::ErrorKind::RealtimeDenied => StreamErrorKind::NonFatal,
+        _ => StreamErrorKind::Other,
+    }
+}
+
 fn device_error(err: cpal::Error) -> AudioError {
-    AudioError::Device(err.to_string())
+    match err.kind() {
+        cpal::ErrorKind::PermissionDenied => AudioError::PermissionDenied(err.to_string()),
+        _ => AudioError::Device(err.to_string()),
+    }
 }

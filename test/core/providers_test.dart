@@ -7,6 +7,8 @@ import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:flspeak/core/android_audio_permission.dart';
+import 'package:flspeak/core/audio_selection.dart';
 import 'package:flspeak/core/models.dart';
 import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/core/notices.dart';
@@ -1578,4 +1580,123 @@ void main() {
       expect(peer.inputMuted, isTrue);
     },
   );
+
+  test('Android mic permission denial falls back to muted listen-only and unmute handles permanent denial', () async {
+    final events = StreamController<CoreEvent>.broadcast();
+    final core = _PermissionCore(events);
+    final gateway = _FakePermissionGateway();
+    final container = ProviderContainer(
+      overrides: [
+        coreSessionProvider.overrideWithValue(core),
+        microphonePermissionProvider.overrideWithValue(gateway),
+      ],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await events.close();
+    });
+
+    final controller = container.read(sessionViewProvider.notifier);
+
+    // 首次连接被拒：仍连入并自动静音，不跳系统设置。
+    gateway.nextStatus = MicrophonePermissionStatus.denied;
+    expect(await controller.connect(id: 'srv', nickname: 'Tester'), isTrue);
+    expect(core.calls, [
+      'disconnect',
+      'micPermitted:false',
+      'muted:true',
+      'connect:srv',
+    ]);
+    expect(gateway.openSettingsCalls, 0);
+
+    // 永久拒绝后主动取消静音：拦截 unmute 并打开系统设置。
+    core.calls.clear();
+    gateway.nextStatus = MicrophonePermissionStatus.permanentlyDenied;
+    await controller.setMuted(false);
+    expect(core.calls, isEmpty);
+    expect(gateway.openSettingsCalls, 1);
+
+    // 系统设置授权后再次取消静音：补报权限并解静音。
+    gateway.nextStatus = MicrophonePermissionStatus.granted;
+    await controller.setMuted(false);
+    expect(core.calls, ['micPermitted:true', 'muted:false']);
+  });
+
+  test('audioDevicesReset event clears only the fallen-back device side in audioSelectionProvider', () async {
+    final events = StreamController<CoreEvent>.broadcast();
+    final core = _PermissionCore(events);
+    final container = ProviderContainer(
+      overrides: [coreSessionProvider.overrideWithValue(core)],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await events.close();
+    });
+
+    container.read(sessionViewProvider);
+    final selection = container.read(audioSelectionProvider.notifier);
+    await selection.selectInput(
+      const AudioDeviceView(id: 'mic-1', name: 'Mic 1', isDefault: false),
+    );
+    await selection.selectOutput(
+      const AudioDeviceView(id: 'spk-1', name: 'Speaker 1', isDefault: false),
+    );
+
+    events.add(const CoreEvent.audioDevicesReset(input: false, output: true));
+    await pumpEventQueue();
+
+    final current = container.read(audioSelectionProvider);
+    expect(current.inputId, 'mic-1');
+    expect(current.inputName, 'Mic 1');
+    expect(current.outputId, isNull);
+    expect(current.outputName, isNull);
+  });
+}
+
+class _PermissionCore extends _Core {
+  _PermissionCore(super.eventsController);
+
+  final calls = <String>[];
+
+  @override
+  Future<void> setMicrophonePermission({required bool granted}) async {
+    calls.add('micPermitted:$granted');
+  }
+
+  @override
+  Future<void> setMuted({required bool muted}) async {
+    calls.add('muted:$muted');
+  }
+
+  @override
+  Future<void> disconnect() async {
+    calls.add('disconnect');
+  }
+
+  @override
+  Future<void> connect({required String id, required String nickname}) async {
+    calls.add('connect:$id');
+  }
+
+  @override
+  Future<void> setAudioDevices({String? input, String? output}) async {
+    calls.add('devices:$input,$output');
+  }
+}
+
+class _FakePermissionGateway implements MicrophonePermissionGateway {
+  MicrophonePermissionStatus nextStatus = MicrophonePermissionStatus.granted;
+  int openSettingsCalls = 0;
+
+  @override
+  bool get enforcesRuntimePermission => true;
+
+  @override
+  Future<MicrophonePermissionStatus> request() async => nextStatus;
+
+  @override
+  Future<bool> openSettings() async {
+    openSettingsCalls++;
+    return true;
+  }
 }

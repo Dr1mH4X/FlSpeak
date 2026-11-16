@@ -323,11 +323,36 @@ fn is_flood_error(err: &tsclient_rs::Error) -> bool {
 
 impl Actor {
     pub(super) fn apply_muted(&mut self, muted: bool) -> Result<(), SessionError> {
+        let effective_muted = muted || !self.mic_permitted;
         if self.audio_enabled {
-            self.voice.set_muted(muted)?;
+            self.voice.set_muted(effective_muted)?;
         }
-        self.voice_state.muted = muted;
-        self.finish_local_voice_change(DIRTY_INPUT_MUTED, muted);
+        self.voice_state.muted = effective_muted;
+        if !effective_muted {
+            self.ensure_capture_started();
+        }
+        self.finish_local_voice_change(DIRTY_INPUT_MUTED, effective_muted);
+        Ok(())
+    }
+
+    pub(super) fn set_mic_permitted(&mut self, granted: bool) -> Result<(), SessionError> {
+        if self.mic_permitted == granted {
+            return Ok(());
+        }
+        self.mic_permitted = granted;
+        if !granted {
+            if self.audio_enabled && self.capture_active {
+                let _ = self.voice.stop_capture();
+            }
+            self.capture_active = false;
+            self.voice_state.input_ready = false;
+            self.sync_voice_gate();
+            self.emit_voice_state();
+        } else {
+            self.voice_state.message = None;
+            self.ensure_capture_started();
+            self.emit_voice_state();
+        }
         Ok(())
     }
 
@@ -604,18 +629,37 @@ impl Actor {
             return;
         }
         self.voice_state.message = None;
-        if self.client.is_some() && self.self_channel_id != 0 && !self.capture_active {
-            let _ = self.voice.set_muted(self.voice_state.muted);
-            let _ = self.voice.set_deafened(self.voice_state.deafened);
-            let _ = self.voice.set_ptt_mode(self.voice_state.ptt_mode);
-            let _ = self.voice.set_ptt_active(self.voice_state.ptt_active);
-            if let Err(err) = self.voice.start_capture(self.input_device.clone()) {
-                self.voice_state.message = Some(err.to_string());
-            } else {
-                self.capture_active = true;
-            }
-        }
+        self.ensure_capture_started();
         self.emit_voice_state();
+    }
+
+    fn ensure_capture_started(&mut self) {
+        if !self.audio_enabled
+            || !self.mic_permitted
+            || self.client.is_none()
+            || self.self_channel_id == 0
+            || !is_supported_codec(self.current_codec)
+        {
+            if !self.mic_permitted {
+                self.capture_active = false;
+            }
+            self.sync_voice_gate();
+            return;
+        }
+        if self.capture_active {
+            return;
+        }
+        let _ = self.voice.set_muted(self.voice_state.muted);
+        let _ = self.voice.set_deafened(self.voice_state.deafened);
+        let _ = self.voice.set_ptt_mode(self.voice_state.ptt_mode);
+        let _ = self.voice.set_ptt_active(self.voice_state.ptt_active);
+        if let Err(err) = self.voice.start_capture(self.input_device.clone()) {
+            self.voice_state.message = Some(err.to_string());
+            self.capture_active = false;
+        } else {
+            self.capture_active = true;
+        }
+        self.sync_voice_gate();
     }
 
     fn stop_capture_with_message(&mut self, message: &str) {
@@ -654,6 +698,7 @@ impl Actor {
                     self.voice_state.message = None;
                 }
                 self.capture_active = ready;
+                self.sync_voice_gate();
                 self.emit_voice_state();
             }
             AudioEvent::PlaybackState { ready } => {
@@ -663,6 +708,23 @@ impl Actor {
                 }
                 self.emit_voice_state();
             }
+            AudioEvent::DeviceFallback { stage } => match stage {
+                AudioStage::Capture => {
+                    self.input_device = None;
+                    self.emit(SessionEvent::AudioDevicesReset {
+                        input: true,
+                        output: false,
+                    });
+                }
+                AudioStage::Playback => {
+                    self.output_device = None;
+                    self.emit(SessionEvent::AudioDevicesReset {
+                        input: false,
+                        output: true,
+                    });
+                }
+                AudioStage::Codec => {}
+            },
             AudioEvent::Error { stage, message } => {
                 let stage = match stage {
                     AudioStage::Capture => "采集",
@@ -715,17 +777,8 @@ impl Actor {
         if let Err(err) = self.voice.start_playback(self.output_device.clone()) {
             self.voice_state.message = Some(err.to_string());
         }
-        if self.self_channel_id != 0 && is_supported_codec(self.current_codec) {
-            if let Err(err) = self.voice.start_capture(self.input_device.clone()) {
-                self.voice_state.message = Some(err.to_string());
-                self.capture_active = false;
-            } else {
-                self.capture_active = true;
-            }
-        } else {
-            self.capture_active = false;
-        }
-        self.sync_voice_gate();
+        self.capture_active = false;
+        self.ensure_capture_started();
     }
 
     pub(super) fn stop_voice(&mut self) {
@@ -1293,5 +1346,45 @@ mod tests {
                 );
             })
             .await;
+    }
+
+    #[test]
+    fn device_fallback_resets_actor_device_and_emits_event() {
+        let mut actor = audio_actor();
+        actor.input_device = Some("aaudio:10".into());
+        actor.output_device = Some("aaudio:20".into());
+        let mut events = actor.events.subscribe();
+
+        actor.handle_audio(AudioEvent::DeviceFallback {
+            stage: AudioStage::Playback,
+        });
+        assert_eq!(actor.output_device, None);
+        assert_eq!(actor.input_device.as_deref(), Some("aaudio:10"));
+        assert!(matches!(
+            events.try_recv(),
+            Ok(SessionEvent::AudioDevicesReset {
+                input: false,
+                output: true
+            })
+        ));
+    }
+
+    #[test]
+    fn denied_mic_permission_keeps_muted_and_clears_capture_state() {
+        let mut actor = audio_actor();
+        actor.voice_state.input_ready = true;
+        actor.set_mic_permitted(false).unwrap();
+        assert!(!actor.mic_permitted);
+        assert!(!actor.capture_active);
+        assert!(!actor.voice_state.input_ready);
+
+        // 无麦克风权限时不能解静音。
+        actor.apply_muted(false).unwrap();
+        assert!(actor.voice_state.muted);
+
+        // 授予权限后允许解静音。
+        actor.set_mic_permitted(true).unwrap();
+        actor.apply_muted(false).unwrap();
+        assert!(!actor.voice_state.muted);
     }
 }

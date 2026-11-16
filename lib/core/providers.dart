@@ -8,6 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../l10n/app_localizations.dart';
+import 'android_audio_permission.dart';
+import 'audio_selection.dart';
 import 'logging/logger.dart';
 import 'models.dart';
 import 'global_hotkey.dart';
@@ -30,6 +32,10 @@ final _localizationsProvider = Provider<AppLocalizations>((ref) {
 /// 在 `main()` 里用真实句柄覆盖；测试里用假的实现覆盖。
 final coreSessionProvider = Provider<CoreSession>(
   (ref) => throw StateError('coreSessionProvider 必须在 ProviderScope 里覆盖'),
+);
+
+final microphonePermissionProvider = Provider<MicrophonePermissionGateway>(
+  (ref) => const AndroidAudioPermission(),
 );
 
 /// `preferences.json` 的绝对路径，设置页展示与复制用。同样在 `main()` 里覆盖。
@@ -224,6 +230,23 @@ class SessionController extends Notifier<SessionView> {
       final session = ref.read(coreSessionProvider);
       // 核心可能已进入界面尚未收到的重连流程，显式重置句柄再连接。
       await session.disconnect();
+      if (!ref.mounted || _connectingServerId != id) return;
+      final permission = ref.read(microphonePermissionProvider);
+      if (permission.enforcesRuntimePermission) {
+        final status = await permission.request();
+        if (!ref.mounted || _connectingServerId != id) return;
+        final granted = status == MicrophonePermissionStatus.granted;
+        await session.setMicrophonePermission(granted: granted);
+        if (!granted) {
+          await session.setMuted(muted: true);
+          if (ref.mounted) {
+            _notify(
+              ref.read(_localizationsProvider).voiceMicPermissionDenied,
+              tone: NoticeTone.info,
+            );
+          }
+        }
+      }
       if (!ref.mounted || _connectingServerId != id) return;
       attempted = true;
       await session.connect(id: id, nickname: nickname);
@@ -455,7 +478,30 @@ class SessionController extends Notifier<SessionView> {
   /// 静音只停发送；deafen 同时停发送并静音播放。状态以 Rust 的 Voice 事件为准。
   Future<void> setMuted(bool muted) async {
     try {
-      await ref.read(coreSessionProvider).setMuted(muted: muted);
+      final session = ref.read(coreSessionProvider);
+      final permission = ref.read(microphonePermissionProvider);
+      if (!muted && permission.enforcesRuntimePermission) {
+        final status = await permission.request();
+        if (!ref.mounted) return;
+        switch (status) {
+          case MicrophonePermissionStatus.granted:
+            await session.setMicrophonePermission(granted: true);
+          case MicrophonePermissionStatus.denied:
+            _notify(
+              ref.read(_localizationsProvider).voiceMicPermissionDenied,
+              tone: NoticeTone.info,
+            );
+            return;
+          case MicrophonePermissionStatus.permanentlyDenied:
+            _notify(
+              ref.read(_localizationsProvider).voiceMicPermissionSettings,
+              tone: NoticeTone.info,
+            );
+            await permission.openSettings();
+            return;
+        }
+      }
+      await session.setMuted(muted: muted);
     } on CoreError catch (error) {
       _notifyCoreError(error);
     }
@@ -1241,6 +1287,10 @@ class SessionController extends Notifier<SessionView> {
           _lastVoiceNotice = message;
           _notify(message);
         }
+      case CoreEvent_AudioDevicesReset(:final input, :final output):
+        ref
+            .read(audioSelectionProvider.notifier)
+            .resetFallback(input: input, output: output);
       case CoreEvent_Speaking(:final clientIds):
         state = current.copyWith(speaking: clientIds.toSet());
       case CoreEvent_SelfSpeaking(:final speaking):

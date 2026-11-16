@@ -8,6 +8,7 @@ pub mod convert;
 pub mod format;
 pub mod level;
 pub mod logging;
+pub mod recovery;
 pub mod softclip;
 pub mod vad;
 
@@ -38,6 +39,12 @@ pub enum CodecError {
 pub enum AudioError {
     #[error("音频设备不可用: {0}")]
     Device(String),
+
+    #[error("找不到音频设备: {0}")]
+    DeviceNotFound(String),
+
+    #[error("音频设备权限被拒绝: {0}")]
+    PermissionDenied(String),
 
     #[error("音频引擎不可用: {0}")]
     Engine(String),
