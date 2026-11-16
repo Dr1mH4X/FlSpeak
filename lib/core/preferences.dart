@@ -51,8 +51,8 @@ enum VoiceMeterSource {
 
 /// 屏幕共享默认分辨率与码率档位。
 enum ScreenShareResolutionPreset {
-  p720('720p', width: 1280, height: 720, bitrateKbps: 2500),
-  p1080('1080p', width: 1920, height: 1080, bitrateKbps: 4500);
+  p720('720p', width: 1280, height: 720, bitrateKbps: 5000),
+  p1080('1080p', width: 1920, height: 1080, bitrateKbps: 8000);
 
   const ScreenShareResolutionPreset(
     this.id, {

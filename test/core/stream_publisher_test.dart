@@ -586,7 +586,7 @@ void main() {
         (
           name: 'Code Editor',
           audio: false,
-          bitrate: 2500,
+          bitrate: 5000,
           viewerLimit: defaultMaxStreamViewers,
         ),
       ]);
@@ -691,7 +691,7 @@ void main() {
       );
       expect(
         sender101.updatedParameters?.encodings?.single.maxBitrate,
-        4500 * 1000,
+        8000 * 1000,
       );
       expect(sender101.updatedParameters?.encodings?.single.maxFramerate, 30);
       expect(
@@ -1015,7 +1015,7 @@ void main() {
       );
       expect(
         videoSender.updatedParameters?.encodings?.single.maxBitrate,
-        4500 * 1000,
+        8000 * 1000,
       );
       expect(videoSender.updatedParameters?.encodings?.single.maxFramerate, 30);
     });
@@ -1247,7 +1247,7 @@ void main() {
       });
     });
 
-    test('orders H264 codecs first by default and VP8 codecs first when configured', () async {
+    test('orders H264 primary codecs first by default and VP8 primary codecs first when configured', () async {
       for (final configured in [null, ScreenShareCodecPreference.vp8]) {
         final events = StreamController<CoreEvent>.broadcast();
         final core = _FakeCoreSession(events);
@@ -1298,25 +1298,55 @@ void main() {
 
         final videoTransceiver =
             bindings.createdPeers.single.transceiversList.first;
-        final expectedFirst = configured == ScreenShareCodecPreference.vp8
-            ? 'video/VP8'
-            : 'video/H264';
+        final expectedOrder = configured == ScreenShareCodecPreference.vp8
+            ? ['video/VP8', 'video/H264']
+            : ['video/H264', 'video/VP8'];
         final mimeOrder = videoTransceiver.preferredCodecs
             ?.map((c) => c.mimeType)
             .toList();
-        expect(mimeOrder?.first, expectedFirst);
-        expect(mimeOrder, containsAll(['video/rtx', 'video/ulpfec']));
+        expect(mimeOrder, expectedOrder);
 
         await events.close();
         container.dispose();
       }
     });
 
-    test('filters passive TCP and duplicate local ICE candidates and does not block remote ICE while flushing', () async {
+    test('computes scaleResolutionDownBy for Retina and 1080p sources and updates active viewers on resize', () async {
+      expect(
+        computeScaleResolutionDownBy(
+          sourceWidth: 0,
+          sourceHeight: 0,
+          resolution: ScreenShareResolutionPreset.p720,
+        ),
+        1.0,
+      );
+      expect(
+        computeScaleResolutionDownBy(
+          sourceWidth: 1920,
+          sourceHeight: 1080,
+          resolution: ScreenShareResolutionPreset.p720,
+        ),
+        1.5,
+      );
+      expect(
+        computeScaleResolutionDownBy(
+          sourceWidth: 1920,
+          sourceHeight: 1080,
+          resolution: ScreenShareResolutionPreset.p1080,
+        ),
+        1.0,
+      );
+      expect(
+        computeScaleResolutionDownBy(
+          sourceWidth: 3024,
+          sourceHeight: 1964,
+          resolution: ScreenShareResolutionPreset.p720,
+        ),
+        closeTo(1964 / 720, 0.0001),
+      );
+
       final events = StreamController<CoreEvent>.broadcast();
-      final candidateGate = Completer<void>();
-      final core = _FakeCoreSession(events)
-        ..sendPublisherCandidateGate = candidateGate;
+      final core = _FakeCoreSession(events);
       final bindings = _FakePublisherWebRtcBindings();
 
       final container = ProviderContainer(
@@ -1326,9 +1356,6 @@ void main() {
         ],
       );
       addTearDown(() async {
-        if (!candidateGate.isCompleted) {
-          candidateGate.complete();
-        }
         await events.close();
         container.dispose();
       });
@@ -1340,87 +1367,152 @@ void main() {
         ),
       );
       await _pumpEventQueue();
+
       await container
           .read(sessionViewProvider.notifier)
-          .startScreenShare(sourceId: 'screen:0', sourceName: 'Entire Screen');
+          .startScreenShare(
+            sourceId: 'screen:0',
+            sourceName: 'Entire Screen',
+            resolution: ScreenShareResolutionPreset.p720,
+            frameRate: ScreenShareFrameRatePreset.fps60,
+          );
       events.add(
-        const CoreEvent.screenSharePublished(streamId: 'pub-stream-ice-filter'),
+        const CoreEvent.screenSharePublished(streamId: 'pub-stream-scale'),
       );
       await _pumpEventQueue();
+
       events.add(
         const CoreEvent.streamViewerJoinRequested(
-          streamId: 'pub-stream-ice-filter',
-          viewerClid: 707,
+          streamId: 'pub-stream-scale',
+          viewerClid: 808,
         ),
       );
       await _pumpEventQueue();
 
-      final peer = bindings.createdPeers.single;
-      // Passive TCP candidate must be ignored.
-      peer.onIceCandidate?.call(
-        RTCIceCandidate(
-          'candidate:tcp-passive 1 tcp 1518280447 192.168.1.10 9 typ host tcptype passive',
-          '0',
-          0,
-        ),
+      // _FakeVideoRenderer reports 1920x1080 on srcObject assignment -> 720p scales down by 1.5x.
+      final sender = bindings.createdPeers.single.sendersList.single;
+      expect(
+        sender.updatedParameters?.encodings?.single.maxBitrate,
+        5000 * 1000,
       );
-      // Two srflx candidates from different STUN servers sharing the same reflexive address:
-      // only the first should be queued.
-      peer.onIceCandidate?.call(
-        RTCIceCandidate(
-          'candidate:1001 1 udp 1686052607 203.0.113.5 41234 typ srflx raddr 192.168.1.10 rport 54321',
-          '0',
-          0,
-        ),
+      expect(sender.updatedParameters?.encodings?.single.maxFramerate, 60);
+      expect(
+        sender.updatedParameters?.encodings?.single.scaleResolutionDownBy,
+        1.5,
       );
-      peer.onIceCandidate?.call(
-        RTCIceCandidate(
-          'candidate:2002 1 udp 1686052607 203.0.113.5 41234 typ srflx raddr 192.168.1.10 rport 54321',
-          '0',
-          0,
-        ),
-      );
+
+      // When native capture later emits Retina dimensions via onResize, active viewer senders update.
+      final renderer = bindings.createdRenderers.single;
+      renderer.value = renderer.value.copyWith(width: 3024, height: 1964);
+      renderer.onResize?.call();
       await _pumpEventQueue();
 
-      // Answer starts async flush (blocked on candidateGate), then remote ICE arrives immediately.
-      events.add(
-        const CoreEvent.publisherSignalReceived(
-          streamId: 'pub-stream-ice-filter',
-          viewerClid: 707,
-          signal: PublisherSignal.answer(sdp: _sampleViewerAnswerSdp),
-        ),
+      expect(
+        sender.updatedParameters?.encodings?.single.scaleResolutionDownBy,
+        closeTo(1964 / 720, 0.0001),
       );
-      events.add(
-        const CoreEvent.publisherSignalReceived(
-          streamId: 'pub-stream-ice-filter',
-          viewerClid: 707,
-          signal: PublisherSignal.iceCandidate(
-            sdp: 'candidate:viewer707 1 udp 2122252543 198.51.100.20 50000 typ host',
+    });
+
+    test(
+      'does not block remote ICE candidates while local ICE candidates flush',
+      () async {
+        final events = StreamController<CoreEvent>.broadcast();
+        final candidateGate = Completer<void>();
+        final core = _FakeCoreSession(events)
+          ..sendPublisherCandidateGate = candidateGate;
+        final bindings = _FakePublisherWebRtcBindings();
+
+        final container = ProviderContainer(
+          overrides: [
+            coreSessionProvider.overrideWithValue(core),
+            webRtcBindingsProvider.overrideWithValue(bindings),
+          ],
+        );
+        addTearDown(() async {
+          if (!candidateGate.isCompleted) {
+            candidateGate.complete();
+          }
+          await events.close();
+          container.dispose();
+        });
+
+        container.read(sessionViewProvider);
+        events.add(
+          const CoreEvent.state(
+            state: CoreSessionState.connected(clientId: 1, channelId: 5),
+          ),
+        );
+        await _pumpEventQueue();
+        await container
+            .read(sessionViewProvider.notifier)
+            .startScreenShare(
+              sourceId: 'screen:0',
+              sourceName: 'Entire Screen',
+            );
+        events.add(
+          const CoreEvent.screenSharePublished(
+            streamId: 'pub-stream-ice-filter',
+          ),
+        );
+        await _pumpEventQueue();
+        events.add(
+          const CoreEvent.streamViewerJoinRequested(
+            streamId: 'pub-stream-ice-filter',
+            viewerClid: 707,
+          ),
+        );
+        await _pumpEventQueue();
+
+        final peer = bindings.createdPeers.single;
+        peer.onIceCandidate?.call(RTCIceCandidate('', '0', 0));
+        peer.onIceCandidate?.call(
+          RTCIceCandidate(
+            'candidate:1001 1 udp 1686052607 203.0.113.5 41234 typ srflx raddr 192.168.1.10 rport 54321',
+            '0',
+            0,
+          ),
+        );
+        await _pumpEventQueue();
+
+        // Answer starts async flush (blocked on candidateGate), then remote ICE arrives immediately.
+        events.add(
+          const CoreEvent.publisherSignalReceived(
+            streamId: 'pub-stream-ice-filter',
+            viewerClid: 707,
+            signal: PublisherSignal.answer(sdp: _sampleViewerAnswerSdp),
+          ),
+        );
+        events.add(
+          const CoreEvent.publisherSignalReceived(
+            streamId: 'pub-stream-ice-filter',
+            viewerClid: 707,
+            signal: PublisherSignal.iceCandidate(
+              sdp: 'candidate:viewer707 1 udp 2122252543 198.51.100.20 50000 typ host',
+              mid: '0',
+              mLine: 0,
+            ),
+          ),
+        );
+        await _pumpEventQueue();
+
+        // Remote ICE candidate must be applied even while local candidate flush is pending.
+        expect(peer.addedCandidates.map((c) => c.candidate), [
+          'candidate:viewer707 1 udp 2122252543 198.51.100.20 50000 typ host',
+        ]);
+        expect(core.sentPublisherCandidates, isEmpty);
+
+        candidateGate.complete();
+        await _pumpEventQueue();
+
+        expect(core.sentPublisherCandidates, [
+          (
+            viewerClid: 707,
+            sdp: 'candidate:1001 1 udp 1686052607 203.0.113.5 41234 typ srflx raddr 192.168.1.10 rport 54321',
             mid: '0',
             mLine: 0,
           ),
-        ),
-      );
-      await _pumpEventQueue();
-
-      // Remote ICE candidate must be applied even while local candidate flush is pending.
-      expect(peer.addedCandidates.map((c) => c.candidate), [
-        'candidate:viewer707 1 udp 2122252543 198.51.100.20 50000 typ host',
-      ]);
-      expect(core.sentPublisherCandidates, isEmpty);
-
-      candidateGate.complete();
-      await _pumpEventQueue();
-
-      // Only the first unique UDP srflx candidate was sent.
-      expect(core.sentPublisherCandidates, [
-        (
-          viewerClid: 707,
-          sdp: 'candidate:1001 1 udp 1686052607 203.0.113.5 41234 typ srflx raddr 192.168.1.10 rport 54321',
-          mid: '0',
-          mLine: 0,
-        ),
-      ]);
-    });
+        ]);
+      },
+    );
   });
 }

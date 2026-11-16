@@ -154,6 +154,23 @@ final streamPublisherProvider =
       StreamPublisherController.new,
     );
 
+/// Computes the `RTCRtpEncoding.scaleResolutionDownBy` factor needed to fit a
+/// captured desktop source of `[sourceWidth] x [sourceHeight]` within
+/// [resolution], matching WebSpeak's sender scaling logic.
+double computeScaleResolutionDownBy({
+  required int sourceWidth,
+  required int sourceHeight,
+  required ScreenShareResolutionPreset resolution,
+}) {
+  if (sourceWidth <= 0 || sourceHeight <= 0) {
+    return 1.0;
+  }
+  final widthRatio = sourceWidth / resolution.width;
+  final heightRatio = sourceHeight / resolution.height;
+  final scale = widthRatio > heightRatio ? widthRatio : heightRatio;
+  return scale > 1.01 ? scale : 1.0;
+}
+
 class _ViewerPeerSession {
   _ViewerPeerSession({required this.viewerClid, required this.peerGeneration});
 
@@ -164,7 +181,6 @@ class _ViewerPeerSession {
   bool failureReported = false;
   final List<RTCIceCandidate> pendingLocalCandidates = [];
   final List<RTCIceCandidate> pendingRemoteCandidates = [];
-  final Set<String> sentLocalCandidateKeys = <String>{};
 
   /// Serializes Answer/ICE handling so a candidate can never be added before the
   /// Answer that established the remote description.
@@ -290,6 +306,10 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
       _previewRenderer = renderer;
       await renderer.initialize();
       if (!_isCurrentGeneration(currentGeneration)) return false;
+      renderer.onResize = () {
+        if (!_isCurrentGeneration(currentGeneration)) return;
+        unawaited(_reapplyAllViewerVideoSenderParameters(currentGeneration));
+      };
       renderer.srcObject = stream;
 
       final hasAudioTrack = audio && stream.getAudioTracks().isNotEmpty;
@@ -504,13 +524,7 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
           return;
         }
         final candidateSdp = candidate.candidate;
-        if (candidateSdp == null ||
-            !shouldTrickleIceCandidate(
-              candidateSdp,
-              viewerSession.sentLocalCandidateKeys,
-            )) {
-          return;
-        }
+        if (candidateSdp == null || candidateSdp.isEmpty) return;
         // Trickle candidates only after the viewer's Answer established the remote
         // description; the official client otherwise receives a burst of signals
         // before it has a peer to apply them to.
@@ -609,13 +623,13 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
       }
 
       final rawSdp = rawOffer.sdp ?? '';
-      // Guarantee m=audio uses a=sendonly even when no audio track is attached,
-      // while keeping libwebrtc's own offer intact unless command-line pruning is needed.
-      final ensuredSdp = ensureAudioDirectionInSdp(rawSdp, 'sendonly');
-      var appliedSdp = _offerFitsOneCommand(ensuredSdp)
-          ? ensuredSdp
+      // Both known-working TS6 implementations hand libwebrtc's own offer to the
+      // viewer unchanged and only narrow codecs through `setCodecPreferences`.
+      // Rewriting the SDP is a last resort for the server's command-line limit.
+      var appliedSdp = _offerFitsOneCommand(rawSdp)
+          ? rawSdp
           : normalizeSdpForTs6(
-              ensuredSdp,
+              rawSdp,
               preferredVideoCodec: preferredCodec,
               fallbackAudioDirection: 'sendonly',
             );
@@ -771,29 +785,10 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
             return;
           }
           // Safely reapply video sender parameters after answer negotiation.
-          try {
-            final senders = await peer.getSenders();
-            final videoSender = senders
-                .where((s) => s.track?.kind == 'video')
-                .firstOrNull;
-            if (videoSender != null &&
-                _isViewerSessionValid(
-                  currentGeneration,
-                  viewerClid,
-                  peerGeneration,
-                )) {
-              final prefs = ref.read(preferencesProvider);
-              await _configureVideoSenderParameters(
-                videoSender: videoSender,
-                resolution: state.resolution,
-                frameRate: state.frameRate,
-                degradationPreference: prefs.screenShareDegradation,
-              );
-            }
-          } catch (_) {
-            // Reapplying sender parameters is best-effort and must never
-            // trigger viewer session teardown.
-          }
+          await _reapplyViewerVideoSenderParameters(
+            generation: currentGeneration,
+            viewerSession: viewerSession,
+          );
           if (!_isViewerSessionValid(
             currentGeneration,
             viewerClid,
@@ -892,12 +887,85 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
       } catch (_) {}
       // Video transceiver is always added first (index 0 / MID 0).
       if (i == 0) {
-        await preferVideoCodecOnTransceiver(
+        await _preferPrimaryVideoCodecs(
           capabilities: capabilities,
           transceiver: transceiver,
           preferredMimeType: preferredMimeType,
         );
       }
+    }
+  }
+
+  /// Restricts the publisher's offer to H.264 and VP8 with the configured codec
+  /// ordered first. libwebrtc then writes the offer itself, so no SDP rewriting
+  /// is needed to stay inside the command line limit.
+  Future<void> _preferPrimaryVideoCodecs({
+    required RTCRtpCapabilities? capabilities,
+    required RTCRtpTransceiver transceiver,
+    required String preferredMimeType,
+  }) async {
+    await preferVideoCodecOnTransceiver(
+      capabilities: capabilities,
+      transceiver: transceiver,
+      preferredMimeType: preferredMimeType,
+      onError: (e) =>
+          logWarn('setCodecPreferences failed', target: 'stream', error: e),
+    );
+  }
+
+  Future<void> _reapplyAllViewerVideoSenderParameters(int generation) async {
+    if (!_isCurrentGeneration(generation) || !state.isActive) return;
+    final sessions = _viewerSessions.values.toList(growable: false);
+    if (sessions.isEmpty) return;
+    final degradationPreference = ref
+        .read(preferencesProvider)
+        .screenShareDegradation;
+    for (final viewerSession in sessions) {
+      await _reapplyViewerVideoSenderParameters(
+        generation: generation,
+        viewerSession: viewerSession,
+        degradationPreference: degradationPreference,
+      );
+    }
+  }
+
+  Future<void> _reapplyViewerVideoSenderParameters({
+    required int generation,
+    required _ViewerPeerSession viewerSession,
+    ScreenShareDegradationPreference? degradationPreference,
+  }) async {
+    if (!_isViewerSessionValid(
+      generation,
+      viewerSession.viewerClid,
+      viewerSession.peerGeneration,
+    )) {
+      return;
+    }
+    final peer = viewerSession.peer;
+    if (peer == null) return;
+    try {
+      final senders = await peer.getSenders();
+      final videoSender = senders
+          .where((s) => s.track?.kind == 'video')
+          .firstOrNull;
+      if (videoSender != null &&
+          _isViewerSessionValid(
+            generation,
+            viewerSession.viewerClid,
+            viewerSession.peerGeneration,
+          )) {
+        await _configureVideoSenderParameters(
+          videoSender: videoSender,
+          resolution: state.resolution,
+          frameRate: state.frameRate,
+          degradationPreference:
+              degradationPreference ??
+              ref.read(preferencesProvider).screenShareDegradation,
+        );
+      }
+    } catch (_) {
+      // Updating sender parameters is best-effort and must never trigger
+      // viewer session teardown.
     }
   }
 
@@ -908,6 +976,14 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
     required ScreenShareDegradationPreference degradationPreference,
   }) async {
     try {
+      final sourceWidth = _previewRenderer?.videoWidth ?? 0;
+      final sourceHeight = _previewRenderer?.videoHeight ?? 0;
+      final scaleResolutionDownBy = computeScaleResolutionDownBy(
+        sourceWidth: sourceWidth,
+        sourceHeight: sourceHeight,
+        resolution: resolution,
+      );
+
       final params = videoSender.parameters;
       params.degradationPreference =
           degradationPreference ==
@@ -922,14 +998,14 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
             active: true,
             maxBitrate: resolution.maxBitrateBps,
             maxFramerate: frameRate.fps,
-            scaleResolutionDownBy: 1.0,
+            scaleResolutionDownBy: scaleResolutionDownBy,
           ),
         ];
       } else {
         for (final encoding in encodings) {
           encoding.maxBitrate = resolution.maxBitrateBps;
           encoding.maxFramerate = frameRate.fps;
-          encoding.scaleResolutionDownBy = 1.0;
+          encoding.scaleResolutionDownBy = scaleResolutionDownBy;
         }
       }
       await videoSender.setParameters(params);
@@ -1088,7 +1164,6 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
     _clearViewerNegotiationTimer(session);
     session.pendingLocalCandidates.clear();
     session.pendingRemoteCandidates.clear();
-    session.sentLocalCandidateKeys.clear();
     _syncViewerIds();
 
     final peer = session.peer;
@@ -1134,7 +1209,6 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
       _clearViewerNegotiationTimer(session);
       session.pendingLocalCandidates.clear();
       session.pendingRemoteCandidates.clear();
-      session.sentLocalCandidateKeys.clear();
     }
 
     final localStream = _localStream;
@@ -1155,6 +1229,7 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
     }
 
     if (previewRenderer != null) {
+      previewRenderer.onResize = null;
       try {
         previewRenderer.srcObject = null;
       } catch (_) {}

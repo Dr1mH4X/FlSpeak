@@ -10,44 +10,13 @@ import 'providers.dart';
 import 'window_chrome.dart';
 
 /// Default STUN server configuration for TS6 screen-share viewer and publisher connections.
-/// Uses a concise set of fast TeamSpeak and reachable public STUN servers so ICE gathering
-/// finishes promptly without flooding signaling.
+/// Matches WebSpeak's official TeamSpeak STUN pair so ICE gathering finishes
+/// promptly without flooding signaling.
 const List<Map<String, dynamic>> defaultStreamIceServers = [
   {
-    'urls': [
-      'stun:turn.teamspeak.com:3478',
-      'stun:stun.cloudflare.com:3478',
-      'stun:stun.qq.com:3478',
-      'stun:stun.miwifi.com:3478',
-    ],
+    'urls': ['stun:turn.teamspeak.com:3478', 'stun:turn2.teamspeak.com:3478'],
   },
 ];
-
-final RegExp _passiveTcpCandidateRegex = RegExp(
-  r'\btcp\b.*\btcptype\s+passive\b',
-  caseSensitive: false,
-);
-final RegExp _iceCandidateTupleRegex = RegExp(
-  r'^(?:a=)?candidate:\S+\s+(\d+)\s+(\S+)\s+\d+\s+(\S+)\s+(\d+)\s+typ\s+(\S+)',
-  caseSensitive: false,
-);
-
-/// Returns whether [candidateSdp] should be trickled over signaling, filtering
-/// out passive TCP candidates and deduplicating identical transport addresses
-/// in [seenKeys].
-bool shouldTrickleIceCandidate(String candidateSdp, Set<String> seenKeys) {
-  final trimmed = candidateSdp.trim();
-  if (trimmed.isEmpty) return false;
-  if (_passiveTcpCandidateRegex.hasMatch(trimmed)) return false;
-
-  final match = _iceCandidateTupleRegex.firstMatch(trimmed);
-  final key = match == null
-      ? trimmed
-      : '${match.group(1)}|${match.group(2)!.toLowerCase()}|'
-            '${match.group(3)!.toLowerCase()}|${match.group(4)}|'
-            '${match.group(5)!.toLowerCase()}';
-  return seenKeys.add(key);
-}
 
 /// Default timeout for WebRTC offer/answer + ICE negotiation.
 const Duration defaultStreamNegotiationTimeout = Duration(seconds: 15);
@@ -545,17 +514,20 @@ String normalizeSdpForTs6(
   return '$trimmed$fallbackAudioSection$lineSeparator';
 }
 
-/// Applies codec preference ordering on a video [transceiver] so codecs
-/// matching [preferredMimeType] (e.g. `video/vp8` or `video/h264`) appear first.
+/// Applies codec preference ordering on a video [transceiver] so primary video
+/// codecs matching [preferredMimeType] (e.g. `video/vp8` or `video/h264`)
+/// appear before the secondary fallback (`video/h264` or `video/vp8`).
 ///
-/// Preserves `video/rtx` retransmission payloads paired with their parent codec
-/// and retains auxiliary resilience payloads (`video/red`, `video/ulpfec`)
-/// so native `libwebrtc` does not reject `setCodecPreferences` with
-/// `INVALID_MODIFICATION`.
+/// Only primary codecs are passed to `setCodecPreferences`: Darwin's
+/// `flutter_webrtc` matches `video/rtx` capabilities without `apt=` parameters,
+/// which collapses multiple RTX entries into duplicates that `libwebrtc` rejects,
+/// and `libwebrtc` automatically attaches paired RTX payload types when generating
+/// offers and answers.
 Future<void> preferVideoCodecOnTransceiver({
   required RTCRtpCapabilities? capabilities,
   required RTCRtpTransceiver transceiver,
   String preferredMimeType = 'video/vp8',
+  void Function(Object error)? onError,
 }) async {
   final codecs = capabilities?.codecs;
   if (codecs == null || codecs.isEmpty) return;
@@ -563,65 +535,21 @@ Future<void> preferVideoCodecOnTransceiver({
   final targetMime = preferredMimeType.trim().toLowerCase();
   final secondaryMime = targetMime == 'video/vp8' ? 'video/h264' : 'video/vp8';
 
-  final preferredBlocks = <List<RTCRtpCodecCapability>>[];
-  final secondaryBlocks = <List<RTCRtpCodecCapability>>[];
-  final auxiliaryCodecs = <RTCRtpCodecCapability>[];
-
-  List<RTCRtpCodecCapability>? currentBlock;
-  int currentBlockCategory = 0; // 1 = preferred, 2 = secondary, 0 = other
-
-  for (final codec in codecs) {
-    final mime = codec.mimeType.toLowerCase();
-    if (mime == 'video/rtx') {
-      if (currentBlock != null) {
-        currentBlock.add(codec);
-      } else {
-        auxiliaryCodecs.add(codec);
-      }
-    } else if (mime == 'video/red' ||
-        mime == 'video/ulpfec' ||
-        mime == 'video/flexfec-03') {
-      auxiliaryCodecs.add(codec);
-    } else {
-      if (currentBlock != null) {
-        if (currentBlockCategory == 1) {
-          preferredBlocks.add(currentBlock);
-        } else if (currentBlockCategory == 2) {
-          secondaryBlocks.add(currentBlock);
-        }
-      }
-      currentBlock = [codec];
-      if (mime == targetMime) {
-        currentBlockCategory = 1;
-      } else if (mime == secondaryMime) {
-        currentBlockCategory = 2;
-      } else {
-        currentBlockCategory = 0;
-      }
-    }
-  }
-
-  if (currentBlock != null) {
-    if (currentBlockCategory == 1) {
-      preferredBlocks.add(currentBlock);
-    } else if (currentBlockCategory == 2) {
-      secondaryBlocks.add(currentBlock);
-    }
-  }
-
-  if (preferredBlocks.isEmpty && secondaryBlocks.isEmpty) return;
-
   final orderedCodecs = <RTCRtpCodecCapability>[
-    for (final block in preferredBlocks) ...block,
-    ...auxiliaryCodecs,
-    for (final block in secondaryBlocks) ...block,
+    for (final codec in codecs)
+      if (codec.mimeType.toLowerCase() == targetMime) codec,
+    for (final codec in codecs)
+      if (codec.mimeType.toLowerCase() == secondaryMime) codec,
   ];
+
+  if (orderedCodecs.isEmpty) return;
 
   try {
     await transceiver.setCodecPreferences(orderedCodecs);
-  } catch (_) {
-    // Ignore platforms that do not support setCodecPreferences; SDP
-    // normalization (`pruneSdpCodecsForTs6`) still reorders and prunes codecs.
+  } catch (e) {
+    // Older native builds or constrained transceivers may reject preference
+    // changes; SDP normalization still prunes and reorders codecs if needed.
+    onError?.call(e);
   }
 }
 
@@ -791,7 +719,6 @@ class StreamViewerController extends Notifier<StreamViewerState> {
   MediaStream? _fallbackStream;
   final List<RTCIceCandidate> _pendingLocalCandidates = [];
   final List<RTCIceCandidate> _pendingRemoteCandidates = [];
-  final Set<String> _sentLocalCandidateKeys = <String>{};
   final List<MediaStreamTrack> _remoteAudioTracks = [];
   Timer? _negotiationTimer;
   bool _remoteDescriptionSet = false;
@@ -942,10 +869,7 @@ class StreamViewerController extends Notifier<StreamViewerState> {
       peer.onIceCandidate = (candidate) {
         if (!_isCurrentGeneration(currentGeneration)) return;
         final candidateSdp = candidate.candidate;
-        if (candidateSdp == null ||
-            !shouldTrickleIceCandidate(candidateSdp, _sentLocalCandidateKeys)) {
-          return;
-        }
+        if (candidateSdp == null || candidateSdp.isEmpty) return;
         if (!_answerSent) {
           _pendingLocalCandidates.add(candidate);
           return;
@@ -1349,7 +1273,6 @@ class StreamViewerController extends Notifier<StreamViewerState> {
     _answerSent = false;
     _pendingLocalCandidates.clear();
     _pendingRemoteCandidates.clear();
-    _sentLocalCandidateKeys.clear();
     _remoteAudioTracks.clear();
 
     final peer = _peer;

@@ -925,7 +925,7 @@ void main() {
       expect(container.read(streamViewerProvider).renderer, isNull);
     });
 
-    test('preferVideoCodecOnTransceiver preserves RTX pairing and auxiliary recovery codecs', () async {
+    test('preferVideoCodecOnTransceiver passes only primary codecs in preference order without RTX or RED/ULPFEC', () async {
       final vp8 = RTCRtpCodecCapability(
         clockRate: 90000,
         mimeType: 'video/VP8',
@@ -968,14 +968,7 @@ void main() {
         preferredMimeType: 'video/vp8',
       );
 
-      expect(transceiver.preferredCodecs, [
-        vp8,
-        rtxVp8,
-        red,
-        ulpfec,
-        h264,
-        rtxH264,
-      ]);
+      expect(transceiver.preferredCodecs, [vp8, h264]);
     });
 
     test('ensureAudioDirectionInSdp replaces existing direction or inserts when absent', () {
@@ -1173,64 +1166,19 @@ void main() {
       },
     );
 
-    test('defaultStreamIceServers includes TeamSpeak official STUN and slim domestic fallback STUN servers', () {
-      final urls = (defaultStreamIceServers.first['urls'] as List)
-          .cast<String>();
-      expect(urls, [
-        'stun:turn.teamspeak.com:3478',
-        'stun:stun.cloudflare.com:3478',
-        'stun:stun.qq.com:3478',
-        'stun:stun.miwifi.com:3478',
-      ]);
-    });
+    test(
+      'defaultStreamIceServers matches WebSpeak TeamSpeak official STUN pair',
+      () {
+        final urls = (defaultStreamIceServers.first['urls'] as List)
+            .cast<String>();
+        expect(urls, [
+          'stun:turn.teamspeak.com:3478',
+          'stun:turn2.teamspeak.com:3478',
+        ]);
+      },
+    );
 
-    test('shouldTrickleIceCandidate filters empty/passive TCP and deduplicates 5-tuples', () {
-      final seenKeys = <String>{};
-
-      expect(shouldTrickleIceCandidate('', seenKeys), isFalse);
-      expect(shouldTrickleIceCandidate('   ', seenKeys), isFalse);
-      expect(
-        shouldTrickleIceCandidate(
-          'candidate:1 1 tcp 1518280447 192.0.2.1 9 typ host tcptype passive',
-          seenKeys,
-        ),
-        isFalse,
-      );
-      expect(seenKeys, isEmpty);
-
-      expect(
-        shouldTrickleIceCandidate(
-          'a=candidate:1 1 UDP 2122252543 198.51.100.2 60000 typ srflx raddr 192.0.2.2 rport 50000',
-          seenKeys,
-        ),
-        isTrue,
-      );
-      // Same (component=1, transport=udp, ip=198.51.100.2, port=60000, type=srflx) with different foundation/prefix is deduplicated.
-      expect(
-        shouldTrickleIceCandidate(
-          'candidate:99 1 udp 1686052607 198.51.100.2 60000 typ srflx raddr 10.0.0.2 rport 50000',
-          seenKeys,
-        ),
-        isFalse,
-      );
-      // Different component (RTCP = 2) or different port is kept.
-      expect(
-        shouldTrickleIceCandidate(
-          'candidate:1 2 UDP 2122252542 198.51.100.2 60000 typ srflx raddr 192.0.2.2 rport 50000',
-          seenKeys,
-        ),
-        isTrue,
-      );
-      expect(
-        shouldTrickleIceCandidate(
-          'candidate:2 1 tcp 1518280447 198.51.100.2 60001 typ host tcptype active',
-          seenKeys,
-        ),
-        isTrue,
-      );
-    });
-
-    test('StreamViewerController filters passive TCP and duplicate local ICE candidates', () async {
+    test('StreamViewerController forwards non-empty local ICE candidates without dropping mid', () async {
       final events = StreamController<CoreEvent>.broadcast();
       final core = _FakeCoreSession(events);
       final bindings = _FakeWebRtcBindings();
@@ -1275,13 +1223,7 @@ void main() {
       await _pumpEventQueue();
 
       final peer = bindings.createdPeers.single;
-      peer.onIceCandidate?.call(
-        RTCIceCandidate(
-          'candidate:tcp1 1 tcp 1518280447 192.0.2.1 9 typ host tcptype passive',
-          '0',
-          0,
-        ),
-      );
+      peer.onIceCandidate?.call(RTCIceCandidate('', '0', 0));
       peer.onIceCandidate?.call(
         RTCIceCandidate(
           'candidate:udp1 1 udp 1686052607 203.0.113.5 55000 typ srflx raddr 192.0.2.1 rport 55000',
@@ -1289,7 +1231,6 @@ void main() {
           0,
         ),
       );
-      // Duplicate 5-tuple on MID 1 (bundled transport duplicate from secondary STUN server).
       peer.onIceCandidate?.call(
         RTCIceCandidate(
           'candidate:udp2 1 UDP 1686052607 203.0.113.5 55000 typ srflx raddr 10.0.0.2 rport 55000',
@@ -1306,6 +1247,13 @@ void main() {
           sdp: 'candidate:udp1 1 udp 1686052607 203.0.113.5 55000 typ srflx raddr 192.0.2.1 rport 55000',
           mid: '0',
           mLine: 0,
+        ),
+        (
+          streamId: 'stream-42',
+          targetClid: 7,
+          sdp: 'candidate:udp2 1 UDP 1686052607 203.0.113.5 55000 typ srflx raddr 10.0.0.2 rport 55000',
+          mid: '1',
+          mLine: 1,
         ),
       ]);
     });
