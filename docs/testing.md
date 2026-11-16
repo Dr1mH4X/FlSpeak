@@ -39,7 +39,7 @@ cargo test -p session --test live_connect -- --ignored --nocapture
 
 快捷命令：`just live-test ts.example.com [昵称]`。
 
-注意：tsclient-rs 走 UDP 9987。`proto::resolve_target` 会先查标准 DNS 的 `_ts3._udp.<domain>` SRV；最终目标由 `proto::client` 检查一次，DNS 查询失败时回退到档案字面地址。TSDNS 尚未实现。服务器对访客关闭 `channellist` 时，测试只验证连接与状态，列表调用会打印权限拒绝而不判失败。
+注意：tsclient-rs 走 UDP 9987。`proto::resolve_target` 会先查标准 DNS 的 `_ts3._udp.<domain>` SRV（查询异常时记录警告并回退到档案主机），再统一查询 A 记录直接解析为 IPv4 `SocketAddr`；原始域名与 SRV 目标均由 `core/proto` 检查官方主机清单，A 记录解析失败直接报错。TSDNS 尚未实现。服务器对访客关闭 `channellist` 时，测试只验证连接与状态，列表调用会打印权限拒绝而不判失败。
 
 设置 `FLSPEAK_TEST_ICON_DIR` 时，真实连接测试还会通过 actor 下载非零频道图标，并把原始图片和 `channels.json` 保存到该目录；此模式要求目标服务器至少有一个自定义频道图标。
 

@@ -9,6 +9,7 @@ repository.workspace = true
 [dependencies]
 async-trait.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
 hickory-resolver = "0.24.4"
 server.workspace = true
 tsclient-rs.workspace = true

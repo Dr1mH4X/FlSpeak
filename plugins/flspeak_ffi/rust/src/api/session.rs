@@ -1256,11 +1256,11 @@ impl From<ConnectError> for CoreError {
             ConnectError::Blocked { .. } => CoreError::BlockedAddress {
                 message: err.to_string(),
             },
-            ConnectError::TransferHostMismatch { .. } | ConnectError::Protocol(_) => {
-                CoreError::Connection {
-                    message: err.to_string(),
-                }
-            }
+            ConnectError::Dns { .. }
+            | ConnectError::TransferHostMismatch { .. }
+            | ConnectError::Protocol(_) => CoreError::Connection {
+                message: err.to_string(),
+            },
         }
     }
 }
@@ -1318,4 +1318,10 @@ pub fn update_audio_settings_json(json: String) -> Result<(), CoreError> {
     session::SettingsManager::update_audio_from_json(&json).map_err(|e| CoreError::Internal {
         message: format!("update_audio_settings_json failed: {e}"),
     })
+}
+
+/// 同步 Android 当前活跃网络的 DNS 服务器 IP 列表（用于 SRV 与 A 记录解析）。
+#[frb(sync)]
+pub fn set_android_dns_servers(servers: Vec<String>) {
+    proto::set_android_dns_servers(&servers);
 }

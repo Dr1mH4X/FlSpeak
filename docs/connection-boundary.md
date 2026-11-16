@@ -7,7 +7,7 @@ FlSpeak 的 TeamSpeak 连接只面向 TeamSpeak 服务器。边界由录入格�
 - 用户只能录入 IP、域名或 `localhost`（可带端口），裸昵称不接受。
 - 不实现 myTeamSpeak 账号登录、云同步、官方媒体上传或附件下载。
 - `named.myteamspeak.com/lookup` 不使用。裸昵称在 `server::parse_address` 就被拒绝，`proto::DenyResolver` 再挡住 tsclient-rs 自带的 discovery。
-- SRV（`_ts3._udp.<domain>`）是标准 DNS，可以解析。最终目标在 `proto::client` 建连前检查一次，命中官方主机清单直接拒绝。
+- SRV（`_ts3._udp.<domain>`）是标准 DNS，可以解析。原始域名与 SRV 目标均在 `core/proto` 检查官方主机清单并由 `hickory-resolver` 解析为 IPv4 `SocketAddr` 后再交给 `proto::client` 建连，命中清单直接拒绝。
 - 官方主机清单只在 `core/proto` 的 `FORBIDDEN_HOST_SUFFIXES` 维护；连接和图片抓取共用这一份，不在 UI、FFI 或存储层复制。
 - 第三方图片 URL 仍然经过 `images.rs` 的 SSRF 检查（只允许 http/https、公网地址、有限重定向和大小）；官方媒体和 `ts.file.myts` 附件不访问。
 - 文件传输主机必须等于会话主机（`proto::check_transfer_host`）。

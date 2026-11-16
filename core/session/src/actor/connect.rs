@@ -126,7 +126,7 @@ impl Actor {
             .await
             .map_err(SessionError::Protocol)?;
 
-        let resolved = match proto::resolve_target(&profile, &proto::DnsSrvResolver).await {
+        let resolved = match proto::resolve_target(&profile, &self.dns_resolver).await {
             Ok(resolved) => resolved,
             Err(err) => {
                 self.emit(SessionEvent::Log {
@@ -155,54 +155,27 @@ impl Actor {
             self.emit(SessionEvent::Log {
                 level: "info".into(),
                 message: format!(
-                    "SRV {}:{} -> {}:{}",
-                    profile.host, profile.port, resolved.target.host, resolved.target.port
+                    "SRV {}:{} -> {}:{} ({})",
+                    profile.host,
+                    profile.port,
+                    resolved.target.host,
+                    resolved.target.port,
+                    resolved.addr
                 ),
             });
-        }
-        if !server::is_ip_literal(&resolved.target.host) {
-            match tokio::time::timeout(
-                Duration::from_secs(2),
-                tokio::net::lookup_host((resolved.target.host.as_str(), resolved.target.port)),
-            )
-            .await
-            {
-                Ok(Ok(addrs)) => {
-                    let list: Vec<String> = addrs.map(|addr| addr.to_string()).collect();
-                    self.emit(SessionEvent::Log {
-                        level: "info".into(),
-                        message: format!(
-                            "DNS {}:{} -> [{}]",
-                            resolved.target.host,
-                            resolved.target.port,
-                            list.join(", ")
-                        ),
-                    });
-                }
-                Ok(Err(err)) => {
-                    self.emit(SessionEvent::Log {
-                        level: "warn".into(),
-                        message: format!(
-                            "DNS {}:{} lookup failed: {err}",
-                            resolved.target.host, resolved.target.port
-                        ),
-                    });
-                }
-                Err(_) => {
-                    self.emit(SessionEvent::Log {
-                        level: "warn".into(),
-                        message: format!(
-                            "DNS {}:{} lookup timed out",
-                            resolved.target.host, resolved.target.port
-                        ),
-                    });
-                }
-            }
+        } else if !server::is_ip_literal(&resolved.target.host) {
+            self.emit(SessionEvent::Log {
+                level: "info".into(),
+                message: format!(
+                    "DNS {}:{} -> {}",
+                    resolved.target.host, resolved.target.port, resolved.addr
+                ),
+            });
         }
         let mut client = match proto::client(
             identity,
             &profile,
-            &resolved.target,
+            &resolved,
             nickname,
             Arc::clone(&self.logger),
         ) {
@@ -267,7 +240,10 @@ impl Actor {
                 let channel_id = client.channel_id();
                 self.client = Some(Arc::new(client));
                 self.network_monitor = Some(crate::network::NetworkMonitor::new());
-                self.transfer_target = Some(resolved.target);
+                self.transfer_target = Some(ServerTarget {
+                    host: resolved.addr.ip().to_string(),
+                    port: resolved.addr.port(),
+                });
                 self.self_client_id = Some(client_id);
                 self.self_channel_id = channel_id;
                 self.active_server_id = Some(profile.id.clone());
@@ -340,8 +316,8 @@ impl Actor {
                 self.emit(SessionEvent::Log {
                     level: "warn".into(),
                     message: format!(
-                        "connect failed: target={}:{} via_srv={} reconnecting={reconnecting} error={err}",
-                        resolved.target.host, resolved.target.port, resolved.via_srv
+                        "connect failed: target={}:{} addr={} via_srv={} reconnecting={reconnecting} error={err}",
+                        resolved.target.host, resolved.target.port, resolved.addr, resolved.via_srv
                     ),
                 });
                 if !reconnecting {
@@ -361,10 +337,11 @@ impl Actor {
                 self.emit(SessionEvent::Log {
                     level: "warn".into(),
                     message: format!(
-                        "connect timed out ({}s): target={}:{} via_srv={} reconnecting={reconnecting}",
+                        "connect timed out ({}s): target={}:{} addr={} via_srv={} reconnecting={reconnecting}",
                         CONNECT_TIMEOUT.as_secs(),
                         resolved.target.host,
                         resolved.target.port,
+                        resolved.addr,
                         resolved.via_srv
                     ),
                 });

@@ -11,7 +11,7 @@ FFI 边界 (plugins/flspeak_ffi)
   ▼
 session      命令队列 + 事件广播，独占 Client
   ▼
-proto        SRV 解析 + 最终连接边界 + deny-all 解析器 + 建连
+proto        SRV/IPv4 解析 + 最终连接边界 + deny-all 解析器 + 建连
   ├────────> server   服务器档案、地址解析与本地登记
   ▼
 tsclient-rs           协议实现（版本见 Cargo.toml）
@@ -32,9 +32,9 @@ Dart: connect(id, nickname)
   └─ FFI 转发 ─> actor
         ├─ 从档案取 host:port（连接目标只能来自档案）
         ├─ 读/生成 identity.json（Dart 拿不到私钥）
-        ├─ proto::resolve_target 做 SRV 查询
-        ├─ proto::client 对最终目标做一次官方主机检查
-        ├─ 注入 DenyResolver + Client::new
+        ├─ proto::resolve_target 做 SRV 与 A 记录解析（产出 IPv4 SocketAddr）
+        ├─ proto::client 对原始域名与 SRV 目标做官方主机检查
+        ├─ 注入 DenyResolver + Client::new（直接以 IPv4 SocketAddr 建连）
         ├─ connect() + wait_connected()（8s 超时；连续 3 次超时提升身份等级）
         └─ 成功：广播 State(Connected{client_id, channel_id}) → Snapshot
              → History；进入支持的频道后启动语音
@@ -42,7 +42,7 @@ Dart: listChannels() / moveToChannel() / sendText()
   └─ 全部经同一个命令队列串行执行
 ```
 
-`server::parse_address` 只接受 IP、域名、`localhost` 和可选端口。裸昵称会被拒绝，因此 `named.myteamspeak.com/lookup` 不会从正常录入路径进入。`proto::client` 是唯一的最终出口检查：目标命中官方主机清单时直接拒绝。SRV 查询失败会回退到档案里的字面地址；SRV 返回的目标也必须在 `client` 这一步通过检查。
+`server::parse_address` 只接受 IP、域名、`localhost` 和可选端口。裸昵称会被拒绝，因此 `named.myteamspeak.com/lookup` 不会从正常录入路径进入。`proto::client` 是唯一的最终出口检查：原始域名与 SRV 返回目标命中官方主机清单时直接拒绝。SRV 查询异常时先记录警告再回退到档案主机；所有域名经 `core/proto` 的 `hickory-resolver` 统一解析为 IPv4 `SocketAddr`（Android 由宿主 `ConnectivityManager` 经 FFI 同步 DNS 上游并保留 `223.5.5.5` / `1.1.1.1` 备用），A 记录解析失败直接报错，不回退给协议库做系统解析。详见 [core/proto 子系统契约](subsystems/proto.md)。
 
 ## 事件流
 

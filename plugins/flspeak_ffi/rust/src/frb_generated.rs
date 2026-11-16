@@ -40,7 +40,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1328517596;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1016627912;
 
 // Section: executor
 
@@ -3169,6 +3169,38 @@ fn wire__crate__api__session__init_settings_impl(
         },
     )
 }
+fn wire__crate__api__session__set_android_dns_servers_impl(
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_sync::<flutter_rust_bridge::for_generated::SseCodec, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "set_android_dns_servers",
+            port: None,
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Sync,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_servers = <Vec<String>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            transform_result_sse::<_, ()>((move || {
+                let output_ok = Ok::<_, ()>({
+                    crate::api::session::set_android_dns_servers(api_servers);
+                })?;
+                std::result::Result::Ok(output_ok)
+            })())
+        },
+    )
+}
 fn wire__crate__api__session__set_log_level_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -4765,10 +4797,10 @@ fn pde_ffi_dispatcher_primary_impl(
         }
         52 => wire__crate__api__session__fetch_image_impl(port, ptr, rust_vec_len, data_len),
         54 => wire__crate__api__session__init_logging_impl(port, ptr, rust_vec_len, data_len),
-        56 => wire__crate__api__session__set_log_level_impl(port, ptr, rust_vec_len, data_len),
-        57 => wire__crate__api__session__shutdown_logging_impl(port, ptr, rust_vec_len, data_len),
-        60 => wire__crate__api__session__upload_image_impl(port, ptr, rust_vec_len, data_len),
-        61 => {
+        57 => wire__crate__api__session__set_log_level_impl(port, ptr, rust_vec_len, data_len),
+        58 => wire__crate__api__session__shutdown_logging_impl(port, ptr, rust_vec_len, data_len),
+        61 => wire__crate__api__session__upload_image_impl(port, ptr, rust_vec_len, data_len),
+        62 => {
             wire__crate__api__session__validate_image_host_impl(port, ptr, rust_vec_len, data_len)
         }
         _ => unreachable!(),
@@ -4787,10 +4819,11 @@ fn pde_ffi_dispatcher_sync_impl(
         49 => wire__crate__api__update__app_version_impl(ptr, rust_vec_len, data_len),
         53 => wire__crate__api__session__get_settings_json_impl(ptr, rust_vec_len, data_len),
         55 => wire__crate__api__session__init_settings_impl(ptr, rust_vec_len, data_len),
-        58 => {
+        56 => wire__crate__api__session__set_android_dns_servers_impl(ptr, rust_vec_len, data_len),
+        59 => {
             wire__crate__api__session__update_audio_settings_json_impl(ptr, rust_vec_len, data_len)
         }
-        59 => wire__crate__api__session__update_ui_settings_json_impl(ptr, rust_vec_len, data_len),
+        60 => wire__crate__api__session__update_ui_settings_json_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }

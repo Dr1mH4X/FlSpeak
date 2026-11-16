@@ -63,6 +63,10 @@ void updateUiSettingsJson({required String json}) =>
 void updateAudioSettingsJson({required String json}) =>
     RustLib.instance.api.crateApiSessionUpdateAudioSettingsJson(json: json);
 
+/// 同步 Android 当前活跃网络的 DNS 服务器 IP 列表（用于 SRV 与 A 记录解析）。
+void setAndroidDnsServers({required List<String> servers}) =>
+    RustLib.instance.api.crateApiSessionSetAndroidDnsServers(servers: servers);
+
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<CoreSession>>
 abstract class CoreSession implements RustOpaqueInterface {
   Future<AccessView> access();

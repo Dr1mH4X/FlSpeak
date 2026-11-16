@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import 'app.dart';
+import 'core/android_dns_sync.dart';
 import 'core/logging/logger.dart';
 import 'core/preferences.dart';
 import 'core/providers.dart';
@@ -20,6 +21,7 @@ Future<void> main() async {
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   }
   await RustLib.init();
+  await AndroidDnsSync.initialize();
 
   final storePath = await resolveStorePath();
   final logDir = logDirectoryFor(storePath);

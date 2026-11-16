@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- 连接 TeamSpeak 服务器。 -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- 读取活跃网络 DNS 配置以解析 SRV/A 记录。 -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <!-- 语音采集与音量控制。 -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
