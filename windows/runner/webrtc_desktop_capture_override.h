@@ -1,6 +1,13 @@
 #ifndef FLSPEAK_WINDOWS_RUNNER_WEBRTC_DESKTOP_CAPTURE_OVERRIDE_H_
 #define FLSPEAK_WINDOWS_RUNNER_WEBRTC_DESKTOP_CAPTURE_OVERRIDE_H_
 
+// Force-included (/FI) before each translation unit's top-of-file defines, so
+// _CRT_SECURE_NO_WARNINGS must precede CRT headers pulled in below (e.g. for
+// flutter_frame_capturer.cc's fopen under /WX).
+#if defined(_MSC_VER) && !defined(_CRT_SECURE_NO_WARNINGS)
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+
 #include <cstdint>
 
 #include "rtc_desktop_device.h"
