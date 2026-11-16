@@ -23,7 +23,7 @@
 | `docs/architecture.md` | 索引与拓扑：分层、一次连接的时序、事件流、线程模型、目录职责与「尚未接线」 | 跨文件契约与序列（→ 主题文档或 `docs/subsystems/`）、决策理由 |
 | `docs/` 主题文档（`audio.md`、`backend.md`、`channels.md`、`connection-boundary.md`、`images.md`、`permissions.md`） | 跨 crate 端到端业务链路与安全边界：多模块协作契约、关键时序与已知限制 | 单一 crate 内部私有实现、决策理由（→ `.agents/notes/`） |
 | `docs/subsystems/` | 单一 crate 架构与模块契约：内部公开 API、核心类型定义、关键路径与子系统不变量 | 跨 crate 业务端到端串联（→ 主题文档）、决策理由（→ `.agents/notes/`） |
-| [docs/defensive-patterns/](defensive-patterns/README.md) | 编码反面与规范替代：[README.md](defensive-patterns/README.md) 独占承载「你在改什么 \| 动手前必读」映射表，子篇按领域承载审查强制准则（general, connection, audio, review, ui） | 子系统内部契约、常规开发流程、重复的全局声明 |
+| [docs/defensive-patterns/](defensive-patterns/README.md) | 编码反面与规范替代：[README.md](defensive-patterns/README.md) 独占承载「你在改什么 \| 动手前必读」映射表，子篇按领域承载审查强制准则（general, connection, audio, review, ui, ui-performance, logging） | 子系统内部契约、常规开发流程、重复的全局声明 |
 | `docs/cookbook/` | 任务驱动式 Step-by-Step 实操指南，带带号步骤与验证命令 | 架构设计决策理由、语法级参考手册 |
 | `docs/development.md` | 开发流程与环境：常用命令、构建依赖与平台细节、FFI 绑定生成、语言约定、发版打包 | 架构图、测试约定、决策理由 |
 | `docs/testing.md` | 测试约定：单测摆放、测试范围选择、真实服务器手动测试、CI 测试门 | 测试用例代码誊写 |

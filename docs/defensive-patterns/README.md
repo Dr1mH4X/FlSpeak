@@ -8,6 +8,7 @@
 | 你在改什么（Changing） | 动手前必读（Read） | 关键不变量与检查点 |
 |---|---|---|
 | Flutter 界面、页面组件、操作按钮、弹窗、文案 | [ui.md](ui.md) 与 [lib/AGENTS.md](../../lib/AGENTS.md) | 遵循 [fls-client-ui-ux](../../.agents/skills/fls-client-ui-ux/SKILL.md)；优先经 [lib/widgets/prism.dart](../../lib/widgets/prism.dart) 复用 `prism_ui` 组件并 `hide` 冲突 Material 控件、无 Tooltip、按钮极简无多余说明、无障碍走 `semanticLabel`、文案走 `arb/`。 |
+| Flutter 界面性能、列表滚动、动画绘制、状态订阅与图片解码 | [ui-performance.md](ui-performance.md)、[../subsystems/ui-design.md](../subsystems/ui-design.md) 与 [fls-ui-performance](../../.agents/skills/fls-ui-performance/SKILL.md) | 长列表经 [lib/widgets/prism.dart](../../lib/widgets/prism.dart) 用 `PrismListView` / `SliverPrismList`；窄化 `.select` 订阅并用 `MemoBuilder`、`WidthBuilder` 隔离重建；高频绘制用 `RepaintBoundary` 与 `CustomPainter(repaint:)`；后台及关闭 `TickerMode` 同步休眠；缩略图限制 `cacheWidth`；默认关闭液态玻璃。 |
 | 会话生命周期、Actor 调度、并发、异步事件流 | [../architecture.md](../architecture.md) 与 [core/session/AGENTS.md](../../core/session/AGENTS.md) | `Client` 协议调用只能经 `core/session` 的 Actor 串行执行，禁止并发调用 tsclient-rs。 |
 | 连接边界、官方主机清单、地址校验、文件/头像传输 | [connection.md](connection.md) 与 [../connection-boundary.md](../connection-boundary.md) | 官方主机清单只在 `core/proto` 的 `FORBIDDEN_HOST_SUFFIXES`，客户端不连接官方云或 myTeamSpeak；连接与传输共用同一检查。 |
 | 音频采集、编解码、播放、环形缓冲区与 FFI 音频链路 | [audio.md](audio.md) 与 [core/audio/AGENTS.md](../../core/audio/AGENTS.md) | 音频帧零跨越 FFI 边界；双线程无锁环形缓冲区，Rust 侧自闭环。 |

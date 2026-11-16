@@ -13,6 +13,7 @@ description: 审查 PR、分支或本地代码改动时使用：对照 docs/defe
 - [docs/defensive-patterns/review.md](../../../docs/defensive-patterns/review.md)
 - [docs/defensive-patterns/general.md](../../../docs/defensive-patterns/general.md)
 - [docs/defensive-patterns/ui.md](../../../docs/defensive-patterns/ui.md)
+- [docs/defensive-patterns/ui-performance.md](../../../docs/defensive-patterns/ui-performance.md)
 - [docs/defensive-patterns/connection.md](../../../docs/defensive-patterns/connection.md)
 - [docs/defensive-patterns/audio.md](../../../docs/defensive-patterns/audio.md)
 - [docs/defensive-patterns/logging.md](../../../docs/defensive-patterns/logging.md)

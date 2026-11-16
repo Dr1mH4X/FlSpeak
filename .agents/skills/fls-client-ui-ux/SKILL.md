@@ -11,7 +11,9 @@ description: 设计、修改或审查 Flutter 界面与交互时使用：核对�
 
 - [docs/defensive-patterns/README.md](../../../docs/defensive-patterns/README.md)
 - [docs/defensive-patterns/ui.md](../../../docs/defensive-patterns/ui.md)
+- [docs/defensive-patterns/ui-performance.md](../../../docs/defensive-patterns/ui-performance.md)
 - [docs/subsystems/ui-design.md](../../../docs/subsystems/ui-design.md)
+- [../fls-ui-performance/SKILL.md](../fls-ui-performance/SKILL.md)
 - [lib/AGENTS.md](../../../lib/AGENTS.md)
 - [lib/widgets/AGENTS.md](../../../lib/widgets/AGENTS.md)
 - [lib/theme/AGENTS.md](../../../lib/theme/AGENTS.md)

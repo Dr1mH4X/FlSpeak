@@ -4,9 +4,9 @@
 
 | 来源 | 原始许可证 | 引入形式与内容 |
 | --- | --- | --- |
-| [FlClash](https://github.com/chen08209/FlClash) | GPL-3.0 | macOS 标题条布局、窗口尺寸与红绿灯让位，Windows 标题栏控制按钮与 Segoe Fluent 矢量图标，Windows Inno Setup 安装脚本与简体中文语言包，以及设置行与设置文本卡片适配 |
-| [prism_ui](https://pub.dev/packages/prism_ui) | GPL-3.0 | Pub 依赖 `prism_ui`，直接提供按钮、弹性按压、`PressSurface`、表面层级、超椭圆形状、滑块开关、弹出菜单、`ListRow`、`DecorationListItem`、Liquid Glass、Goo 与主题过渡原语 |
-| [FlClash 的 `plugins/window`](https://github.com/chen08209/FlClash/tree/main/plugins/window) | MIT | 隐藏标题栏、窗口拖拽、双击缩放、最小化/最大化/关闭、置顶、系统材质特效（Mica/Acrylic）、单实例检测与全屏状态 |
+| [FlClash](https://github.com/chen08209/FlClash) | GPL-3.0 | macOS 标题条布局、窗口尺寸与红绿灯让位，Windows 标题栏控制按钮与 Segoe Fluent 矢量图标，Windows Inno Setup 安装脚本与简体中文语言包，窄屏底部导航与标签切换动画，系统字体枚举、调色板、外观设置与交互预览卡片，以及设置行与设置文本卡片适配 |
+| [prism_ui](https://pub.dev/packages/prism_ui) | GPL-3.0 | Pub 依赖 `prism_ui`，直接提供按钮、弹性按压、`PressSurface`、表面层级、超椭圆形状、开关、滑块、`SegmentedControl`、弹出菜单、`ListRow`、`DecorationListItem`、`NavigationDock`/`NavigationBar`、`AnimatedVisibility`、`OpenContainer`、`showSheet`、`SearchField`、`NullStatus`、seeded 取色与纯黑映射、Liquid Glass、Goo 与主题过渡原语 |
+| [FlClash 的 `plugins/window`](https://github.com/chen08209/FlClash/tree/main/plugins/window) | MIT | 隐藏标题栏、窗口拖拽、双击缩放、最小化/最大化/关闭、置顶、系统材质特效（macOS NSVisualEffectView / NSGlassEffectView、Windows Mica/Acrylic）、单实例检测与全屏状态 |
 | [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | MIT | Markdown 正文段落单物理行检查门禁脚本 |
 
 ## FlClash
@@ -15,17 +15,24 @@
 
 原始许可证为 GNU General Public License v3.0，见 FlClash 仓库根 `LICENSE`，原文见 https://www.gnu.org/licenses/gpl-3.0.txt 。复制片段的版权归 FlClash 作者所有。
 
-复制内容来自 `lib/common/layout.dart` 的窗口尺寸与红绿灯区域、`lib/manager/window_manager.dart` 的 `WindowHeaderContainer`、`WindowHeaderLayout`、`WindowHeaderBar`、`WindowHeader`、`lib/ui/sidebar.dart`、`lib/ui/icons/app_glyphs.dart`、`lib/ui/icons/caption_icon.dart`、`lib/ui/list_item.dart`、`lib/ui/setting_text_card.dart` 与 `windows/packaging/exe/` 的 `inno_setup.iss`、`ChineseSimplified.isl`。
+复制内容来自 `lib/common/layout.dart` 的窗口尺寸与红绿灯区域、`lib/manager/window_manager.dart` 的 `WindowHeaderContainer`、`WindowHeaderLayout`、`WindowHeaderBar`、`WindowHeader`、`lib/ui/sidebar.dart`、`lib/ui/icons/app_glyphs.dart`、`lib/ui/icons/caption_icon.dart`、`lib/ui/list_item.dart`、`lib/ui/setting_text_card.dart`、`lib/common/system_fonts.dart`、`lib/common/window.dart` 的 `setSidebarBlur` / `_resolveBlurEffect`、`lib/pages/home.dart` 的 `PageView` 过渡与 `_FadeTabPage`、`lib/widgets/palette.dart`、`lib/views/font_family.dart`、`lib/features/form/selection_sheet.dart`、`lib/views/theme_preview.dart`、`lib/views/theme.dart` 与 `windows/packaging/exe/` 的 `inno_setup.iss`、`ChineseSimplified.isl`。
 
 | 本仓库文件 | 原始文件 |
 | --- | --- |
 | `lib/core/window_metrics.dart` | `lib/common/layout.dart` |
+| `lib/core/system_fonts.dart` | `lib/common/system_fonts.dart` |
+| `lib/core/window_chrome.dart` | `plugins/window/lib/src/desktop_window.dart`、`lib/common/window.dart` |
 | `lib/widgets/window_header.dart` | `lib/manager/window_manager.dart`、`lib/ui/scaffold.dart` |
+| `lib/widgets/compact_navigation_shell.dart` | `lib/pages/home.dart` |
 | `lib/widgets/app_navigation_sidebar.dart` | `lib/ui/sidebar.dart` |
 | `lib/widgets/app_glyphs.dart` | `lib/ui/icons/app_glyphs.dart` |
 | `lib/widgets/caption_icon.dart` | `lib/ui/icons/caption_icon.dart` |
 | `lib/features/settings/widgets/list_item.dart` | `lib/ui/list_item.dart` |
 | `lib/features/settings/widgets/setting_text_card.dart` | `lib/ui/setting_text_card.dart` |
+| `lib/features/settings/widgets/palette.dart` | `lib/widgets/palette.dart` |
+| `lib/features/settings/widgets/font_family_view.dart` | `lib/views/font_family.dart`、`lib/features/form/selection_sheet.dart` |
+| `lib/features/settings/widgets/theme_preview.dart` | `lib/views/theme_preview.dart` |
+| `lib/features/settings/widgets/theme_settings_view.dart` | `lib/views/theme.dart` |
 | `windows/packaging/exe/inno_setup.iss`、`ChineseSimplified.isl` | `windows/packaging/exe/inno_setup.iss`、`ChineseSimplified.isl` |
 
 ## prism_ui
@@ -39,7 +46,7 @@ FlSpeak 通过 `pubspec.yaml` Pub 依赖与 [lib/widgets/prism.dart](../lib/widg
 | 本仓库接入位置 | 对应模块内容 |
 | --- | --- |
 | `pubspec.yaml` | 完整引入 `prism_ui`（按钮、按压表面、弹性缩放、表面层级、形状、开关、弹出菜单、分组列表、Liquid Glass 着色器、Goo 与主题过渡） |
-| `lib/widgets/prism.dart` | `PrismRootScope`、`PrismUiLocalizationsDelegate`、`SurfaceCard`、`ElevatedSurfaceTheme`、`AnimatedInkWell`、`OptionsValueButton` 桥接与统一导出 |
+| `lib/widgets/prism.dart` | `PrismRootScope`、`PrismUiLocalizationsDelegate`、`SurfaceCard`、`ElevatedSurfaceTheme`、`AnimatedInkWell`、`OptionsValueButton`、`Slider`、`SegmentedControl`、`NavigationDock`/`NavigationBar`、`OpenContainer`、`showSheet`、`SearchField`、`NullStatus`、seeded 取色/纯黑接口桥接与统一导出 |
 | `lib/features/settings/settings_page.dart` | 沿用 `page_transition.dart` 的 `300 ms` 临界阻尼推入弹簧参数与导航架构 |
 
 ## FlClash 的 window 插件
@@ -47,14 +54,14 @@ FlSpeak 通过 `pubspec.yaml` Pub 依赖与 [lib/widgets/prism.dart](../lib/widg
 位置为 FlClash 仓库的 `plugins/window`，原始许可证为 MIT，见该目录的 `LICENSE`。
 
 复制内容来自：
-- `macos/window/Sources/window/WindowStyle.swift` 的 `.hidden` 标题栏分支，以及 `WindowController.swift` 的 `startDragging`、`maximize`、`setFullScreen` 行为。
+- `macos/window/Sources/window/WindowStyle.swift` 的 `.hidden` 标题栏分支，`WindowEffectView.swift` 的 macOS 原生侧栏毛玻璃/液态玻璃视图容器，以及 `WindowController.swift` 的 `startDragging`、`maximize`、`setFullScreen` 与 `setEffect` 行为。
 - `windows/window_style.h` 与 `windows/window_style.cpp` 的隐藏标题栏、DWM 边框延伸、暗色模式与 Mica/Acrylic 材质。
 - `windows/window_controller.h` 与 `windows/window_controller.cpp` 的非客户区消息处理、顶部 1px 细边框 hit-test 与缩放、窗口拖拽、最小化、最大化与全屏。
 - `windows/running_instance.h` 与 `windows/running_instance.cpp` 的单实例进程匹配与激活。
 
 | 本仓库文件 | 原始文件 |
 | --- | --- |
-| `macos/Runner/MainFlutterWindow.swift` | `plugins/window/macos/window/Sources/window/WindowStyle.swift`、`WindowController.swift` |
+| `macos/Runner/MainFlutterWindow.swift` | `plugins/window/macos/window/Sources/window/WindowStyle.swift`、`WindowEffectView.swift`、`WindowController.swift` |
 | `windows/runner/running_instance.h`、`windows/runner/running_instance.cpp` | `plugins/window/windows/running_instance.h`、`running_instance.cpp` |
 | `windows/runner/window_style.h`、`windows/runner/window_style.cpp` | `plugins/window/windows/window_style.h`、`window_style.cpp` |
 | `windows/runner/window_controller.h`、`windows/runner/window_controller.cpp` | `plugins/window/windows/window_controller.h`、`window_controller.cpp` |
