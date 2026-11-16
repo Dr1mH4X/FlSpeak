@@ -52,6 +52,29 @@ final _itemShape = AppShape.all(10);
 
 enum AppNavDestination { home, server, settings }
 
+/// 剥离已被常驻侧栏占据一侧的水平安全边距，避免右侧主区域重复退避。
+class SidebarContentInset extends StatelessWidget {
+  const SidebarContentInset({
+    super.key,
+    required this.hasSidebar,
+    required this.child,
+  });
+
+  final bool hasSidebar;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final isLtr = Directionality.of(context) == TextDirection.ltr;
+    return MediaQuery.removePadding(
+      context: context,
+      removeLeft: hasSidebar && isLtr,
+      removeRight: hasSidebar && !isLtr,
+      child: child,
+    );
+  }
+}
+
 /// 全局常驻侧边栏：
 /// - 尺寸对齐 FlClash：项高 40px、图标 24px、间距 4px、展开 220px；
 /// - 收起宽度动态计算：math.max(48.0, windowControls.width)（macOS 避让红绿灯时为 78px，无红绿灯时为 48px）；
@@ -266,12 +289,21 @@ class _AppNavigationSidebarState extends ConsumerState<AppNavigationSidebar>
         shape: BorderDirectional(
           end: BorderSide(color: dividerColorOf(context), width: 1),
         ),
-        child: TweenAnimationBuilder<double>(
-          tween: Tween(end: (canExpandInPlace && _globalExpanded) ? 1.0 : 0.0),
-          duration: reduceMotion ? Duration.zero : _expandDuration,
-          curve: Easing.standard,
-          builder: (context, progress, _) =>
-              buildSidebarPane(progress, isOverlay: false),
+        child: MediaQuery.removePadding(
+          context: context,
+          removeLeft: Directionality.of(context) != TextDirection.ltr,
+          removeRight: Directionality.of(context) == TextDirection.ltr,
+          child: SafeArea(
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(
+                end: (canExpandInPlace && _globalExpanded) ? 1.0 : 0.0,
+              ),
+              duration: reduceMotion ? Duration.zero : _expandDuration,
+              curve: Easing.standard,
+              builder: (context, progress, _) =>
+                  buildSidebarPane(progress, isOverlay: false),
+            ),
+          ),
         ),
       ),
     );

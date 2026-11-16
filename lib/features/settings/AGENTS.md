@@ -31,12 +31,12 @@
 ```
 
 ### 交互规则
-1. **多级菜单非抽屉**：点击分类卡片或子项入口后，**直接占满右侧主内容区**进入对应子页面，严禁使用从右侧滑出一半的导航抽屉；一级与二/三级子页面之间采用双向水平推入/拉回转场（进入自右侧推入，返回反向退回），并为各层级视图分配独立 `ValueKey` 与本地透明 `Material` 边界（`_SettingsTopBar` 同样独立）。字体选择与自定义调色板分别通过 `OpenContainer`（窄屏）或 `showSheet`（桌面）打开独立选择器。
-2. **面包屑式逐级返回机制**：各级页面顶部提供基于 `TonalButtonTheme` + `ElasticPress` + `IconButton` + `BarItemGlyph` + `GlyphIcon(Glyphs.backFor(platform))` 的返回按钮（带无障碍标签，禁 `Tooltip`）；同时绑定物理按键 `LogicalKeyboardKey.escape`。
+1. **多级菜单非抽屉**：点击分类卡片或子项入口后，**直接占满右侧主内容区**进入对应子页面，严禁使用从右侧滑出一半的导航抽屉；设置外层采用 `lib/widgets/scaffold/scaffold.dart` 的 `Scaffold` 承担悬浮顶栏与状态栏退避，一级与二/三级子页面主体在 `AnimatedSwitcher` 中采用双向水平推入/拉回转场（进入自右侧推入，返回反向退回），并为各层级视图分配独立 `ValueKey` 与本地 `Material` 边界。字体选择与自定义调色板分别通过 `OpenContainer`（窄屏）或 `showSheet`（桌面）打开独立选择器。
+2. **面包屑式逐级返回机制**：`Scaffold` 的 `backAction` 统一承接顶部返回按钮（带 `Semantics` 无障碍标签）；同时绑定物理按键 `LogicalKeyboardKey.escape`。
    - 三级页面（语音 / 屏幕共享）按返回按钮或 `ESC` 键退回二级通用页面。
    - 二级页面按返回按钮或 `ESC` 键退回一级概览页。
    - 一级概览页按返回按钮或 `ESC` 键退回进入设置页前的页面（来路）；在窄屏底部导航标签根视图下退回「首页」标签；若无历史路由，已连接时退回工作区，未连接时退回首页。
-3. **顶栏无冲突拖拽与左上角固定**：`_SettingsTopBar` 铺满右侧设置区域全宽，返回按钮与页面标题固定锚定在区域左上角（不随窗口变宽向中间收缩偏移）；桌面端窗口拖拽区域（`WindowDragRegion`）铺在标题及其右侧空白区域，不遮挡左侧返回按钮的手势。
+3. **悬浮顶栏与安全区边界**：设置主区域通过 `SidebarContentInset` 剥离侧栏一侧的水平安全边距，内部滚动列表按 `context.appBarInset` 与 `MediaQuery.paddingOf(context)` 避让悬浮顶栏及系统安全区；桌面端窗口拖拽由 `WindowHeader` 与侧栏顶部避让区承担。
 
 ---
 

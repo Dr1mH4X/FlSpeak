@@ -102,6 +102,7 @@ class WorkspaceShell extends ConsumerWidget {
     final compactWidth = AppNavigationSidebar.compactWidthOf(context);
 
     if (compact) {
+      final isLtr = Directionality.of(context) == TextDirection.ltr;
       return Scaffold(
         backgroundColor: context.pageColor,
         drawer: Drawer(
@@ -114,17 +115,22 @@ class WorkspaceShell extends ConsumerWidget {
             ),
           ),
           clipBehavior: Clip.antiAlias,
-          child: SafeArea(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                rail,
-                Expanded(child: panel),
-              ],
+          child: MediaQuery.removePadding(
+            context: context,
+            removeLeft: !isLtr,
+            removeRight: isLtr,
+            child: SafeArea(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  rail,
+                  Expanded(child: panel),
+                ],
+              ),
             ),
           ),
         ),
-        body: SafeArea(child: surface),
+        body: surface,
       );
     }
 
@@ -133,26 +139,33 @@ class WorkspaceShell extends ConsumerWidget {
       backgroundColor: blurOpacity != null
           ? Colors.transparent
           : context.pageColor,
-      body: SafeArea(
-        top: false,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            rail,
-            ChannelPaneResizer(
-              // 分隔条自身也占地，算上限时一并扣掉，主区域不再被它挤穿。
-              maxWidth: math.max(
-                Sizes.channelPanelMin,
-                width -
-                    compactWidth -
-                    Sizes.mainPaneMin -
-                    ChannelPaneResizer.handleWidth,
+      body: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          rail,
+          Expanded(
+            child: SidebarContentInset(
+              hasSidebar: true,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ChannelPaneResizer(
+                    // 分隔条自身也占地，算上限时一并扣掉，主区域不再被它挤穿。
+                    maxWidth: math.max(
+                      Sizes.channelPanelMin,
+                      width -
+                          compactWidth -
+                          Sizes.mainPaneMin -
+                          ChannelPaneResizer.handleWidth,
+                    ),
+                    child: panel,
+                  ),
+                  Expanded(child: surface),
+                ],
               ),
-              child: panel,
             ),
-            Expanded(child: surface),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

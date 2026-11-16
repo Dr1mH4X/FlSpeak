@@ -18,8 +18,10 @@ import 'package:flspeak/router.dart';
 import 'package:flspeak/features/connect/connect_page.dart';
 import 'package:flspeak/features/connect/widgets/identity_card.dart';
 import 'package:flspeak/features/connect/widgets/server_row.dart';
+import 'package:flspeak/widgets/app_navigation_sidebar.dart';
 import 'package:flspeak/widgets/expressive_frame.dart';
 import 'package:flspeak/widgets/prism.dart';
+import 'package:flspeak/widgets/scaffold/scaffold.dart' as app_scaffold;
 
 class _FakeCore extends Fake implements CoreSession {
   @override
@@ -577,7 +579,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+      final scaffold = tester.widget<app_scaffold.Scaffold>(
+        find.byType(app_scaffold.Scaffold),
+      );
       expect(scaffold.backgroundColor, pageColor);
 
       final pageCanvas = tester.widget<Material>(
@@ -898,6 +902,76 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(TextField), findsOneWidget);
     expect(tester.widget<GooSurface>(find.byType(GooSurface)).glass, isNotNull);
+  });
+
+  testWidgets('连接页在窄屏与宽屏均让顶栏与内容退避状态栏', (tester) async {
+    Future<void> verifyForSize(Size size, {required bool wide}) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            coreSessionProvider.overrideWithValue(_FakeCore()),
+            sessionViewProvider.overrideWith(_TestSessionController.new),
+          ],
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            locale: const Locale('zh'),
+            localizationsDelegates: const [
+              ...AppLocalizations.localizationsDelegates,
+              PrismUiLocalizationsDelegate(),
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(padding: const EdgeInsets.only(top: 40, bottom: 24)),
+              child: PrismRootScope(
+                brightness: Brightness.light,
+                child: child!,
+              ),
+            ),
+            home: const ConnectPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final barFinder = find.byType(ScaffoldBar);
+      expect(barFinder, findsOneWidget);
+      expect(tester.getTopLeft(barFinder).dy, 0.0);
+
+      final barTitle = find.descendant(
+        of: barFinder,
+        matching: find.text(wide ? '服务器' : 'FlSpeak'),
+      );
+      expect(tester.getTopLeft(barTitle).dy, greaterThanOrEqualTo(40.0));
+
+      final introTitle = find.text('找到你的声音');
+      expect(
+        tester.getTopLeft(introTitle).dy,
+        greaterThanOrEqualTo(40.0 + pageToolbarHeight),
+      );
+
+      if (wide) {
+        final toggle = find.descendant(
+          of: find.byType(AppNavigationSidebar),
+          matching: find.byWidgetPredicate(
+            (w) =>
+                w is Icon &&
+                (w.icon == Icons.menu_rounded ||
+                    w.icon == Icons.menu_open_rounded),
+          ),
+        );
+        expect(tester.getTopLeft(toggle).dy, greaterThanOrEqualTo(40.0));
+      }
+    }
+
+    await verifyForSize(const Size(390, 844), wide: false);
+    await verifyForSize(const Size(900, 800), wide: true);
   });
 }
 

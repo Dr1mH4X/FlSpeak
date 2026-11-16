@@ -58,8 +58,15 @@
 
 - **节结构与间距**：`ListHeader` 使用 `headline` 字阶并可右侧挂载 36 dp 高度的 `TonalButtonSize.section` 操作组；`ListFooter` 使用 `footnote` 字阶（`onSurfaceVariant`）置于卡片下方。
 - **行几何**：`ListRow` 在行高内对 `leading`、标题/副标题列与 `trailing`（如 `Switch` 与收紧 `minimumSize: Size.zero` 的 `OptionsValueButton`）执行纵轴居中对齐，`PopupMenu` 展开后的内部选项行与设置项共享 `prism_ui` 列表规范。
-- **子页面过渡与材质隔离**：设置多级钻取（概览页与二/三级子页切换）为每个页面槽位绑定独立 `ValueKey` 与本地 `Material(type: MaterialType.transparency)` 边界，顶栏 `_SettingsTopBar` 通过 `TonalButtonTheme`、`ElasticPress`、`IconButton`、`BarItemGlyph` 与 `GlyphIcon(Glyphs.backFor(platform))` 提供返回按钮（使用语义标签，无 `Tooltip`）并固定铺满右侧设置区左上角（供桌面窗口拖拽区域向右延伸），转场采用双向水平推入/拉回（进入自右侧推入，返回自左侧退回并揭开上一级，采用 `300 ms` 临界阻尼弹簧）。
+- **子页面过渡与材质隔离**：设置多级钻取（概览页与二/三级子页切换）外层采用 [lib/widgets/scaffold/scaffold.dart](../../lib/widgets/scaffold/scaffold.dart) 的悬浮 `Scaffold` 承担标题与返回按钮（带 `Semantics` 无障碍标签，内部动作按钮保留 FlClash 原样），主体内容区为每个页面槽位绑定独立 `ValueKey` 与本地 `Material` 边界，并在 `AnimatedSwitcher` 中执行双向水平推入/拉回转场（进入自右侧推入，返回自左侧退回并揭开上一级，采用 `300 ms` 临界阻尼弹簧）。
 - **行内容与分组位置**：前置图标统一为 `24 dp` 裸图标（无额外背景框）；分组内每行经 `ItemPositionScope` 感知首/中/尾/单项位置，中间插入 1 物理像素高的 `14% onSurface` 分隔线。
+
+## 状态栏与安全区退避
+
+应用在 Android 上以 `SystemUiMode.edgeToEdge` 运行，根组件挂载 `_AppMediaQuery` 钳制异常顶部系统边距并通过 `AnnotatedRegion<SystemUiOverlayStyle>`（`sized: false`）维持透明状态栏与透明系统导航栏（三键导航开启 `systemNavigationBarContrastEnforced`）；`android/app/src/main/res/values-v27` 与 `values-night-v27` 声明 `windowLayoutInDisplayCutoutMode=shortEdges` 以适配刘海与挖孔屏幕。
+
+- **悬浮顶栏页面**：连接页、设置页与窄屏工作区主区使用 `lib/widgets/scaffold/scaffold.dart` 的 `Scaffold`（基于 `prism_ui` `PrismScaffold`、`ScaffoldBar` 与 `FloatingHeader`），顶栏内部通过 `SafeArea(bottom: false)` 退避状态栏并将渐变背景延伸至状态栏下方，滚动内容按 `context.appBarInset` 预留顶栏高度。
+- **三栏布局与侧栏退避**：宽屏（`>= Breakpoints.compact`）下 `AppNavigationSidebar` 在自身内部包裹 `SafeArea` 并结合 `SidebarContentInset` 剥离已由侧栏承担一侧的水平安全边距，防止右侧内容区重复退避；工作区宽屏三栏中的频道面板顶栏、底部状态卡与主区域 `_ChannelHeader` 各自内置 `SafeArea` 退避状态栏与系统导航栏。
 
 ## 外观主题与窄屏底部导航
 

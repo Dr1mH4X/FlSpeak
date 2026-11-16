@@ -230,7 +230,7 @@ class _CompactNavigationShellState
               : 0,
           child: MediaQuery.removePadding(
             context: context,
-            removeBottom: true,
+            removeBottom: showBottomBar,
             child: PageView.builder(
               controller: _pageController,
               physics: const NeverScrollableScrollPhysics(),

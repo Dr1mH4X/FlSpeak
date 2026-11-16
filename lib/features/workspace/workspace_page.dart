@@ -26,6 +26,7 @@ import '../../theme/app_theme.dart';
 import '../../widgets/common.dart';
 import '../../widgets/monogram.dart';
 import '../../widgets/prism.dart';
+import '../../widgets/scaffold/scaffold.dart' as app_scaffold;
 import '../../widgets/window_header.dart';
 import '../settings/widgets/image_host_dialog.dart';
 import 'widgets/chat_pane.dart';
@@ -141,16 +142,9 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
     });
 
     final compact = MediaQuery.sizeOf(context).width < Breakpoints.compact;
-
-    return Column(
+    final mainPane = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _ChannelHeader(
-          compact: compact,
-          channel: channel,
-          tabController: _tabController,
-          isMemberDetails: isMemberDetails,
-        ),
         if (identityUpgradeTarget != null)
           _IdentityBanner(
             target: identityUpgradeTarget,
@@ -222,6 +216,85 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
         ),
       ],
     );
+
+    if (compact) {
+      return app_scaffold.Scaffold(
+        backgroundColor: context.pageColor,
+        title: channel != null ? channelDisplayName(channel) : l10n.appName,
+        backAction: () => _navigateBack(context),
+        actions: [
+          IconButton(
+            onPressed: () => Scaffold.maybeOf(context)?.openDrawer(),
+            icon: Icon(
+              Icons.menu_rounded,
+              semanticLabel: l10n.workspaceOpenMenu,
+            ),
+          ),
+        ],
+        body: Builder(
+          builder: (context) => Material(
+            type: MaterialType.transparency,
+            child: Padding(
+              padding: EdgeInsets.only(top: context.appBarInset),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (channel != null)
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(color: dividerColorOf(context)),
+                        ),
+                      ),
+                      child: SafeArea(
+                        top: false,
+                        bottom: false,
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            child: _ViewTabs(
+                              tabs: _tabSpecs(
+                                l10n,
+                                isMemberDetails: isMemberDetails,
+                              ),
+                              controller: _tabController,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  Expanded(child: SafeArea(top: false, child: mainPane)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _ChannelHeader(
+          channel: channel,
+          tabController: _tabController,
+          isMemberDetails: isMemberDetails,
+        ),
+        Expanded(child: SafeArea(top: false, left: false, child: mainPane)),
+      ],
+    );
+  }
+
+  void _navigateBack(BuildContext context) {
+    final router = GoRouter.maybeOf(context);
+    if (router != null && router.canPop()) {
+      router.pop();
+    } else if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else if (router != null) {
+      router.go(AppRoutes.connect);
+    }
   }
 
   Widget _buildBody(
@@ -547,13 +620,11 @@ List<_TabSpec> _tabSpecs(
 
 class _ChannelHeader extends StatelessWidget {
   const _ChannelHeader({
-    required this.compact,
     required this.channel,
     required this.tabController,
     required this.isMemberDetails,
   });
 
-  final bool compact;
   final ChannelView? channel;
   final TabController tabController;
   final bool isMemberDetails;
@@ -561,91 +632,52 @@ class _ChannelHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final horizontal = compact ? 8.0 : 16.0;
     final hasChannel = channel != null;
 
-    return Container(
-      height: Sizes.header,
+    return DecoratedBox(
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: dividerColorOf(context))),
       ),
-      child: Padding(
-        padding: EdgeInsets.symmetric(horizontal: horizontal),
-        child: Row(
-          children: [
-            if (compact) ...[
-              TonalButtonTheme(
-                glass: LiquidGlassScope.of(context),
-                child: ElasticPress(
-                  child: IconButton(
-                    onPressed: () {
-                      final router = GoRouter.maybeOf(context);
-                      if (router != null && router.canPop()) {
-                        router.pop();
-                      } else if (Navigator.of(context).canPop()) {
-                        Navigator.of(context).pop();
-                      } else if (router != null) {
-                        router.go(AppRoutes.connect);
-                      }
-                    },
-                    iconSize: IconSizes.toolbar,
-                    icon: Semantics(
-                      label: MaterialLocalizations.of(context)
-                          .backButtonTooltip,
-                      child: BarItemGlyph(
-                        child: GlyphIcon(
-                          Glyphs.backFor(Theme.of(context).platform),
+      child: SafeArea(
+        bottom: false,
+        left: false,
+        child: SizedBox(
+          height: Sizes.header,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: WindowDragRegion(
+                    child: Semantics(
+                      header: true,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          channel != null
+                              ? channelDisplayName(channel!)
+                              : l10n.appName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: context.texts.titleMedium?.copyWith(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 4),
-              ElasticPress(
-                child: IconButton(
-                  onPressed: () => Scaffold.of(context).openDrawer(),
-                  style: ButtonStyle.from(
-                    minimumSize: const Size(Sizes.touch, Sizes.touch),
+                if (hasChannel) ...[
+                  const SizedBox(width: 6),
+                  _ViewTabs(
+                    tabs: _tabSpecs(l10n, isMemberDetails: isMemberDetails),
+                    controller: tabController,
                   ),
-                  icon: Icon(
-                    Icons.menu_rounded,
-                    size: IconSizes.standard,
-                    semanticLabel: l10n.workspaceOpenMenu,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-            ],
-            Expanded(
-              child: WindowDragRegion(
-                child: Semantics(
-                  header: true,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      channel != null
-                          ? channelDisplayName(channel!)
-                          : l10n.appName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: context.texts.titleMedium?.copyWith(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+                ],
+              ],
             ),
-            if (hasChannel) ...[
-              const SizedBox(width: 6),
-              _ViewTabs(
-                tabs: _tabSpecs(l10n, isMemberDetails: isMemberDetails),
-                controller: tabController,
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );

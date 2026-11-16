@@ -1,3 +1,7 @@
+// 本文件包含的代码片段来源于 FlClash（https://github.com/chen08209/FlClash）项目，
+// 原始许可证为 GPL-3.0，来源提交：be84736605527034689c95bf27828ff27d912c5e。
+// 对应 lib/manager/theme_manager.dart 中的 _AppMediaQuery 与系统栏 AnnotatedRegion 配置。
+
 import 'dart:async';
 import 'dart:ui' show AppExitResponse;
 
@@ -212,21 +216,26 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
       themeAnimationDuration: Duration.zero,
       builder: (context, child) {
         final theme = Theme.of(context);
-        return PrismRootScope(
-          brightness: theme.brightness,
-          platform: theme.platform,
-          primaryColor: primaryColor,
-          colorStyle: colorStyle,
-          pureBlack: pureBlack,
-          fontFamily: fontFamily,
-          textScale: textScaleEnabled ? textScale : null,
-          liquidGlass: glassQuality,
-          child: AnnotatedRegion<SystemUiOverlayStyle>(
-            value: appSystemUiOverlayStyle(theme),
-            child: _WindowBackgroundSync(
-              child: _StartupLoggingNotice(
-                child: _StartupUpdateNotice(
-                  child: _WindowFrame(child: child ?? const SizedBox.shrink()),
+        return _AppMediaQuery(
+          child: PrismRootScope(
+            brightness: theme.brightness,
+            platform: theme.platform,
+            primaryColor: primaryColor,
+            colorStyle: colorStyle,
+            pureBlack: pureBlack,
+            fontFamily: fontFamily,
+            textScale: textScaleEnabled ? textScale : null,
+            liquidGlass: glassQuality,
+            child: AnnotatedRegion<SystemUiOverlayStyle>(
+              value: appSystemUiOverlayStyle(theme),
+              sized: false,
+              child: _WindowBackgroundSync(
+                child: _StartupLoggingNotice(
+                  child: _StartupUpdateNotice(
+                    child: _WindowFrame(
+                      child: child ?? const SizedBox.shrink(),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -238,21 +247,41 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
   }
 }
 
-/// 状态栏与系统导航栏的图标亮度跟随主题。Android 没有 AppBar 时不会自动
-/// 推断，深色主题需要明确要求浅色图标，浅色主题反之。
+/// 状态栏与系统导航栏的图标亮度跟随主题。页面在底层穿过透明系统导航栏，
+/// 三键导航由系统绘制半透明遮罩，手势条保持通透。
 SystemUiOverlayStyle appSystemUiOverlayStyle(ThemeData theme) {
   final dark = theme.brightness == Brightness.dark;
+  final iconBrightness = dark ? Brightness.light : Brightness.dark;
   return SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
-    statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
+    statusBarIconBrightness: iconBrightness,
     statusBarBrightness: dark ? Brightness.dark : Brightness.light,
-    systemNavigationBarColor: theme.colorScheme.surface,
-    systemNavigationBarIconBrightness: dark
-        ? Brightness.light
-        : Brightness.dark,
+    systemNavigationBarColor: Colors.transparent,
+    systemNavigationBarIconBrightness: iconBrightness,
     systemNavigationBarDividerColor: Colors.transparent,
-    systemNavigationBarContrastEnforced: false,
+    systemNavigationBarContrastEnforced: true,
   );
+}
+
+/// 防止部分 Android 机型或引擎启动/旋转瞬间上报异常巨大的顶部系统边距。
+class _AppMediaQuery extends StatelessWidget {
+  const _AppMediaQuery({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final data = MediaQuery.of(context);
+    final padding = data.padding;
+    return MediaQuery(
+      data: data.copyWith(
+        padding: padding.copyWith(
+          top: padding.top > data.size.height * 0.3 ? 20.0 : padding.top,
+        ),
+      ),
+      child: child,
+    );
+  }
 }
 
 /// 把当前主题的 surface 色与侧栏模糊请求同步给原生窗口：macOS 的标题栏、圆角边缘

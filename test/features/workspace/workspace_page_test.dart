@@ -25,9 +25,12 @@ import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/features/workspace/widgets/channel_pane.dart';
 import 'package:flspeak/features/workspace/widgets/chat_pane.dart';
 import 'package:flspeak/features/workspace/workspace_page.dart';
+import 'package:flspeak/features/workspace/workspace_shell.dart';
 import 'package:flspeak/features/workspace/workspace_state.dart';
+import 'package:flspeak/widgets/app_navigation_sidebar.dart';
 import 'package:flspeak/widgets/monogram.dart';
 import 'package:flspeak/widgets/prism.dart';
+import 'package:flspeak/widgets/scaffold/scaffold.dart' as app_scaffold;
 
 class _Core extends Fake implements CoreSession {
   final joined = <({String streamId, int sourceClid})>[];
@@ -841,5 +844,95 @@ void main() {
     await tester.tap(find.text('Studio'));
     await tester.pumpAndSettle();
     expect(container.read(sessionViewProvider).chatScope, ChatScope.channel);
+  });
+
+  testWidgets('工作区在窄屏与平板宽屏均让顶栏与侧栏退避状态栏', (tester) async {
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1.0;
+
+    final container = ProviderContainer(
+      overrides: [
+        coreSessionProvider.overrideWithValue(_Core()),
+        sessionViewProvider.overrideWith(_Session.new),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    Future<void> mount(Size size) async {
+      tester.view.physicalSize = size;
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            locale: const Locale('zh'),
+            localizationsDelegates: const [
+              ...AppLocalizations.localizationsDelegates,
+              PrismUiLocalizationsDelegate(),
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(padding: const EdgeInsets.only(top: 40, bottom: 24)),
+              child: PrismRootScope(
+                brightness: Brightness.light,
+                child: child!,
+              ),
+            ),
+            home: const WorkspaceShell(
+              location: '/workspace',
+              child: WorkspacePage(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    // 窄屏使用 FlClash Scaffold，返回与抽屉按钮退避状态栏，Tab 条位于顶栏下方
+    await mount(const Size(390, 844));
+    expect(find.byType(app_scaffold.Scaffold), findsOneWidget);
+    final backFinder = find.bySemanticsLabel(
+      MaterialLocalizations.of(tester.element(find.byType(WorkspacePage)))
+          .backButtonTooltip,
+    );
+    expect(tester.getTopLeft(backFinder).dy, greaterThanOrEqualTo(40.0));
+    expect(
+      tester.getTopLeft(find.byIcon(Icons.menu_rounded)).dy,
+      greaterThanOrEqualTo(40.0),
+    );
+    expect(
+      tester.getTopLeft(find.byType(TabBar)).dy,
+      greaterThanOrEqualTo(40.0 + pageToolbarHeight),
+    );
+
+    // 宽屏（Android 平板）：全局侧栏、频道栏顶栏、主区域顶栏全部退避状态栏
+    await mount(const Size(900, 800));
+    expect(
+      tester
+          .getTopLeft(
+            find.descendant(
+              of: find.byType(AppNavigationSidebar),
+              matching: find.byWidgetPredicate(
+                (w) =>
+                    w is Icon &&
+                    (w.icon == Icons.menu_rounded ||
+                        w.icon == Icons.menu_open_rounded),
+              ),
+            ),
+          )
+          .dy,
+      greaterThanOrEqualTo(40.0),
+    );
+    expect(
+      tester.getTopLeft(find.byIcon(Icons.dns_outlined)).dy,
+      greaterThanOrEqualTo(40.0),
+    );
+    expect(
+      tester.getTopLeft(find.byType(TabBar)).dy,
+      greaterThanOrEqualTo(40.0),
+    );
   });
 }

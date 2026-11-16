@@ -68,7 +68,12 @@ class ChannelPanel extends StatelessWidget {
               ],
             ),
           ),
-          _UserFooter(onDisconnect: onDisconnect),
+          SafeArea(
+            top: false,
+            left: false,
+            right: false,
+            child: _UserFooter(onDisconnect: onDisconnect),
+          ),
         ],
       ),
     );
@@ -84,31 +89,36 @@ class _ChannelHeader extends ConsumerWidget {
     final serverLabel = ref.watch(
       sessionViewProvider.select((view) => view.activeServer?.label),
     );
-    return SizedBox(
-      height: Sizes.header,
-      child: WindowDragRegion(
-        child: Padding(
-          padding: const EdgeInsets.only(left: 16, right: 8),
-          child: Row(
-            children: [
-              Icon(
-                Icons.dns_outlined,
-                size: IconSizes.medium,
-                color: context.scheme.primary,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  serverLabel ?? l10n.appName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: context.texts.titleMedium?.copyWith(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
+    return SafeArea(
+      bottom: false,
+      left: false,
+      right: false,
+      child: SizedBox(
+        height: Sizes.header,
+        child: WindowDragRegion(
+          child: Padding(
+            padding: const EdgeInsets.only(left: 16, right: 8),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.dns_outlined,
+                  size: IconSizes.medium,
+                  color: context.scheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    serverLabel ?? l10n.appName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: context.texts.titleMedium?.copyWith(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

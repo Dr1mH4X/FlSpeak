@@ -9,6 +9,7 @@ import 'package:flutter/material.dart'
         InputBorder,
         InputDecoration,
         OutlinedButton,
+        Scaffold,
         Switch,
         TextButton,
         TextField;
@@ -25,8 +26,8 @@ import '../../theme/app_theme.dart';
 import '../../widgets/app_navigation_sidebar.dart';
 import '../../widgets/compact_navigation_shell.dart';
 import '../../widgets/prism.dart' hide Divider;
+import '../../widgets/scaffold/scaffold.dart';
 import 'widgets/add_server_dialog.dart';
-import 'widgets/connect_header.dart';
 import 'widgets/identity_card.dart';
 import 'widgets/identity_dialog.dart';
 import 'widgets/remove_server_dialog.dart';
@@ -270,85 +271,106 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
 
     final bottomDockInset = CompactBottomInsetScope.of(context);
     final inCompactTabs = CompactRootTabScope.maybeOf(context)?.active ?? false;
-    final content = SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(
-        horizontal,
-        wide ? 48 : 28,
-        horizontal,
-        32 + bottomDockInset,
-      ),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: Sizes.connectContent),
-          child: wide
-              ? Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [intro, const SizedBox(height: 36), section],
-                      ),
+    final body = Builder(
+      builder: (context) {
+        final safePadding = MediaQuery.paddingOf(context);
+        return SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+            horizontal + safePadding.left,
+            context.appBarInset + (wide ? 24.0 : 16.0),
+            horizontal + safePadding.right,
+            32.0 + bottomDockInset + safePadding.bottom,
+          ),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: Sizes.connectContent),
+              child: wide
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              intro,
+                              const SizedBox(height: 36),
+                              section,
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 28),
+                        SizedBox(width: Sizes.identityColumn, child: identity),
+                      ],
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        intro,
+                        const SizedBox(height: 28),
+                        identity,
+                        const SizedBox(height: 28),
+                        section,
+                      ],
                     ),
-                    const SizedBox(width: 28),
-                    SizedBox(width: Sizes.identityColumn, child: identity),
-                  ],
-                )
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    intro,
-                    const SizedBox(height: 28),
-                    identity,
-                    const SizedBox(height: 28),
-                    section,
-                  ],
-                ),
-        ),
-      ),
+            ),
+          ),
+        );
+      },
     );
 
-    final header = ConnectHeader(
-      desktop: desktop,
-      connected: connected,
-      showSettingsButton: !inCompactTabs,
-      onWorkspace: () => context.go(AppRoutes.workspace),
-      onSettings: () => context.push(AppRoutes.settings),
+    final pageScaffold = SurfaceScope(
+      level: SurfaceLevel.page,
+      child: Scaffold(
+        backgroundColor: context.pageColor,
+        title: desktop ? l10n.serversTitle : l10n.appName,
+        actions: [
+          if (connected)
+            desktop
+                ? TextButton.icon(
+                    onPressed: () => context.go(AppRoutes.workspace),
+                    icon: const Icon(
+                      Icons.arrow_forward_rounded,
+                      size: IconSizes.medium,
+                    ),
+                    label: Text(l10n.workspaceReturn),
+                  )
+                : IconButton(
+                    onPressed: () => context.go(AppRoutes.workspace),
+                    icon: Icon(
+                      Icons.arrow_forward_rounded,
+                      semanticLabel: l10n.workspaceReturn,
+                    ),
+                  ),
+          if (!desktop && !inCompactTabs)
+            IconButton(
+              onPressed: () => context.push(AppRoutes.settings),
+              icon: Icon(
+                Icons.settings_outlined,
+                semanticLabel: l10n.settingsTitle,
+              ),
+            ),
+        ],
+        body: body,
+      ),
     );
 
     final blurOpacity = desktop ? ref.watch(windowBlurOpacityProvider) : null;
-    return Scaffold(
-      backgroundColor: blurOpacity != null
-          ? Colors.transparent
-          : context.pageColor,
-      body: SafeArea(
-        top: !desktop,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (desktop)
-              const AppNavigationSidebar(
-                selectedDestination: AppNavDestination.home,
-              ),
-            Expanded(
-              child: Material(
-                color: context.pageColor,
-                borderRadius: BorderRadius.zero,
-                clipBehavior: Clip.antiAlias,
-                child: SurfaceScope(
-                  level: SurfaceLevel.page,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      header,
-                      Expanded(child: content),
-                    ],
-                  ),
-                ),
-              ),
+    return Material(
+      color: blurOpacity != null ? Colors.transparent : context.pageColor,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (desktop)
+            const AppNavigationSidebar(
+              selectedDestination: AppNavDestination.home,
             ),
-          ],
-        ),
+          Expanded(
+            child: SidebarContentInset(
+              hasSidebar: desktop,
+              child: pageScaffold,
+            ),
+          ),
+        ],
       ),
     );
   }

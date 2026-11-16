@@ -29,6 +29,7 @@ import 'package:flspeak/widgets/prism.dart'
         InputDecorationTheme,
         LiquidGlassQuality,
         LiquidGlassScope,
+        ScaffoldBar,
         Surface,
         TextField;
 import 'package:flspeak/widgets/update_dot.dart';
@@ -439,10 +440,17 @@ void main() {
             .backButtonTooltip,
       );
       expect(backButton, findsOneWidget);
-      final topBarTitleColor = tester
-          .widget<Text>(find.text('通用').first)
-          .style
-          ?.color;
+      Color? resolvedTopBarTitleColor(String title) {
+        final finder = find.descendant(
+          of: find.byType(ScaffoldBar),
+          matching: find.text(title),
+        );
+        final element = tester.element(finder.first);
+        final widget = tester.widget<Text>(finder.first);
+        return DefaultTextStyle.of(element).style.merge(widget.style).color;
+      }
+
+      final topBarTitleColor = resolvedTopBarTitleColor('通用');
 
       await tester.tap(backButton);
       for (final step in [
@@ -460,10 +468,7 @@ void main() {
           ),
           isTrue,
         );
-        expect(
-          tester.widget<Text>(find.text('设置').first).style?.color,
-          topBarTitleColor,
-        );
+        expect(resolvedTopBarTitleColor('设置'), topBarTitleColor);
       }
       await tester.pumpAndSettle();
       expect(sidebarSurface().color, baselineSidebarColor);
@@ -629,6 +634,71 @@ void main() {
       await tester.enterText(fieldFinder, 'local');
       await tester.pump();
       expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'TsClientApp clamps anomalous top padding and enforces transparent system bars',
+    (tester) async {
+      tester.view.physicalSize = const Size(600, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final darkStyle = appSystemUiOverlayStyle(buildAppTheme(Brightness.dark));
+      expect(darkStyle.statusBarColor, Colors.transparent);
+      expect(darkStyle.systemNavigationBarColor, Colors.transparent);
+      expect(darkStyle.systemNavigationBarContrastEnforced, isTrue);
+
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_PttCore()),
+          storePathProvider.overrideWithValue(
+            '/tmp/flspeak-test/preferences.json',
+          ),
+          sessionViewProvider.overrideWith(_PttSession.new),
+          preferencesStoreProvider.overrideWithValue(
+            PreferencesStore.inMemory(
+              preferences: const SessionPreferences(
+                nickname: 'Test',
+                locale: 'zh',
+              ),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      tester.view.padding = const FakeViewPadding(top: 300, bottom: 24);
+      addTearDown(tester.view.resetPadding);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const TsClientApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final region = tester.widget<AnnotatedRegion<SystemUiOverlayStyle>>(
+        find
+            .byWidgetPredicate(
+              (widget) =>
+                  widget is AnnotatedRegion<SystemUiOverlayStyle> &&
+                  !widget.sized,
+            )
+            .first,
+      );
+      expect(region.sized, isFalse);
+
+      // BuildContext inside PrismRootScope should see clamped top padding (20.0).
+      final scopeContext = tester.element(find.byType(BannerHost));
+      expect(MediaQuery.paddingOf(scopeContext).top, 20.0);
+
+      // Normal status bar height (44.0 <= 800 * 0.3) is preserved untouched.
+      tester.view.padding = const FakeViewPadding(top: 44, bottom: 24);
+      await tester.pumpAndSettle();
+      expect(MediaQuery.paddingOf(scopeContext).top, 44.0);
     },
   );
 }

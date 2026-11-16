@@ -1,7 +1,8 @@
 import 'dart:async';
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
-import 'package:flutter/material.dart' hide IconButton, Switch, TextButton;
+import 'package:flutter/material.dart'
+    hide IconButton, Scaffold, Switch, TextButton;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -20,8 +21,8 @@ import '../../widgets/app_navigation_sidebar.dart';
 import '../../widgets/common.dart';
 import '../../widgets/compact_navigation_shell.dart';
 import '../../widgets/prism.dart';
+import '../../widgets/scaffold/scaffold.dart';
 import '../../widgets/update_dot.dart';
-import '../../widgets/window_header.dart';
 import 'settings_state.dart';
 import 'widgets/about_card.dart';
 import 'widgets/image_host_dialog.dart';
@@ -463,91 +464,97 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         ? -1.0
         : 1.0;
 
-    final Widget activePage = KeyedSubtree(
-      key: pageKey,
-      child: Material(
-        color: pageColor,
-        child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            compact ? 16 : 32,
-            16,
-            compact ? 16 : 32,
-            40 + CompactBottomInsetScope.of(context),
-          ),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 720),
-              child: isSubPage ? subPageContent : overviewContent,
-            ),
-          ),
+    final Widget rightContent = SurfaceScope(
+      level: SurfaceLevel.page,
+      child: Scaffold(
+        backgroundColor: pageColor,
+        title: pageTitle,
+        backAction: _back,
+        body: Builder(
+          builder: (context) {
+            final safePadding = MediaQuery.paddingOf(context);
+            final Widget activePage = KeyedSubtree(
+              key: pageKey,
+              child: Material(
+                color: pageColor,
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(
+                    (compact ? 16.0 : 32.0) + safePadding.left,
+                    context.appBarInset + 16.0,
+                    (compact ? 16.0 : 32.0) + safePadding.right,
+                    40.0 +
+                        CompactBottomInsetScope.of(context) +
+                        safePadding.bottom,
+                  ),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 720),
+                      child: isSubPage ? subPageContent : overviewContent,
+                    ),
+                  ),
+                ),
+              ),
+            );
+            return ClipRect(
+              child: AnimatedSwitcher(
+                duration: _settingsTransitionDuration,
+                switchInCurve: _settingsPushCurve,
+                switchOutCurve: _settingsPushCurve.flipped,
+                layoutBuilder: (currentChild, previousChildren) => Stack(
+                  fit: StackFit.expand,
+                  children: _navDirection >= 0
+                      ? [...previousChildren, ?currentChild]
+                      : [?currentChild, ...previousChildren],
+                ),
+                transitionBuilder: (child, animation) {
+                  final isIncoming = child.key == pageKey;
+                  final bool isCoverLayer =
+                      (_navDirection >= 0 && !isIncoming) ||
+                      (_navDirection < 0 && isIncoming);
+                  final Offset beginOffset = isCoverLayer
+                      ? Offset(-_coveredSlideFactor * rtlSign, 0)
+                      : Offset(rtlSign, 0);
+                  Widget animated = SlideTransition(
+                    position: Tween<Offset>(
+                      begin: beginOffset,
+                      end: Offset.zero,
+                    ).animate(animation),
+                    child: child,
+                  );
+                  if (isCoverLayer) {
+                    animated = AnimatedBuilder(
+                      animation: animation,
+                      builder: (context, inner) {
+                        final dim =
+                            _coveredDimAlpha *
+                            (1.0 - animation.value).clamp(0.0, 1.0);
+                        return Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            inner!,
+                            if (dim > 0)
+                              IgnorePointer(
+                                child: ColoredBox(
+                                  color: Colors.black.withValues(alpha: dim),
+                                ),
+                              ),
+                          ],
+                        );
+                      },
+                      child: animated,
+                    );
+                  }
+                  if (!isIncoming) {
+                    animated = IgnorePointer(child: animated);
+                  }
+                  return animated;
+                },
+                child: activePage,
+              ),
+            );
+          },
         ),
       ),
-    );
-
-    final rightContent = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _SettingsTopBar(title: pageTitle, onBack: _back),
-        Expanded(
-          child: ClipRect(
-            child: AnimatedSwitcher(
-              duration: _settingsTransitionDuration,
-              switchInCurve: _settingsPushCurve,
-              switchOutCurve: _settingsPushCurve.flipped,
-              layoutBuilder: (currentChild, previousChildren) => Stack(
-                fit: StackFit.expand,
-                children: _navDirection >= 0
-                    ? [...previousChildren, ?currentChild]
-                    : [?currentChild, ...previousChildren],
-              ),
-              transitionBuilder: (child, animation) {
-                final isIncoming = child.key == pageKey;
-                final bool isCoverLayer =
-                    (_navDirection >= 0 && !isIncoming) ||
-                    (_navDirection < 0 && isIncoming);
-                final Offset beginOffset = isCoverLayer
-                    ? Offset(-_coveredSlideFactor * rtlSign, 0)
-                    : Offset(rtlSign, 0);
-                Widget animated = SlideTransition(
-                  position: Tween<Offset>(
-                    begin: beginOffset,
-                    end: Offset.zero,
-                  ).animate(animation),
-                  child: child,
-                );
-                if (isCoverLayer) {
-                  animated = AnimatedBuilder(
-                    animation: animation,
-                    builder: (context, inner) {
-                      final dim =
-                          _coveredDimAlpha *
-                          (1.0 - animation.value).clamp(0.0, 1.0);
-                      return Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          inner!,
-                          if (dim > 0)
-                            IgnorePointer(
-                              child: ColoredBox(
-                                color: Colors.black.withValues(alpha: dim),
-                              ),
-                            ),
-                        ],
-                      );
-                    },
-                    child: animated,
-                  );
-                }
-                if (!isIncoming) {
-                  animated = IgnorePointer(child: animated);
-                }
-                return animated;
-              },
-              child: activePage,
-            ),
-          ),
-        ),
-      ],
     );
 
     return Shortcuts(
@@ -576,89 +583,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 setState(() => _activeCategory = null);
               }
             },
-            child: Scaffold(
-              backgroundColor:
-                  !compact && ref.watch(windowBlurOpacityProvider) != null
+            child: Material(
+              color: !compact && ref.watch(windowBlurOpacityProvider) != null
                   ? Colors.transparent
                   : pageColor,
-              body: SurfaceScope(
-                level: SurfaceLevel.page,
-                child: SafeArea(
-                  top: compact,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (!compact)
-                        const AppNavigationSidebar(
-                          selectedDestination: AppNavDestination.settings,
-                        ),
-                      Expanded(
-                        child: ColoredBox(
-                          color: pageColor,
-                          child: rightContent,
-                        ),
-                      ),
-                    ],
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (!compact)
+                    const AppNavigationSidebar(
+                      selectedDestination: AppNavDestination.settings,
+                    ),
+                  Expanded(
+                    child: SidebarContentInset(
+                      hasSidebar: !compact,
+                      child: rightContent,
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SettingsTopBar extends StatelessWidget {
-  const _SettingsTopBar({required this.title, required this.onBack});
-
-  final String title;
-  final VoidCallback onBack;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      type: MaterialType.transparency,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: Sizes.header),
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(context.isCompact ? 8 : 12, 8, 16, 8),
-          child: Row(
-            children: [
-              TonalButtonTheme(
-                glass: LiquidGlassScope.of(context),
-                child: ElasticPress(
-                  child: IconButton(
-                    onPressed: onBack,
-                    iconSize: IconSizes.toolbar,
-                    icon: Semantics(
-                      label: MaterialLocalizations.of(context)
-                          .backButtonTooltip,
-                      child: BarItemGlyph(
-                        child: GlyphIcon(
-                          Glyphs.backFor(Theme.of(context).platform),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: WindowDragRegion(
-                  child: Semantics(
-                    header: true,
-                    child: Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTextStyle.pageTitle.of(context),
-                    ),
-                  ),
-                ),
-              ),
-            ],
           ),
         ),
       ),

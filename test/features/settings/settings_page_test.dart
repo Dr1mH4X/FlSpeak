@@ -917,4 +917,91 @@ void main() {
       expect(cardAtWide.dx, greaterThan(cardAtNarrow.dx));
     },
   );
+
+  testWidgets(
+    'settings page clears status bar in both compact and wide layouts',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.devicePixelRatio = 1.0;
+
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_Core()),
+          sessionViewProvider.overrideWith(_Session.new),
+          updateProvider.overrideWith(_Update.new),
+          appVersionProvider.overrideWithValue('0.1.0'),
+          storePathProvider.overrideWithValue(
+            '/tmp/flspeak-test/preferences.json',
+          ),
+          preferencesStoreProvider.overrideWithValue(
+            PreferencesStore.inMemory(
+              preferences: const SessionPreferences(
+                nickname: 'Test',
+                locale: 'zh',
+              ),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      Future<void> verifyForSize(Size size, {required bool wide}) async {
+        tester.view.physicalSize = size;
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+              theme: buildAppTheme(Brightness.light),
+              locale: const Locale('zh'),
+              localizationsDelegates: const [
+                ...AppLocalizations.localizationsDelegates,
+                PrismUiLocalizationsDelegate(),
+              ],
+              supportedLocales: AppLocalizations.supportedLocales,
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(padding: const EdgeInsets.only(top: 40, bottom: 24)),
+                child: PrismRootScope(
+                  brightness: Brightness.light,
+                  child: child!,
+                ),
+              ),
+              home: const SettingsPage(),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final backFinder = find.bySemanticsLabel(
+          MaterialLocalizations.of(tester.element(find.byType(SettingsPage)))
+              .backButtonTooltip,
+        );
+        expect(tester.getTopLeft(backFinder).dy, greaterThanOrEqualTo(40.0));
+
+        final tile = find.byType(SettingsOptionsTile<String?>);
+        expect(
+          tester.getTopLeft(tile).dy,
+          greaterThanOrEqualTo(40.0 + pageToolbarHeight),
+        );
+
+        if (wide) {
+          final toggle = find.descendant(
+            of: find.byType(AppNavigationSidebar),
+            matching: find.byWidgetPredicate(
+              (w) =>
+                  w is Icon &&
+                  (w.icon == Icons.menu_rounded ||
+                      w.icon == Icons.menu_open_rounded),
+            ),
+          );
+          expect(tester.getTopLeft(toggle).dy, greaterThanOrEqualTo(40.0));
+        }
+      }
+
+      await verifyForSize(const Size(390, 844), wide: false);
+      await verifyForSize(const Size(900, 800), wide: true);
+    },
+  );
 }
