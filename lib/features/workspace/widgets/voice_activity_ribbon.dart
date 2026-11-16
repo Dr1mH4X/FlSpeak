@@ -7,16 +7,108 @@ import '../../../core/voice_levels.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/signal_ribbon.dart';
 
-/// 所选声源的响度历史；电平与连接标记只重建这块画布。
-class VoiceActivityRibbon extends ConsumerWidget {
+/// 所选声源的响度历史；电平与连接标记只重建这块画布，并在后台/遮挡时休眠。
+class VoiceActivityRibbon extends ConsumerStatefulWidget {
   const VoiceActivityRibbon({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<VoiceActivityRibbon> createState() =>
+      _VoiceActivityRibbonState();
+}
+
+class _VoiceActivityRibbonState extends ConsumerState<VoiceActivityRibbon>
+    with WidgetsBindingObserver {
+  bool _isForeground = true;
+  bool _isTickerEnabled = true;
+  ProviderSubscription<AsyncValue<VoiceLevels>>? _levelsSub;
+  VoiceLevels _levels = VoiceLevels.silent;
+
+  bool get _isActive => _isForeground && _isTickerEnabled;
+
+  static bool _isLifecycleVisible(AppLifecycleState? state) => switch (state) {
+    AppLifecycleState.hidden ||
+    AppLifecycleState.paused ||
+    AppLifecycleState.detached => false,
+    AppLifecycleState.resumed || AppLifecycleState.inactive || null => true,
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _isForeground = _isLifecycleVisible(WidgetsBinding.instance.lifecycleState);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _isTickerEnabled = TickerMode.valuesOf(context).enabled;
+    _syncListening(notify: false);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final isForeground = _isLifecycleVisible(state);
+    if (_isForeground == isForeground) {
+      return;
+    }
+    _isForeground = isForeground;
+    _syncListening(notify: true);
+  }
+
+  void _syncListening({required bool notify}) {
+    if (_isActive) {
+      if (_levelsSub != null) {
+        return;
+      }
+      var firingImmediately = true;
+      _levelsSub = ref.listenManual<AsyncValue<VoiceLevels>>(
+        voiceLevelsProvider,
+        (_, next) {
+          final levels = next.value;
+          if (levels == null || !mounted || identical(levels, _levels)) {
+            return;
+          }
+          if (firingImmediately && !notify) {
+            _levels = levels;
+            return;
+          }
+          setState(() => _levels = levels);
+        },
+        fireImmediately: true,
+      );
+      firingImmediately = false;
+      if (notify && mounted) {
+        setState(() {});
+      }
+      return;
+    }
+
+    final hadSub = _levelsSub != null;
+    _levelsSub?.close();
+    _levelsSub = null;
+    if ((hadSub || !identical(_levels, VoiceLevels.silent)) &&
+        notify &&
+        mounted) {
+      setState(() => _levels = VoiceLevels.silent);
+    } else {
+      _levels = VoiceLevels.silent;
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _levelsSub?.close();
+    _levelsSub = null;
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final source = ref.watch(
       preferencesProvider.select((prefs) => prefs.voiceMeterSource),
     );
-    final levels = ref.watch(voiceLevelsProvider).value ?? VoiceLevels.silent;
     final connection = ref.watch(
       sessionViewProvider.select(
         (view) => (
@@ -29,9 +121,9 @@ class VoiceActivityRibbon extends ConsumerWidget {
     return ExcludeSemantics(
       child: _Ribbon(
         key: ValueKey((connection.serverId, connection.epoch)),
-        levels: levels,
+        levels: _isActive ? _levels : VoiceLevels.silent,
         source: source,
-        connected: connection.connected,
+        connected: connection.connected && _isActive,
       ),
     );
   }

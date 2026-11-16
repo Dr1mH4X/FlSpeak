@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/models.dart';
 import '../../core/notices.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_localizations.dart';
@@ -31,7 +30,9 @@ class WorkspaceShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = context.scheme;
     final l10n = AppLocalizations.of(context);
-    final view = ref.watch(sessionViewProvider);
+    final activeServerId = ref.watch(
+      sessionViewProvider.select((view) => view.activeServerId),
+    );
     final width = MediaQuery.sizeOf(context).width;
     final compact = width < Breakpoints.compact;
     final panelColor = context.isDark
@@ -40,18 +41,24 @@ class WorkspaceShell extends ConsumerWidget {
 
     // 掉线重连期间每换一次尝试就在右上角刷新同一条提示；同一文案由
     // NoticeCenter 去重，不会叠成多张卡片。
-    ref.listen<SessionView>(sessionViewProvider, (previous, next) {
-      if (!next.reconnecting) {
-        return;
-      }
-      if (previous?.reconnecting == true &&
-          previous?.reconnectAttempt == next.reconnectAttempt) {
-        return;
-      }
-      ref
-          .read(noticeCenterProvider.notifier)
-          .show(l10n.workspaceRetrying, tone: NoticeTone.info);
-    });
+    ref.listen<({bool reconnecting, int? attempt})>(
+      sessionViewProvider.select(
+        (view) =>
+            (reconnecting: view.reconnecting, attempt: view.reconnectAttempt),
+      ),
+      (previous, next) {
+        if (!next.reconnecting) {
+          return;
+        }
+        if (previous?.reconnecting == true &&
+            previous?.attempt == next.attempt) {
+          return;
+        }
+        ref
+            .read(noticeCenterProvider.notifier)
+            .show(l10n.workspaceRetrying, tone: NoticeTone.info);
+      },
+    );
 
     /// 断开后回到服务器列表：工作区只剩空频道栏，
     /// 用户下一步能做的事全在连接页。
@@ -73,15 +80,24 @@ class WorkspaceShell extends ConsumerWidget {
       }
     }
 
-    final rail = AppNavigationSidebar(
-      selectedDestination: AppNavDestination.server,
-      activeServerId: view.activeServerId,
+    final rail = RepaintBoundary(
+      child: AppNavigationSidebar(
+        selectedDestination: AppNavDestination.server,
+        activeServerId: activeServerId,
+      ),
     );
-    final panel = ChannelPanel(
-      onChannelSelected: selectChannel,
-      onDisconnect: () => unawaited(disconnect()),
+    final panel = RepaintBoundary(
+      child: ColoredBox(
+        color: panelColor,
+        child: ChannelPanel(
+          onChannelSelected: selectChannel,
+          onDisconnect: () => unawaited(disconnect()),
+        ),
+      ),
     );
-    final surface = _MainSurface(compact: compact, child: child);
+    final surface = RepaintBoundary(
+      child: _MainSurface(compact: compact, child: child),
+    );
 
     final compactWidth = AppNavigationSidebar.compactWidthOf(context);
 
@@ -112,8 +128,11 @@ class WorkspaceShell extends ConsumerWidget {
       );
     }
 
+    final blurOpacity = ref.watch(windowBlurOpacityProvider);
     return Scaffold(
-      backgroundColor: context.pageColor,
+      backgroundColor: blurOpacity != null
+          ? Colors.transparent
+          : context.pageColor,
       body: SafeArea(
         top: false,
         child: Row(

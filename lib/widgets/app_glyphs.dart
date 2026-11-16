@@ -1,5 +1,5 @@
-// 本文件包含的代码片段来源于 FlClash（https://github.com/chen08209/FlClash）项目，原始许可证为 GPL-3.0。
-// edit、palette、delete 沿用 FlClash 的 lib/ui/icons/app_glyphs.dart 矢量定义，其余为 FlSpeak 业务动作补充。
+// 本文件包含的代码片段来源于 FlClash（https://github.com/chen08209/FlClash）项目，原始许可证为 GPL-3.0，来源提交 be84736605527034689c95bf27828ff27d912c5e。
+// dashboard、settings、reset、add、edit、palette、delete、layers、sun、pureBlack、paintbrush、eyedropper、motion、blur、liquidGlass、font、textSize 沿用 FlClash 的 lib/ui/icons/app_glyphs.dart 矢量定义，其余为 FlSpeak 业务动作补充。
 
 import 'dart:math' as math;
 
@@ -199,6 +199,257 @@ abstract final class AppGlyphs {
     GlyphPolyline([
       GlyphVertex(16.4, 12),
       GlyphVertex(20.8, 12),
+    ], role: GlyphRole.line),
+  ]);
+
+  static const dashboard = Glyph([
+    GlyphBox(3.5, 3.5, 10.5, 11.5, 2),
+    GlyphBox(13.5, 3.5, 20.5, 9.5, 2),
+    GlyphBox(3.5, 14.5, 10.5, 20.5, 2),
+    GlyphBox(13.5, 12.5, 20.5, 20.5, 2),
+  ]);
+
+  static const settings = Glyph([
+    GlyphPolyline([
+      GlyphVertex(9.87, 5.44, 0.6),
+      GlyphVertex(10.09, 3, 0.9),
+      GlyphVertex(13.91, 3, 0.9),
+      GlyphVertex(14.13, 5.44, 0.6),
+      GlyphVertex(16.62, 6.87, 0.6),
+      GlyphVertex(18.84, 5.84, 0.9),
+      GlyphVertex(20.75, 9.16, 0.9),
+      GlyphVertex(18.75, 10.57, 0.6),
+      GlyphVertex(18.75, 13.43, 0.6),
+      GlyphVertex(20.75, 14.84, 0.9),
+      GlyphVertex(18.84, 18.16, 0.9),
+      GlyphVertex(16.62, 17.13, 0.6),
+      GlyphVertex(14.13, 18.56, 0.6),
+      GlyphVertex(13.91, 21, 0.9),
+      GlyphVertex(10.09, 21, 0.9),
+      GlyphVertex(9.87, 18.56, 0.6),
+      GlyphVertex(7.38, 17.13, 0.6),
+      GlyphVertex(5.16, 18.16, 0.9),
+      GlyphVertex(3.25, 14.84, 0.9),
+      GlyphVertex(5.25, 13.43, 0.6),
+      GlyphVertex(5.25, 10.57, 0.6),
+      GlyphVertex(3.25, 9.16, 0.9),
+      GlyphVertex(5.16, 5.84, 0.9),
+      GlyphVertex(7.38, 6.87, 0.6),
+    ], closed: true),
+    GlyphCircle(12, 12, 3, role: GlyphRole.detail),
+  ]);
+
+  static const reset = Glyph([
+    GlyphArc(
+      12,
+      13.77,
+      7.07,
+      math.pi * 1.15,
+      math.pi * -1.65,
+      role: GlyphRole.line,
+    ),
+    GlyphPolyline([
+      GlyphVertex(12, 6.7),
+      GlyphVertex(9.9, 6.7),
+    ], role: GlyphRole.line),
+    GlyphPolyline([
+      GlyphVertex(13.7, 10.5),
+      GlyphVertex(9.9, 6.7, 0.4),
+      GlyphVertex(13.7, 2.9),
+    ], role: GlyphRole.line),
+  ]);
+
+  static const add = Glyph([
+    GlyphPolyline([
+      GlyphVertex(12, 5),
+      GlyphVertex(12, 19),
+    ], role: GlyphRole.line),
+    GlyphPolyline([
+      GlyphVertex(5, 12),
+      GlyphVertex(19, 12),
+    ], role: GlyphRole.line),
+  ]);
+
+  static const layers = Glyph([
+    GlyphPolyline([
+      GlyphVertex(12, 3, 1.5),
+      GlyphVertex(20.8, 7.6, 1.2),
+      GlyphVertex(12, 12.2, 1.5),
+      GlyphVertex(3.2, 7.6, 1.2),
+    ], closed: true),
+    GlyphPolyline([
+      GlyphVertex(3.2, 12),
+      GlyphVertex(12, 16.6, 1.5),
+      GlyphVertex(20.8, 12),
+    ], role: GlyphRole.line),
+    GlyphPolyline([
+      GlyphVertex(3.2, 16.4),
+      GlyphVertex(12, 21, 1.5),
+      GlyphVertex(20.8, 16.4),
+    ], role: GlyphRole.line),
+  ]);
+
+  static const sun = Glyph([
+    GlyphCircle(12, 12, 4),
+    GlyphPolyline([
+      GlyphVertex(12, 2.9),
+      GlyphVertex(12, 4.4),
+    ], role: GlyphRole.line),
+    GlyphPolyline([
+      GlyphVertex(12, 19.6),
+      GlyphVertex(12, 21.1),
+    ], role: GlyphRole.line),
+    GlyphPolyline([
+      GlyphVertex(2.9, 12),
+      GlyphVertex(4.4, 12),
+    ], role: GlyphRole.line),
+    GlyphPolyline([
+      GlyphVertex(19.6, 12),
+      GlyphVertex(21.1, 12),
+    ], role: GlyphRole.line),
+    GlyphPolyline([
+      GlyphVertex(5.57, 5.57),
+      GlyphVertex(6.63, 6.63),
+    ], role: GlyphRole.line),
+    GlyphPolyline([
+      GlyphVertex(18.43, 5.57),
+      GlyphVertex(17.37, 6.63),
+    ], role: GlyphRole.line),
+    GlyphPolyline([
+      GlyphVertex(5.57, 18.43),
+      GlyphVertex(6.63, 17.37),
+    ], role: GlyphRole.line),
+    GlyphPolyline([
+      GlyphVertex(18.43, 18.43),
+      GlyphVertex(17.37, 17.37),
+    ], role: GlyphRole.line),
+  ]);
+
+  static const pureBlack = Glyph([
+    GlyphBox(3, 3.5, 21, 16.5, 2.5),
+    GlyphPath(
+      'M7 6H17A1.5 1.5 0 0 1 18.5 7.5V12.5A1.5 1.5 0 0 1 17 14H7A1.5 1.5 0 0 1 5.5 12.5V7.5A1.5 1.5 0 0 1 7 6Z',
+      role: GlyphRole.detail,
+      solid: true,
+    ),
+    GlyphPolyline([
+      GlyphVertex(12, 16.5),
+      GlyphVertex(12, 20.4),
+    ], role: GlyphRole.line),
+    GlyphPolyline([
+      GlyphVertex(8, 20.4),
+      GlyphVertex(16, 20.4),
+    ], role: GlyphRole.line),
+  ]);
+
+  static const paintbrush = Glyph([
+    GlyphPolyline([
+      GlyphVertex(9.1, 10.51, 1.2),
+      GlyphVertex(13.49, 14.9, 1.2),
+      GlyphVertex(9.95, 18.43, 3.6),
+      GlyphVertex(4.08, 20.2, 1),
+      GlyphVertex(5.57, 14.05, 3.6),
+    ], closed: true),
+    GlyphPolyline([
+      GlyphVertex(12.64, 8.96, 0.6),
+      GlyphVertex(15.04, 11.36, 0.6),
+      GlyphVertex(21.4, 5, 1.7),
+      GlyphVertex(19, 2.6, 1.7),
+    ], closed: true),
+  ]);
+
+  static const eyedropper = Glyph([
+    GlyphPolyline([
+      GlyphVertex(4.79, 19.21, 0.9),
+      GlyphVertex(8.46, 18.08, 1.2),
+      GlyphVertex(14.4, 12.14, 0.5),
+      GlyphVertex(16.24, 13.98, 1),
+      GlyphVertex(18.79, 11.43, 1),
+      GlyphVertex(17.73, 10.37, 0.5),
+      GlyphVertex(21.4, 6.7, 2.9),
+      GlyphVertex(17.3, 2.6, 2.9),
+      GlyphVertex(13.63, 6.27, 0.5),
+      GlyphVertex(12.57, 5.21, 1),
+      GlyphVertex(10.02, 7.76, 1),
+      GlyphVertex(11.86, 9.6, 0.5),
+      GlyphVertex(5.92, 15.54, 1.2),
+    ], closed: true),
+  ]);
+
+  static const motion = Glyph([
+    GlyphCircle(15.6, 12, 5.3),
+    GlyphPolyline([
+      GlyphVertex(4.4, 8),
+      GlyphVertex(7.6, 8),
+    ], role: GlyphRole.line),
+    GlyphPolyline([
+      GlyphVertex(2.9, 12),
+      GlyphVertex(6.5, 12),
+    ], role: GlyphRole.line),
+    GlyphPolyline([
+      GlyphVertex(4.4, 16),
+      GlyphVertex(7.6, 16),
+    ], role: GlyphRole.line),
+  ]);
+
+  static const blur = Glyph([
+    GlyphCircle(9.4, 9.4, 1.6, role: GlyphRole.line, solid: true),
+    GlyphCircle(14.6, 9.4, 1.6, role: GlyphRole.line, solid: true),
+    GlyphCircle(9.4, 14.6, 1.6, role: GlyphRole.line, solid: true),
+    GlyphCircle(14.6, 14.6, 1.6, role: GlyphRole.line, solid: true),
+    GlyphCircle(9.4, 4.2, 1.1, role: GlyphRole.line, solid: true),
+    GlyphCircle(14.6, 4.2, 1.1, role: GlyphRole.line, solid: true),
+    GlyphCircle(4.2, 9.4, 1.1, role: GlyphRole.line, solid: true),
+    GlyphCircle(19.8, 9.4, 1.1, role: GlyphRole.line, solid: true),
+    GlyphCircle(4.2, 14.6, 1.1, role: GlyphRole.line, solid: true),
+    GlyphCircle(19.8, 14.6, 1.1, role: GlyphRole.line, solid: true),
+    GlyphCircle(9.4, 19.8, 1.1, role: GlyphRole.line, solid: true),
+    GlyphCircle(14.6, 19.8, 1.1, role: GlyphRole.line, solid: true),
+  ]);
+
+  static const liquidGlass = Glyph([
+    GlyphPath(
+      'M12 3.4C14.6 6.2 18.4 10.2 18.4 14.4A6.4 6.4 0 0 1 5.6 14.4'
+      'C5.6 10.2 9.4 6.2 12 3.4Z',
+    ),
+    GlyphArc(
+      12,
+      14.4,
+      3.4,
+      math.pi * 0.6,
+      math.pi * 0.36,
+      role: GlyphRole.detail,
+    ),
+  ]);
+
+  static const font = Glyph([
+    GlyphPolyline([
+      GlyphVertex(5.2, 19.6),
+      GlyphVertex(12, 4.4, 0.6),
+      GlyphVertex(18.8, 19.6),
+    ], role: GlyphRole.line),
+    GlyphPolyline([
+      GlyphVertex(7.7, 14),
+      GlyphVertex(16.3, 14),
+    ], role: GlyphRole.line),
+  ]);
+
+  static const textSize = Glyph([
+    GlyphPolyline([
+      GlyphVertex(3.2, 4.4),
+      GlyphVertex(14, 4.4),
+    ], role: GlyphRole.line),
+    GlyphPolyline([
+      GlyphVertex(8.6, 4.4),
+      GlyphVertex(8.6, 19.6),
+    ], role: GlyphRole.line),
+    GlyphPolyline([
+      GlyphVertex(14.8, 10.8),
+      GlyphVertex(21, 10.8),
+    ], role: GlyphRole.line),
+    GlyphPolyline([
+      GlyphVertex(17.9, 10.8),
+      GlyphVertex(17.9, 19.6),
     ], role: GlyphRole.line),
   ]);
 }

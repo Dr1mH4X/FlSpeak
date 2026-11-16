@@ -334,4 +334,76 @@ void main() {
     await tester.pump(const Duration(seconds: 6));
     expect(controller.samples, samplesAtClose);
   });
+
+  testWidgets(
+    'telemetry polling pauses when hidden or ticker disabled, continues when inactive',
+    (tester) async {
+      final container = ProviderContainer(
+        overrides: [sessionViewProvider.overrideWith(_Controller.new)],
+      );
+      addTearDown(container.dispose);
+
+      final tickerEnabled = ValueNotifier(true);
+      addTearDown(tickerEnabled.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            locale: const Locale('zh'),
+            localizationsDelegates: const [
+              ...AppLocalizations.localizationsDelegates,
+              PrismUiLocalizationsDelegate(),
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) =>
+                PrismRootScope(brightness: Brightness.light, child: child!),
+            home: Scaffold(
+              body: ValueListenableBuilder<bool>(
+                valueListenable: tickerEnabled,
+                builder: (_, enabled, child) => TickerMode(
+                  enabled: enabled,
+                  child: NetworkTelemetryPanel(onClose: () {}),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final controller =
+          container.read(sessionViewProvider.notifier) as _Controller;
+      expect(controller.samples, 1);
+
+      await tester.pump(const Duration(seconds: 1));
+      expect(controller.samples, 2);
+
+      // Desktop unfocused side-by-side window (inactive) keeps polling.
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await tester.pump(const Duration(seconds: 2));
+      expect(controller.samples, 4);
+
+      // Minimized/hidden pauses polling.
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      await tester.pump(const Duration(seconds: 3));
+      expect(controller.samples, 4);
+
+      // Restored resumes immediately + continues polling.
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      expect(controller.samples, 5);
+
+      // Disabled TickerMode (e.g. offstage / background tab) pauses polling.
+      tickerEnabled.value = false;
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 3));
+      expect(controller.samples, 5);
+
+      tickerEnabled.value = true;
+      await tester.pump();
+      expect(controller.samples, 6);
+    },
+  );
 }

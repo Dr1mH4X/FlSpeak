@@ -948,4 +948,144 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get memberClientSoftware => 'Client software';
+
+  @override
+  String get settingsLiquidGlass => 'Liquid Glass';
+
+  @override
+  String get settingsLiquidGlassNone => 'None';
+
+  @override
+  String get settingsLiquidGlassStandard => 'Standard';
+
+  @override
+  String get settingsLiquidGlassUltra => 'Ultra';
+
+  @override
+  String get settingsThemeMode => 'Theme mode';
+
+  @override
+  String get settingsPureBlackMode => 'Pure black mode';
+
+  @override
+  String get settingsPureBlackStandard => 'Standard';
+
+  @override
+  String get settingsPureBlackOn => 'Pure black';
+
+  @override
+  String get settingsThemeColor => 'Theme color';
+
+  @override
+  String get settingsColorStyle => 'Color style';
+
+  @override
+  String get settingsColorStyleVivid => 'Vivid';
+
+  @override
+  String get settingsColorStyleTinted => 'Tinted';
+
+  @override
+  String get settingsColorStyleSoft => 'Soft';
+
+  @override
+  String get settingsColorStyleMonochrome => 'Monochrome';
+
+  @override
+  String get settingsAddColor => 'Add color';
+
+  @override
+  String get settingsCustomColor => 'Custom color';
+
+  @override
+  String get settingsColorEdit => 'Edit';
+
+  @override
+  String get settingsColorDelete => 'Delete';
+
+  @override
+  String get settingsColorGrid => 'Grid';
+
+  @override
+  String get settingsColorSpectrum => 'Spectrum';
+
+  @override
+  String get settingsColorSliders => 'Sliders';
+
+  @override
+  String get settingsColorHue => 'Hue';
+
+  @override
+  String get settingsColorSaturation => 'Saturation';
+
+  @override
+  String get settingsColorBrightness => 'Brightness';
+
+  @override
+  String get settingsColorHex => 'Hex';
+
+  @override
+  String get settingsReset => 'Reset';
+
+  @override
+  String get settingsResetThemeColorsTip => 'Reset theme colors to defaults?';
+
+  @override
+  String settingsDeleteColorTip(String color) {
+    return 'Delete color $color?';
+  }
+
+  @override
+  String get settingsBottomBar => 'Bottom bar';
+
+  @override
+  String get settingsBottomBarFloating => 'Floating';
+
+  @override
+  String get settingsBottomBarDocked => 'Docked';
+
+  @override
+  String get settingsTabAnimation => 'Tab animation';
+
+  @override
+  String get settingsTabAnimationSlide => 'Slide';
+
+  @override
+  String get settingsTabAnimationFade => 'Fade';
+
+  @override
+  String get settingsSidebar => 'Sidebar';
+
+  @override
+  String get settingsSidebarBlur => 'Background blur';
+
+  @override
+  String get settingsFontFamily => 'Font family';
+
+  @override
+  String get settingsFontDefault => 'Default';
+
+  @override
+  String get settingsInstalledFonts => 'Installed fonts';
+
+  @override
+  String get settingsFontSearch => 'Search fonts';
+
+  @override
+  String get settingsFontNoResults => 'No matching fonts';
+
+  @override
+  String get settingsTextScale => 'Text scaling';
+
+  @override
+  String get settingsTextScaleSystem => 'Follow system';
+
+  @override
+  String get settingsTextScaleCustom => 'Custom';
+
+  @override
+  String get settingsTextScalePreview => 'Preview text at this size';
+
+  @override
+  String get navWorkspace => 'Workspace';
 }

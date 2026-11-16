@@ -64,104 +64,146 @@ class _ServerRowState extends ConsumerState<ServerRow> {
     final showLastConnected = !narrow;
     final compact = context.isCompact;
     final showMoreButton = compact && !widget.connecting;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
 
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: AnimatedContainer(
-        duration: Motion.effectsDefault,
-        curve: Motion.effectsDefaultCurve,
-        color: connected
-            ? scheme.primaryContainer.withValues(alpha: 0.3)
-            : Colors.transparent,
-        child: SecondaryMenu(
-          openOnSecondaryTap: true,
-          enabled: !widget.connecting,
-          moreSemanticLabel: widget.connecting
-              ? null
-              : MaterialLocalizations.of(context).showMenuTooltip,
-          morePadding: const EdgeInsets.only(right: 8),
-          items: [
-            PopupMenuItem(
-              glyph: AppGlyphs.edit,
-              label: l10n.serverEdit,
-              onPressed: () =>
-                  showAddServerDialog(context, server: widget.profile),
-            ),
-            PopupMenuItem(
-              glyph: AppGlyphs.palette,
-              label: l10n.serverIconChange,
-              onPressed: () async {
-                final current =
+    return RepaintBoundary(
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: AnimatedContainer(
+          duration: reduceMotion ? Duration.zero : Motion.effectsDefault,
+          curve: Motion.effectsDefaultCurve,
+          color: connected
+              ? scheme.primaryContainer.withValues(alpha: 0.3)
+              : Colors.transparent,
+          child: SecondaryMenu(
+            openOnSecondaryTap: true,
+            enabled: !widget.connecting,
+            moreSemanticLabel: widget.connecting
+                ? null
+                : MaterialLocalizations.of(context).showMenuTooltip,
+            morePadding: const EdgeInsets.only(right: 8),
+            items: [
+              PopupMenuItem(
+                glyph: AppGlyphs.edit,
+                label: l10n.serverEdit,
+                onPressed: () =>
+                    showAddServerDialog(context, server: widget.profile),
+              ),
+              PopupMenuItem(
+                glyph: AppGlyphs.palette,
+                label: l10n.serverIconChange,
+                onPressed: () async {
+                  final current =
+                      ref
+                          .read(preferencesProvider)
+                          .serverIcons[widget.profile.id] ??
+                      ServerIconChoice.auto;
+                  final iconBytes = ref
+                      .read(sessionViewProvider)
+                      .serverIconBytes[widget.profile.id];
+                  final icon = await showServerIconPicker(
+                    context,
+                    current,
+                    serverIconBytes: iconBytes,
+                  );
+                  if (mounted && icon != null) {
                     ref
-                        .read(preferencesProvider)
-                        .serverIcons[widget.profile.id] ??
-                    ServerIconChoice.auto;
-                final iconBytes = ref
-                    .read(sessionViewProvider)
-                    .serverIconBytes[widget.profile.id];
-                final icon = await showServerIconPicker(
-                  context,
-                  current,
-                  serverIconBytes: iconBytes,
-                );
-                if (mounted && icon != null) {
-                  ref
-                      .read(preferencesProvider.notifier)
-                      .setServerIcon(widget.profile.id, icon);
-                }
-              },
-            ),
-            PopupMenuItem(
-              glyph: AppGlyphs.delete,
-              label: l10n.serverRemoveFromList,
-              danger: !connected,
-              onPressed: connected ? null : widget.onRemove,
-            ),
-          ],
-          builder: (context, _) => Semantics(
-            button: true,
-            enabled: active,
-            child: AnimatedInkWell(
-              onTap: widget.enabled ? widget.onTap : null,
-              // M3 state layer：hover 是 onSurface 8%，不再自定底色。
-              hoverColor: scheme.onSurface.withValues(alpha: 0.08),
-              child: AnimatedOpacity(
-                duration: Motion.effectsDefault,
-                curve: Motion.effectsDefaultCurve,
-                opacity: active ? 1 : 0.5,
-                child: Padding(
-                  // 与身份卡的内容缩进（20）对齐，两卡头像才能落在同一条线上。
-                  padding: EdgeInsets.fromLTRB(
-                    narrow ? 16 : 20,
-                    12,
-                    showMoreButton ? 4 : 20,
-                    12,
-                  ),
-                  child: Row(
-                    children: [
-                      ServerBadge(
-                        id: widget.profile.id,
-                        size: 44,
-                        online: connected,
-                        selected: connected,
-                        loading: widget.connecting,
-                      ),
-                      SizedBox(width: narrow ? 12 : 16),
-                      Expanded(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              widget.profile.label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: texts.titleMedium,
+                        .read(preferencesProvider.notifier)
+                        .setServerIcon(widget.profile.id, icon);
+                  }
+                },
+              ),
+              PopupMenuItem(
+                glyph: AppGlyphs.delete,
+                label: l10n.serverRemoveFromList,
+                danger: !connected,
+                onPressed: connected ? null : widget.onRemove,
+              ),
+            ],
+            builder: (context, _) => Semantics(
+              button: true,
+              enabled: active,
+              child: AnimatedInkWell(
+                onTap: widget.enabled ? widget.onTap : null,
+                // M3 state layer：hover 是 onSurface 8%，不再自定底色。
+                hoverColor: scheme.onSurface.withValues(alpha: 0.08),
+                child: AnimatedOpacity(
+                  duration: reduceMotion
+                      ? Duration.zero
+                      : Motion.effectsDefault,
+                  curve: Motion.effectsDefaultCurve,
+                  opacity: active ? 1 : 0.5,
+                  child: Padding(
+                    // 与身份卡的内容缩进（20）对齐，两卡头像才能落在同一条线上。
+                    padding: EdgeInsets.fromLTRB(
+                      narrow ? 16 : 20,
+                      12,
+                      showMoreButton ? 4 : 20,
+                      12,
+                    ),
+                    child: Row(
+                      children: [
+                        ServerBadge(
+                          id: widget.profile.id,
+                          size: 44,
+                          online: connected,
+                          selected: connected,
+                          loading: widget.connecting,
+                        ),
+                        SizedBox(width: narrow ? 12 : 16),
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.profile.label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: texts.titleMedium,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${widget.profile.host}:${widget.profile.port}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: texts.bodySmall?.copyWith(
+                                  color: scheme.onSurfaceVariant,
+                                  fontFeatures: tabularFigures,
+                                ),
+                              ),
+                              if (narrow && (connected || widget.connecting))
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    widget.connecting
+                                        ? l10n.sessionConnecting
+                                        : l10n.sessionConnected,
+                                    style: texts.labelSmall?.copyWith(
+                                      color: scheme.primary,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        if (!narrow && widget.connecting)
+                          Text(
+                            l10n.sessionConnecting,
+                            style: texts.labelMedium?.copyWith(
+                              fontSize: 12,
+                              color: scheme.primary,
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '${widget.profile.host}:${widget.profile.port}',
+                          )
+                        else if (!narrow && connected)
+                          _ConnectedChip(label: l10n.sessionConnected)
+                        else if (showLastConnected)
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 160),
+                            child: Text(
+                              lastConnectedLabel(context, widget.lastConnected),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: texts.bodySmall?.copyWith(
@@ -169,65 +211,30 @@ class _ServerRowState extends ConsumerState<ServerRow> {
                                 fontFeatures: tabularFigures,
                               ),
                             ),
-                            if (narrow && (connected || widget.connecting))
-                              Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: Text(
-                                  widget.connecting
-                                      ? l10n.sessionConnecting
-                                      : l10n.sessionConnected,
-                                  style: texts.labelSmall?.copyWith(
-                                    color: scheme.primary,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      if (!narrow && widget.connecting)
-                        Text(
-                          l10n.sessionConnecting,
-                          style: texts.labelMedium?.copyWith(
-                            fontSize: 12,
-                            color: scheme.primary,
                           ),
-                        )
-                      else if (!narrow && connected)
-                        _ConnectedChip(label: l10n.sessionConnected)
-                      else if (showLastConnected)
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 160),
-                          child: Text(
-                            lastConnectedLabel(context, widget.lastConnected),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: texts.bodySmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                              fontFeatures: tabularFigures,
-                            ),
+                        const SizedBox(width: 6),
+                        // hover 反馈按 M3 归到 effects fast：nudge 只有 2px，
+                        // 用 slow 的 spatial 档反而拖沓。
+                        AnimatedContainer(
+                          duration: reduceMotion
+                              ? Duration.zero
+                              : Motion.effectsFast,
+                          curve: Motion.effectsFastCurve,
+                          transform: Matrix4.translationValues(
+                            _hovered && active ? 2 : 0,
+                            0,
+                            0,
+                          ),
+                          child: Icon(
+                            Icons.arrow_forward_rounded,
+                            size: IconSizes.medium,
+                            color: connected
+                                ? scheme.primary
+                                : scheme.onSurfaceVariant,
                           ),
                         ),
-                      const SizedBox(width: 6),
-                      // hover 反馈按 M3 归到 effects fast：nudge 只有 2px，
-                      // 用 slow 的 spatial 档反而拖沓。
-                      AnimatedContainer(
-                        duration: Motion.effectsFast,
-                        curve: Motion.effectsFastCurve,
-                        transform: Matrix4.translationValues(
-                          _hovered && active ? 2 : 0,
-                          0,
-                          0,
-                        ),
-                        child: Icon(
-                          Icons.arrow_forward_rounded,
-                          size: IconSizes.medium,
-                          color: connected
-                              ? scheme.primary
-                              : scheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),

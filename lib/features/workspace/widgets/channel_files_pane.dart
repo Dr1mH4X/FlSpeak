@@ -4,10 +4,12 @@ import 'package:flutter/material.dart'
         ButtonStyle,
         FilledButton,
         IconButton,
+        InputDecoration,
         LinearProgressIndicator,
         OutlinedButton,
         Switch,
-        TextButton;
+        TextButton,
+        TextField;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models.dart';
@@ -127,13 +129,22 @@ class _ChannelFilesPaneState extends ConsumerState<ChannelFilesPane> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final view = ref.watch(sessionViewProvider);
-    final downloading =
-        _downloading ||
-        view.activeFileDownloads.containsKey((_epoch, widget.channelId));
-    final transferId =
-        _transferId ?? view.activeFileDownloads[(_epoch, widget.channelId)];
-    final transfer = view.transfers[transferId];
+    final downloadState = ref.watch(
+      sessionViewProvider.select((view) {
+        final key = (_epoch, widget.channelId);
+        return (
+          active: view.activeFileDownloads.containsKey(key),
+          transferId: view.activeFileDownloads[key],
+        );
+      }),
+    );
+    final downloading = _downloading || downloadState.active;
+    final transferId = _transferId ?? downloadState.transferId;
+    final transfer = ref.watch(
+      sessionViewProvider.select(
+        (view) => transferId == null ? null : view.transfers[transferId],
+      ),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -193,7 +204,7 @@ class _ChannelFilesPaneState extends ConsumerState<ChannelFilesPane> {
                     autocorrect: false,
                     enableSuggestions: false,
                     decoration: InputDecoration(
-                      labelText: l10n.channelPasswordLabel,
+                      hintText: l10n.channelPasswordLabel,
                     ),
                     onSubmitted: (_) => _load(),
                   ),
@@ -226,8 +237,9 @@ class _ChannelFilesPaneState extends ConsumerState<ChannelFilesPane> {
                 )
               : _files.isEmpty
               ? Center(child: Text(l10n.fileListEmpty))
-              : ListView.builder(
+              : PrismListView(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
+                  estimatedItemExtent: 56,
                   itemCount: _files.length,
                   itemBuilder: (context, index) {
                     final file = _files[index];

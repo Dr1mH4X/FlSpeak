@@ -6,7 +6,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart'
     show debugDefaultTargetPlatformOverride;
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide InputDecorationTheme, TextField;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flutter/services.dart';
@@ -14,6 +14,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import 'package:flspeak/app.dart';
+import 'package:flspeak/features/settings/settings_page.dart';
 import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/core/models.dart';
 import 'package:flspeak/core/notices.dart';
@@ -22,7 +23,14 @@ import 'package:flspeak/core/preferences.dart';
 import 'package:flspeak/core/update_check.dart';
 import 'package:flspeak/router.dart';
 import 'package:flspeak/widgets/app_navigation_sidebar.dart';
-import 'package:flspeak/widgets/prism.dart' show BannerHost, Surface;
+import 'package:flspeak/widgets/prism.dart'
+    show
+        BannerHost,
+        InputDecorationTheme,
+        LiquidGlassQuality,
+        LiquidGlassScope,
+        Surface,
+        TextField;
 import 'package:flspeak/widgets/update_dot.dart';
 
 class _PttSession extends SessionController {
@@ -426,7 +434,10 @@ void main() {
       await tester.tap(generalCategory);
       await tester.pumpAndSettle();
 
-      final backButton = find.byIcon(Icons.arrow_back_rounded);
+      final backButton = find.bySemanticsLabel(
+        MaterialLocalizations.of(tester.element(find.byType(SettingsPage)))
+            .backButtonTooltip,
+      );
       expect(backButton, findsOneWidget);
       final topBarTitleColor = tester
           .widget<Text>(find.text('通用').first)
@@ -509,6 +520,115 @@ void main() {
       final topBannerY = tester.getTopLeft(find.text('连接失败')).dy;
       expect(topBannerY, greaterThanOrEqualTo(32 + Sizes.header + 8));
       expect(topBannerY, lessThan(32 + 32 + Sizes.header + 8));
+    },
+  );
+
+  testWidgets(
+    'TsClientApp defaults LiquidGlassScope off and switches quality from preferences',
+    (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_PttCore()),
+          storePathProvider.overrideWithValue(
+            '/tmp/flspeak-test/preferences.json',
+          ),
+          sessionViewProvider.overrideWith(_PttSession.new),
+          preferencesStoreProvider.overrideWithValue(
+            PreferencesStore.inMemory(
+              preferences: const SessionPreferences(
+                nickname: 'Test',
+                locale: 'zh',
+              ),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const TsClientApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      BuildContext scopeContext() =>
+          tester.element(find.byType(Navigator).last);
+
+      expect(LiquidGlassScope.of(scopeContext()), isFalse);
+
+      container
+          .read(preferencesProvider.notifier)
+          .setLiquidGlass(LiquidGlassMode.standard);
+      await tester.pump();
+      expect(LiquidGlassScope.of(scopeContext()), isTrue);
+      expect(
+        LiquidGlassScope.qualityOf(scopeContext()),
+        LiquidGlassQuality.standard,
+      );
+
+      container
+          .read(preferencesProvider.notifier)
+          .setLiquidGlass(LiquidGlassMode.ultra);
+      await tester.pump();
+      expect(LiquidGlassScope.of(scopeContext()), isTrue);
+      expect(
+        LiquidGlassScope.qualityOf(scopeContext()),
+        LiquidGlassQuality.ultra,
+      );
+
+      container
+          .read(preferencesProvider.notifier)
+          .setLiquidGlass(LiquidGlassMode.none);
+      await tester.pump();
+      expect(LiquidGlassScope.of(scopeContext()), isFalse);
+    },
+  );
+
+  testWidgets(
+    'TsClientApp injects prism InputDecorationTheme and renders search TextField under LiquidGlassScope',
+    (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_PttCore()),
+          storePathProvider.overrideWithValue(
+            '/tmp/flspeak-test/preferences.json',
+          ),
+          sessionViewProvider.overrideWith(_PttSession.new),
+          preferencesStoreProvider.overrideWithValue(
+            PreferencesStore.inMemory(
+              preferences: const SessionPreferences(
+                nickname: 'Test',
+                locale: 'zh',
+                liquidGlass: LiquidGlassMode.standard,
+              ),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const TsClientApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.search_rounded));
+      await tester.pumpAndSettle();
+
+      final fieldFinder = find.byType(TextField);
+      expect(fieldFinder, findsOneWidget);
+      final fieldContext = tester.element(fieldFinder);
+      expect(LiquidGlassScope.of(fieldContext), isTrue);
+      expect(InputDecorationTheme.of(fieldContext).filled, isTrue);
+
+      await tester.enterText(fieldFinder, 'local');
+      await tester.pump();
+      expect(tester.takeException(), isNull);
     },
   );
 }

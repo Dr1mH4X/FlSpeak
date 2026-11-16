@@ -9,17 +9,29 @@ import 'package:flutter/material.dart'
         Divider,
         FilledButton,
         IconButton,
+        InputBorder,
+        InputDecoration,
+        InputDecorationTheme,
+        InputDecorationThemeData,
+        NavigationBar,
+        NavigationDestination,
         OutlinedButton,
+        Slider,
         Switch,
-        TextButton;
+        TextButton,
+        TextField,
+        TextFormField;
+import 'package:prism_ui/icons/icons.dart' show GlyphIcon, Glyphs;
 import 'package:prism_ui/prism_ui.dart' as prism;
 
+import '../core/preferences.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
 
 export 'package:prism_ui/prism_ui.dart'
     show
         ActivityIndicator,
+        AnimatedVisibility,
         AppCorner,
         AppRadius,
         AppShape,
@@ -27,11 +39,17 @@ export 'package:prism_ui/prism_ui.dart'
         BannerHost,
         BannerHostState,
         BannerLevel,
+        BarItemGlyph,
+        BarItemPresence,
         ButtonStyle,
         Card,
+        CardPageRoute,
         CardSurface,
         Checkbox,
         Chip,
+        ColorExtension,
+        ColorSchemeExtension,
+        ColorStyle,
         ContextMenuRegion,
         DecorationListItem,
         Divider,
@@ -39,12 +57,20 @@ export 'package:prism_ui/prism_ui.dart'
         ElasticHover,
         ElasticPress,
         ElevatedSurfaceExt,
+        FilledInputTheme,
         FocusRing,
         FormSheetRoute,
+        GooPane,
         GooSurface,
         IconButtonData,
+        Illustration,
+        InputBorder,
+        InputDecoration,
+        InputDecorationTheme,
+        InputDecorationThemeData,
         ItemPosition,
         ItemPositionProvider,
+        LinearProgressIndicator,
         LiquidGlass,
         LiquidGlassGlow,
         LiquidGlassGroup,
@@ -53,7 +79,7 @@ export 'package:prism_ui/prism_ui.dart'
         LiquidGlassRim,
         LiquidGlassScope,
         LiquidGlassStyle,
-        LinearProgressIndicator,
+        ListController,
         ListFooter,
         ListHeader,
         ListRow,
@@ -61,7 +87,17 @@ export 'package:prism_ui/prism_ui.dart'
         ListSectionGap,
         Measure,
         MeasureScope,
+        MemoBuilder,
         MetaChip,
+        NavigationBar,
+        NavigationDestination,
+        NavigationDock,
+        NavigationDockDestination,
+        NoInputBorder,
+        NullStatus,
+        NullStatusSwitcher,
+        OpenContainer,
+        OpenContainerTransition,
         PopupAnchor,
         PopupMenu,
         PopupMenuItem,
@@ -71,16 +107,27 @@ export 'package:prism_ui/prism_ui.dart'
         PopupValueText,
         PressLook,
         PressSurface,
+        PrismListView,
+        SearchField,
         SegmentedControl,
         SelectionBadge,
         SelectionCheck,
         SheetDragHandle,
+        SheetProps,
+        SheetProvider,
+        SheetType,
+        Slider,
+        SliderShape,
+        SliverPrismList,
         SnapSheetRoute,
         SpringCurve,
         Surface,
         SurfaceLevel,
         SurfaceScope,
         Switch,
+        TextField,
+        TextFormField,
+        TextSelectionMenu,
         ThemeCrossFade,
         TonalButton,
         TonalButtonGroup,
@@ -88,19 +135,32 @@ export 'package:prism_ui/prism_ui.dart'
         TonalButtonTheme,
         TonalChip,
         ViewScope,
+        WidthBuilder,
+        dockShadows,
         dropletSpring,
+        fadeTabCurve,
+        fadeTabDuration,
         focusRingSide,
         formSheetShape,
         generateGroup,
+        isRouteMoving,
+        kTabScrollDuration,
         listHeaderPaddingOf,
         listRowMinHeight,
         listRowVerticalPadding,
+        menuShadows,
         riseAndFall,
+        seededColorScheme,
         sheetNavigatorOf,
+        sheetScrollController,
+        showSheet,
         snapSheetDetents;
+
+export 'package:prism_ui/hct/hct.dart' show Hct;
 
 export 'package:prism_ui/icons/icons.dart'
     show
+        AnimatedGlyph,
         Glyph,
         GlyphArc,
         GlyphBox,
@@ -218,32 +278,74 @@ class PrismRootScope extends StatelessWidget {
     super.key,
     required this.brightness,
     this.platform,
-    this.liquidGlass = prism.LiquidGlassQuality.standard,
+    this.primaryColor = defaultPrimaryColor,
+    this.colorStyle = AppColorStyle.vivid,
+    this.pureBlack = false,
+    this.fontFamily,
+    this.textScale,
+    this.liquidGlass,
     this.crossFadeTheme = true,
     required this.child,
   });
 
   final Brightness brightness;
   final TargetPlatform? platform;
+  final int primaryColor;
+  final AppColorStyle colorStyle;
+  final bool pureBlack;
+  final String? fontFamily;
+  final double? textScale;
   final prism.LiquidGlassQuality? liquidGlass;
   final bool crossFadeTheme;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    MediaQuery.textScalerOf(context);
+    final baseMediaQuery = MediaQuery.of(context);
+    final customScale = textScale?.clamp(minTextScale, maxTextScale).toDouble();
+    final effectiveTextScaler = customScale != null
+        ? TextScaler.linear(customScale)
+        : baseMediaQuery.textScaler;
+    final textFactor = customScale ?? effectiveTextScaler.scale(1.0);
     final effectivePlatform = platform ?? defaultTargetPlatform;
-    final prismTheme = buildPrismTheme(brightness, platform: effectivePlatform);
-    final textFactor = WidgetsBinding
-        .instance
-        .platformDispatcher
-        .textScaleFactor
-        .toDouble();
+    final prismTheme = buildPrismTheme(
+      brightness,
+      platform: effectivePlatform,
+      primaryColor: primaryColor,
+      colorStyle: colorStyle,
+      pureBlack: pureBlack,
+      fontFamily: fontFamily,
+    );
 
-    final size = MediaQuery.sizeOf(context);
-    Widget content = prism.SurfaceScope(
-      level: prism.SurfaceLevel.page,
-      child: child,
+    final size = baseMediaQuery.size;
+    final prismScheme = prismTheme.colorScheme;
+    final inputShape = prism.AppShape.input;
+    Widget content = prism.InputDecorationTheme(
+      data: prism.InputDecorationThemeData(
+        filled: true,
+        fillColor: prismScheme.surfaceContainer,
+        hoverColor: prismScheme.onSurface.withValues(alpha: 0.04),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
+        border: inputShape.copyWith(
+          borderSide: BorderSide(color: prismScheme.outline),
+        ),
+        enabledBorder: inputShape.copyWith(
+          borderSide: BorderSide(color: prismScheme.outline),
+        ),
+        focusedBorder: inputShape.copyWith(
+          borderSide: BorderSide(color: prismScheme.primary, width: 2),
+        ),
+        errorBorder: inputShape.copyWith(
+          borderSide: BorderSide(color: prismScheme.error),
+        ),
+        focusedErrorBorder: inputShape.copyWith(
+          borderSide: BorderSide(color: prismScheme.error, width: 2),
+        ),
+      ),
+      child: prism.SurfaceScope(level: prism.SurfaceLevel.page, child: child),
     );
     if (context.getInheritedWidgetOfExactType<prism.ViewScope>() == null) {
       content = prism.ViewScope(
@@ -262,23 +364,47 @@ class PrismRootScope extends StatelessWidget {
       ),
     );
 
-    content = Builder(
+    Widget scopeTree = Builder(
       builder: (scopeContext) => prism.MeasureScope(
         measure: prism.Measure.of(scopeContext, textFactor),
         child: glassContent,
       ),
     );
+    if (customScale != null) {
+      scopeTree = MediaQuery(
+        data: baseMediaQuery.copyWith(textScaler: effectiveTextScaler),
+        child: scopeTree,
+      );
+    }
 
     if (crossFadeTheme) {
-      content = prism.ThemeCrossFade(child: content);
+      scopeTree = prism.ThemeCrossFade(child: scopeTree);
     }
 
     return prism.Theme(
       data: prismTheme,
-      child: IconTheme(data: prismTheme.iconTheme, child: content),
+      child: IconTheme(data: prismTheme.iconTheme, child: scopeTree),
     );
   }
 }
+
+prism.LiquidGlassStyle glassPillStyleOf(BuildContext context) =>
+    prism.LiquidGlassStyle.pill(prism.Theme.of(context).colorScheme);
+
+prism.LiquidGlassStyle glassRegularStyleOf(BuildContext context) =>
+    prism.LiquidGlassStyle.regular(prism.Theme.of(context).colorScheme);
+
+prism.LiquidGlassStyle glassMenuStyleOf(BuildContext context) =>
+    prism.LiquidGlassStyle.menu(prism.Theme.of(context).colorScheme);
+
+prism.LiquidGlassRim glassMenuRimOf(BuildContext context) =>
+    prism.LiquidGlassRim.menu(prism.Theme.of(context).colorScheme);
+
+List<BoxShadow> dockShadowsOf(BuildContext context) =>
+    prism.dockShadows(prism.Theme.of(context).colorScheme);
+
+List<BoxShadow> menuShadowsOf(BuildContext context) =>
+    prism.menuShadows(prism.Theme.of(context).colorScheme);
 
 /// 无边框超椭圆表面卡片：按上下文表面层级自动步进底色并向下传递作用域。
 class SurfaceCard extends StatelessWidget {
@@ -442,8 +568,8 @@ class OptionsValueButton extends StatelessWidget {
               alignment: AlignmentDirectional.centerEnd,
             ),
           ),
-          Icon(
-            Icons.unfold_more_rounded,
+          GlyphIcon(
+            Glyphs.picker,
             size: IconSizes.medium,
             color: scheme.onSurfaceVariant,
           ),

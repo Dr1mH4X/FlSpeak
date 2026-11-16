@@ -3,9 +3,12 @@ import 'package:flutter/material.dart'
         ButtonStyle,
         FilledButton,
         IconButton,
+        InputBorder,
+        InputDecoration,
         OutlinedButton,
         Switch,
-        TextButton;
+        TextButton,
+        TextField;
 import 'package:flutter/services.dart';
 
 import '../../../l10n/app_localizations.dart';
@@ -215,15 +218,15 @@ class _IdentityDialogContentState extends State<_IdentityDialogContent> {
                 horizontal: 8,
                 vertical: 8,
               ),
-              border: AppInputBorder(
+              border: AppShape.input.copyWith(
                 borderRadius: AppRadius.sm,
                 borderSide: BorderSide(color: scheme.outline),
               ),
-              enabledBorder: AppInputBorder(
+              enabledBorder: AppShape.input.copyWith(
                 borderRadius: AppRadius.sm,
                 borderSide: BorderSide(color: scheme.outline),
               ),
-              focusedBorder: AppInputBorder(
+              focusedBorder: AppShape.input.copyWith(
                 borderRadius: AppRadius.sm,
                 borderSide: BorderSide(color: scheme.primary, width: 2),
               ),

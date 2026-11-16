@@ -4,7 +4,7 @@ import 'dart:async';
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide TextField;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -837,6 +837,67 @@ void main() {
     expect(find.byType(TextField), findsOneWidget);
     expect(find.text('Servers'), findsOneWidget);
     expect(find.bySemanticsLabel('Add server'), findsOneWidget);
+  });
+
+  testWidgets('搜索框按 LiquidGlassScope 切换 GooSurface 玻璃与实色降级，并保持展开清空行为', (
+    tester,
+  ) async {
+    Future<void> mount(LiquidGlassQuality? quality) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          key: ValueKey(quality),
+          overrides: [
+            coreSessionProvider.overrideWithValue(_FakeCore()),
+            sessionViewProvider.overrideWith(_TwoServersSessionController.new),
+          ],
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            locale: const Locale('zh'),
+            localizationsDelegates: const [
+              ...AppLocalizations.localizationsDelegates,
+              PrismUiLocalizationsDelegate(),
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) => PrismRootScope(
+              brightness: Brightness.light,
+              liquidGlass: quality,
+              child: child!,
+            ),
+            home: const ConnectPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await mount(null);
+    expect(tester.widget<GooSurface>(find.byType(GooSurface)).glass, isNull);
+
+    await tester.tap(find.byIcon(Icons.search_rounded));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.byType(GooPane), findsOneWidget);
+    expect(tester.widget<GooSurface>(find.byType(GooSurface)).glass, isNull);
+
+    await tester.enterText(find.byType(TextField), 'B');
+    await tester.pumpAndSettle();
+    expect(find.byType(ServerRow), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.close_rounded));
+    await tester.pumpAndSettle();
+    expect(find.byType(ServerRow), findsNWidgets(2));
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsNothing);
+
+    await mount(LiquidGlassQuality.standard);
+    expect(tester.widget<GooSurface>(find.byType(GooSurface)).glass, isNotNull);
+
+    await tester.tap(find.byIcon(Icons.search_rounded));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsOneWidget);
+    expect(tester.widget<GooSurface>(find.byType(GooSurface)).glass, isNotNull);
   });
 }
 

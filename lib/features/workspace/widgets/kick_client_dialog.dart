@@ -4,13 +4,16 @@ import 'package:flutter/material.dart'
         ButtonStyle,
         FilledButton,
         IconButton,
+        InputDecoration,
         OutlinedButton,
         Switch,
-        TextButton;
+        TextButton,
+        TextField;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
 import '../../../widgets/prism.dart';
 
@@ -117,11 +120,19 @@ class _KickFormState extends ConsumerState<_KickForm> {
               : l10n.kickServerConfirm(widget.client.nickname),
         ),
         const SizedBox(height: 16),
+        Text(
+          l10n.kickReason,
+          style: context.texts.bodyMedium?.copyWith(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 6),
         TextField(
           controller: _reason,
           enabled: !_busy && sameConnection,
           maxLines: 2,
-          decoration: InputDecoration(labelText: l10n.kickReason),
+          decoration: const InputDecoration(),
         ),
         if (sameConnection && !targetAvailable)
           Padding(

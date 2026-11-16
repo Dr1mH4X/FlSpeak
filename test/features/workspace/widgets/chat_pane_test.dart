@@ -11,7 +11,8 @@ import 'package:flutter/material.dart'
         IconButton,
         OutlinedButton,
         Switch,
-        TextButton;
+        TextButton,
+        TextField;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -216,7 +217,9 @@ void main() {
       var messages = List.generate(40, (index) => message(index));
       key.currentState!.replaceMessages(messages);
       await tester.pumpAndSettle();
-      final scroll = tester.widget<ListView>(find.byType(ListView)).controller!;
+      final scroll = tester
+          .widget<PrismListView>(find.byType(PrismListView))
+          .controller!;
       scroll.jumpTo(0);
       await tester.pump();
       messages = [...messages, message(40)];
@@ -238,7 +241,7 @@ void main() {
       ]);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 20));
-      await tester.drag(find.byType(ListView), const Offset(0, 300));
+      await tester.drag(find.byType(PrismListView), const Offset(0, 300));
       await tester.pumpAndSettle();
       expect(scroll.position.extentAfter, greaterThan(72));
     },
@@ -941,7 +944,7 @@ void main() {
       expect(tester.widget<TextField>(field).focusNode!.hasFocus, isTrue);
 
       // 点击输入框与发送栏外部区域时仍能正常收起焦点。
-      await tester.tap(find.byType(ListView));
+      await tester.tap(find.byType(PrismListView));
       await tester.pumpAndSettle();
       expect(tester.widget<TextField>(field).focusNode!.hasFocus, isFalse);
     },
@@ -1064,7 +1067,7 @@ void main() {
       expect(tester.widget<TextField>(field).focusNode!.hasFocus, isTrue);
 
       // 上传期间用户主动点到消息列表失焦。
-      await tester.tap(find.byType(ListView));
+      await tester.tap(find.byType(PrismListView));
       await tester.pumpAndSettle();
       expect(tester.widget<TextField>(field).focusNode!.hasFocus, isFalse);
 
@@ -1072,6 +1075,107 @@ void main() {
       await tester.pumpAndSettle();
       expect(sent, ['![](<https://images.example.com/async.png>)']);
       expect(tester.widget<TextField>(field).focusNode!.hasFocus, isFalse);
+    },
+  );
+
+  testWidgets(
+    'floating composer and slash menu toggle LiquidGlass via scope and bottom scroll clears composer',
+    (tester) async {
+      final messages = List.generate(
+        30,
+        (index) => ChatMessage(
+          from: 'Alice',
+          fromUid: 'alice',
+          fromId: 2,
+          text: 'message $index',
+          at: DateTime.utc(2026, 1, 1).add(Duration(seconds: index)),
+          scope: ChatScope.channel,
+          targetId: 5,
+        ),
+      );
+      const bot = ClientView(
+        id: 7,
+        nickname: 'HelperBot',
+        uid: 'helper-bot',
+        channelId: 5,
+        clientType: ClientType.bot,
+        capabilities: ['chat:slash_commands'],
+        botCommandPrefix: '/',
+        botCommands: [BotCommandView(name: 'ask', args: '', desc: '提问')],
+      );
+
+      Future<void> mount(LiquidGlassQuality? quality) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            key: ValueKey(quality),
+            theme: buildAppTheme(Brightness.light),
+            locale: const Locale('zh'),
+            localizationsDelegates: const [
+              ...AppLocalizations.localizationsDelegates,
+              PrismUiLocalizationsDelegate(),
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) => PrismRootScope(
+              brightness: Brightness.light,
+              liquidGlass: quality,
+              child: child!,
+            ),
+            home: Scaffold(
+              body: SizedBox(
+                width: 640,
+                height: 480,
+                child: ChatPane(
+                  channelName: 'Lobby',
+                  messages: messages,
+                  scope: ChatScope.channel,
+                  canSendChannel: true,
+                  busy: false,
+                  selfUid: 'self',
+                  selfClientId: 1,
+                  selfChannelId: 5,
+                  recipients: const [bot],
+                  recipientUid: null,
+                  onRecipientChanged: (_) {},
+                  onReply: (_) {},
+                  onScopeChanged: (_) {},
+                  onSend: (_) async => true,
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      await mount(null);
+      expect(find.byType(LiquidGlass), findsNothing);
+      final listFinder = find.byType(PrismListView);
+      final scrollable = tester.state<ScrollableState>(
+        find
+            .descendant(of: listFinder, matching: find.byType(Scrollable))
+            .first,
+      );
+      scrollable.position.jumpTo(scrollable.position.maxScrollExtent);
+      await tester.pumpAndSettle();
+
+      final lastMessageFinder = find.text('message 29');
+      expect(lastMessageFinder, findsOneWidget);
+      final lastMessageBottom = tester.getBottomLeft(lastMessageFinder).dy;
+      final composerTop = tester.getTopLeft(find.byType(TextField)).dy;
+      expect(lastMessageBottom, lessThanOrEqualTo(composerTop));
+
+      await tester.enterText(find.byType(TextField), '/');
+      await tester.pumpAndSettle();
+      expect(find.text('/ask'), findsOneWidget);
+      expect(find.byType(LiquidGlass), findsNothing);
+
+      await mount(LiquidGlassQuality.standard);
+      expect(find.byType(LiquidGlass), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), '/');
+      await tester.pumpAndSettle();
+      expect(find.text('/ask'), findsOneWidget);
+      expect(find.byType(LiquidGlass), findsNWidgets(2));
     },
   );
 }

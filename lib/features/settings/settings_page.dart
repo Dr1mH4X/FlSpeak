@@ -18,16 +18,17 @@ import '../../router.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_navigation_sidebar.dart';
 import '../../widgets/common.dart';
+import '../../widgets/compact_navigation_shell.dart';
 import '../../widgets/prism.dart';
 import '../../widgets/update_dot.dart';
 import '../../widgets/window_header.dart';
 import 'settings_state.dart';
 import 'widgets/about_card.dart';
-import 'widgets/appearance_picker.dart';
 import 'widgets/image_host_dialog.dart';
 import 'widgets/ptt_hotkey_recorder.dart';
 import 'widgets/settings_dialogs.dart';
 import 'widgets/settings_section.dart';
+import 'widgets/theme_settings_view.dart';
 
 enum SettingsCategory { appearance, general, about }
 
@@ -56,12 +57,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   GeneralSubcategory? _activeGeneralSubcategory;
   int _navDirection = 1;
 
+  void _notifyCompactOverview() {
+    final atOverview =
+        _activeCategory == null && _activeGeneralSubcategory == null;
+    CompactSettingsOverviewNotification(atOverview).dispatch(context);
+  }
+
   void _enterCategory(SettingsCategory category) {
     setState(() {
       _navDirection = 1;
       _activeCategory = category;
       _activeGeneralSubcategory = null;
     });
+    _notifyCompactOverview();
   }
 
   void _enterGeneralSubcategory(GeneralSubcategory subcategory) {
@@ -69,6 +77,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       _navDirection = 1;
       _activeGeneralSubcategory = subcategory;
     });
+    _notifyCompactOverview();
   }
 
   void _back() {
@@ -77,6 +86,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         _navDirection = -1;
         _activeGeneralSubcategory = null;
       });
+      _notifyCompactOverview();
       return;
     }
     if (_activeCategory != null) {
@@ -84,6 +94,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         _navDirection = -1;
         _activeCategory = null;
       });
+      _notifyCompactOverview();
       return;
     }
     final router = GoRouter.maybeOf(context);
@@ -91,6 +102,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       router.pop();
     } else if (Navigator.of(context).canPop()) {
       Navigator.of(context).pop();
+    } else if (CompactRootTabScope.maybeOf(context)?.onExitToHome
+        case final exitToHome?) {
+      exitToHome();
     } else if (router != null) {
       final view = ref.read(sessionViewProvider);
       router.go(view.connected ? AppRoutes.workspace : AppRoutes.connect);
@@ -211,35 +225,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     Widget subPageContent;
     switch (_activeCategory) {
       case SettingsCategory.appearance:
-        subPageContent = Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(bottom: 24),
-              child: AppearancePicker(
-                value: preferences.theme,
-                onChanged: ref.read(preferencesProvider.notifier).setTheme,
-              ),
-            ),
-            generateSection(
-              items: [
-                SettingsOptionsTile<VoiceMeterSource>(
-                  icon: Icons.graphic_eq_rounded,
-                  title: l10n.settingsVoiceMeter,
-                  options: VoiceMeterSource.values,
-                  value: preferences.voiceMeterSource,
-                  textBuilder: (source) => _voiceMeterLabel(l10n, source),
-                  onChanged: (source) {
-                    if (!mounted) return;
-                    ref
-                        .read(preferencesProvider.notifier)
-                        .setVoiceMeterSource(source);
-                  },
-                ),
-              ],
-            ),
-          ],
-        );
+        subPageContent = const ThemeSettingsView();
       case SettingsCategory.general:
         if (_activeGeneralSubcategory == null) {
           subPageContent = Column(
@@ -360,6 +346,23 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       ),
                     ],
                   ),
+                  generateSection(
+                    items: [
+                      SettingsOptionsTile<VoiceMeterSource>(
+                        icon: Icons.graphic_eq_rounded,
+                        title: l10n.settingsVoiceMeter,
+                        options: VoiceMeterSource.values,
+                        value: preferences.voiceMeterSource,
+                        textBuilder: (source) => _voiceMeterLabel(l10n, source),
+                        onChanged: (source) {
+                          if (!mounted) return;
+                          ref
+                              .read(preferencesProvider.notifier)
+                              .setVoiceMeterSource(source);
+                        },
+                      ),
+                    ],
+                  ),
                 ],
               );
             case GeneralSubcategory.screenShare:
@@ -469,7 +472,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             compact ? 16 : 32,
             16,
             compact ? 16 : 32,
-            40,
+            40 + CompactBottomInsetScope.of(context),
           ),
           child: Center(
             child: ConstrainedBox(
@@ -574,7 +577,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               }
             },
             child: Scaffold(
-              backgroundColor: context.pageColor,
+              backgroundColor:
+                  !compact && ref.watch(windowBlurOpacityProvider) != null
+                  ? Colors.transparent
+                  : pageColor,
               body: SurfaceScope(
                 level: SurfaceLevel.page,
                 child: SafeArea(
@@ -586,7 +592,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         const AppNavigationSidebar(
                           selectedDestination: AppNavDestination.settings,
                         ),
-                      Expanded(child: rightContent),
+                      Expanded(
+                        child: ColoredBox(
+                          color: pageColor,
+                          child: rightContent,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -611,46 +622,43 @@ class _SettingsTopBar extends StatelessWidget {
       type: MaterialType.transparency,
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: Sizes.header),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 880),
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                context.isCompact ? 8 : 12,
-                8,
-                16,
-                8,
-              ),
-              child: Row(
-                children: [
-                  ElasticButton(
-                    child: IconButton(
-                      onPressed: onBack,
-                      iconSize: IconSizes.toolbar,
-                      icon: Icon(
-                        Icons.arrow_back_rounded,
-                        semanticLabel: MaterialLocalizations.of(context)
-                            .backButtonTooltip,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: WindowDragRegion(
-                      child: Semantics(
-                        header: true,
-                        child: Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTextStyle.pageTitle.of(context),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(context.isCompact ? 8 : 12, 8, 16, 8),
+          child: Row(
+            children: [
+              TonalButtonTheme(
+                glass: LiquidGlassScope.of(context),
+                child: ElasticPress(
+                  child: IconButton(
+                    onPressed: onBack,
+                    iconSize: IconSizes.toolbar,
+                    icon: Semantics(
+                      label: MaterialLocalizations.of(context)
+                          .backButtonTooltip,
+                      child: BarItemGlyph(
+                        child: GlyphIcon(
+                          Glyphs.backFor(Theme.of(context).platform),
                         ),
                       ),
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: WindowDragRegion(
+                  child: Semantics(
+                    header: true,
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyle.pageTitle.of(context),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

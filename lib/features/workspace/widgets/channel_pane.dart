@@ -40,7 +40,7 @@ import 'voice_activity_ribbon.dart';
 /// TeamSpeak 的频道不区分文字与语音——每个频道既是语音房间也承载文字消息，
 /// 所以设计稿里的「文字频道 / 语音频道」两段在真实数据上没有依据，这里只保留
 /// 一棵按 `parentId` 展开的频道树，成员跟随所属频道缩进显示。
-class ChannelPanel extends ConsumerStatefulWidget {
+class ChannelPanel extends StatelessWidget {
   const ChannelPanel({this.onChannelSelected, this.onDisconnect, super.key});
 
   /// 点频道后离开设置页，回到工作区。
@@ -48,13 +48,90 @@ class ChannelPanel extends ConsumerStatefulWidget {
   final VoidCallback? onDisconnect;
 
   @override
-  ConsumerState<ChannelPanel> createState() => _ChannelPanelState();
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final scheme = context.scheme;
+    return Surface(
+      color: scheme.surfaceContainerLow,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _ChannelHeader(),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SectionLabel(label: l10n.channelsSection),
+                Expanded(
+                  child: _ChannelTree(onChannelSelected: onChannelSelected),
+                ),
+              ],
+            ),
+          ),
+          _UserFooter(onDisconnect: onDisconnect),
+        ],
+      ),
+    );
+  }
 }
 
-class _ChannelPanelState extends ConsumerState<ChannelPanel> {
+class _ChannelHeader extends ConsumerWidget {
+  const _ChannelHeader();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final serverLabel = ref.watch(
+      sessionViewProvider.select((view) => view.activeServer?.label),
+    );
+    return SizedBox(
+      height: Sizes.header,
+      child: WindowDragRegion(
+        child: Padding(
+          padding: const EdgeInsets.only(left: 16, right: 8),
+          child: Row(
+            children: [
+              Icon(
+                Icons.dns_outlined,
+                size: IconSizes.medium,
+                color: context.scheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  serverLabel ?? l10n.appName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.texts.titleMedium?.copyWith(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChannelTree extends ConsumerStatefulWidget {
+  const _ChannelTree({this.onChannelSelected});
+
+  final VoidCallback? onChannelSelected;
+
+  @override
+  ConsumerState<_ChannelTree> createState() => _ChannelTreeState();
+}
+
+class _ChannelTreeState extends ConsumerState<_ChannelTree> {
   /// 上一次点击的频道、点下去之前的高亮位置与双击判定窗口。按 `channelId`
-  /// 比对，而不是按行位置，因为 `ListView.builder` 会按位置复用行。
+  /// 比对，而不是按行位置，因为列表复用会按位置复用行。
   ({int channelId, SelectedChannel? fallback, Timer timer})? _pendingTap;
+  List<ChannelView>? _cachedChannels;
+  List<ClientView>? _cachedClients;
+  List<_TreeRow> _cachedRows = const [];
 
   @override
   void dispose() {
@@ -62,20 +139,92 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
     super.dispose();
   }
 
+  List<_TreeRow> _flattenCached(
+    List<ChannelView> channels,
+    List<ClientView> clients,
+  ) {
+    if (identical(channels, _cachedChannels) &&
+        identical(clients, _cachedClients)) {
+      return _cachedRows;
+    }
+    final channelIds = <int>{for (final channel in channels) channel.id};
+    final roots = <ChannelView>[];
+    final childrenByParent = <int, List<ChannelView>>{};
+    for (final channel in channels) {
+      if (!channelIds.contains(channel.parentId)) {
+        roots.add(channel);
+      } else {
+        (childrenByParent[channel.parentId] ??= <ChannelView>[]).add(channel);
+      }
+    }
+    final clientsByChannel = <int, List<ClientView>>{};
+    for (final client in clients) {
+      (clientsByChannel[client.channelId] ??= <ClientView>[]).add(client);
+    }
+
+    final rows = <_TreeRow>[];
+    void walk(ChannelView channel, int depth) {
+      // spacer 只改变名字的画法：行高、选中与加入都和普通频道一致（官方
+      // 客户端里双击装饰频道同样能进入房间）。
+      final spacer = parseChannelSpacer(channel.name);
+      rows.add(_ChannelRow(channel: channel, depth: depth, spacer: spacer));
+      final members = clientsByChannel[channel.id];
+      if (members != null) {
+        for (final member in members) {
+          rows.add(_MemberRow(client: member, depth: depth + 1));
+        }
+      }
+      final children = childrenByParent[channel.id];
+      if (children != null) {
+        for (final child in orderSiblings(children)) {
+          walk(child, depth + 1);
+        }
+      }
+    }
+
+    for (final root in orderSiblings(roots)) {
+      walk(root, 0);
+    }
+    _cachedChannels = channels;
+    _cachedClients = clients;
+    _cachedRows = rows;
+    return rows;
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
-    final view = ref.watch(sessionViewProvider);
+    final (
+      :connected,
+      :busy,
+      :activeServerId,
+      :selfChannelId,
+      :channels,
+      :clients,
+    ) = ref.watch(
+      sessionViewProvider.select(
+        (view) => (
+          connected: view.connected,
+          busy: view.busy,
+          activeServerId: view.activeServerId,
+          selfChannelId: view.selfChannelId,
+          channels: view.channels,
+          clients: view.clients,
+        ),
+      ),
+    );
     final activeId = ref.watch(activeChannelIdProvider);
-    final isPublishing = ref.watch(
-      streamPublisherProvider.select((state) => state.isActive),
+    final hasSelectedMember = ref.watch(
+      selectedMemberProvider.select(
+        (selected) => selected != null && selected.serverId == activeServerId,
+      ),
     );
 
     void select(ChannelView channel) {
       ref
           .read(selectedChannelProvider.notifier)
-          .select(channel.id, serverId: view.activeServerId);
+          .select(channel.id, serverId: activeServerId);
       ref.read(sessionViewProvider.notifier).selectChatScope(ChatScope.channel);
       widget.onChannelSelected?.call();
     }
@@ -91,7 +240,7 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
           .read(selectedChannelProvider.notifier)
           .join(
             channel.id,
-            serverId: view.activeServerId,
+            serverId: activeServerId,
             fallback: fallback,
             requestPassword: () =>
                 requestChannelPassword(context, ref, channel.id),
@@ -110,10 +259,12 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
       widget.onChannelSelected?.call();
     }
 
-    // 右键菜单的加入：按点菜单那一刻的选中位置回退，不受双击窗口干扰。
     void joinFromMenu(ChannelView channel) {
       unawaited(join(channel, fallback: ref.read(selectedChannelProvider)));
     }
+
+    bool canJoinChannel(ChannelView channel) =>
+        connected && !busy && selfChannelId != channel.id;
 
     // 单击只看、双击进入。不用 `InkWell.onDoubleTap`：它会把手势竞技场按到
     // `kDoubleTapTimeout` 之后，单击反馈也跟着晚一拍。改成按点击间隔自己判定，
@@ -123,7 +274,7 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
       _pendingTap?.timer.cancel();
       if (pending != null &&
           pending.channelId == channel.id &&
-          _canJoin(view, channel)) {
+          canJoinChannel(channel)) {
         _pendingTap = null;
         unawaited(join(channel, fallback: pending.fallback));
         return;
@@ -144,109 +295,10 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
       );
     }
 
-    return Surface(
-      color: scheme.surfaceContainerLow,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _buildHeader(context, l10n, view),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SectionLabel(label: l10n.channelsSection),
-                Expanded(
-                  child: _buildTree(
-                    context,
-                    l10n,
-                    view,
-                    activeId,
-                    tap,
-                    joinFromMenu,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          _UserFooter(
-            view: view,
-            onDisconnect: widget.onDisconnect,
-            muted: view.muted,
-            deafened: view.deafened,
-            away: view.away,
-            sharingScreen: isPublishing,
-            onToggleMute: () =>
-                ref.read(sessionViewProvider.notifier).setMuted(!view.muted),
-            onToggleDeafen: () => ref
-                .read(sessionViewProvider.notifier)
-                .setDeafened(!view.deafened),
-            onToggleAway: () =>
-                ref.read(sessionViewProvider.notifier).setAway(!view.away),
-            onToggleScreenShare: () {
-              if (!view.connected || view.selfChannelId == null) return;
-              if (isPublishing) {
-                unawaited(
-                  ref.read(sessionViewProvider.notifier).stopScreenShare(),
-                );
-              } else {
-                unawaited(showScreenSharePickerAndStart(context, ref));
-              }
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeader(
-    BuildContext context,
-    AppLocalizations l10n,
-    SessionView view,
-  ) {
-    return SizedBox(
-      height: Sizes.header,
-      child: WindowDragRegion(
-        child: Padding(
-          padding: const EdgeInsets.only(left: 16, right: 8),
-          child: Row(
-            children: [
-              Icon(
-                Icons.dns_outlined,
-                size: IconSizes.medium,
-                color: context.scheme.primary,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  view.activeServer?.label ?? l10n.appName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: context.texts.titleMedium?.copyWith(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTree(
-    BuildContext context,
-    AppLocalizations l10n,
-    SessionView view,
-    int? activeId,
-    void Function(ChannelView channel) onTap,
-    // 菜单通道的加入：回退位置由调用方按当时的选中补齐。
-    void Function(ChannelView channel) onJoin,
-  ) {
-    final rows = _flatten(view);
+    final rows = _flattenCached(channels, clients);
     if (rows.isEmpty) {
       // 掉线时主区域已经说明状态，频道栏留空，不再重复同一句话。
-      if (!view.connected) {
+      if (!connected) {
         return const SizedBox.shrink();
       }
       return Padding(
@@ -254,83 +306,59 @@ class _ChannelPanelState extends ConsumerState<ChannelPanel> {
         child: Text(
           l10n.workspaceNoChannels,
           style: context.texts.bodySmall?.copyWith(
-            color: context.scheme.onSurfaceVariant,
+            color: scheme.onSurfaceVariant,
           ),
         ),
       );
     }
 
-    final selectedMember = ref.watch(selectedMemberProvider);
-    final hasSelectedMember =
-        selectedMember != null &&
-        selectedMember.serverId == view.activeServerId;
-
-    return ListView.builder(
+    final dividerColor = dividerColorOf(context);
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return PrismListView(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      estimatedItemExtent: 40,
       itemCount: rows.length,
       itemBuilder: (context, index) {
         final row = rows[index];
         return switch (row) {
           _ChannelRow(:final channel, :final depth, :final spacer) =>
-            _ChannelTile(
-              channel: channel,
-              depth: depth,
-              selected: !hasSelectedMember && channel.id == activeId,
-              onTap: () => onTap(channel),
-              onJoin: () => onJoin(channel),
-              canJoin: _canJoin(view, channel),
-              spacer: spacer,
+            MemoBuilder(
+              inputs: [
+                channel,
+                depth,
+                !hasSelectedMember && channel.id == activeId,
+                canJoinChannel(channel),
+                spacer?.align,
+                spacer?.text,
+                scheme.primaryContainer,
+                scheme.onPrimaryContainer,
+                scheme.onSurfaceVariant,
+                dividerColor,
+                reduceMotion,
+              ],
+              builder: (context) => _ChannelTile(
+                channel: channel,
+                depth: depth,
+                selected: !hasSelectedMember && channel.id == activeId,
+                onTap: () => tap(channel),
+                onJoin: () => joinFromMenu(channel),
+                canJoin: canJoinChannel(channel),
+                spacer: spacer,
+              ),
             ),
-          _MemberRow(:final client, :final depth) => _MemberTile(
-            client: client,
-            depth: depth,
-            selected:
-                hasSelectedMember &&
-                selectedMember.clientId == client.id &&
-                selectedMember.uid == client.uid,
-            // 服务器不回显自己的声音，自己说话由 SelfSpeaking 事件单独表达。
-            speaking:
-                view.speaking.contains(client.id) ||
-                (client.id == view.selfClientId && view.selfSpeaking),
-            stream: view.streamForClient(client.id),
+          _MemberRow(:final client, :final depth) => MemoBuilder(
+            inputs: [client, depth],
+            builder: (context) => _MemberTile(client: client, depth: depth),
           ),
         };
       },
     );
-  }
-
-  List<_TreeRow> _flatten(SessionView view) {
-    final rows = <_TreeRow>[];
-
-    void walk(ChannelView channel, int depth) {
-      // spacer 只改变名字的画法：行高、选中与加入都和普通频道一致（官方
-      // 客户端里双击装饰频道同样能进入房间）。
-      final spacer = parseChannelSpacer(channel.name);
-      final children = view.orderedChildrenOf(channel.id);
-      final members = view.clientsIn(channel.id);
-      rows.add(_ChannelRow(channel: channel, depth: depth, spacer: spacer));
-      for (final member in members) {
-        rows.add(_MemberRow(client: member, depth: depth + 1));
-      }
-      for (final child in children) {
-        walk(child, depth + 1);
-      }
-    }
-
-    for (final root in view.orderedRootChannels()) {
-      walk(root, 0);
-    }
-    return rows;
   }
 }
 
 sealed class _TreeRow {
   const _TreeRow();
 }
-
-/// 可以双击/右键加入：已连接、没有命令在跑，且自己还不在这个频道里。
-bool _canJoin(SessionView view, ChannelView channel) =>
-    view.connected && !view.busy && view.selfChannelId != channel.id;
 
 class _ChannelRow extends _TreeRow {
   const _ChannelRow({required this.channel, required this.depth, this.spacer});
@@ -398,7 +426,9 @@ class _ChannelTile extends StatelessWidget {
           button: true,
           selected: selected,
           child: AnimatedContainer(
-            duration: Motion.effectsFast,
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : Motion.effectsFast,
             curve: Motion.effectsDefaultCurve,
             decoration: ShapeDecoration(
               color: selected ? scheme.primaryContainer : Colors.transparent,
@@ -509,8 +539,8 @@ class _FillSpacerText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
+    return WidthBuilder(
+      builder: (context, width) {
         final painter = TextPainter(
           text: TextSpan(text: text, style: style),
           textDirection: Directionality.of(context),
@@ -518,10 +548,10 @@ class _FillSpacerText extends StatelessWidget {
         )..layout();
         final unitWidth = painter.width;
         painter.dispose();
-        if (unitWidth <= 0 || !constraints.maxWidth.isFinite) {
+        if (unitWidth <= 0 || !width.isFinite) {
           return const SizedBox.shrink();
         }
-        final repeat = (constraints.maxWidth / unitWidth).floor();
+        final repeat = (width / unitWidth).floor();
         return Align(
           child: Text(
             text * (repeat < 1 ? 1 : repeat),
@@ -535,25 +565,41 @@ class _FillSpacerText extends StatelessWidget {
   }
 }
 
-class _MemberTile extends StatelessWidget {
-  const _MemberTile({
-    required this.client,
-    required this.depth,
-    required this.speaking,
-    required this.selected,
-    this.stream,
-  });
+class _MemberTile extends ConsumerWidget {
+  const _MemberTile({required this.client, required this.depth});
 
   final ClientView client;
   final int depth;
-  final bool speaking;
-  final bool selected;
-  final StreamView? stream;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
+    final activeServerId = ref.watch(
+      sessionViewProvider.select((view) => view.activeServerId),
+    );
+    final selected = ref.watch(
+      selectedMemberProvider.select(
+        (item) =>
+            item != null &&
+            item.serverId == activeServerId &&
+            item.clientId == client.id &&
+            item.uid == client.uid,
+      ),
+    );
+    // 服务器不回显自己的声音，自己说话由 SelfSpeaking 事件单独表达。
+    final speaking = ref.watch(
+      sessionViewProvider.select(
+        (view) =>
+            view.speaking.contains(client.id) ||
+            (client.id == view.selfClientId && view.selfSpeaking),
+      ),
+    );
+    final sharingScreen = ref.watch(
+      sessionViewProvider.select(
+        (view) => view.streamForClient(client.id) != null,
+      ),
+    );
     final foreground = selected
         ? scheme.onPrimaryContainer
         : scheme.onSurfaceVariant;
@@ -616,7 +662,7 @@ class _MemberTile extends StatelessWidget {
                   ],
                 ),
               ),
-              MemberStatusFlags(client: client, sharingScreen: stream != null),
+              MemberStatusFlags(client: client, sharingScreen: sharingScreen),
             ],
           ),
         ),
@@ -626,28 +672,8 @@ class _MemberTile extends StatelessWidget {
 }
 
 class _UserFooter extends ConsumerStatefulWidget {
-  const _UserFooter({
-    required this.view,
-    required this.muted,
-    required this.deafened,
-    required this.away,
-    required this.sharingScreen,
-    required this.onToggleMute,
-    required this.onToggleDeafen,
-    required this.onToggleAway,
-    required this.onToggleScreenShare,
-    this.onDisconnect,
-  });
+  const _UserFooter({this.onDisconnect});
 
-  final SessionView view;
-  final bool muted;
-  final bool deafened;
-  final bool away;
-  final bool sharingScreen;
-  final VoidCallback onToggleMute;
-  final VoidCallback onToggleDeafen;
-  final VoidCallback onToggleAway;
-  final VoidCallback onToggleScreenShare;
   final VoidCallback? onDisconnect;
 
   @override
@@ -655,20 +681,12 @@ class _UserFooter extends ConsumerStatefulWidget {
 }
 
 class _UserFooterState extends ConsumerState<_UserFooter> {
-  late bool _expanded = widget.view.networkPanelPinned;
+  bool _expanded = false;
 
   @override
-  void didUpdateWidget(covariant _UserFooter oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.view.connectionEpoch != oldWidget.view.connectionEpoch ||
-        (!widget.view.connected && oldWidget.view.connected)) {
-      _expanded = false;
-    }
-    if (widget.view.networkPanelPinned &&
-        !oldWidget.view.networkPanelPinned &&
-        !_expanded) {
-      _expanded = true;
-    }
+  void initState() {
+    super.initState();
+    _expanded = ref.read(sessionViewProvider).networkPanelPinned;
   }
 
   void _toggleNetwork() {
@@ -684,7 +702,7 @@ class _UserFooterState extends ConsumerState<_UserFooter> {
       return;
     }
     setState(() => _expanded = false);
-    if (widget.view.networkPanelPinned) {
+    if (ref.read(sessionViewProvider).networkPanelPinned) {
       ref.read(sessionViewProvider.notifier).setNetworkPanelPinned(false);
     }
   }
@@ -693,10 +711,54 @@ class _UserFooterState extends ConsumerState<_UserFooter> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
-    final view = widget.view;
-    final channel = view.selfChannelId == null
-        ? null
-        : view.channelById(view.selfChannelId!);
+    final (
+      :connected,
+      :reconnecting,
+      :busy,
+      :selfChannelId,
+      :muted,
+      :deafened,
+      :away,
+    ) = ref.watch(
+      sessionViewProvider.select(
+        (view) => (
+          connected: view.connected,
+          reconnecting: view.reconnecting,
+          busy: view.busy,
+          selfChannelId: view.selfChannelId,
+          muted: view.muted,
+          deafened: view.deafened,
+          away: view.away,
+        ),
+      ),
+    );
+    final sharingScreen = ref.watch(
+      streamPublisherProvider.select((state) => state.isActive),
+    );
+
+    ref.listen<({int epoch, bool connected, bool pinned})>(
+      sessionViewProvider.select(
+        (view) => (
+          epoch: view.connectionEpoch,
+          connected: view.connected,
+          pinned: view.networkPanelPinned,
+        ),
+      ),
+      (previous, next) {
+        if (previous != null &&
+            (next.epoch != previous.epoch ||
+                (!next.connected && previous.connected))) {
+          if (_expanded) {
+            setState(() => _expanded = false);
+          }
+          return;
+        }
+        if (next.pinned && !(previous?.pinned ?? false) && !_expanded) {
+          setState(() => _expanded = true);
+        }
+      },
+    );
+
     return Padding(
       padding: const EdgeInsets.all(8),
       child: SurfaceCard(
@@ -718,36 +780,69 @@ class _UserFooterState extends ConsumerState<_UserFooter> {
                 ],
               ),
             ),
-            if (view.connected || view.reconnecting)
+            if (connected || reconnecting)
               Padding(
                 padding: const EdgeInsets.fromLTRB(4, 8, 4, 4),
                 child: Row(
                   children: [
                     Expanded(
-                      child: NetworkStatus(
-                        view: view,
-                        expanded: _expanded,
-                        onToggle: _toggleNetwork,
-                        channelLabel: channel == null
-                            ? (view.activeServer?.label ?? l10n.appName)
-                            : channelDisplayName(channel),
+                      child: Consumer(
+                        builder: (context, ref, _) {
+                          final (
+                            :isConnected,
+                            :network,
+                            :channelLabel,
+                          ) = ref.watch(
+                            sessionViewProvider.select((view) {
+                              final channel = view.selfChannelId == null
+                                  ? null
+                                  : view.channelById(view.selfChannelId!);
+                              return (
+                                isConnected: view.connected,
+                                network: view.network,
+                                channelLabel: channel == null
+                                    ? (view.activeServer?.label ?? l10n.appName)
+                                    : channelDisplayName(channel),
+                              );
+                            }),
+                          );
+                          return NetworkStatus(
+                            connected: isConnected,
+                            network: network,
+                            expanded: _expanded,
+                            onToggle: _toggleNetwork,
+                            channelLabel: channelLabel,
+                          );
+                        },
                       ),
                     ),
-                    if (view.connected && view.selfChannelId != null)
+                    if (connected && selfChannelId != null)
                       _IconToggle(
                         key: const ValueKey('voice-screen-share-toggle'),
-                        label: widget.sharingScreen
+                        label: sharingScreen
                             ? l10n.streamStopShare
                             : l10n.streamStartShare,
-                        icon: widget.sharingScreen
+                        icon: sharingScreen
                             ? Icons.stop_screen_share_rounded
                             : Icons.screen_share_rounded,
-                        active: widget.sharingScreen,
-                        onTap: widget.onToggleScreenShare,
+                        active: sharingScreen,
+                        onTap: () {
+                          if (sharingScreen) {
+                            unawaited(
+                              ref
+                                  .read(sessionViewProvider.notifier)
+                                  .stopScreenShare(),
+                            );
+                          } else {
+                            unawaited(
+                              showScreenSharePickerAndStart(context, ref),
+                            );
+                          }
+                        },
                       ),
                     if (widget.onDisconnect != null)
                       IconButton.filled(
-                        onPressed: view.busy ? null : widget.onDisconnect,
+                        onPressed: busy ? null : widget.onDisconnect,
                         style: ButtonStyle.from(
                           backgroundColor: scheme.error,
                           foregroundColor: scheme.onError,
@@ -761,7 +856,7 @@ class _UserFooterState extends ConsumerState<_UserFooter> {
                   ],
                 ),
               ),
-            if (view.connected || view.reconnecting)
+            if (connected || reconnecting)
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 12),
                 child: Divider(height: 1, thickness: 1),
@@ -784,30 +879,30 @@ class _UserFooterState extends ConsumerState<_UserFooter> {
                   ),
                   const SizedBox(width: 6),
                   _IconToggle(
-                    label: widget.muted ? l10n.voiceUnmute : l10n.voiceMute,
-                    icon: widget.muted
-                        ? Icons.mic_off_rounded
-                        : Icons.mic_rounded,
-                    active: widget.muted,
-                    onTap: widget.onToggleMute,
+                    label: muted ? l10n.voiceUnmute : l10n.voiceMute,
+                    icon: muted ? Icons.mic_off_rounded : Icons.mic_rounded,
+                    active: muted,
+                    onTap: () =>
+                        ref.read(sessionViewProvider.notifier).setMuted(!muted),
                   ),
                   _IconToggle(
-                    label: widget.deafened
-                        ? l10n.voiceUndeafen
-                        : l10n.voiceDeafen,
-                    icon: widget.deafened
+                    label: deafened ? l10n.voiceUndeafen : l10n.voiceDeafen,
+                    icon: deafened
                         ? Icons.headset_off_rounded
                         : Icons.headphones_rounded,
-                    active: widget.deafened,
-                    onTap: widget.onToggleDeafen,
+                    active: deafened,
+                    onTap: () => ref
+                        .read(sessionViewProvider.notifier)
+                        .setDeafened(!deafened),
                   ),
                   _IconToggle(
-                    label: widget.away ? l10n.voiceUnaway : l10n.voiceAway,
+                    label: away ? l10n.voiceUnaway : l10n.voiceAway,
                     icon: Icons.schedule_rounded,
-                    active: widget.away,
+                    active: away,
                     activeContainer: scheme.primaryContainer,
                     activeOnContainer: scheme.onPrimaryContainer,
-                    onTap: widget.onToggleAway,
+                    onTap: () =>
+                        ref.read(sessionViewProvider.notifier).setAway(!away),
                   ),
                 ],
               ),
@@ -857,13 +952,29 @@ class _CardExtensionState extends State<_CardExtension>
   @override
   void didUpdateWidget(covariant _CardExtension oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    _controller.duration = reduceMotion ? Duration.zero : Motion.effectsDefault;
+    _controller.reverseDuration = reduceMotion
+        ? Duration.zero
+        : Motion.effectsFast;
     if (widget.expanded) {
       if (!_visible) {
         setState(() => _visible = true);
       }
-      _controller.forward();
+      if (reduceMotion) {
+        _controller.value = 1;
+      } else {
+        _controller.forward();
+      }
     } else {
-      _controller.reverse();
+      if (reduceMotion) {
+        _controller.value = 0;
+        if (_visible) {
+          setState(() => _visible = false);
+        }
+      } else {
+        _controller.reverse();
+      }
     }
   }
 
@@ -938,7 +1049,9 @@ class _IconToggle extends StatelessWidget {
           padding: EdgeInsets.zero,
         ),
         icon: AnimatedSwitcher(
-          duration: Motion.effectsFast,
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : Motion.effectsFast,
           switchInCurve: Motion.effectsFastCurve,
           switchOutCurve: Motion.effectsFastCurve.flipped,
           transitionBuilder: (child, animation) => FadeTransition(

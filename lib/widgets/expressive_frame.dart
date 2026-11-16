@@ -32,13 +32,15 @@ class _ExpressiveFrameState extends State<ExpressiveFrame>
     vsync: this,
     duration: _spinPeriod,
   );
+  bool _reduceMotion = false;
+  bool _tickerEnabled = true;
 
   @override
-  void initState() {
-    super.initState();
-    if (widget.loading) {
-      _turns.repeat();
-    }
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _reduceMotion = MediaQuery.disableAnimationsOf(context);
+    _tickerEnabled = TickerMode.valuesOf(context).enabled;
+    _syncSpin();
   }
 
   @override
@@ -50,9 +52,18 @@ class _ExpressiveFrameState extends State<ExpressiveFrame>
   }
 
   void _syncSpin() {
+    if (_reduceMotion || !_tickerEnabled) {
+      _turns.stop();
+      if (!widget.loading) {
+        _turns.value = 0;
+      }
+      return;
+    }
     if (widget.loading) {
-      _turns.repeat();
-    } else {
+      if (!_turns.isAnimating) {
+        _turns.repeat();
+      }
+    } else if (_turns.isAnimating || _turns.value != 0) {
       // 四叶花每转 1/4 圈外观对称，结束加载时顺滑停到下一个 1/4 圈。
       final rest = (_turns.value * 4).ceil() / 4;
       _turns.animateTo(rest, duration: _spinPeriod * (rest - _turns.value));
@@ -68,18 +79,12 @@ class _ExpressiveFrameState extends State<ExpressiveFrame>
   @override
   Widget build(BuildContext context) {
     final fill = widget.color ?? context.scheme.primaryContainer;
-    return AnimatedBuilder(
-      animation: _turns,
-      child: widget.child,
-      builder: (context, child) => CustomPaint(
-        painter: _CloverPainter(
-          path: _cloverPath,
-          color: fill,
-          rotation: _turns.value * 2 * math.pi,
-        ),
+    return RepaintBoundary(
+      child: CustomPaint(
+        painter: _CloverPainter(path: _cloverPath, color: fill, turns: _turns),
         child: SizedBox.square(
           dimension: widget.size,
-          child: Center(child: child),
+          child: Center(child: widget.child),
         ),
       ),
     );
@@ -90,12 +95,14 @@ class _CloverPainter extends CustomPainter {
   const _CloverPainter({
     required this.path,
     required this.color,
-    required this.rotation,
-  });
+    required this.turns,
+  }) : super(repaint: turns);
 
   final Path path;
   final Color color;
-  final double rotation;
+  final Animation<double> turns;
+
+  double get rotation => turns.value * 2 * math.pi;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -113,5 +120,5 @@ class _CloverPainter extends CustomPainter {
   bool shouldRepaint(_CloverPainter oldDelegate) =>
       oldDelegate.path != path ||
       oldDelegate.color != color ||
-      oldDelegate.rotation != rotation;
+      oldDelegate.turns != turns;
 }

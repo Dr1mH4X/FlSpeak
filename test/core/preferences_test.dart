@@ -260,4 +260,25 @@ void main() {
       ScreenShareDegradationPreference.maintainResolution,
     );
   });
+
+  test('liquidGlass defaults to none, round-trips, and falls back safely', () {
+    const defaults = SessionPreferences(nickname: 'TestUser');
+    expect(defaults.liquidGlass, LiquidGlassMode.none);
+    expect(
+      SessionPreferences.fromJson(const {}).liquidGlass,
+      LiquidGlassMode.none,
+    );
+
+    for (final mode in LiquidGlassMode.values) {
+      final restored = SessionPreferences.fromJson(
+        SessionPreferences(nickname: 'TestUser', liquidGlass: mode).toJson(),
+      );
+      expect(restored.liquidGlass, mode);
+    }
+
+    final fallback = SessionPreferences.fromJson(const {
+      'liquidGlass': 'unknown',
+    });
+    expect(fallback.liquidGlass, LiquidGlassMode.none);
+  });
 }

@@ -6,21 +6,24 @@ import 'package:flutter/material.dart'
         ButtonStyle,
         FilledButton,
         IconButton,
+        InputBorder,
+        InputDecoration,
         OutlinedButton,
         Switch,
-        TextButton;
+        TextButton,
+        TextField;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/models.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../router.dart';
 import '../../theme/app_motion.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_navigation_sidebar.dart';
+import '../../widgets/compact_navigation_shell.dart';
 import '../../widgets/prism.dart' hide Divider;
 import 'widgets/add_server_dialog.dart';
 import 'widgets/connect_header.dart';
@@ -120,41 +123,86 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final view = ref.watch(sessionViewProvider);
-    final preferences = ref.watch(preferencesProvider);
+    final (
+      :servers,
+      :connected,
+      :connecting,
+      :reconnecting,
+      :activeServerId,
+      :sessionBusy,
+    ) = ref.watch(
+      sessionViewProvider.select(
+        (view) => (
+          servers: view.servers,
+          connected: view.connected,
+          connecting: view.connecting,
+          reconnecting: view.reconnecting,
+          activeServerId: view.activeServerId,
+          sessionBusy: view.busy,
+        ),
+      ),
+    );
+    final (:nickname, :lastConnected) = ref.watch(
+      preferencesProvider.select(
+        (prefs) =>
+            (nickname: prefs.nickname, lastConnected: prefs.lastConnected),
+      ),
+    );
     final scheme = context.scheme;
     final size = MediaQuery.sizeOf(context);
     final desktop = size.width >= Breakpoints.compact;
     final wide = size.width >= Breakpoints.wide;
 
-    ref.listen<SessionView>(sessionViewProvider, (previous, next) {
-      final pending = _pendingServerId;
-      if (pending == null) {
-        return;
-      }
-      if (next.connected && next.activeServerId == pending) {
-        _pendingServerId = null;
-        ref
-            .read(preferencesProvider.notifier)
-            .markConnected(pending, DateTime.now());
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            context.go(AppRoutes.workspace);
-          }
-        });
-      } else if ((previous != null && next.failureSeq != previous.failureSeq) ||
-          (!next.busy &&
-              !next.connecting &&
-              !next.reconnecting &&
-              next.activeServerId != null &&
-              next.activeServerId != pending)) {
-        // 只有明确的失败/换目标才放掉连接中状态；busy 结束不等于连上。
-        _pendingServerId = null;
-      }
-    });
+    ref.listen<
+      ({
+        bool connected,
+        String? activeServerId,
+        int failureSeq,
+        bool busy,
+        bool connecting,
+        bool reconnecting,
+      })
+    >(
+      sessionViewProvider.select(
+        (view) => (
+          connected: view.connected,
+          activeServerId: view.activeServerId,
+          failureSeq: view.failureSeq,
+          busy: view.busy,
+          connecting: view.connecting,
+          reconnecting: view.reconnecting,
+        ),
+      ),
+      (previous, next) {
+        final pending = _pendingServerId;
+        if (pending == null) {
+          return;
+        }
+        if (next.connected && next.activeServerId == pending) {
+          _pendingServerId = null;
+          ref
+              .read(preferencesProvider.notifier)
+              .markConnected(pending, DateTime.now());
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              context.go(AppRoutes.workspace);
+            }
+          });
+        } else if ((previous != null &&
+                next.failureSeq != previous.failureSeq) ||
+            (!next.busy &&
+                !next.connecting &&
+                !next.reconnecting &&
+                next.activeServerId != null &&
+                next.activeServerId != pending)) {
+          // 只有明确的失败/换目标才放掉连接中状态；busy 结束不等于连上。
+          _pendingServerId = null;
+        }
+      },
+    );
 
     if (!_autoConnectTried && widget.serverId != null) {
-      final target = _serverById(view.servers, widget.serverId!);
+      final target = _serverById(servers, widget.serverId!);
       if (target != null) {
         _autoConnectTried = true;
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -165,14 +213,18 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
       }
     }
 
-    final connectedId = view.connected ? view.activeServerId : null;
+    final connectedId = connected ? activeServerId : null;
     final connectingId =
         _pendingServerId ??
-        ((view.connecting || view.reconnecting) ? view.activeServerId : null);
-    final busy =
-        _pendingServerId != null || view.connecting || view.reconnecting;
-    final servers = _orderedServers(view, preferences.lastConnected);
-    final filtered = servers
+        ((connecting || reconnecting) ? activeServerId : null);
+    final busy = _pendingServerId != null || connecting || reconnecting;
+    final orderedServers = _orderedServers(
+      servers,
+      connected: connected,
+      activeServerId: activeServerId,
+      lastConnected: lastConnected,
+    );
+    final filtered = orderedServers
         .where(
           (server) => '${server.label} ${server.host}'.toLowerCase().contains(
             _query.toLowerCase().trim(),
@@ -182,22 +234,22 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
 
     final section = _ServerSection(
       servers: filtered,
-      hasServers: servers.isNotEmpty,
+      hasServers: orderedServers.isNotEmpty,
       onSearch: (value) => setState(() => _query = value),
-      lastConnected: preferences.lastConnected,
+      lastConnected: lastConnected,
       connectedId: connectedId,
       connectingId: connectingId,
-      enabled: !busy && !view.busy,
+      enabled: !busy && !sessionBusy,
       onAdd: _openAddServer,
       onConnect: _connect,
       onRemove: _removeServer,
     );
 
     final identity = wide
-        ? IdentityCard(nickname: preferences.nickname, onManage: _openIdentity)
+        ? IdentityCard(nickname: nickname, onManage: _openIdentity)
         : IdentityStrip(
-            nickname: preferences.nickname,
-            serverCount: view.servers.length,
+            nickname: nickname,
+            serverCount: servers.length,
             onManage: _openIdentity,
           );
 
@@ -216,8 +268,15 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
       ],
     );
 
+    final bottomDockInset = CompactBottomInsetScope.of(context);
+    final inCompactTabs = CompactRootTabScope.maybeOf(context)?.active ?? false;
     final content = SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(horizontal, wide ? 48 : 28, horizontal, 32),
+      padding: EdgeInsets.fromLTRB(
+        horizontal,
+        wide ? 48 : 28,
+        horizontal,
+        32 + bottomDockInset,
+      ),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: Sizes.connectContent),
@@ -251,13 +310,17 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
 
     final header = ConnectHeader(
       desktop: desktop,
-      connected: view.connected,
+      connected: connected,
+      showSettingsButton: !inCompactTabs,
       onWorkspace: () => context.go(AppRoutes.workspace),
       onSettings: () => context.push(AppRoutes.settings),
     );
 
+    final blurOpacity = desktop ? ref.watch(windowBlurOpacityProvider) : null;
     return Scaffold(
-      backgroundColor: context.pageColor,
+      backgroundColor: blurOpacity != null
+          ? Colors.transparent
+          : context.pageColor,
       body: SafeArea(
         top: !desktop,
         child: Row(
@@ -292,17 +355,18 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
 }
 
 List<ServerProfileView> _orderedServers(
-  SessionView view,
-  Map<String, DateTime> lastConnected,
-) {
+  List<ServerProfileView> source, {
+  required bool connected,
+  required String? activeServerId,
+  required Map<String, DateTime> lastConnected,
+}) {
   final order = <String, int>{
-    for (var index = 0; index < view.servers.length; index++)
-      view.servers[index].id: index,
+    for (var index = 0; index < source.length; index++) source[index].id: index,
   };
-  final servers = [...view.servers];
+  final servers = [...source];
   servers.sort((a, b) {
-    final aConnected = view.connected && view.activeServerId == a.id;
-    final bConnected = view.connected && view.activeServerId == b.id;
+    final aConnected = connected && activeServerId == a.id;
+    final bConnected = connected && activeServerId == b.id;
     if (aConnected != bConnected) {
       return aConnected ? -1 : 1;
     }
@@ -470,7 +534,6 @@ class _ServerSearchControlState extends State<_ServerSearchControl>
   static const double _expandedMaxWidth = 260.0;
 
   bool _expanded = false;
-  bool _hasFocus = false;
 
   late final TextEditingController _controller = TextEditingController()
     ..addListener(_handleTextChanged);
@@ -545,11 +608,7 @@ class _ServerSearchControlState extends State<_ServerSearchControl>
   }
 
   void _handleFocusChanged() {
-    final focused = _focusNode.hasFocus;
-    if (_hasFocus != focused) {
-      setState(() => _hasFocus = focused);
-    }
-    if (!focused && _expanded && _controller.text.isEmpty) {
+    if (!_focusNode.hasFocus && _expanded && _controller.text.isEmpty) {
       setState(() => _expanded = false);
       _animateExpand(false);
     }
@@ -569,6 +628,7 @@ class _ServerSearchControlState extends State<_ServerSearchControl>
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
+    final glass = LiquidGlassScope.of(context);
     final surfaceFill = context.raisedSurfaceColor;
     final availableWidth = math.max(0.0, widget.maxRowWidth - 12);
     final collapsedWidth = math.min(_collapsedSize, availableWidth);
@@ -577,129 +637,134 @@ class _ServerSearchControlState extends State<_ServerSearchControl>
       math.max(collapsedWidth, availableWidth * 0.65),
     );
 
-    return AnimatedBuilder(
-      animation: _expandController,
-      builder: (context, _) {
-        if (!_expanded && _expandController.isDismissed) {
-          return SizedBox(
-            width: collapsedWidth,
-            height: _collapsedSize,
-            child: ElasticButton(
-              child: IconButton(
-                onPressed: _open,
-                style: ButtonStyle.from(
-                  backgroundColor: surfaceFill,
-                  foregroundColor: scheme.onSurface,
-                  fixedSize: Size.square(collapsedWidth),
-                  minimumSize: Size.square(collapsedWidth),
-                  padding: EdgeInsets.zero,
-                  iconSize: IconSizes.toolbar,
-                  shape: AppShape.full,
-                ),
-                icon: Icon(
-                  Icons.search_rounded,
-                  semanticLabel: l10n.serverSearchLabel,
+    return GooSurface(
+      glass: glass ? glassPillStyleOf(context) : null,
+      color: surfaceFill,
+      shadows: glass ? const [] : dockShadowsOf(context),
+      child: AnimatedBuilder(
+        animation: _expandController,
+        builder: (context, _) {
+          if (!_expanded && _expandController.isDismissed) {
+            return TonalButtonTheme(
+              glass: glass,
+              child: SizedBox(
+                width: collapsedWidth,
+                height: _collapsedSize,
+                child: IconButton(
+                  onPressed: _open,
+                  style: ButtonStyle.from(
+                    backgroundColor: Colors.transparent,
+                    foregroundColor: scheme.onSurface,
+                    fixedSize: Size.square(collapsedWidth),
+                    minimumSize: Size.square(collapsedWidth),
+                    padding: EdgeInsets.zero,
+                    iconSize: IconSizes.toolbar,
+                    shape: AppShape.full,
+                  ),
+                  icon: Icon(
+                    Icons.search_rounded,
+                    semanticLabel: l10n.serverSearchLabel,
+                  ),
                 ),
               ),
-            ),
-          );
-        }
+            );
+          }
 
-        final currentWidth = lerpDouble(
-          collapsedWidth,
-          expandedWidth,
-          _expandAnimation.value,
-        )!.clamp(collapsedWidth, availableWidth);
-        final empty = _controller.text.isEmpty;
+          final currentWidth = lerpDouble(
+            collapsedWidth,
+            expandedWidth,
+            _expandAnimation.value,
+          )!.clamp(collapsedWidth, availableWidth);
+          final empty = _controller.text.isEmpty;
 
-        return DecoratedBox(
-          decoration: ShapeDecoration(
-            color: surfaceFill,
-            shape: RoundedSuperellipseBorder(
-              borderRadius: AppRadius.full,
-              side: BorderSide(
-                color: _hasFocus ? scheme.primary : scheme.outline,
-                width: _hasFocus ? 2 : 1,
-              ),
-            ),
-          ),
-          child: ClipRSuperellipse(
-            borderRadius: AppRadius.full,
-            child: SizedBox(
-              width: currentWidth,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                physics: const NeverScrollableScrollPhysics(),
-                child: SizedBox(
-                  width: expandedWidth,
-                  child: TextField(
-                    controller: _controller,
-                    focusNode: _focusNode,
-                    maxLines: 1,
-                    textAlignVertical: TextAlignVertical.center,
-                    textInputAction: TextInputAction.search,
-                    onChanged: widget.onChanged,
-                    onTapOutside: (_) => _focusNode.unfocus(),
-                    style: context.texts.bodyMedium,
-                    decoration: InputDecoration(
-                      filled: false,
-                      hoverColor: Colors.transparent,
-                      isDense: true,
-                      constraints: const BoxConstraints(
-                        minHeight: _collapsedSize,
-                      ),
-                      hintText: l10n.serverSearchLabel,
-                      contentPadding: EdgeInsetsDirectional.fromSTEB(
-                        0,
-                        8,
-                        empty ? 16 : 0,
-                        8,
-                      ),
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      errorBorder: InputBorder.none,
-                      focusedErrorBorder: InputBorder.none,
-                      prefixIcon: Icon(
-                        Icons.search_rounded,
-                        size: IconSizes.toolbar,
-                        color: scheme.onSurface,
-                      ),
-                      prefixIconConstraints: const BoxConstraints.tightFor(
-                        width: _collapsedSize,
-                        height: _collapsedSize,
-                      ),
-                      suffixIcon: empty
-                          ? null
-                          : Padding(
-                              padding: const EdgeInsetsDirectional.only(end: 4),
-                              child: IconButton(
-                                onPressed: _handleClear,
-                                style: ButtonStyle.from(
-                                  foregroundColor: scheme.onSurfaceVariant,
-                                  fixedSize: const Size.square(32),
-                                  minimumSize: const Size.square(32),
-                                  padding: EdgeInsets.zero,
-                                  iconSize: IconSizes.medium,
-                                  shape: AppShape.full,
-                                ),
-                                icon: Icon(
-                                  Icons.close_rounded,
-                                  semanticLabel: l10n.serverSearchClear,
-                                ),
-                              ),
+          return ElasticPress(
+            child: GooPane(
+              child: FocusRing(
+                shape: AppShape.full,
+                child: ClipRSuperellipse(
+                  borderRadius: AppRadius.full,
+                  child: SizedBox(
+                    width: currentWidth,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const NeverScrollableScrollPhysics(),
+                      child: SizedBox(
+                        width: expandedWidth,
+                        child: TextField(
+                          controller: _controller,
+                          focusNode: _focusNode,
+                          maxLines: 1,
+                          textAlignVertical: TextAlignVertical.center,
+                          textInputAction: TextInputAction.search,
+                          onChanged: widget.onChanged,
+                          onTapOutside: (_) => _focusNode.unfocus(),
+                          style: context.texts.bodyMedium,
+                          decoration: InputDecoration(
+                            filled: false,
+                            hoverColor: Colors.transparent,
+                            isDense: true,
+                            constraints: const BoxConstraints(
+                              minHeight: _collapsedSize,
                             ),
-                      suffixIconConstraints: const BoxConstraints(
-                        minHeight: _collapsedSize,
+                            hintText: l10n.serverSearchLabel,
+                            contentPadding: EdgeInsetsDirectional.fromSTEB(
+                              0,
+                              8,
+                              empty ? 16 : 0,
+                              8,
+                            ),
+                            border: const NoInputBorder(),
+                            enabledBorder: const NoInputBorder(),
+                            focusedBorder: const NoInputBorder(),
+                            errorBorder: const NoInputBorder(),
+                            focusedErrorBorder: const NoInputBorder(),
+                            prefixIcon: Icon(
+                              Icons.search_rounded,
+                              size: IconSizes.toolbar,
+                              color: scheme.onSurface,
+                            ),
+                            prefixIconConstraints:
+                                const BoxConstraints.tightFor(
+                                  width: _collapsedSize,
+                                  height: _collapsedSize,
+                                ),
+                            suffixIcon: empty
+                                ? null
+                                : Padding(
+                                    padding: const EdgeInsetsDirectional.only(
+                                      end: 4,
+                                    ),
+                                    child: IconButton(
+                                      onPressed: _handleClear,
+                                      style: ButtonStyle.from(
+                                        foregroundColor:
+                                            scheme.onSurfaceVariant,
+                                        fixedSize: const Size.square(32),
+                                        minimumSize: const Size.square(32),
+                                        padding: EdgeInsets.zero,
+                                        iconSize: IconSizes.medium,
+                                        shape: AppShape.full,
+                                      ),
+                                      icon: Icon(
+                                        Icons.close_rounded,
+                                        semanticLabel: l10n.serverSearchClear,
+                                      ),
+                                    ),
+                                  ),
+                            suffixIconConstraints: const BoxConstraints(
+                              minHeight: _collapsedSize,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }

@@ -530,7 +530,10 @@ class _UrlImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final image = RemoteImage(url: url);
+    final maxDecodeWidth = (460 * MediaQuery.devicePixelRatioOf(context))
+        .round()
+        .clamp(1, 1024);
+    final image = RemoteImage(url: url, cacheWidth: maxDecodeWidth);
     return _ImageFrame(
       child: onTap == null
           ? image

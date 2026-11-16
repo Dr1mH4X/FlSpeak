@@ -30,6 +30,84 @@ enum AppThemePreference {
   }
 }
 
+/// 主题种子色默认值与预设色板，首项为应用品牌色。
+const int defaultPrimaryColor = 0xFFC44D78;
+
+const List<int> defaultPrimaryColors = [
+  defaultPrimaryColor,
+  0xFF007AFF,
+  0xFFCB30E0,
+  0xFFFF2D55,
+  0xFFFF383C,
+  0xFFFF8D28,
+  0xFFFFCC00,
+  0xFF34C759,
+  0xFF8E8E93,
+];
+
+const double minTextScale = 0.8;
+const double maxTextScale = 1.4;
+
+/// 主题色彩生成风格。
+enum AppColorStyle {
+  vivid('vivid'),
+  tinted('tinted'),
+  soft('soft'),
+  monochrome('monochrome');
+
+  const AppColorStyle(this.id);
+
+  final String id;
+
+  static AppColorStyle fromId(Object? value) {
+    for (final style in values) {
+      if (style.id == value) {
+        return style;
+      }
+    }
+    return AppColorStyle.vivid;
+  }
+}
+
+/// 窄屏底部导航切换页签时的过渡动效。
+enum TabAnimation {
+  slide('slide'),
+  fade('fade');
+
+  const TabAnimation(this.id);
+
+  final String id;
+
+  static TabAnimation fromId(Object? value) {
+    for (final animation in values) {
+      if (animation.id == value) {
+        return animation;
+      }
+    }
+    return TabAnimation.slide;
+  }
+}
+
+/// 液态玻璃质感档位。默认关闭以减轻低性能设备的离屏捕获与着色器负担。
+enum LiquidGlassMode {
+  none('none'),
+  standard('standard'),
+  ultra('ultra');
+
+  const LiquidGlassMode(this.id);
+
+  final String id;
+
+  static LiquidGlassMode fromId(Object? value) {
+    for (final mode in values) {
+      if (mode.id == value) {
+        return mode;
+      }
+    }
+    return LiquidGlassMode.none;
+  }
+}
+
 /// 用户卡电平条跟随的音频源。JSON 存稳定字符串，改枚举名不毁旧文件。
 enum VoiceMeterSource {
   microphone('microphone'),
@@ -190,6 +268,17 @@ class SessionPreferences {
     this.lastConnected = const <String, DateTime>{},
     this.locale,
     this.theme = AppThemePreference.dark,
+    this.pureBlack = false,
+    this.primaryColor = defaultPrimaryColor,
+    this.primaryColors = defaultPrimaryColors,
+    this.colorStyle = AppColorStyle.vivid,
+    this.floatingNavigationBar = true,
+    this.tabAnimation = TabAnimation.slide,
+    this.liquidGlass = LiquidGlassMode.none,
+    this.sidebarBlur = false,
+    this.fontFamily,
+    this.textScaleEnabled = false,
+    this.textScale = 1.0,
     this.pttHotkey,
     this.channelPanelWidth,
     this.streamViewerHeight,
@@ -219,6 +308,17 @@ class SessionPreferences {
   final String? locale;
 
   final AppThemePreference theme;
+  final bool pureBlack;
+  final int primaryColor;
+  final List<int> primaryColors;
+  final AppColorStyle colorStyle;
+  final bool floatingNavigationBar;
+  final TabAnimation tabAnimation;
+  final LiquidGlassMode liquidGlass;
+  final bool sidebarBlur;
+  final String? fontFamily;
+  final bool textScaleEnabled;
+  final double textScale;
 
   /// 按住说话快捷键：Flutter `LogicalKeyboardKey.keyId`，`null` 表示未设置。
   /// keyId 跨平台稳定，注册到系统时再按平台换算成原生键码。
@@ -244,6 +344,17 @@ class SessionPreferences {
     Map<String, DateTime>? lastConnected,
     Object? locale = _unset,
     AppThemePreference? theme,
+    bool? pureBlack,
+    int? primaryColor,
+    List<int>? primaryColors,
+    AppColorStyle? colorStyle,
+    bool? floatingNavigationBar,
+    TabAnimation? tabAnimation,
+    LiquidGlassMode? liquidGlass,
+    bool? sidebarBlur,
+    Object? fontFamily = _unset,
+    bool? textScaleEnabled,
+    double? textScale,
     Object? pttHotkey = _unset,
     Object? channelPanelWidth = _unset,
     Object? streamViewerHeight = _unset,
@@ -260,6 +371,19 @@ class SessionPreferences {
     lastConnected: lastConnected ?? this.lastConnected,
     locale: identical(locale, _unset) ? this.locale : locale as String?,
     theme: theme ?? this.theme,
+    pureBlack: pureBlack ?? this.pureBlack,
+    primaryColor: primaryColor ?? this.primaryColor,
+    primaryColors: primaryColors ?? this.primaryColors,
+    colorStyle: colorStyle ?? this.colorStyle,
+    floatingNavigationBar: floatingNavigationBar ?? this.floatingNavigationBar,
+    tabAnimation: tabAnimation ?? this.tabAnimation,
+    liquidGlass: liquidGlass ?? this.liquidGlass,
+    sidebarBlur: sidebarBlur ?? this.sidebarBlur,
+    fontFamily: identical(fontFamily, _unset)
+        ? this.fontFamily
+        : fontFamily as String?,
+    textScaleEnabled: textScaleEnabled ?? this.textScaleEnabled,
+    textScale: textScale ?? this.textScale,
     pttHotkey: identical(pttHotkey, _unset)
         ? this.pttHotkey
         : pttHotkey as int?,
@@ -289,6 +413,17 @@ class SessionPreferences {
     },
     'locale': locale,
     'theme': theme.id,
+    'pureBlack': pureBlack,
+    'primaryColor': primaryColor,
+    'primaryColors': primaryColors,
+    'colorStyle': colorStyle.id,
+    'floatingNavigationBar': floatingNavigationBar,
+    'tabAnimation': tabAnimation.id,
+    'liquidGlass': liquidGlass.id,
+    'sidebarBlur': sidebarBlur,
+    'fontFamily': fontFamily,
+    'textScaleEnabled': textScaleEnabled,
+    'textScale': textScale,
     'pttHotkey': pttHotkey,
     'channelPanelWidth': channelPanelWidth,
     'streamViewerHeight': streamViewerHeight,
@@ -301,6 +436,28 @@ class SessionPreferences {
     'autoCheckUpdate': autoCheckUpdate,
     'logLevel': logLevel.id,
   };
+
+  static int? _parseOpaqueColor(Object? raw) {
+    if (raw is int) {
+      return 0xFF000000 | (raw & 0x00FFFFFF);
+    }
+    return null;
+  }
+
+  static List<int> _parsePrimaryColors(Object? raw) {
+    if (raw is! List) {
+      return defaultPrimaryColors;
+    }
+    final seen = <int>{};
+    final result = <int>[];
+    for (final entry in raw) {
+      final parsed = _parseOpaqueColor(entry);
+      if (parsed != null && seen.add(parsed)) {
+        result.add(parsed);
+      }
+    }
+    return result.isEmpty ? defaultPrimaryColors : List.unmodifiable(result);
+  }
 
   static SessionPreferences fromJson(Map<String, Object?> json) {
     final ui = json['ui'] is Map
@@ -331,6 +488,11 @@ class SessionPreferences {
     final rawNickname = ui['nickname'];
     final nickname = rawNickname is String ? rawNickname.trim() : '';
     final rawLocale = ui['locale'];
+    final rawFontFamily = ui['fontFamily'];
+    final trimmedFontFamily = rawFontFamily is String
+        ? rawFontFamily.trim()
+        : '';
+    final rawTextScale = ui['textScale'];
     final rawPttHotkey = ui['pttHotkey'];
     final rawPanelWidth = ui['channelPanelWidth'];
     final rawStreamViewerHeight = ui['streamViewerHeight'];
@@ -342,6 +504,26 @@ class SessionPreferences {
       lastConnected: lastConnected,
       locale: rawLocale is String && rawLocale.isNotEmpty ? rawLocale : null,
       theme: AppThemePreference.fromId(ui['theme']),
+      pureBlack: ui['pureBlack'] is bool ? ui['pureBlack'] as bool : false,
+      primaryColor:
+          _parseOpaqueColor(ui['primaryColor']) ?? defaultPrimaryColor,
+      primaryColors: _parsePrimaryColors(ui['primaryColors']),
+      colorStyle: AppColorStyle.fromId(ui['colorStyle']),
+      floatingNavigationBar: ui['floatingNavigationBar'] is bool
+          ? ui['floatingNavigationBar'] as bool
+          : true,
+      tabAnimation: TabAnimation.fromId(ui['tabAnimation']),
+      liquidGlass: LiquidGlassMode.fromId(ui['liquidGlass']),
+      sidebarBlur: ui['sidebarBlur'] is bool
+          ? ui['sidebarBlur'] as bool
+          : false,
+      fontFamily: trimmedFontFamily.isNotEmpty ? trimmedFontFamily : null,
+      textScaleEnabled: ui['textScaleEnabled'] is bool
+          ? ui['textScaleEnabled'] as bool
+          : false,
+      textScale: rawTextScale is num && rawTextScale.isFinite
+          ? rawTextScale.toDouble().clamp(minTextScale, maxTextScale).toDouble()
+          : 1.0,
       pttHotkey: rawPttHotkey is int ? rawPttHotkey : null,
       // 文件可能被手改或跨版本：不是有限数就当未设置，尺寸交给渲染时的夹取。
       channelPanelWidth: rawPanelWidth is num && rawPanelWidth.isFinite

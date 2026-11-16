@@ -54,8 +54,8 @@ final sessionViewProvider = NotifierProvider<SessionController, SessionView>(
   SessionController.new,
 );
 
-/// 电平独立成流：50Hz 的更新只让电平条重建，不碰整个 `SessionView`。
-final voiceLevelsProvider = StreamProvider<VoiceLevels>((ref) {
+/// 电平独立成流：50Hz 的更新只让电平条重建，并在无活跃订阅时自动释放底层监听。
+final voiceLevelsProvider = StreamProvider.autoDispose<VoiceLevels>((ref) {
   return ref.watch(sessionViewProvider.notifier).levels;
 });
 
@@ -1504,6 +1504,96 @@ class PreferencesController extends Notifier<SessionPreferences> {
     _update(state.copyWith(theme: theme));
   }
 
+  void setLiquidGlass(LiquidGlassMode mode) {
+    if (mode == state.liquidGlass) {
+      return;
+    }
+    _update(state.copyWith(liquidGlass: mode));
+  }
+
+  void setPureBlack(bool enabled) {
+    if (enabled == state.pureBlack) {
+      return;
+    }
+    _update(state.copyWith(pureBlack: enabled));
+  }
+
+  void setPrimaryColor(int color) {
+    final normalized = 0xFF000000 | (color & 0x00FFFFFF);
+    if (normalized == state.primaryColor) {
+      return;
+    }
+    _update(state.copyWith(primaryColor: normalized));
+  }
+
+  void updateThemePalette({
+    int? primaryColor,
+    List<int>? primaryColors,
+    AppColorStyle? colorStyle,
+  }) {
+    _update(
+      state.copyWith(
+        primaryColor: primaryColor == null
+            ? null
+            : (0xFF000000 | (primaryColor & 0x00FFFFFF)),
+        primaryColors: primaryColors == null
+            ? null
+            : List.unmodifiable(primaryColors),
+        colorStyle: colorStyle,
+      ),
+    );
+  }
+
+  void setColorStyle(AppColorStyle style) {
+    if (style == state.colorStyle) {
+      return;
+    }
+    _update(state.copyWith(colorStyle: style));
+  }
+
+  void setFloatingNavigationBar(bool floating) {
+    if (floating == state.floatingNavigationBar) {
+      return;
+    }
+    _update(state.copyWith(floatingNavigationBar: floating));
+  }
+
+  void setTabAnimation(TabAnimation animation) {
+    if (animation == state.tabAnimation) {
+      return;
+    }
+    _update(state.copyWith(tabAnimation: animation));
+  }
+
+  void setSidebarBlur(bool enabled) {
+    if (enabled == state.sidebarBlur) {
+      return;
+    }
+    _update(state.copyWith(sidebarBlur: enabled));
+  }
+
+  void setFontFamily(String? family) {
+    final trimmed = family?.trim();
+    final normalized = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+    if (normalized == state.fontFamily) {
+      return;
+    }
+    _update(state.copyWith(fontFamily: normalized));
+  }
+
+  void setTextScale({bool? enabled, double? scale}) {
+    final nextEnabled = enabled ?? state.textScaleEnabled;
+    final nextScale = (scale ?? state.textScale)
+        .clamp(minTextScale, maxTextScale)
+        .toDouble();
+    if (nextEnabled == state.textScaleEnabled && nextScale == state.textScale) {
+      return;
+    }
+    _update(
+      state.copyWith(textScaleEnabled: nextEnabled, textScale: nextScale),
+    );
+  }
+
   /// `null` 表示清除按住说话快捷键。
   void setPttHotkey(int? keyId) {
     if (keyId == state.pttHotkey) {
@@ -1616,3 +1706,21 @@ class PreferencesController extends Notifier<SessionPreferences> {
     }
   }
 }
+
+/// 原生桌面窗口模糊启用时建议给侧栏表面叠加的遮罩透明度；`null` 表示不透明显示。
+class WindowBlurOpacityController extends Notifier<double?> {
+  @override
+  double? build() => null;
+
+  void setOpacity(double? opacity) {
+    if (state == opacity) {
+      return;
+    }
+    state = opacity;
+  }
+}
+
+final windowBlurOpacityProvider =
+    NotifierProvider<WindowBlurOpacityController, double?>(
+      WindowBlurOpacityController.new,
+    );

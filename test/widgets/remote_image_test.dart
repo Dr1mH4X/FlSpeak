@@ -42,10 +42,23 @@ Future<void> _mount(WidgetTester tester, Widget child) async {
     ),
   );
   // Codec completion uses the engine's real clock, outside widget-test fake time.
-  await tester.runAsync(
-    () =>
-        precacheImage(MemoryImage(_png), tester.element(find.byType(Scaffold))),
-  );
+  await tester.runAsync(() async {
+    await precacheImage(
+      MemoryImage(_png),
+      tester.element(find.byType(Scaffold)),
+    );
+    await Future<void>.delayed(Duration.zero);
+  });
+  await tester.pump();
+  final images = tester.widgetList<Image>(find.byType(Image)).toList();
+  if (images.isNotEmpty) {
+    final context = tester.element(find.byType(Scaffold));
+    await tester.runAsync(
+      () => Future.wait([
+        for (final image in images) precacheImage(image.image, context),
+      ]),
+    );
+  }
 }
 
 void main() {
@@ -136,4 +149,63 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(MediaViewer), findsNothing);
   });
+
+  testWidgets('grid and chat bound decode width while viewer stays full-res', (
+    tester,
+  ) async {
+    await _mount(
+      tester,
+      const Row(
+        children: [
+          Expanded(
+            child: SizedBox(
+              width: 300,
+              height: 300,
+              child: MediaGrid(
+                urls: ['https://example.com/grid.png'],
+                onOpen: _noopOpen,
+              ),
+            ),
+          ),
+          Expanded(
+            child: SizedBox(
+              width: 400,
+              height: 300,
+              child: MessageContent(
+                text: 'https://example.com/chat.png',
+                style: TextStyle(),
+              ),
+            ),
+          ),
+          Expanded(child: MediaViewer(urls: ['https://example.com/full.png'])),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final gridImage = tester.widget<Image>(
+      find.descendant(of: find.byType(MediaGrid), matching: find.byType(Image)),
+    );
+    expect(gridImage.image, isA<ResizeImage>());
+    expect((gridImage.image as ResizeImage).width, inInclusiveRange(1, 512));
+
+    final chatImage = tester.widget<Image>(
+      find.descendant(
+        of: find.byType(MessageContent),
+        matching: find.byType(Image),
+      ),
+    );
+    expect(chatImage.image, isA<ResizeImage>());
+    expect((chatImage.image as ResizeImage).width, inInclusiveRange(1, 1024));
+
+    final viewerImage = tester.widget<Image>(
+      find.descendant(
+        of: find.byType(MediaViewer),
+        matching: find.byType(Image),
+      ),
+    );
+    expect(viewerImage.image, isNot(isA<ResizeImage>()));
+  });
 }
+
+void _noopOpen(int _) {}

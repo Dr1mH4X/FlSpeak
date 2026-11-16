@@ -12,7 +12,6 @@ import 'package:flutter/material.dart'
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
-import '../../../core/models.dart';
 import '../../../core/network_quality.dart';
 import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
@@ -24,14 +23,16 @@ import '../../../widgets/signal_ribbon.dart';
 /// 浮层只在打开时构建，关闭后连同采样定时器和信号历史一起释放。
 class NetworkStatus extends StatelessWidget {
   const NetworkStatus({
-    required this.view,
+    required this.connected,
+    required this.network,
     required this.channelLabel,
     required this.expanded,
     required this.onToggle,
     super.key,
   });
 
-  final SessionView view;
+  final bool connected;
+  final NetworkTelemetry? network;
   final String channelLabel;
   final bool expanded;
   final VoidCallback onToggle;
@@ -41,12 +42,12 @@ class NetworkStatus extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final color = _qualityColor(
       context,
-      connected: view.connected,
-      telemetry: view.network,
+      connected: connected,
+      telemetry: network,
     );
-    final label = !view.connected
+    final label = !connected
         ? l10n.sessionConnecting
-        : switch (networkQuality(view.network)) {
+        : switch (networkQuality(network)) {
             NetworkQuality.unknown => l10n.networkMeasuring,
             NetworkQuality.good => l10n.voiceConnected,
             NetworkQuality.degraded => l10n.networkDegraded,
@@ -102,7 +103,8 @@ class NetworkTelemetryPanel extends ConsumerStatefulWidget {
       _NetworkTelemetryPanelState();
 }
 
-class _NetworkTelemetryPanelState extends ConsumerState<NetworkTelemetryPanel> {
+class _NetworkTelemetryPanelState extends ConsumerState<NetworkTelemetryPanel>
+    with WidgetsBindingObserver {
   static const _historyLength = 24;
   static const _sampleInterval = Duration(seconds: 1);
 
@@ -112,10 +114,23 @@ class _NetworkTelemetryPanelState extends ConsumerState<NetworkTelemetryPanel> {
   List<double?> _lossOutHistory = List<double?>.filled(_historyLength, null);
   Timer? _timer;
   NetworkTelemetry? _lastTelemetry;
+  bool _isForeground = true;
+  bool _isTickerEnabled = true;
+
+  bool get _canPoll => mounted && _isForeground && _isTickerEnabled;
+
+  static bool _isLifecycleVisible(AppLifecycleState? state) => switch (state) {
+    AppLifecycleState.hidden ||
+    AppLifecycleState.paused ||
+    AppLifecycleState.detached => false,
+    AppLifecycleState.resumed || AppLifecycleState.inactive || null => true,
+  };
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _isForeground = _isLifecycleVisible(WidgetsBinding.instance.lifecycleState);
     final telemetry = ref.read(sessionViewProvider).network;
     if (telemetry != null) {
       _lastTelemetry = telemetry;
@@ -124,15 +139,51 @@ class _NetworkTelemetryPanelState extends ConsumerState<NetworkTelemetryPanel> {
       _lossInHistory = _seedHistory(_lossLevel(telemetry.lossInPercent));
       _lossOutHistory = _seedHistory(_lossLevel(telemetry.lossOutPercent));
     }
-    unawaited(ref.read(sessionViewProvider.notifier).sampleNetwork());
-    _timer = Timer.periodic(_sampleInterval, (_) {
+    _syncPolling(sampleImmediately: true);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final isTickerEnabled = TickerMode.valuesOf(context).enabled;
+    if (_isTickerEnabled == isTickerEnabled) {
+      return;
+    }
+    _isTickerEnabled = isTickerEnabled;
+    _syncPolling(sampleImmediately: _isTickerEnabled);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final isForeground = _isLifecycleVisible(state);
+    if (_isForeground == isForeground) {
+      return;
+    }
+    _isForeground = isForeground;
+    _syncPolling(sampleImmediately: _isForeground);
+  }
+
+  void _syncPolling({required bool sampleImmediately}) {
+    if (!_canPoll) {
+      _timer?.cancel();
+      _timer = null;
+      return;
+    }
+    if (sampleImmediately) {
       unawaited(ref.read(sessionViewProvider.notifier).sampleNetwork());
+    }
+    _timer ??= Timer.periodic(_sampleInterval, (_) {
+      if (_canPoll) {
+        unawaited(ref.read(sessionViewProvider.notifier).sampleNetwork());
+      }
     });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
+    _timer = null;
     super.dispose();
   }
 
@@ -225,123 +276,125 @@ class _NetworkTelemetryPanelState extends ConsumerState<NetworkTelemetryPanel> {
       fontFeatures: tabularFigures,
     );
 
-    return ConstrainedBox(
-      key: const ValueKey('network-telemetry-panel'),
-      constraints: BoxConstraints(
-        maxHeight: math.min(320, MediaQuery.sizeOf(context).height * 0.45),
-      ),
-      child: SingleChildScrollView(
-        primary: false,
-        padding: const EdgeInsets.fromLTRB(16, 8, 8, 12),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final traceWidth = (constraints.maxWidth * 0.26)
-                .clamp(30.0, 64.0)
-                .toDouble();
-            final valueWidth = (constraints.maxWidth * 0.24)
-                .clamp(42.0, 64.0)
-                .toDouble();
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(
-                  height: Sizes.touch,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Semantics(
-                          header: true,
-                          child: Text(
-                            l10n.networkStatus,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: titleStyle,
+    return RepaintBoundary(
+      child: ConstrainedBox(
+        key: const ValueKey('network-telemetry-panel'),
+        constraints: BoxConstraints(
+          maxHeight: math.min(320, MediaQuery.sizeOf(context).height * 0.45),
+        ),
+        child: SingleChildScrollView(
+          primary: false,
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 12),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final traceWidth = (constraints.maxWidth * 0.26)
+                  .clamp(30.0, 64.0)
+                  .toDouble();
+              final valueWidth = (constraints.maxWidth * 0.24)
+                  .clamp(42.0, 64.0)
+                  .toDouble();
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(
+                    height: Sizes.touch,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Semantics(
+                            header: true,
+                            child: Text(
+                              l10n.networkStatus,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: titleStyle,
+                            ),
                           ),
                         ),
-                      ),
-                      IconButton(
-                        onPressed: () => ref
-                            .read(sessionViewProvider.notifier)
-                            .setNetworkPanelPinned(!pinned),
-                        isSelected: pinned,
-                        icon: Icon(
-                          Icons.push_pin_outlined,
-                          size: IconSizes.toolbar,
-                          semanticLabel: l10n.windowPin,
+                        IconButton(
+                          onPressed: () => ref
+                              .read(sessionViewProvider.notifier)
+                              .setNetworkPanelPinned(!pinned),
+                          isSelected: pinned,
+                          icon: Icon(
+                            Icons.push_pin_outlined,
+                            size: IconSizes.toolbar,
+                            semanticLabel: l10n.windowPin,
+                          ),
+                          selectedIcon: Icon(
+                            Icons.push_pin_rounded,
+                            size: IconSizes.toolbar,
+                            semanticLabel: l10n.windowUnpin,
+                          ),
+                          style: ButtonStyle.from(
+                            foregroundColor: pinned
+                                ? scheme.primary
+                                : scheme.onSurfaceVariant,
+                            backgroundColor: pinned
+                                ? scheme.primaryContainer.withValues(alpha: 0.4)
+                                : Colors.transparent,
+                          ),
                         ),
-                        selectedIcon: Icon(
-                          Icons.push_pin_rounded,
-                          size: IconSizes.toolbar,
-                          semanticLabel: l10n.windowUnpin,
+                        IconButton(
+                          onPressed: widget.onClose,
+                          style: ButtonStyle.from(
+                            foregroundColor: scheme.onSurfaceVariant,
+                          ),
+                          icon: Icon(
+                            Icons.close_rounded,
+                            size: IconSizes.toolbar,
+                            semanticLabel: l10n.commonClose,
+                          ),
                         ),
-                        style: ButtonStyle.from(
-                          foregroundColor: pinned
-                              ? scheme.primary
-                              : scheme.onSurfaceVariant,
-                          backgroundColor: pinned
-                              ? scheme.primaryContainer.withValues(alpha: 0.4)
-                              : Colors.transparent,
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: widget.onClose,
-                        style: ButtonStyle.from(
-                          foregroundColor: scheme.onSurfaceVariant,
-                        ),
-                        icon: Icon(
-                          Icons.close_rounded,
-                          size: IconSizes.toolbar,
-                          semanticLabel: l10n.commonClose,
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 4),
-                _MetricTraceRow(
-                  label: l10n.networkPing,
-                  value: _formatMilliseconds(l10n, telemetry?.roundTripMs),
-                  history: _pingHistory,
-                  color: color,
-                  traceWidth: traceWidth,
-                  valueWidth: valueWidth,
-                  labelStyle: labelStyle,
-                  valueStyle: valueStyle,
-                ),
-                _MetricTraceRow(
-                  label: l10n.networkJitter,
-                  value: _formatMilliseconds(l10n, telemetry?.jitterMs),
-                  history: _jitterHistory,
-                  color: color,
-                  traceWidth: traceWidth,
-                  valueWidth: valueWidth,
-                  labelStyle: labelStyle,
-                  valueStyle: valueStyle,
-                ),
-                _MetricTraceRow(
-                  label: l10n.networkLossIn,
-                  value: _formatPercent(l10n, telemetry?.lossInPercent),
-                  history: _lossInHistory,
-                  color: color,
-                  traceWidth: traceWidth,
-                  valueWidth: valueWidth,
-                  labelStyle: labelStyle,
-                  valueStyle: valueStyle,
-                ),
-                _MetricTraceRow(
-                  label: l10n.networkLossOut,
-                  value: _formatPercent(l10n, telemetry?.lossOutPercent),
-                  history: _lossOutHistory,
-                  color: color,
-                  traceWidth: traceWidth,
-                  valueWidth: valueWidth,
-                  labelStyle: labelStyle,
-                  valueStyle: valueStyle,
-                ),
-              ],
-            );
-          },
+                  const SizedBox(height: 4),
+                  _MetricTraceRow(
+                    label: l10n.networkPing,
+                    value: _formatMilliseconds(l10n, telemetry?.roundTripMs),
+                    history: _pingHistory,
+                    color: color,
+                    traceWidth: traceWidth,
+                    valueWidth: valueWidth,
+                    labelStyle: labelStyle,
+                    valueStyle: valueStyle,
+                  ),
+                  _MetricTraceRow(
+                    label: l10n.networkJitter,
+                    value: _formatMilliseconds(l10n, telemetry?.jitterMs),
+                    history: _jitterHistory,
+                    color: color,
+                    traceWidth: traceWidth,
+                    valueWidth: valueWidth,
+                    labelStyle: labelStyle,
+                    valueStyle: valueStyle,
+                  ),
+                  _MetricTraceRow(
+                    label: l10n.networkLossIn,
+                    value: _formatPercent(l10n, telemetry?.lossInPercent),
+                    history: _lossInHistory,
+                    color: color,
+                    traceWidth: traceWidth,
+                    valueWidth: valueWidth,
+                    labelStyle: labelStyle,
+                    valueStyle: valueStyle,
+                  ),
+                  _MetricTraceRow(
+                    label: l10n.networkLossOut,
+                    value: _formatPercent(l10n, telemetry?.lossOutPercent),
+                    history: _lossOutHistory,
+                    color: color,
+                    traceWidth: traceWidth,
+                    valueWidth: valueWidth,
+                    labelStyle: labelStyle,
+                    valueStyle: valueStyle,
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );

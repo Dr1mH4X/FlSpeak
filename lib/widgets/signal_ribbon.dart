@@ -30,16 +30,18 @@ class SignalRibbon extends StatelessWidget {
   final double verticalInset;
 
   @override
-  Widget build(BuildContext context) => SizedBox.expand(
-    child: CustomPaint(
-      painter: _SignalRibbonPainter(
-        values: values,
-        color: color,
-        idleHeight: idleHeight,
-        barWidth: barWidth,
-        minGap: minGap,
-        maxGap: maxGap,
-        verticalInset: verticalInset,
+  Widget build(BuildContext context) => RepaintBoundary(
+    child: SizedBox.expand(
+      child: CustomPaint(
+        painter: _SignalRibbonPainter(
+          values: values,
+          color: color,
+          idleHeight: idleHeight,
+          barWidth: barWidth,
+          minGap: minGap,
+          maxGap: maxGap,
+          verticalInset: verticalInset,
+        ),
       ),
     ),
   );

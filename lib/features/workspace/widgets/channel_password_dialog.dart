@@ -4,13 +4,16 @@ import 'package:flutter/material.dart'
         ButtonStyle,
         FilledButton,
         IconButton,
+        InputDecoration,
         OutlinedButton,
         Switch,
-        TextButton;
+        TextButton,
+        TextField;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
 import '../../../widgets/prism.dart';
 
@@ -92,6 +95,14 @@ class _PasswordFormState extends ConsumerState<_PasswordForm> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Text(
+          l10n.channelPasswordLabel,
+          style: context.texts.bodyMedium?.copyWith(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 6),
         TextField(
           controller: _password,
           autofocus: true,
@@ -99,10 +110,7 @@ class _PasswordFormState extends ConsumerState<_PasswordForm> {
           autocorrect: false,
           enableSuggestions: false,
           enabled: !_busy,
-          decoration: InputDecoration(
-            labelText: l10n.channelPasswordLabel,
-            errorText: _error,
-          ),
+          decoration: InputDecoration(errorText: _error),
           onSubmitted: (_) => _join(),
         ),
         const SizedBox(height: 16),

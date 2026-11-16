@@ -91,7 +91,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(SettingsPage), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.arrow_back_rounded));
+    await tester.tap(
+      find.bySemanticsLabel(
+        MaterialLocalizations.of(tester.element(find.byType(SettingsPage)))
+            .backButtonTooltip,
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.byType(ConnectPage), findsOneWidget);

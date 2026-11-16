@@ -36,21 +36,32 @@ class MemberDetailsPane extends ConsumerWidget {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
     final texts = context.texts;
-    final view = ref.watch(sessionViewProvider);
     final compact = context.isCompact;
     final padding = EdgeInsets.all(compact ? 16.0 : 24.0);
 
-    final live = !isOffline && view.connected
-        ? view.clients
-              .where((peer) => peer.id == client.id && peer.uid == client.uid)
-              .firstOrNull
-        : null;
+    final live = ref.watch(
+      sessionViewProvider.select((view) {
+        if (isOffline || !view.connected) return null;
+        for (final peer in view.clients) {
+          if (peer.id == client.id && peer.uid == client.uid) {
+            return peer;
+          }
+        }
+        return null;
+      }),
+    );
     final member = live ?? client;
-    final channel = view.channelById(member.channelId);
-    final isSpeaking =
-        !isOffline &&
-        (view.speaking.contains(member.id) ||
-            (member.id == view.selfClientId && view.selfSpeaking));
+    final channel = ref.watch(
+      sessionViewProvider.select((view) => view.channelById(member.channelId)),
+    );
+    final isSpeaking = ref.watch(
+      sessionViewProvider.select(
+        (view) =>
+            !isOffline &&
+            (view.speaking.contains(member.id) ||
+                (member.id == view.selfClientId && view.selfSpeaking)),
+      ),
+    );
 
     return SizedBox.expand(
       child: SingleChildScrollView(

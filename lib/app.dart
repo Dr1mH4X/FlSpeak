@@ -150,7 +150,36 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
   @override
   Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
-    final preferences = ref.watch(preferencesProvider);
+    final (
+      :locale,
+      :themeMode,
+      :liquidGlass,
+      :pureBlack,
+      :primaryColor,
+      :colorStyle,
+      :fontFamily,
+      :textScaleEnabled,
+      :textScale,
+    ) = ref.watch(
+      preferencesProvider.select(
+        (prefs) => (
+          locale: prefs.locale,
+          themeMode: prefs.theme,
+          liquidGlass: prefs.liquidGlass,
+          pureBlack: prefs.pureBlack,
+          primaryColor: prefs.primaryColor,
+          colorStyle: prefs.colorStyle,
+          fontFamily: prefs.fontFamily,
+          textScaleEnabled: prefs.textScaleEnabled,
+          textScale: prefs.textScale,
+        ),
+      ),
+    );
+    final glassQuality = switch (liquidGlass) {
+      LiquidGlassMode.none => null,
+      LiquidGlassMode.standard => LiquidGlassQuality.standard,
+      LiquidGlassMode.ultra => LiquidGlassQuality.ultra,
+    };
 
     return MaterialApp.router(
       debugShowCheckedModeBanner: false,
@@ -160,20 +189,38 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
         PrismUiLocalizationsDelegate(),
       ],
       supportedLocales: AppLocalizations.supportedLocales,
-      locale: preferences.locale == null ? null : Locale(preferences.locale!),
-      themeMode: switch (preferences.theme) {
+      locale: locale == null ? null : Locale(locale),
+      themeMode: switch (themeMode) {
         AppThemePreference.system => ThemeMode.system,
         AppThemePreference.light => ThemeMode.light,
         AppThemePreference.dark => ThemeMode.dark,
       },
-      theme: buildAppTheme(Brightness.light),
-      darkTheme: buildAppTheme(Brightness.dark),
+      theme: buildAppTheme(
+        Brightness.light,
+        primaryColor: primaryColor,
+        colorStyle: colorStyle,
+        pureBlack: pureBlack,
+        fontFamily: fontFamily,
+      ),
+      darkTheme: buildAppTheme(
+        Brightness.dark,
+        primaryColor: primaryColor,
+        colorStyle: colorStyle,
+        pureBlack: pureBlack,
+        fontFamily: fontFamily,
+      ),
       themeAnimationDuration: Duration.zero,
       builder: (context, child) {
         final theme = Theme.of(context);
         return PrismRootScope(
           brightness: theme.brightness,
           platform: theme.platform,
+          primaryColor: primaryColor,
+          colorStyle: colorStyle,
+          pureBlack: pureBlack,
+          fontFamily: fontFamily,
+          textScale: textScaleEnabled ? textScale : null,
+          liquidGlass: glassQuality,
           child: AnnotatedRegion<SystemUiOverlayStyle>(
             value: appSystemUiOverlayStyle(theme),
             child: _WindowBackgroundSync(
@@ -208,38 +255,87 @@ SystemUiOverlayStyle appSystemUiOverlayStyle(ThemeData theme) {
   );
 }
 
-/// 把当前主题的 surface 色报给原生窗口：macOS 的标题栏与圆角边缘底色
-/// 跟随主题切换，其余平台没有原生实现，调用被静默忽略。
-class _WindowBackgroundSync extends StatefulWidget {
+/// 把当前主题的 surface 色与侧栏模糊请求同步给原生窗口：macOS 的标题栏、圆角边缘
+/// 与原生毛玻璃跟随主题切换，其余平台没有原生实现，调用被静默忽略。
+class _WindowBackgroundSync extends ConsumerStatefulWidget {
   const _WindowBackgroundSync({required this.child});
 
   final Widget child;
 
   @override
-  State<_WindowBackgroundSync> createState() => _WindowBackgroundSyncState();
+  ConsumerState<_WindowBackgroundSync> createState() =>
+      _WindowBackgroundSyncState();
 }
 
-class _WindowBackgroundSyncState extends State<_WindowBackgroundSync> {
+class _WindowBackgroundSyncState extends ConsumerState<_WindowBackgroundSync> {
   static const _chrome = WindowChrome();
 
   Color? _reported;
+  ({bool enabled, Brightness brightness, int tintArgb})? _lastBlur;
+  int _blurRevision = 0;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _sync(ref.read(preferencesProvider).sidebarBlur);
+  }
+
+  void _sync(bool sidebarBlur) {
+    final theme = Theme.of(context);
     final color = context.pageColor;
-    if (color == _reported) {
+    final compact = MediaQuery.sizeOf(context).width < Breakpoints.compact;
+    final blurEnabled = sidebarBlur && !compact;
+    final blurRequest = (
+      enabled: blurEnabled,
+      brightness: theme.brightness,
+      tintArgb: theme.colorScheme.surfaceContainer.toARGB32(),
+    );
+
+    final backgroundChanged = color != _reported;
+    final blurChanged = blurRequest != _lastBlur;
+    if (!backgroundChanged && !blurChanged) {
       return;
     }
     _reported = color;
-    // 平台通道不在 build 里发；首帧与主题切换各报一次就够。
+    _lastBlur = blurRequest;
+    final revision = ++_blurRevision;
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(_chrome.setBackground(color.toARGB32()));
+      unawaited(_apply(color, blurRequest, blurChanged, revision));
     });
   }
 
+  Future<void> _apply(
+    Color pageColor,
+    ({bool enabled, Brightness brightness, int tintArgb}) blurRequest,
+    bool blurChanged,
+    int revision,
+  ) async {
+    double? opacity = mounted ? ref.read(windowBlurOpacityProvider) : null;
+    if (blurChanged) {
+      opacity = await WindowChrome.setSidebarBlur(
+        enabled: blurRequest.enabled,
+        brightness: blurRequest.brightness,
+        tint: Color(blurRequest.tintArgb),
+      );
+      if (!mounted || revision != _blurRevision) {
+        return;
+      }
+      ref.read(windowBlurOpacityProvider.notifier).setOpacity(opacity);
+    }
+    if (opacity == null) {
+      await _chrome.setBackground(pageColor.toARGB32());
+    }
+  }
+
   @override
-  Widget build(BuildContext context) => widget.child;
+  Widget build(BuildContext context) {
+    final sidebarBlur = ref.watch(
+      preferencesProvider.select((prefs) => prefs.sidebarBlur),
+    );
+    _sync(sidebarBlur);
+    return widget.child;
+  }
 }
 
 /// 日志初始化失败只提示一次；页面与日志写入继续以无文件模式运行。

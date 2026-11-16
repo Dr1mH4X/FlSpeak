@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:prism_ui/prism_ui.dart' as prism;
 
+import '../core/preferences.dart';
+
 Color dividerColorForScheme(ColorScheme scheme) =>
     scheme.onSurface.withValues(alpha: 0.14);
 
@@ -33,6 +35,8 @@ extension SurfaceContext on BuildContext {
     _toPrismColorScheme(Theme.of(this).colorScheme),
   );
 }
+
+prism.ColorScheme toPrismColorScheme(ColorScheme s) => _toPrismColorScheme(s);
 
 prism.ColorScheme _toPrismColorScheme(ColorScheme s) => prism.ColorScheme(
   brightness: s.brightness,
@@ -393,7 +397,7 @@ String initialsOf(String name) {
 /// 数字用等宽字形，列表里的计数与时间戳才不会随内容跳动。
 const List<FontFeature> tabularFigures = [FontFeature.tabularFigures()];
 
-TextTheme _textTheme(Brightness brightness) {
+TextTheme _textTheme(Brightness brightness, {String? fontFamily}) {
   final base = brightness == Brightness.dark
       ? Typography.material2021().white
       : Typography.material2021().black;
@@ -445,6 +449,7 @@ TextTheme _textTheme(Brightness brightness) {
         ),
       )
       .apply(
+        fontFamily: fontFamily,
         fontFamilyFallback: const [
           'PingFang SC',
           'Microsoft YaHei',
@@ -453,30 +458,85 @@ TextTheme _textTheme(Brightness brightness) {
       );
 }
 
-ColorScheme _scheme(Brightness brightness) {
-  final prismSeeded = prism.seededColorScheme(
-    seedColor: const Color(0xFF5556C9),
-    brightness: brightness,
-    style: prism.ColorStyle.vivid,
-  );
-  final scheme = _fromPrismColorScheme(prismSeeded);
-  if (brightness == Brightness.dark &&
-      _contrast(scheme.onPrimary, scheme.primary) < 4.5) {
-    // 保证暗色模式主按钮白字（onPrimary）满足 WCAG AA ≥ 4.5:1 对比度。
-    var primary = scheme.primary;
-    for (var step = 0; step < 16; step++) {
-      if (_contrast(scheme.onPrimary, primary) >= 4.55) {
-        break;
-      }
-      primary = Color.lerp(primary, Colors.black, 0.02)!;
-    }
-    return scheme.copyWith(primary: primary);
+prism.ColorStyle prismColorStyleOf(AppColorStyle style) => switch (style) {
+  AppColorStyle.vivid => prism.ColorStyle.vivid,
+  AppColorStyle.tinted => prism.ColorStyle.tinted,
+  AppColorStyle.soft => prism.ColorStyle.soft,
+  AppColorStyle.monochrome => prism.ColorStyle.monochrome,
+};
+
+ColorScheme _ensurePrimaryContrast(ColorScheme scheme) {
+  if (_contrast(scheme.onPrimary, scheme.primary) >= 4.5) {
+    return scheme;
   }
-  return scheme;
+  // 保证主按钮文本与主色满足 WCAG AA >= 4.5:1 对比度。
+  final target =
+      scheme.onPrimary.computeLuminance() > scheme.primary.computeLuminance()
+      ? Colors.black
+      : Colors.white;
+  var primary = scheme.primary;
+  for (var step = 0; step < 24; step++) {
+    if (_contrast(scheme.onPrimary, primary) >= 4.55) {
+      break;
+    }
+    primary = Color.lerp(primary, target, 0.03)!;
+  }
+  return scheme.copyWith(primary: primary);
 }
 
-final Map<(Brightness, TargetPlatform), ThemeData> _materialThemeCache = {};
-final Map<(Brightness, TargetPlatform), prism.ThemeData> _prismThemeCache = {};
+const _maxThemeCacheEntries = 64;
+
+typedef _SchemeKey = (Brightness, int, AppColorStyle, bool);
+typedef _ThemeKey = (
+  Brightness,
+  TargetPlatform,
+  int,
+  AppColorStyle,
+  bool,
+  String?,
+);
+
+final Map<_SchemeKey, ColorScheme> _colorSchemeCache = {};
+final Map<_ThemeKey, ThemeData> _materialThemeCache = {};
+final Map<_ThemeKey, prism.ThemeData> _prismThemeCache = {};
+
+T _cachePut<_K, T>(Map<_K, T> cache, _K key, T Function() create) {
+  final existing = cache.remove(key);
+  if (existing != null) {
+    cache[key] = existing;
+    return existing;
+  }
+  final built = create();
+  cache[key] = built;
+  if (cache.length > _maxThemeCacheEntries) {
+    cache.remove(cache.keys.first);
+  }
+  return built;
+}
+
+/// 按亮度、种子色、风格与纯黑开关生成并缓存 Material [ColorScheme]。
+ColorScheme buildAppColorScheme({
+  required Brightness brightness,
+  int primaryColor = defaultPrimaryColor,
+  AppColorStyle colorStyle = AppColorStyle.vivid,
+  bool pureBlack = false,
+}) {
+  final effectivePureBlack = pureBlack && brightness == Brightness.dark;
+  return _cachePut(
+    _colorSchemeCache,
+    (brightness, primaryColor, colorStyle, effectivePureBlack),
+    () {
+      final prismSeeded = prism.seededColorScheme(
+        seedColor: Color(primaryColor),
+        brightness: brightness,
+        style: prismColorStyleOf(colorStyle),
+      );
+      final applied = prism.ColorSchemeExtension(prismSeeded)
+          .toPureBlack(effectivePureBlack);
+      return _ensurePrimaryContrast(_fromPrismColorScheme(applied));
+    },
+  );
+}
 
 const List<String> _cjkFontFallback = [
   'PingFang SC',
@@ -490,19 +550,38 @@ Color surfaceColorFor(prism.SurfaceLevel level, ColorScheme scheme) =>
 prism.SurfaceLevel floatingSurfaceLevelFor(ColorScheme scheme) =>
     prism.SurfaceLevel.floatingOf(_toPrismColorScheme(scheme));
 
-/// 按亮度与目标平台缓存 `prism_ui` 主题实例，避免非主题重建时触发 `ThemeCrossFade`。
+/// 按主题参数缓存 `prism_ui` 主题实例，避免非主题重建时触发 `ThemeCrossFade`。
 prism.ThemeData buildPrismTheme(
   Brightness brightness, {
   TargetPlatform? platform,
+  int primaryColor = defaultPrimaryColor,
+  AppColorStyle colorStyle = AppColorStyle.vivid,
+  bool pureBlack = false,
+  String? fontFamily,
 }) {
   final effectivePlatform = platform ?? defaultTargetPlatform;
-  return _prismThemeCache.putIfAbsent((brightness, effectivePlatform), () {
-    final materialScheme = _scheme(brightness);
+  final effectivePureBlack = pureBlack && brightness == Brightness.dark;
+  final key = (
+    brightness,
+    effectivePlatform,
+    primaryColor,
+    colorStyle,
+    effectivePureBlack,
+    fontFamily,
+  );
+  return _cachePut(_prismThemeCache, key, () {
+    final materialScheme = buildAppColorScheme(
+      brightness: brightness,
+      primaryColor: primaryColor,
+      colorStyle: colorStyle,
+      pureBlack: effectivePureBlack,
+    );
     final scheme = _toPrismColorScheme(materialScheme);
     final elevated = _toPrismColorScheme(elevatedColorScheme(materialScheme));
     return prism.ThemeData(
       colorScheme: scheme,
       platform: effectivePlatform,
+      fontFamily: fontFamily,
       fontFamilyFallback: _cjkFontFallback,
       scaffoldBackgroundColor: prism.SurfaceLevel.page.colorOf(scheme),
       elevatedColorScheme: elevated,
@@ -510,13 +589,34 @@ prism.ThemeData buildPrismTheme(
   });
 }
 
-/// 按亮度与目标平台缓存 Material 主题，保持与 `prism_ui` 一致的配色与形状规范。
-ThemeData buildAppTheme(Brightness brightness, {TargetPlatform? platform}) {
+/// 按主题参数缓存 Material 主题，保持与 `prism_ui` 一致的配色与形状规范。
+ThemeData buildAppTheme(
+  Brightness brightness, {
+  TargetPlatform? platform,
+  int primaryColor = defaultPrimaryColor,
+  AppColorStyle colorStyle = AppColorStyle.vivid,
+  bool pureBlack = false,
+  String? fontFamily,
+}) {
   final effectivePlatform = platform ?? defaultTargetPlatform;
-  return _materialThemeCache.putIfAbsent((brightness, effectivePlatform), () {
-    final scheme = _scheme(brightness);
+  final effectivePureBlack = pureBlack && brightness == Brightness.dark;
+  final key = (
+    brightness,
+    effectivePlatform,
+    primaryColor,
+    colorStyle,
+    effectivePureBlack,
+    fontFamily,
+  );
+  return _cachePut(_materialThemeCache, key, () {
+    final scheme = buildAppColorScheme(
+      brightness: brightness,
+      primaryColor: primaryColor,
+      colorStyle: colorStyle,
+      pureBlack: effectivePureBlack,
+    );
     final dark = brightness == Brightness.dark;
-    final text = _textTheme(brightness);
+    final text = _textTheme(brightness, fontFamily: fontFamily);
     final floatingSurface = surfaceColorFor(
       floatingSurfaceLevelFor(scheme),
       scheme,

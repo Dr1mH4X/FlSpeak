@@ -5,11 +5,14 @@ import 'package:flutter/material.dart'
         ButtonStyle,
         FilledButton,
         IconButton,
+        InputBorder,
+        InputDecoration,
         OutlinedButton,
         PopupMenuItem,
         Switch,
-        TextButton;
-import 'package:flutter/rendering.dart' show ScrollDirection;
+        TextButton,
+        TextField;
+import 'package:flutter/rendering.dart' show RenderProxyBox, ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
@@ -96,9 +99,11 @@ class _ChatPaneState extends State<ChatPane> {
   final _input = TextEditingController();
   final _focus = FocusNode();
   final _scroll = ScrollController();
+  final _dockInset = ValueNotifier<double>(90);
   int _scrollRequest = 0;
   bool _followingMessages = true;
   bool _scrollingToEnd = false;
+  ChatMessage? _animatedMessage;
 
   bool _sending = false;
   PickedChatImage? _image;
@@ -254,6 +259,11 @@ class _ChatPaneState extends State<ChatPane> {
     final latest = widget.messages.lastOrNull;
     final newMessage =
         latest != null && !identical(latest, oldWidget.messages.lastOrNull);
+    if (!changed && newMessage) {
+      _animatedMessage = latest;
+    } else if (changed) {
+      _animatedMessage = null;
+    }
     final following =
         _followingMessages &&
         (!_scroll.hasClients ||
@@ -269,7 +279,15 @@ class _ChatPaneState extends State<ChatPane> {
     _input.dispose();
     _focus.dispose();
     _scroll.dispose();
+    _dockInset.dispose();
     super.dispose();
+  }
+
+  void _handleDockHeightChanged(double height) {
+    if (!mounted || (height - _dockInset.value).abs() <= 0.5) {
+      return;
+    }
+    _dockInset.value = height;
   }
 
   void _scheduleScrollToEnd() {
@@ -286,11 +304,15 @@ class _ChatPaneState extends State<ChatPane> {
         return;
       }
       final target = _scroll.position.maxScrollExtent;
-      await _scroll.animateTo(
-        target,
-        duration: Motion.effectsFast,
-        curve: Motion.effectsFastCurve,
-      );
+      if (MediaQuery.disableAnimationsOf(context)) {
+        _scroll.jumpTo(target);
+      } else {
+        await _scroll.animateTo(
+          target,
+          duration: Motion.effectsFast,
+          curve: Motion.effectsFastCurve,
+        );
+      }
       if (mounted && request == _scrollRequest) {
         _scrollingToEnd = false;
       }
@@ -409,10 +431,9 @@ class _ChatPaneState extends State<ChatPane> {
               : widget.description)
         : '';
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Stack(
       children: [
-        Expanded(
+        Positioned.fill(
           child: NotificationListener<ScrollMetricsNotification>(
             onNotification: (notification) {
               // 富文本、图片与惰性列表布局都可能修正底部的实际位置。
@@ -440,97 +461,187 @@ class _ChatPaneState extends State<ChatPane> {
                 }
                 return false;
               },
-              child: ListView.builder(
-                controller: _scroll,
-                // 拖动消息列表时收起键盘，避免触屏上键盘挡住输入区。
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: EdgeInsets.fromLTRB(horizontal, 24, horizontal, 24),
-                itemCount: widget.messages.length + 1,
-                itemBuilder: (context, index) {
-                  final child = index == 0
-                      ? _Welcome(title: welcomeTitle, body: welcomeBody)
-                      : _MessageRow(
-                          avatar: widget.avatarBuilder?.call(
-                            widget.messages[index - 1],
+              child: ValueListenableBuilder<double>(
+                valueListenable: _dockInset,
+                builder: (context, dockInset, _) => PrismListView(
+                  controller: _scroll,
+                  // 拖动消息列表时收起键盘，避免触屏上键盘挡住输入区。
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: EdgeInsets.fromLTRB(
+                    horizontal,
+                    24,
+                    horizontal,
+                    24 + dockInset,
+                  ),
+                  estimatedItemExtent: 84,
+                  itemCount: widget.messages.length + 1,
+                  itemBuilder: (context, index) {
+                    if (index == 0) {
+                      return Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(
+                            maxWidth: _contentMaxWidth,
                           ),
-                          message: widget.messages[index - 1],
-                          onImageTap: _openImage,
-                          onReply:
-                              _sending ||
-                                  widget.busy ||
-                                  _isOwnMessage(widget.messages[index - 1])
-                              ? null
-                              : widget.onReply,
-                        );
-                  return Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        maxWidth: _contentMaxWidth,
+                          child: _Welcome(
+                            title: welcomeTitle,
+                            body: welcomeBody,
+                          ),
+                        ),
+                      );
+                    }
+                    final message = widget.messages[index - 1];
+                    final canReply =
+                        !_sending && !widget.busy && !_isOwnMessage(message);
+                    final animateEntry = identical(message, _animatedMessage);
+                    return Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          maxWidth: _contentMaxWidth,
+                        ),
+                        child: MemoBuilder(
+                          inputs: [
+                            message,
+                            canReply,
+                            animateEntry,
+                            context.isCompact,
+                          ],
+                          builder: (context) => _MessageRow(
+                            avatar: widget.avatarBuilder?.call(message),
+                            message: message,
+                            onImageTap: _openImage,
+                            onReply: canReply ? widget.onReply : null,
+                            animateEntry: animateEntry,
+                          ),
+                        ),
                       ),
-                      child: child,
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
-        ),
-        // 没有当前投递目标时保留范围选择入口，禁止发送。
-        if (_image != null)
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: horizontal, vertical: 8),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: _contentMaxWidth),
-                child: Row(
-                  children: [
-                    ClipRSuperellipse(
-                      borderRadius: AppRadius.md,
-                      child: Image.memory(
-                        _image!.bytes,
-                        width: 64,
-                        height: 64,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stack) =>
-                            const SizedBox.square(
-                              dimension: 64,
-                              child: Icon(Icons.broken_image_rounded),
-                            ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        _image!.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: _sending
-                          ? null
-                          : () => setState(() {
-                              _image = null;
-                              _uploadedImageUrl = null;
-                            }),
-                      icon: Icon(
-                        Icons.close_rounded,
-                        semanticLabel: l10n.chatRemoveImage,
-                      ),
-                    ),
-                  ],
+                    );
+                  },
                 ),
               ),
             ),
           ),
-        ValueListenableBuilder<TextEditingValue>(
-          valueListenable: _input,
-          builder: (context, value, _) =>
-              _buildSlashCommandAutocomplete(context, value.text),
         ),
-        _buildComposer(context, l10n),
+        Align(
+          alignment: Alignment.bottomCenter,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _input,
+                builder: (context, value, _) =>
+                    _buildSlashCommandAutocomplete(context, value.text),
+              ),
+              _MeasureDockHeight(
+                onHeightChanged: _handleDockHeightChanged,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // 没有当前投递目标时保留范围选择入口，禁止发送。
+                    if (_image != null) _buildImagePreview(context, l10n),
+                    _buildComposer(context, l10n),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
+    );
+  }
+
+  Widget _buildFloatingContainer(
+    BuildContext context, {
+    required LiquidGlassStyle glassStyle,
+    required Color fallbackColor,
+    required List<BoxShadow> shadows,
+    bool clip = false,
+    required Widget child,
+  }) {
+    final scheme = context.scheme;
+    final content = clip
+        ? ClipRSuperellipse(borderRadius: AppRadius.xl, child: child)
+        : child;
+    if (LiquidGlassScope.of(context)) {
+      return LiquidGlass(
+        style: glassStyle,
+        borderRadius: AppRadius.xl,
+        shadows: shadows,
+        child: content,
+      );
+    }
+    return DecoratedBox(
+      decoration: ShapeDecoration(
+        color: fallbackColor,
+        shape: AppShape.xl.copyWith(side: BorderSide(color: scheme.outline)),
+        shadows: shadows,
+      ),
+      child: content,
+    );
+  }
+
+  Widget _buildImagePreview(BuildContext context, AppLocalizations l10n) {
+    final scheme = context.scheme;
+    final horizontal = context.isCompact ? 16.0 : 32.0;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(horizontal, 8, horizontal, 0),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: _contentMaxWidth),
+          child: _buildFloatingContainer(
+            context,
+            glassStyle: glassPillStyleOf(context),
+            fallbackColor: scheme.surfaceContainerHigh,
+            shadows: dockShadowsOf(context),
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Row(
+                children: [
+                  ClipRSuperellipse(
+                    borderRadius: AppRadius.md,
+                    child: Image.memory(
+                      _image!.bytes,
+                      width: 64,
+                      height: 64,
+                      fit: BoxFit.cover,
+                      cacheWidth: (64 * MediaQuery.devicePixelRatioOf(context))
+                          .round()
+                          .clamp(1, 256),
+                      errorBuilder: (context, error, stack) =>
+                          const SizedBox.square(
+                            dimension: 64,
+                            child: Icon(Icons.broken_image_rounded),
+                          ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _image!.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _sending
+                        ? null
+                        : () => setState(() {
+                            _image = null;
+                            _uploadedImageUrl = null;
+                          }),
+                    icon: Icon(
+                      Icons.close_rounded,
+                      semanticLabel: l10n.chatRemoveImage,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -573,12 +684,12 @@ class _ChatPaneState extends State<ChatPane> {
           ),
           child: Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: Surface(
-              color: scheme.surfaceContainerHighest,
-              clipBehavior: Clip.antiAlias,
-              shape: AppShape.xl.copyWith(
-                side: BorderSide(color: scheme.outline),
-              ),
+            child: _buildFloatingContainer(
+              context,
+              glassStyle: glassMenuStyleOf(context),
+              fallbackColor: scheme.surfaceContainerHighest,
+              shadows: menuShadowsOf(context),
+              clip: true,
               child: SurfaceScope(
                 level: floatingSurfaceLevelFor(scheme),
                 child: ListView.builder(
@@ -678,16 +789,13 @@ class _ChatPaneState extends State<ChatPane> {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: _contentMaxWidth),
           child: TextFieldTapRegion(
-            child: DecoratedBox(
-              decoration: ShapeDecoration(
-                // 暗色主面板本身就是 surfaceContainer，输入条往上一级
-                // （Highest）才浮得出来；亮色维持原状。
-                color: scheme.surfaceContainerHigh,
-                shape: RoundedSuperellipseBorder(
-                  borderRadius: AppRadius.xl,
-                  side: BorderSide(color: scheme.outline),
-                ),
-              ),
+            child: _buildFloatingContainer(
+              context,
+              glassStyle: glassPillStyleOf(context),
+              // 暗色主面板本身就是 surfaceContainer，输入条往上一级
+              // （Highest）才浮得出来；亮色维持原状。
+              fallbackColor: scheme.surfaceContainerHigh,
+              shadows: dockShadowsOf(context),
               child: Padding(
                 padding: const EdgeInsets.all(8),
                 child: Row(
@@ -738,17 +846,14 @@ class _ChatPaneState extends State<ChatPane> {
                       ),
                     const SizedBox(width: 4),
                     Expanded(
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
+                      child: WidthBuilder(
+                        builder: (context, width) {
                           final hintStyle = texts.bodyMedium?.copyWith(
                             color: scheme.onSurfaceVariant,
                           );
                           var hintText = l10n.chatComposerHintTo(target);
                           if (scope == ChatScope.channel) {
-                            final textWidth = math.max(
-                              0.0,
-                              constraints.maxWidth - 44,
-                            );
+                            final textWidth = math.max(0.0, width - 44);
                             final painter = TextPainter(
                               text: TextSpan(text: hintText, style: hintStyle),
                               maxLines: 1,
@@ -785,11 +890,14 @@ class _ChatPaneState extends State<ChatPane> {
                                 hintMaxLines: 1,
                                 hintStyle: hintStyle,
                                 filled: false,
+                                hoverColor: Colors.transparent,
                                 isDense: true,
-                                border: InputBorder.none,
-                                enabledBorder: InputBorder.none,
-                                focusedBorder: InputBorder.none,
-                                disabledBorder: InputBorder.none,
+                                border: const NoInputBorder(),
+                                enabledBorder: const NoInputBorder(),
+                                focusedBorder: const NoInputBorder(),
+                                disabledBorder: const NoInputBorder(),
+                                errorBorder: const NoInputBorder(),
+                                focusedErrorBorder: const NoInputBorder(),
                                 // 文本距弧边的总内边距 = 容器 8 + 22 = 30，
                                 // 与有效圆角半径（60 高钳制后的 30）光学对齐。
                                 contentPadding: const EdgeInsets.symmetric(
@@ -1137,63 +1245,33 @@ class _Welcome extends StatelessWidget {
   }
 }
 
-class _MessageRow extends StatefulWidget {
+class _MessageRow extends StatelessWidget {
   const _MessageRow({
     this.avatar,
     required this.message,
     required this.onImageTap,
     required this.onReply,
+    this.animateEntry = false,
   });
 
   final ChatMessage message;
   final Widget? avatar;
   final ValueChanged<String> onImageTap;
   final ValueChanged<ChatMessage>? onReply;
-
-  @override
-  State<_MessageRow> createState() => _MessageRowState();
-}
-
-class _MessageRowState extends State<_MessageRow>
-    with SingleTickerProviderStateMixin {
-  // 入场是位移+淡入：位移按 M3 spatial fast 档，曲线带轻微回弹。
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: Motion.spatialFast,
-  );
-  late final CurvedAnimation _curve = CurvedAnimation(
-    parent: _controller,
-    curve: Motion.spatialCurve,
-  );
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_controller.isDismissed) {
-      _controller.forward();
-    }
-  }
-
-  @override
-  void dispose() {
-    _curve.dispose();
-    _controller.dispose();
-    super.dispose();
-  }
+  final bool animateEntry;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
     final texts = context.texts;
-    final message = widget.message;
 
     final row = Padding(
       padding: const EdgeInsets.only(bottom: 20),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          widget.avatar ??
+          avatar ??
               ClientAvatar(nickname: message.from, size: AvatarSize.medium),
           const SizedBox(width: 12),
           Expanded(
@@ -1222,12 +1300,9 @@ class _MessageRowState extends State<_MessageRow>
                         fontFeatures: tabularFigures,
                       ),
                     ),
-                    if (message.scope == ChatScope.direct &&
-                        widget.onReply != null)
+                    if (message.scope == ChatScope.direct && onReply != null)
                       IconButton(
-                        onPressed: widget.onReply == null
-                            ? null
-                            : () => widget.onReply!(message),
+                        onPressed: () => onReply!(message),
                         icon: Icon(
                           Icons.reply_rounded,
                           size: IconSizes.medium,
@@ -1245,7 +1320,7 @@ class _MessageRowState extends State<_MessageRow>
                         height: 1.5,
                       ) ??
                       const TextStyle(),
-                  onImageTap: widget.onImageTap,
+                  onImageTap: onImageTap,
                 ),
               ],
             ),
@@ -1254,6 +1329,48 @@ class _MessageRowState extends State<_MessageRow>
       ),
     );
 
+    if (!animateEntry || MediaQuery.disableAnimationsOf(context)) {
+      return row;
+    }
+    return _AnimatedMessageEntry(child: row);
+  }
+}
+
+class _AnimatedMessageEntry extends StatefulWidget {
+  const _AnimatedMessageEntry({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_AnimatedMessageEntry> createState() => _AnimatedMessageEntryState();
+}
+
+class _AnimatedMessageEntryState extends State<_AnimatedMessageEntry>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: Motion.spatialFast,
+  );
+  late final CurvedAnimation _curve = CurvedAnimation(
+    parent: _controller,
+    curve: Motion.spatialCurve,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _curve.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return FadeTransition(
       opacity: _curve,
       child: SlideTransition(
@@ -1261,8 +1378,63 @@ class _MessageRowState extends State<_MessageRow>
           begin: const Offset(0, 0.08),
           end: Offset.zero,
         ).animate(_curve),
-        child: row,
+        child: widget.child,
       ),
     );
+  }
+}
+
+class _MeasureDockHeight extends SingleChildRenderObjectWidget {
+  const _MeasureDockHeight({
+    required this.onHeightChanged,
+    required super.child,
+  });
+
+  final ValueChanged<double> onHeightChanged;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderMeasureDockHeight(onHeightChanged);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderMeasureDockHeight renderObject,
+  ) {
+    renderObject.onHeightChanged = onHeightChanged;
+  }
+}
+
+class _RenderMeasureDockHeight extends RenderProxyBox {
+  _RenderMeasureDockHeight(this.onHeightChanged);
+
+  ValueChanged<double> onHeightChanged;
+  double? _lastHeight;
+  bool _scheduled = false;
+
+  @override
+  void detach() {
+    _scheduled = false;
+    super.detach();
+  }
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    final height = size.height;
+    if (_lastHeight != null && (height - _lastHeight!).abs() <= 0.5) {
+      return;
+    }
+    _lastHeight = height;
+    if (_scheduled) return;
+    _scheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scheduled = false;
+      if (!attached) return;
+      final current = _lastHeight;
+      if (current != null) {
+        onHeightChanged(current);
+      }
+    });
   }
 }

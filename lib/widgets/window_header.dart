@@ -8,7 +8,9 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/providers.dart';
 import '../core/window_chrome.dart';
 import '../core/window_metrics.dart';
 import '../l10n/app_localizations.dart';
@@ -93,17 +95,21 @@ class WindowHeaderLayout extends StatelessWidget {
   }
 }
 
-class WindowHeader extends StatelessWidget {
+class WindowHeader extends ConsumerWidget {
   const WindowHeader({super.key, this.title, this.isWindows = false});
 
   final Widget? title;
   final bool isWindows;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final height = getWindowHeaderHeight(isMacOS: !isWindows);
+    final backdropOpacity = isWindows
+        ? ref.watch(windowBlurOpacityProvider)
+        : null;
     return WindowHeaderBar(
       height: height,
+      backdropOpacity: backdropOpacity,
       onDragStart: () => unawaited(WindowChrome.startDragging()),
       onDoubleTap: () => unawaited(
         isWindows ? WindowChrome.toggleMaximize() : WindowChrome.toggleZoom(),
@@ -118,6 +124,7 @@ class WindowHeaderBar extends StatelessWidget {
   const WindowHeaderBar({
     super.key,
     required this.height,
+    this.backdropOpacity,
     required this.onDragStart,
     required this.onDoubleTap,
     this.title,
@@ -125,6 +132,7 @@ class WindowHeaderBar extends StatelessWidget {
   });
 
   final double height;
+  final double? backdropOpacity;
   final VoidCallback onDragStart;
   final VoidCallback onDoubleTap;
   final Widget? title;
@@ -132,7 +140,10 @@ class WindowHeaderBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = _chromeSurface(context);
+    final baseColor = _chromeSurface(context);
+    final color = backdropOpacity != null
+        ? baseColor.withValues(alpha: backdropOpacity)
+        : baseColor;
     return Material(
       color: color,
       shape: Border(bottom: Divider.createBorderSide(context)),
@@ -146,7 +157,7 @@ class WindowHeaderBar extends StatelessWidget {
                 behavior: HitTestBehavior.opaque,
                 onPanStart: (_) => onDragStart(),
                 onDoubleTap: onDoubleTap,
-                child: ColoredBox(color: color),
+                child: const ColoredBox(color: Colors.transparent),
               ),
             ),
             if (title != null)

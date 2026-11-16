@@ -55,4 +55,44 @@ void main() {
       expect(tester.binding.hasScheduledFrame, isFalse);
     },
   );
+
+  testWidgets(
+    'pauses rotation under disableAnimations and disabled TickerMode',
+    (tester) async {
+      Future<void> mountWith({
+        required bool disableAnimations,
+        required bool tickerEnabled,
+      }) => tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(disableAnimations: disableAnimations),
+            child: TickerMode(
+              enabled: tickerEnabled,
+              child: const Center(
+                child: ExpressiveFrame(
+                  loading: true,
+                  child: Icon(Icons.music_note),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await mountWith(disableAnimations: true, tickerEnabled: true);
+      await tester.pumpAndSettle();
+      expect(rotationOf(tester), 0);
+      expect(tester.binding.hasScheduledFrame, isFalse);
+
+      await mountWith(disableAnimations: false, tickerEnabled: false);
+      await tester.pumpAndSettle();
+      expect(rotationOf(tester), 0);
+      expect(tester.binding.hasScheduledFrame, isFalse);
+
+      await mountWith(disableAnimations: false, tickerEnabled: true);
+      expect(tester.binding.hasScheduledFrame, isTrue);
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(rotationOf(tester), greaterThan(0));
+    },
+  );
 }

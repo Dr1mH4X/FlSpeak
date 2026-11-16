@@ -1,10 +1,12 @@
-import 'package:flutter/material.dart' hide FilledButton, TextButton;
+import 'package:flutter/material.dart'
+    hide FilledButton, InputDecoration, TextButton, TextField;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../../../core/image_host.dart';
 import '../../../core/notices.dart';
 import '../../../l10n/app_localizations.dart';
+import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';
 import '../../../widgets/prism.dart';
 
@@ -101,37 +103,41 @@ class _ImageHostFormState extends ConsumerState<_ImageHostForm> {
           _public.text = value?.publicBase ?? '';
           _token.text = value?.token ?? '';
         }
+        final labelStyle = context.texts.bodyMedium?.copyWith(
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+        );
         return Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            Text(l10n.imageHostUploadBase, style: labelStyle),
+            const SizedBox(height: 6),
             TextField(
               controller: _upload,
               enabled: !_busy,
               autocorrect: false,
-              decoration: InputDecoration(
-                labelText: l10n.imageHostUploadBase,
-                hintText: l10n.imageHostUploadHint,
-              ),
+              decoration: InputDecoration(hintText: l10n.imageHostUploadHint),
             ),
             const SizedBox(height: 12),
+            Text(l10n.imageHostPublicBase, style: labelStyle),
+            const SizedBox(height: 6),
             TextField(
               controller: _public,
               enabled: !_busy,
               autocorrect: false,
-              decoration: InputDecoration(
-                labelText: l10n.imageHostPublicBase,
-                hintText: l10n.imageHostPublicHint,
-              ),
+              decoration: InputDecoration(hintText: l10n.imageHostPublicHint),
             ),
             const SizedBox(height: 12),
+            Text(l10n.imageHostToken, style: labelStyle),
+            const SizedBox(height: 6),
             TextField(
               controller: _token,
               enabled: !_busy,
               obscureText: true,
               autocorrect: false,
               enableSuggestions: false,
-              decoration: InputDecoration(labelText: l10n.imageHostToken),
+              decoration: const InputDecoration(),
             ),
             if (_error != null)
               Padding(

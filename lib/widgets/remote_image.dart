@@ -15,6 +15,8 @@ class RemoteImage extends ConsumerWidget {
     this.fit = BoxFit.contain,
     this.width,
     this.height,
+    this.cacheWidth,
+    this.cacheHeight,
     this.foregroundColor,
     super.key,
   });
@@ -23,6 +25,8 @@ class RemoteImage extends ConsumerWidget {
   final BoxFit fit;
   final double? width;
   final double? height;
+  final int? cacheWidth;
+  final int? cacheHeight;
   final Color? foregroundColor;
 
   @override
@@ -76,6 +80,8 @@ class RemoteImage extends ConsumerWidget {
         fit: fit,
         width: width,
         height: height,
+        cacheWidth: cacheWidth,
+        cacheHeight: cacheHeight,
         frameBuilder: (context, child, frame, synchronous) =>
             frame == null ? loading() : child,
         errorBuilder: (context, error, stackTrace) => failed(),

@@ -91,10 +91,15 @@ void main() {
         await tester.pumpAndSettle();
 
         if (!language) {
-          // 音频显示在「外观」二级页面中
-          final categoryRow = find.widgetWithText(SettingsTile, '外观');
-          await tester.ensureVisible(categoryRow);
-          await tester.tap(categoryRow);
+          // 音频显示在「通用」->「语音」三级页面中
+          final generalRow = find.widgetWithText(SettingsTile, '通用');
+          await tester.ensureVisible(generalRow);
+          await tester.tap(generalRow);
+          await tester.pumpAndSettle();
+
+          final voiceRow = find.widgetWithText(SettingsTile, '语音');
+          await tester.ensureVisible(voiceRow);
+          await tester.tap(voiceRow);
           await tester.pumpAndSettle();
         }
 
@@ -258,7 +263,10 @@ void main() {
       expect(find.text('麦克风'), findsWidgets);
 
       // 点击顶部返回按钮返回二级通用菜单
-      final backBtn = find.byIcon(Icons.arrow_back_rounded);
+      final backBtn = find.bySemanticsLabel(
+        MaterialLocalizations.of(tester.element(find.byType(SettingsPage)))
+            .backButtonTooltip,
+      );
       expect(backBtn, findsOneWidget);
       await tester.tap(backBtn);
       await tester.pumpAndSettle();
@@ -340,7 +348,13 @@ void main() {
       await tester.pumpAndSettle();
 
       // 二级页面已呈现并包含返回按钮与通用选项
-      expect(find.byIcon(Icons.arrow_back_rounded), findsOneWidget);
+      expect(
+        find.bySemanticsLabel(
+          MaterialLocalizations.of(tester.element(find.byType(SettingsPage)))
+              .backButtonTooltip,
+        ),
+        findsOneWidget,
+      );
       expect(find.widgetWithText(SettingsTile, '语音'), findsOneWidget);
       expect(find.widgetWithText(SettingsTile, '自动检查更新'), findsOneWidget);
       expect(
@@ -711,7 +725,11 @@ void main() {
       expect(generalHeights.every((h) => h >= 48.0), isTrue);
 
       // 返回概览页：被揭开的概览页从左侧回位（dx < baseX），退出中的通用页向右滑出（dx > baseX）
-      await tester.tap(find.byIcon(Icons.arrow_back_rounded));
+      final backFinder = find.bySemanticsLabel(
+        MaterialLocalizations.of(tester.element(find.byType(SettingsPage)))
+            .backButtonTooltip,
+      );
+      await tester.tap(backFinder);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 40));
 
@@ -737,9 +755,166 @@ void main() {
       for (final ink in tester.widgetList<InkWell>(find.byType(InkWell))) {
         expect(ink.splashFactory, NoSplash.splashFactory);
       }
-      await tester.tap(find.byIcon(Icons.arrow_back_rounded));
+      await tester.tap(backFinder);
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey<String>('overview')), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'appearance liquid glass defaults to none and updates preference',
+    (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_Core()),
+          sessionViewProvider.overrideWith(_Session.new),
+          updateProvider.overrideWith(_Update.new),
+          appVersionProvider.overrideWithValue('0.1.0'),
+          storePathProvider.overrideWithValue(
+            '/tmp/flspeak-test/preferences.json',
+          ),
+          preferencesStoreProvider.overrideWithValue(
+            PreferencesStore.inMemory(
+              preferences: const SessionPreferences(
+                nickname: 'Test',
+                locale: 'zh',
+              ),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            locale: const Locale('zh'),
+            localizationsDelegates: const [
+              ...AppLocalizations.localizationsDelegates,
+              PrismUiLocalizationsDelegate(),
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) =>
+                PrismRootScope(brightness: Brightness.light, child: child!),
+            home: const SettingsPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final appearance = find.widgetWithText(SettingsTile, '外观');
+      await tester.ensureVisible(appearance);
+      await tester.tap(appearance);
+      await tester.pumpAndSettle();
+
+      final glassHeader = find.widgetWithText(ListHeader, '液态玻璃');
+      await tester.ensureVisible(glassHeader);
+      await tester.pumpAndSettle();
+      expect(
+        container.read(preferencesProvider).liquidGlass,
+        LiquidGlassMode.none,
+      );
+
+      final noneOption = find.widgetWithText(DecorationListItem, '无').last;
+      await tester.ensureVisible(noneOption);
+      expect(
+        find.descendant(of: noneOption, matching: find.byType(SelectionCheck)),
+        findsOneWidget,
+      );
+
+      final standardOption = find.widgetWithText(DecorationListItem, '标准').last;
+      await tester.ensureVisible(standardOption);
+      await tester.tap(standardOption);
+      await tester.pumpAndSettle();
+      expect(
+        container.read(preferencesProvider).liquidGlass,
+        LiquidGlassMode.standard,
+      );
+
+      final ultraOption = find.widgetWithText(DecorationListItem, '极致').last;
+      await tester.ensureVisible(ultraOption);
+      await tester.tap(ultraOption);
+      await tester.pumpAndSettle();
+      expect(
+        container.read(preferencesProvider).liquidGlass,
+        LiquidGlassMode.ultra,
+      );
+    },
+  );
+
+  testWidgets(
+    'settings back button stays anchored at top-left when window widens',
+    (tester) async {
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      tester.view.devicePixelRatio = 1;
+
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_Core()),
+          sessionViewProvider.overrideWith(_Session.new),
+          updateProvider.overrideWith(_Update.new),
+          appVersionProvider.overrideWithValue('0.1.0'),
+          storePathProvider.overrideWithValue(
+            '/tmp/flspeak-test/preferences.json',
+          ),
+          preferencesStoreProvider.overrideWithValue(
+            PreferencesStore.inMemory(
+              preferences: const SessionPreferences(
+                nickname: 'Test',
+                locale: 'zh',
+              ),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      Widget app() => UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            ...AppLocalizations.localizationsDelegates,
+            PrismUiLocalizationsDelegate(),
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
+          home: const SettingsPage(),
+        ),
+      );
+
+      tester.view.physicalSize = const Size(1000, 700);
+      await tester.pumpWidget(app());
+      await tester.pumpAndSettle();
+
+      final backFinder = find.bySemanticsLabel(
+        MaterialLocalizations.of(tester.element(find.byType(SettingsPage)))
+            .backButtonTooltip,
+      );
+      final backAtNarrow = tester.getTopLeft(backFinder);
+      final cardAtNarrow = tester.getTopLeft(
+        find.byType(SettingsOptionsTile<String?>),
+      );
+
+      tester.view.physicalSize = const Size(1600, 700);
+      await tester.pumpAndSettle();
+
+      final backAtWide = tester.getTopLeft(backFinder);
+      final cardAtWide = tester.getTopLeft(
+        find.byType(SettingsOptionsTile<String?>),
+      );
+
+      final paneAtWide = tester.getTopLeft(find.byType(AnimatedSwitcher).first);
+
+      expect(backAtWide.dx, backAtNarrow.dx);
+      expect(backAtWide.dy, backAtNarrow.dy);
+      expect(backAtWide.dx - paneAtWide.dx, lessThan(40));
+      expect(cardAtWide.dx, greaterThan(cardAtNarrow.dx));
     },
   );
 }

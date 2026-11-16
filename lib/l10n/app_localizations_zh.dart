@@ -920,4 +920,144 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get memberClientSoftware => '客户端';
+
+  @override
+  String get settingsLiquidGlass => '液态玻璃';
+
+  @override
+  String get settingsLiquidGlassNone => '无';
+
+  @override
+  String get settingsLiquidGlassStandard => '标准';
+
+  @override
+  String get settingsLiquidGlassUltra => '极致';
+
+  @override
+  String get settingsThemeMode => '主题模式';
+
+  @override
+  String get settingsPureBlackMode => '纯黑模式';
+
+  @override
+  String get settingsPureBlackStandard => '标准';
+
+  @override
+  String get settingsPureBlackOn => '纯黑';
+
+  @override
+  String get settingsThemeColor => '主题色';
+
+  @override
+  String get settingsColorStyle => '配色风格';
+
+  @override
+  String get settingsColorStyleVivid => '鲜明';
+
+  @override
+  String get settingsColorStyleTinted => '柔彩';
+
+  @override
+  String get settingsColorStyleSoft => '柔和';
+
+  @override
+  String get settingsColorStyleMonochrome => '单色';
+
+  @override
+  String get settingsAddColor => '添加颜色';
+
+  @override
+  String get settingsCustomColor => '自定义颜色';
+
+  @override
+  String get settingsColorEdit => '编辑';
+
+  @override
+  String get settingsColorDelete => '删除';
+
+  @override
+  String get settingsColorGrid => '网格';
+
+  @override
+  String get settingsColorSpectrum => '光谱';
+
+  @override
+  String get settingsColorSliders => '滑块';
+
+  @override
+  String get settingsColorHue => '色相';
+
+  @override
+  String get settingsColorSaturation => '饱和度';
+
+  @override
+  String get settingsColorBrightness => '明度';
+
+  @override
+  String get settingsColorHex => '十六进制';
+
+  @override
+  String get settingsReset => '重置';
+
+  @override
+  String get settingsResetThemeColorsTip => '确定要重置默认主题色设置吗？';
+
+  @override
+  String settingsDeleteColorTip(String color) {
+    return '确定要删除颜色 $color 吗？';
+  }
+
+  @override
+  String get settingsBottomBar => '底部导航栏';
+
+  @override
+  String get settingsBottomBarFloating => '悬浮';
+
+  @override
+  String get settingsBottomBarDocked => '停靠';
+
+  @override
+  String get settingsTabAnimation => '标签切换动画';
+
+  @override
+  String get settingsTabAnimationSlide => '滑动';
+
+  @override
+  String get settingsTabAnimationFade => '淡入淡出';
+
+  @override
+  String get settingsSidebar => '侧栏';
+
+  @override
+  String get settingsSidebarBlur => '背景模糊';
+
+  @override
+  String get settingsFontFamily => '字体';
+
+  @override
+  String get settingsFontDefault => '默认';
+
+  @override
+  String get settingsInstalledFonts => '已安装字体';
+
+  @override
+  String get settingsFontSearch => '搜索字体';
+
+  @override
+  String get settingsFontNoResults => '未找到匹配的字体';
+
+  @override
+  String get settingsTextScale => '字体大小';
+
+  @override
+  String get settingsTextScaleSystem => '跟随系统';
+
+  @override
+  String get settingsTextScaleCustom => '自定义';
+
+  @override
+  String get settingsTextScalePreview => '预览当前文字大小';
+
+  @override
+  String get navWorkspace => '工作区';
 }

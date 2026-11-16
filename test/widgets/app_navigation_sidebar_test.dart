@@ -222,4 +222,97 @@ void main() {
       expect(sidebarBox.size.width, 48.0);
     },
   );
+
+  testWidgets(
+    'AppNavigationSidebar applies LiquidGlass only to compact overlay when enabled',
+    (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_FakeCore()),
+          sessionViewProvider.overrideWith(_TestSessionController.new),
+          storePathProvider.overrideWithValue('/tmp/flspeak/prefs.json'),
+          preferencesStoreProvider.overrideWithValue(
+            PreferencesStore.inMemory(
+              preferences: const SessionPreferences(nickname: 'Test'),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      Future<void> mount({
+        required Size size,
+        required LiquidGlassQuality? quality,
+      }) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+              key: ValueKey((size, quality)),
+              theme: buildAppTheme(Brightness.light),
+              localizationsDelegates: const [
+                ...AppLocalizations.localizationsDelegates,
+                PrismUiLocalizationsDelegate(),
+              ],
+              supportedLocales: AppLocalizations.supportedLocales,
+              builder: (context, child) => PrismRootScope(
+                brightness: Brightness.light,
+                liquidGlass: quality,
+                child: child!,
+              ),
+              home: const Scaffold(
+                body: Row(
+                  children: [
+                    AppNavigationSidebar(
+                      selectedDestination: AppNavDestination.home,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      // 桌面停靠侧栏保持实色 Surface，不施加 LiquidGlass。
+      await mount(
+        size: const Size(1200, 800),
+        quality: LiquidGlassQuality.standard,
+      );
+      expect(find.byType(LiquidGlass), findsNothing);
+      await tester.tap(find.bySemanticsLabel('展开侧边栏'));
+      await tester.pumpAndSettle();
+      expect(find.byType(LiquidGlass), findsNothing);
+
+      // 收起桌面展开状态后再测窄屏浮层。
+      await tester.tap(find.bySemanticsLabel('收起侧边栏'));
+      await tester.pumpAndSettle();
+
+      await mount(
+        size: const Size(500, 800),
+        quality: LiquidGlassQuality.standard,
+      );
+      expect(find.byType(LiquidGlass), findsNothing);
+      await tester.tap(find.bySemanticsLabel('展开侧边栏'));
+      await tester.pumpAndSettle();
+      expect(find.byType(LiquidGlass), findsOneWidget);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.byType(LiquidGlass), findsNothing);
+
+      // 关闭玻璃开关时窄屏浮层回退为 Surface。
+      await mount(size: const Size(500, 800), quality: null);
+      await tester.tap(find.bySemanticsLabel('展开侧边栏'));
+      await tester.pumpAndSettle();
+      expect(find.byType(LiquidGlass), findsNothing);
+    },
+  );
 }

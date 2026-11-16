@@ -148,4 +148,77 @@ void main() {
     await tester.pump();
     expect(await _peakPixels(tester, boundaryKey), 0);
   });
+
+  testWidgets('在 TickerMode 关闭或后台生命周期时暂停监听电平，仅在 inactive 保持活跃', (tester) async {
+    final levels = StreamController<VoiceLevels>.broadcast(sync: true);
+    addTearDown(levels.close);
+    const boundaryKey = ValueKey('meter-pause');
+    final tickerEnabled = ValueNotifier(true);
+    addTearDown(tickerEnabled.dispose);
+
+    final container = ProviderContainer(
+      overrides: [
+        sessionViewProvider.overrideWith(_Session.new),
+        voiceLevelsProvider.overrideWith((ref) => levels.stream),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(seedColor: Colors.red)
+                .copyWith(primary: const Color(0xFFFF0000)),
+          ),
+          home: Center(
+            child: ValueListenableBuilder<bool>(
+              valueListenable: tickerEnabled,
+              builder: (_, enabled, child) => TickerMode(
+                enabled: enabled,
+                child: const RepaintBoundary(
+                  key: boundaryKey,
+                  child: SizedBox(
+                    width: 200,
+                    height: 48,
+                    child: VoiceActivityRibbon(),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(levels.hasListener, isTrue);
+
+    // 桌面双窗口失焦（inactive）保持活跃
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await tester.pump();
+    expect(levels.hasListener, isTrue);
+
+    // 后台（paused）即使宿主停止调度帧，也立即释放底层流监听。
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump(Duration.zero);
+    expect(levels.hasListener, isFalse);
+    levels.add(const VoiceLevels(mic: 1));
+    await tester.pump();
+    expect(await _peakPixels(tester, boundaryKey), 0);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    expect(levels.hasListener, isTrue);
+
+    // TickerMode 关闭时停止订阅
+    tickerEnabled.value = false;
+    await tester.pump();
+    await tester.pump(Duration.zero);
+    expect(levels.hasListener, isFalse);
+
+    tickerEnabled.value = true;
+    await tester.pump();
+    expect(levels.hasListener, isTrue);
+  });
 }

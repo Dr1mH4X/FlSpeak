@@ -176,8 +176,25 @@ class _AppNavigationSidebarState extends ConsumerState<AppNavigationSidebar>
 
   @override
   Widget build(BuildContext context) {
-    final view = ref.watch(sessionViewProvider);
+    final (
+      :servers,
+      :activeServerId,
+      :connected,
+      :isConnectingOrReconnecting,
+      :busy,
+    ) = ref.watch(
+      sessionViewProvider.select(
+        (view) => (
+          servers: view.servers,
+          activeServerId: view.activeServerId,
+          connected: view.connected,
+          isConnectingOrReconnecting: view.connecting || view.reconnecting,
+          busy: view.busy || view.connecting || view.reconnecting,
+        ),
+      ),
+    );
     final scheme = context.scheme;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
     final windowControls =
         widget.windowControls ?? ViewScope.windowControlsOf(context);
     final canExpandInPlace = !context.isCompact;
@@ -189,11 +206,11 @@ class _AppNavigationSidebarState extends ConsumerState<AppNavigationSidebar>
         windowControls: windowControls,
         expanded: isOverlay ? true : _globalExpanded,
         selectedDestination: widget.selectedDestination,
-        activeServerId: widget.activeServerId ?? view.activeServerId,
-        servers: view.servers,
-        connectedServerId: view.connected ? view.activeServerId : null,
-        isConnectingOrReconnecting: view.connecting || view.reconnecting,
-        busy: view.busy || view.connecting || view.reconnecting,
+        activeServerId: widget.activeServerId ?? activeServerId,
+        servers: servers,
+        connectedServerId: connected ? activeServerId : null,
+        isConnectingOrReconnecting: isConnectingOrReconnecting,
+        busy: busy,
         onToggle: () => _handleToggle(canExpandInPlace: canExpandInPlace),
         onHome: () {
           if (isOverlay) _closeOverlay();
@@ -240,13 +257,18 @@ class _AppNavigationSidebarState extends ConsumerState<AppNavigationSidebar>
         );
       },
       child: Surface(
-        color: scheme.surfaceContainerLowest,
+        color:
+            !context.isCompact && ref.watch(windowBlurOpacityProvider) != null
+            ? scheme.surfaceContainerLowest.withValues(
+                alpha: ref.watch(windowBlurOpacityProvider),
+              )
+            : scheme.surfaceContainerLowest,
         shape: BorderDirectional(
           end: BorderSide(color: dividerColorOf(context), width: 1),
         ),
         child: TweenAnimationBuilder<double>(
           tween: Tween(end: (canExpandInPlace && _globalExpanded) ? 1.0 : 0.0),
-          duration: _expandDuration,
+          duration: reduceMotion ? Duration.zero : _expandDuration,
           curve: Easing.standard,
           builder: (context, progress, _) =>
               buildSidebarPane(progress, isOverlay: false),
@@ -465,8 +487,9 @@ class _SidebarPane extends StatelessWidget {
           Expanded(
             child: servers.isEmpty
                 ? const SizedBox.shrink()
-                : ListView.builder(
+                : PrismListView(
                     padding: EdgeInsets.zero,
+                    itemExtent: _itemSize + _itemGap,
                     itemCount: servers.length,
                     itemBuilder: (context, index) {
                       final server = servers[index];
@@ -478,20 +501,38 @@ class _SidebarPane extends StatelessWidget {
                           activeServerId == server.id &&
                           isConnectingOrReconnecting;
 
-                      return _SidebarServerTile(
-                        server: server,
-                        selected: isSelected,
-                        connected: isConnected,
-                        loading: isLoading,
-                        itemWidth: itemWidth,
-                        rowWidth: rowWidth,
-                        iconInset: iconInset,
-                        sideInset: sideInset,
-                        labelOpacity: labelOpacity,
-                        colors: colors,
-                        onTap: busy ? null : () => onConnectServer(server),
-                        onDisconnect: onDisconnectServer,
-                        onChangeIcon: () => onChangeServerIcon(server),
+                      return MemoBuilder(
+                        inputs: [
+                          server,
+                          isSelected,
+                          isConnected,
+                          isLoading,
+                          busy,
+                          itemWidth,
+                          rowWidth,
+                          iconInset,
+                          sideInset,
+                          labelOpacity,
+                          colors.selectedFill,
+                          colors.label,
+                          colors.icon,
+                          colors.indicator,
+                        ],
+                        builder: (context) => _SidebarServerTile(
+                          server: server,
+                          selected: isSelected,
+                          connected: isConnected,
+                          loading: isLoading,
+                          itemWidth: itemWidth,
+                          rowWidth: rowWidth,
+                          iconInset: iconInset,
+                          sideInset: sideInset,
+                          labelOpacity: labelOpacity,
+                          colors: colors,
+                          onTap: busy ? null : () => onConnectServer(server),
+                          onDisconnect: onDisconnectServer,
+                          onChangeIcon: () => onChangeServerIcon(server),
+                        ),
                       );
                     },
                   ),
@@ -794,18 +835,36 @@ class _SidebarOverlay extends StatelessWidget {
               },
               child: FocusScope(
                 autofocus: true,
-                child: Surface(
-                  color: scheme.surfaceContainerLowest,
-                  shape: BorderDirectional(
-                    end: BorderSide(color: dividerColorOf(context), width: 1),
-                  ),
-                  elevation: 8,
-                  shadowColor: scheme.shadow,
-                  child: AnimatedBuilder(
-                    animation: progress,
-                    builder: (_, _) => builder(progress.value),
-                  ),
-                ),
+                child: LiquidGlassScope.of(context)
+                    ? LiquidGlass(
+                        style: glassMenuStyleOf(context),
+                        borderRadius: BorderRadiusDirectional.horizontal(
+                          end: const Radius.circular(AppCorner.lg),
+                        ).resolve(Directionality.of(context)),
+                        shadows: menuShadowsOf(context),
+                        child: SurfaceScope(
+                          level: floatingSurfaceLevelFor(scheme),
+                          child: AnimatedBuilder(
+                            animation: progress,
+                            builder: (_, _) => builder(progress.value),
+                          ),
+                        ),
+                      )
+                    : Surface(
+                        color: scheme.surfaceContainerLowest,
+                        shape: BorderDirectional(
+                          end: BorderSide(
+                            color: dividerColorOf(context),
+                            width: 1,
+                          ),
+                        ),
+                        elevation: 8,
+                        shadowColor: scheme.shadow,
+                        child: AnimatedBuilder(
+                          animation: progress,
+                          builder: (_, _) => builder(progress.value),
+                        ),
+                      ),
               ),
             ),
           ),

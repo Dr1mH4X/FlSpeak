@@ -12,11 +12,15 @@ import 'package:flutter/material.dart'
         TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/channel_display.dart';
 import '../../core/models.dart';
 import '../../core/providers.dart';
+import '../../core/stream_publisher.dart';
+import '../../core/stream_viewer.dart';
 import '../../l10n/app_localizations.dart';
+import '../../router.dart';
 import '../../theme/app_motion.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common.dart';
@@ -85,8 +89,33 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final view = ref.watch(sessionViewProvider);
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
     final channelId = ref.watch(activeChannelIdProvider);
+    final detailsTarget = ref.watch(activeDetailsTargetProvider);
+    final isMemberDetails = detailsTarget is MemberDetailsTarget;
+    final (
+      :connected,
+      :connecting,
+      :reconnecting,
+      :reconnectAttempt,
+      :activeServerId,
+      :connectionEpoch,
+      :identityUpgradeTarget,
+      :channel,
+    ) = ref.watch(
+      sessionViewProvider.select(
+        (view) => (
+          connected: view.connected,
+          connecting: view.connecting,
+          reconnecting: view.reconnecting,
+          reconnectAttempt: view.reconnectAttempt,
+          activeServerId: view.activeServerId,
+          connectionEpoch: view.connectionEpoch,
+          identityUpgradeTarget: view.identityUpgradeTarget,
+          channel: channelId == null ? null : view.channelById(channelId),
+        ),
+      ),
+    );
 
     ref.listen(
       sessionViewProvider.select(
@@ -111,10 +140,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
       }
     });
 
-    final channel = channelId == null ? null : view.channelById(channelId);
     final compact = MediaQuery.sizeOf(context).width < Breakpoints.compact;
-    final detailsTarget = ref.watch(activeDetailsTargetProvider);
-    final isMemberDetails = detailsTarget is MemberDetailsTarget;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -125,64 +151,72 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
           tabController: _tabController,
           isMemberDetails: isMemberDetails,
         ),
-        if (view.identityUpgradeTarget != null)
+        if (identityUpgradeTarget != null)
           _IdentityBanner(
-            target: view.identityUpgradeTarget!,
+            target: identityUpgradeTarget,
             onCancel: ref
                 .read(sessionViewProvider.notifier)
                 .cancelIdentityUpgrade,
           ),
-        _VoiceAlerts(view: view),
-        StreamViewerSection(view: view),
+        const _VoiceAlerts(),
+        const _WorkspaceStreamViewer(),
         Expanded(
           // 视图替换走 crossfade（M3 effects default）：同一容器内换内容
           // 不做位移，避免整块内容跳来跳去。
-          child: LayoutBuilder(
-            builder: (context, constraints) => Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: AnimatedSwitcher(
-                    duration: Motion.effectsDefault,
-                    switchInCurve: Motion.effectsDefaultCurve,
-                    switchOutCurve: Motion.effectsDefaultCurve.flipped,
-                    layoutBuilder: (current, previous) => Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        for (final child in previous)
-                          ExcludeFocus(
-                            child: IgnorePointer(
-                              child: ExcludeSemantics(child: child),
-                            ),
+          child: RepaintBoundary(
+            child: WidthBuilder(
+              builder: (context, width) => Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: RepaintBoundary(
+                      child: AnimatedSwitcher(
+                        duration: reduceMotion
+                            ? Duration.zero
+                            : Motion.effectsDefault,
+                        switchInCurve: Motion.effectsDefaultCurve,
+                        switchOutCurve: Motion.effectsDefaultCurve.flipped,
+                        layoutBuilder: (current, previous) => Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            for (final child in previous)
+                              ExcludeFocus(
+                                child: IgnorePointer(
+                                  child: ExcludeSemantics(child: child),
+                                ),
+                              ),
+                            ?current,
+                          ],
+                        ),
+                        child: KeyedSubtree(
+                          key: ValueKey((
+                            _tab,
+                            activeServerId,
+                            connectionEpoch,
+                            channelId,
+                            connected,
+                            connecting || reconnecting,
+                            _tab == _MainTab.details ? detailsTarget : null,
+                          )),
+                          child: _buildBody(
+                            context,
+                            l10n,
+                            connected: connected,
+                            connecting: connecting,
+                            reconnecting: reconnecting,
+                            reconnectAttempt: reconnectAttempt,
+                            connectionEpoch: connectionEpoch,
+                            channel: channel,
+                            detailsTarget: detailsTarget,
                           ),
-                        ?current,
-                      ],
-                    ),
-                    child: KeyedSubtree(
-                      key: ValueKey((
-                        _tab,
-                        view.activeServerId,
-                        view.connectionEpoch,
-                        channelId,
-                        view.connected,
-                        view.connecting || view.reconnecting,
-                        _tab == _MainTab.details ? detailsTarget : null,
-                      )),
-                      child: _buildBody(
-                        context,
-                        l10n,
-                        view,
-                        channel,
-                        detailsTarget,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                if (constraints.maxWidth >= 900 &&
-                    channel != null &&
-                    view.connected)
-                  MembersPane(view: view, channelId: channel.id),
-              ],
+                  if (width >= 900 && channel != null && connected)
+                    MembersPane(channelId: channel.id),
+                ],
+              ),
             ),
           ),
         ),
@@ -192,12 +226,16 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
 
   Widget _buildBody(
     BuildContext context,
-    AppLocalizations l10n,
-    SessionView view,
-    ChannelView? channel,
-    DetailsTarget? detailsTarget,
-  ) {
-    if (view.connecting || view.reconnecting) {
+    AppLocalizations l10n, {
+    required bool connected,
+    required bool connecting,
+    required bool reconnecting,
+    required int? reconnectAttempt,
+    required int connectionEpoch,
+    required ChannelView? channel,
+    required DetailsTarget? detailsTarget,
+  }) {
+    if (connecting || reconnecting) {
       final scheme = context.scheme;
       return Center(
         child: Column(
@@ -206,8 +244,8 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
             const ActivityIndicator(size: 36),
             const SizedBox(height: 16),
             Text(
-              view.reconnecting
-                  ? l10n.voiceReconnectingAttempt(view.reconnectAttempt ?? 1)
+              reconnecting
+                  ? l10n.voiceReconnectingAttempt(reconnectAttempt ?? 1)
                   : l10n.sessionConnecting,
               style: context.texts.bodyMedium?.copyWith(
                 color: scheme.onSurfaceVariant,
@@ -225,19 +263,18 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
             detailsTarget.client.id,
             detailsTarget.client.uid,
             detailsTarget.isOffline,
-            view.connectionEpoch,
+            connectionEpoch,
           )),
           client: detailsTarget.client,
           isOffline: detailsTarget.isOffline,
         );
       }
       return EmptyState(
-        icon: view.connected ? Icons.forum_rounded : Icons.link_off_rounded,
-        body: view.connected ? l10n.workspaceNoChannels : l10n.workspaceDropped,
+        icon: connected ? Icons.forum_rounded : Icons.link_off_rounded,
+        body: connected ? l10n.workspaceNoChannels : l10n.workspaceDropped,
       );
     }
 
-    final controller = ref.read(sessionViewProvider.notifier);
     switch (_tab) {
       case _MainTab.details:
         if (detailsTarget is MemberDetailsTarget) {
@@ -246,7 +283,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
               detailsTarget.client.id,
               detailsTarget.client.uid,
               detailsTarget.isOffline,
-              view.connectionEpoch,
+              connectionEpoch,
             )),
             client: detailsTarget.client,
             isOffline: detailsTarget.isOffline,
@@ -258,63 +295,219 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
         );
       case _MainTab.files:
         return ChannelFilesPane(
-          key: ValueKey((view.connectionEpoch, channel.id)),
+          key: ValueKey((connectionEpoch, channel.id)),
           channelId: channel.id,
         );
       case _MainTab.media:
-        final urls = imageUrlsInMessages(
-          view.visibleMessages(channelId: channel.id),
-        );
-        return MediaGrid(
-          urls: urls,
-          onOpen: (index) =>
-              showMediaViewer(context, urls: urls, initialIndex: index),
-        );
+        return _ChannelMediaBody(channelId: channel.id);
       case _MainTab.chat:
-        return ChatPane(
-          avatarBuilder: (message) =>
-              message.scope == ChatScope.server &&
-                  message.fromId == 0 &&
-                  message.fromUid.isEmpty &&
-                  view.activeServerId != null
-              ? ServerBadge(id: view.activeServerId!, size: AvatarSize.medium)
-              : SessionMemberAvatar(
-                  uid: message.fromUid,
-                  nickname: message.from,
-                ),
-          key: ValueKey(channel.id),
-          channelName: channelDisplayName(channel),
-          messages: view.visibleMessages(channelId: channel.id),
-          scope: view.chatScope,
-          canSendChannel: view.selfChannelId == channel.id,
+        return _ChannelChatBody(channel: channel);
+    }
+  }
+}
+
+class _WorkspaceStreamViewer extends ConsumerWidget {
+  const _WorkspaceStreamViewer();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hasStreamContext = ref.watch(
+      sessionViewProvider.select(
+        (view) =>
+            view.connected &&
+            (view.streams.isNotEmpty || view.watchingStreamId != null),
+      ),
+    );
+    final isPublishing = ref.watch(
+      streamPublisherProvider.select((state) => state.isActive),
+    );
+    final isViewerActive = ref.watch(
+      streamViewerProvider.select((state) => state.isActive),
+    );
+    if (!hasStreamContext && !isPublishing && !isViewerActive) {
+      return const SizedBox.shrink();
+    }
+    final view = ref.watch(sessionViewProvider);
+    return RepaintBoundary(child: StreamViewerSection(view: view));
+  }
+}
+
+class _ChannelMediaBody extends ConsumerWidget {
+  const _ChannelMediaBody({required this.channelId});
+
+  final int channelId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final (
+      :messages,
+      :chatScope,
+      :directRecipientUid,
+      :directRecipientId,
+      :selfClientId,
+      :clients,
+      :selfChannelId,
+    ) = ref.watch(
+      sessionViewProvider.select(
+        (view) => (
+          messages: view.messages,
+          chatScope: view.chatScope,
+          directRecipientUid: view.directRecipientUid,
+          directRecipientId: view.directRecipientId,
+          selfClientId: view.selfClientId,
+          clients: view.clients,
+          selfChannelId: view.selfChannelId,
+        ),
+      ),
+    );
+    final scopedView = SessionView(
+      state: selfClientId != null
+          ? CoreSessionState.connected(
+              clientId: selfClientId,
+              channelId: selfChannelId ?? 0,
+            )
+          : const CoreSessionState.disconnected(),
+      messages: messages,
+      clients: clients,
+      chatScope: chatScope,
+      directRecipientUid: directRecipientUid,
+      directRecipientId: directRecipientId,
+    );
+    final urls = imageUrlsInMessages(
+      scopedView.visibleMessages(channelId: channelId),
+    );
+    return MediaGrid(
+      urls: urls,
+      onOpen: (index) =>
+          showMediaViewer(context, urls: urls, initialIndex: index),
+    );
+  }
+}
+
+class _ChannelChatBody extends ConsumerStatefulWidget {
+  const _ChannelChatBody({required this.channel});
+
+  final ChannelView channel;
+
+  @override
+  ConsumerState<_ChannelChatBody> createState() => _ChannelChatBodyState();
+}
+
+class _ChannelChatBodyState extends ConsumerState<_ChannelChatBody> {
+  List<ChatMessage>? _lastMessages;
+  List<ClientView>? _lastClients;
+  ChatScope? _lastScope;
+  String? _lastRecipientUid;
+  int? _lastSelfClientId;
+  int _lastChannelId = -1;
+  List<ChatMessage> _cachedVisible = const [];
+  List<ClientView> _cachedRecipients = const [];
+
+  @override
+  Widget build(BuildContext context) {
+    final channel = widget.channel;
+    final (
+      :activeServerId,
+      :messages,
+      :clients,
+      :chatScope,
+      :selfChannelId,
+      :selfClientId,
+      :busy,
+      :directRecipientUid,
+      :directRecipientId,
+      :unreadScopes,
+      :unreadPeers,
+    ) = ref.watch(
+      sessionViewProvider.select(
+        (view) => (
+          activeServerId: view.activeServerId,
+          messages: view.messages,
+          clients: view.clients,
+          chatScope: view.chatScope,
+          selfChannelId: view.selfChannelId,
+          selfClientId: view.selfClientId,
           busy: view.busy,
-          onScopeChanged: controller.selectChatScope,
-          onSend: controller.prepareMessageSender(),
-          onPickImage: () => controller.pickChatImage(paste: false),
-          onPasteImage: () => controller.pickChatImage(paste: true),
-          onUploadImage: controller.uploadChatImage,
-          onConfigureImageHost: () => showImageHostSettings(context),
-          description: channel.description,
-          recipients: view.clients
-              .where(
-                (peer) => peer.id != view.selfClientId && peer.uid.isNotEmpty,
-              )
-              .toList(),
-          recipientUid: view.directRecipientUid,
-          recipientId: view.directRecipientId,
+          directRecipientUid: view.directRecipientUid,
+          directRecipientId: view.directRecipientId,
           unreadScopes: view.unreadScopes,
           unreadPeers: view.unreadPeers,
-          selfUid: view.selfUid,
-          selfClientId: view.selfClientId,
-          selfChannelId: view.selfChannelId,
-          onRecipientChanged: controller.selectDirectRecipient,
-          onRecipientSelected: (peer) =>
-              controller.selectDirectRecipient(peer.uid, clientId: peer.id),
-          onFetchBotCommands: (peer) =>
-              controller.fetchBotCommands(peer.id, peer.uid),
-          onReply: controller.replyToMessage,
-        );
+        ),
+      ),
+    );
+
+    if (!identical(_lastClients, clients) ||
+        _lastSelfClientId != selfClientId) {
+      _lastClients = clients;
+      _cachedRecipients = clients
+          .where((peer) => peer.id != selfClientId && peer.uid.isNotEmpty)
+          .toList(growable: false);
     }
+
+    final scopedView = SessionView(
+      state: selfClientId != null
+          ? CoreSessionState.connected(
+              clientId: selfClientId,
+              channelId: selfChannelId ?? 0,
+            )
+          : const CoreSessionState.disconnected(),
+      messages: messages,
+      clients: clients,
+      chatScope: chatScope,
+      directRecipientUid: directRecipientUid,
+      directRecipientId: directRecipientId,
+    );
+
+    if (!identical(_lastMessages, messages) ||
+        _lastScope != chatScope ||
+        _lastRecipientUid != directRecipientUid ||
+        _lastSelfClientId != selfClientId ||
+        _lastChannelId != channel.id) {
+      _lastMessages = messages;
+      _lastScope = chatScope;
+      _lastRecipientUid = directRecipientUid;
+      _lastSelfClientId = selfClientId;
+      _lastChannelId = channel.id;
+      _cachedVisible = scopedView.visibleMessages(channelId: channel.id);
+    }
+
+    final controller = ref.read(sessionViewProvider.notifier);
+    return ChatPane(
+      avatarBuilder: (message) =>
+          message.scope == ChatScope.server &&
+              message.fromId == 0 &&
+              message.fromUid.isEmpty &&
+              activeServerId != null
+          ? ServerBadge(id: activeServerId, size: AvatarSize.medium)
+          : SessionMemberAvatar(uid: message.fromUid, nickname: message.from),
+      key: ValueKey(channel.id),
+      channelName: channelDisplayName(channel),
+      messages: _cachedVisible,
+      scope: chatScope,
+      canSendChannel: selfChannelId == channel.id,
+      busy: busy,
+      onScopeChanged: controller.selectChatScope,
+      onSend: controller.prepareMessageSender(),
+      onPickImage: () => controller.pickChatImage(paste: false),
+      onPasteImage: () => controller.pickChatImage(paste: true),
+      onUploadImage: controller.uploadChatImage,
+      onConfigureImageHost: () => showImageHostSettings(context),
+      description: channel.description,
+      recipients: _cachedRecipients,
+      recipientUid: directRecipientUid,
+      recipientId: directRecipientId,
+      unreadScopes: unreadScopes,
+      unreadPeers: unreadPeers,
+      selfUid: scopedView.selfUid,
+      selfClientId: selfClientId,
+      selfChannelId: selfChannelId,
+      onRecipientChanged: controller.selectDirectRecipient,
+      onRecipientSelected: (peer) =>
+          controller.selectDirectRecipient(peer.uid, clientId: peer.id),
+      onFetchBotCommands: (peer) =>
+          controller.fetchBotCommands(peer.id, peer.uid),
+      onReply: controller.replyToMessage,
+    );
   }
 }
 
@@ -381,7 +574,35 @@ class _ChannelHeader extends StatelessWidget {
         child: Row(
           children: [
             if (compact) ...[
-              ElasticButton(
+              TonalButtonTheme(
+                glass: LiquidGlassScope.of(context),
+                child: ElasticPress(
+                  child: IconButton(
+                    onPressed: () {
+                      final router = GoRouter.maybeOf(context);
+                      if (router != null && router.canPop()) {
+                        router.pop();
+                      } else if (Navigator.of(context).canPop()) {
+                        Navigator.of(context).pop();
+                      } else if (router != null) {
+                        router.go(AppRoutes.connect);
+                      }
+                    },
+                    iconSize: IconSizes.toolbar,
+                    icon: Semantics(
+                      label: MaterialLocalizations.of(context)
+                          .backButtonTooltip,
+                      child: BarItemGlyph(
+                        child: GlyphIcon(
+                          Glyphs.backFor(Theme.of(context).platform),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              ElasticPress(
                 child: IconButton(
                   onPressed: () => Scaffold.of(context).openDrawer(),
                   style: ButtonStyle.from(
@@ -505,40 +726,46 @@ class _IdentityBanner extends StatelessWidget {
 }
 
 /// 语音设备状态 chip，任何页签下都可见。瞬时语音错误走右上角提示。
-class _VoiceAlerts extends StatelessWidget {
-  const _VoiceAlerts({required this.view});
-
-  final SessionView view;
+class _VoiceAlerts extends ConsumerWidget {
+  const _VoiceAlerts();
 
   @override
-  Widget build(BuildContext context) {
-    if (!view.connected) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final (:connected, :voiceInputReady, :voiceOutputReady) = ref.watch(
+      sessionViewProvider.select(
+        (view) => (
+          connected: view.connected,
+          voiceInputReady: view.voiceInputReady,
+          voiceOutputReady: view.voiceOutputReady,
+        ),
+      ),
+    );
+    if (!connected || (voiceInputReady && voiceOutputReady)) {
       return const SizedBox.shrink();
     }
     final l10n = AppLocalizations.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (!view.voiceInputReady || !view.voiceOutputReady)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                if (!view.voiceInputReady)
-                  _DeviceChip(
-                    icon: Icons.mic_off_rounded,
-                    label: l10n.voiceMicUnavailable,
-                  ),
-                if (!view.voiceOutputReady)
-                  _DeviceChip(
-                    icon: Icons.volume_off_rounded,
-                    label: l10n.voiceSpeakerUnavailable,
-                  ),
-              ],
-            ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              if (!voiceInputReady)
+                _DeviceChip(
+                  icon: Icons.mic_off_rounded,
+                  label: l10n.voiceMicUnavailable,
+                ),
+              if (!voiceOutputReady)
+                _DeviceChip(
+                  icon: Icons.volume_off_rounded,
+                  label: l10n.voiceSpeakerUnavailable,
+                ),
+            ],
           ),
+        ),
       ],
     );
   }

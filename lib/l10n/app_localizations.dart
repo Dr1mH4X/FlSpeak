@@ -1819,6 +1819,282 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Client software'**
   String get memberClientSoftware;
+
+  /// No description provided for @settingsLiquidGlass.
+  ///
+  /// In en, this message translates to:
+  /// **'Liquid Glass'**
+  String get settingsLiquidGlass;
+
+  /// No description provided for @settingsLiquidGlassNone.
+  ///
+  /// In en, this message translates to:
+  /// **'None'**
+  String get settingsLiquidGlassNone;
+
+  /// No description provided for @settingsLiquidGlassStandard.
+  ///
+  /// In en, this message translates to:
+  /// **'Standard'**
+  String get settingsLiquidGlassStandard;
+
+  /// No description provided for @settingsLiquidGlassUltra.
+  ///
+  /// In en, this message translates to:
+  /// **'Ultra'**
+  String get settingsLiquidGlassUltra;
+
+  /// No description provided for @settingsThemeMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Theme mode'**
+  String get settingsThemeMode;
+
+  /// No description provided for @settingsPureBlackMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Pure black mode'**
+  String get settingsPureBlackMode;
+
+  /// No description provided for @settingsPureBlackStandard.
+  ///
+  /// In en, this message translates to:
+  /// **'Standard'**
+  String get settingsPureBlackStandard;
+
+  /// No description provided for @settingsPureBlackOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Pure black'**
+  String get settingsPureBlackOn;
+
+  /// No description provided for @settingsThemeColor.
+  ///
+  /// In en, this message translates to:
+  /// **'Theme color'**
+  String get settingsThemeColor;
+
+  /// No description provided for @settingsColorStyle.
+  ///
+  /// In en, this message translates to:
+  /// **'Color style'**
+  String get settingsColorStyle;
+
+  /// No description provided for @settingsColorStyleVivid.
+  ///
+  /// In en, this message translates to:
+  /// **'Vivid'**
+  String get settingsColorStyleVivid;
+
+  /// No description provided for @settingsColorStyleTinted.
+  ///
+  /// In en, this message translates to:
+  /// **'Tinted'**
+  String get settingsColorStyleTinted;
+
+  /// No description provided for @settingsColorStyleSoft.
+  ///
+  /// In en, this message translates to:
+  /// **'Soft'**
+  String get settingsColorStyleSoft;
+
+  /// No description provided for @settingsColorStyleMonochrome.
+  ///
+  /// In en, this message translates to:
+  /// **'Monochrome'**
+  String get settingsColorStyleMonochrome;
+
+  /// No description provided for @settingsAddColor.
+  ///
+  /// In en, this message translates to:
+  /// **'Add color'**
+  String get settingsAddColor;
+
+  /// No description provided for @settingsCustomColor.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom color'**
+  String get settingsCustomColor;
+
+  /// No description provided for @settingsColorEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get settingsColorEdit;
+
+  /// No description provided for @settingsColorDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get settingsColorDelete;
+
+  /// No description provided for @settingsColorGrid.
+  ///
+  /// In en, this message translates to:
+  /// **'Grid'**
+  String get settingsColorGrid;
+
+  /// No description provided for @settingsColorSpectrum.
+  ///
+  /// In en, this message translates to:
+  /// **'Spectrum'**
+  String get settingsColorSpectrum;
+
+  /// No description provided for @settingsColorSliders.
+  ///
+  /// In en, this message translates to:
+  /// **'Sliders'**
+  String get settingsColorSliders;
+
+  /// No description provided for @settingsColorHue.
+  ///
+  /// In en, this message translates to:
+  /// **'Hue'**
+  String get settingsColorHue;
+
+  /// No description provided for @settingsColorSaturation.
+  ///
+  /// In en, this message translates to:
+  /// **'Saturation'**
+  String get settingsColorSaturation;
+
+  /// No description provided for @settingsColorBrightness.
+  ///
+  /// In en, this message translates to:
+  /// **'Brightness'**
+  String get settingsColorBrightness;
+
+  /// No description provided for @settingsColorHex.
+  ///
+  /// In en, this message translates to:
+  /// **'Hex'**
+  String get settingsColorHex;
+
+  /// No description provided for @settingsReset.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset'**
+  String get settingsReset;
+
+  /// No description provided for @settingsResetThemeColorsTip.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset theme colors to defaults?'**
+  String get settingsResetThemeColorsTip;
+
+  /// No description provided for @settingsDeleteColorTip.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete color {color}?'**
+  String settingsDeleteColorTip(String color);
+
+  /// No description provided for @settingsBottomBar.
+  ///
+  /// In en, this message translates to:
+  /// **'Bottom bar'**
+  String get settingsBottomBar;
+
+  /// No description provided for @settingsBottomBarFloating.
+  ///
+  /// In en, this message translates to:
+  /// **'Floating'**
+  String get settingsBottomBarFloating;
+
+  /// No description provided for @settingsBottomBarDocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Docked'**
+  String get settingsBottomBarDocked;
+
+  /// No description provided for @settingsTabAnimation.
+  ///
+  /// In en, this message translates to:
+  /// **'Tab animation'**
+  String get settingsTabAnimation;
+
+  /// No description provided for @settingsTabAnimationSlide.
+  ///
+  /// In en, this message translates to:
+  /// **'Slide'**
+  String get settingsTabAnimationSlide;
+
+  /// No description provided for @settingsTabAnimationFade.
+  ///
+  /// In en, this message translates to:
+  /// **'Fade'**
+  String get settingsTabAnimationFade;
+
+  /// No description provided for @settingsSidebar.
+  ///
+  /// In en, this message translates to:
+  /// **'Sidebar'**
+  String get settingsSidebar;
+
+  /// No description provided for @settingsSidebarBlur.
+  ///
+  /// In en, this message translates to:
+  /// **'Background blur'**
+  String get settingsSidebarBlur;
+
+  /// No description provided for @settingsFontFamily.
+  ///
+  /// In en, this message translates to:
+  /// **'Font family'**
+  String get settingsFontFamily;
+
+  /// No description provided for @settingsFontDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Default'**
+  String get settingsFontDefault;
+
+  /// No description provided for @settingsInstalledFonts.
+  ///
+  /// In en, this message translates to:
+  /// **'Installed fonts'**
+  String get settingsInstalledFonts;
+
+  /// No description provided for @settingsFontSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Search fonts'**
+  String get settingsFontSearch;
+
+  /// No description provided for @settingsFontNoResults.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching fonts'**
+  String get settingsFontNoResults;
+
+  /// No description provided for @settingsTextScale.
+  ///
+  /// In en, this message translates to:
+  /// **'Text scaling'**
+  String get settingsTextScale;
+
+  /// No description provided for @settingsTextScaleSystem.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow system'**
+  String get settingsTextScaleSystem;
+
+  /// No description provided for @settingsTextScaleCustom.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom'**
+  String get settingsTextScaleCustom;
+
+  /// No description provided for @settingsTextScalePreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Preview text at this size'**
+  String get settingsTextScalePreview;
+
+  /// No description provided for @navWorkspace.
+  ///
+  /// In en, this message translates to:
+  /// **'Workspace'**
+  String get navWorkspace;
 }
 
 class _AppLocalizationsDelegate

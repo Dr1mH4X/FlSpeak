@@ -97,8 +97,8 @@ class SettingsTile extends StatelessWidget {
     final Widget? resolvedTrailing =
         trailing ??
         (onTap != null
-            ? Icon(
-                Icons.chevron_right_rounded,
+            ? GlyphIcon(
+                Glyphs.chevronForward,
                 size: IconSizes.medium,
                 color: scheme.onSurfaceVariant,
               )

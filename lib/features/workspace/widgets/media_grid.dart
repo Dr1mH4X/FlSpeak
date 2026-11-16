@@ -98,11 +98,21 @@ class _MediaTile extends StatelessWidget {
             look: PressLook.tint,
             onPressed: onTap,
             childFills: true,
-            child: RemoteImage(
-              url: url,
-              width: double.infinity,
-              height: double.infinity,
-              fit: BoxFit.cover,
+            child: WidthBuilder(
+              builder: (context, width) {
+                final maxDecodeWidth = width.isFinite && width > 0
+                    ? (width * MediaQuery.devicePixelRatioOf(context))
+                          .round()
+                          .clamp(1, 512)
+                    : 512;
+                return RemoteImage(
+                  url: url,
+                  width: double.infinity,
+                  height: double.infinity,
+                  cacheWidth: maxDecodeWidth,
+                  fit: BoxFit.cover,
+                );
+              },
             ),
           ),
         ),

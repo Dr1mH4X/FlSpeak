@@ -17,6 +17,7 @@ class ConnectHeader extends StatelessWidget {
     required this.connected,
     required this.onWorkspace,
     required this.onSettings,
+    this.showSettingsButton = true,
     super.key,
   });
 
@@ -24,6 +25,7 @@ class ConnectHeader extends StatelessWidget {
   final bool connected;
   final VoidCallback onWorkspace;
   final VoidCallback onSettings;
+  final bool showSettingsButton;
 
   @override
   Widget build(BuildContext context) {
@@ -75,7 +77,7 @@ class ConnectHeader extends StatelessWidget {
                 ),
               ),
           ],
-          if (!desktop)
+          if (!desktop && showSettingsButton)
             ElasticButton(
               child: IconButton(
                 onPressed: onSettings,

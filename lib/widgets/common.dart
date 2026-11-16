@@ -202,17 +202,19 @@ class _ModalPanel extends StatelessWidget {
                   ],
                 ),
               ),
-              ElasticButton(
+              ElasticPress(
                 child: IconButton(
                   onPressed: () => Navigator.of(context).maybePop(),
                   iconSize: IconSizes.toolbar,
                   style: ButtonStyle.from(
                     foregroundColor: scheme.onSurfaceVariant,
                   ),
-                  icon: Icon(
-                    Icons.close_rounded,
-                    semanticLabel: MaterialLocalizations.of(context)
-                        .closeButtonTooltip,
+                  icon: Semantics(
+                    label: MaterialLocalizations.of(context).closeButtonTooltip,
+                    child: const GlyphIcon(
+                      Glyphs.close,
+                      size: IconSizes.toolbar,
+                    ),
                   ),
                 ),
               ),

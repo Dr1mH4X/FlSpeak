@@ -1,10 +1,11 @@
 // ignore_for_file: depend_on_referenced_packages
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide TextField;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flspeak/l10n/app_localizations.dart';
 import 'package:flspeak/theme/app_theme.dart';
+import 'package:flspeak/widgets/prism.dart' show TextField;
 import 'package:flspeak/features/connect/widgets/identity_dialog.dart';
 
 void main() {

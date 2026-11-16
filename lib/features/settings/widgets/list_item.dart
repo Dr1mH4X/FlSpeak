@@ -204,7 +204,7 @@ class ListItem<T> extends StatelessWidget {
 
   Widget get _pageTrailing =>
       trailing ??
-      const Icon(Icons.chevron_right_rounded, size: IconSizes.medium);
+      const GlyphIcon(Glyphs.chevronForward, size: IconSizes.medium);
 
   @override
   Widget build(BuildContext context) {

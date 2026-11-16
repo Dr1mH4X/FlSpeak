@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart'
@@ -205,9 +206,10 @@ class MemberAvatar extends StatelessWidget {
       ),
     );
 
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
     // 说话描边用透明边占位过渡：边框出现/消失不再挤动布局，也不瞬跳。
     final avatar = AnimatedContainer(
-      duration: Motion.effectsFast,
+      duration: reduceMotion ? Duration.zero : Motion.effectsFast,
       curve: Motion.effectsDefaultCurve,
       width: size,
       height: size,
@@ -223,14 +225,17 @@ class MemberAvatar extends StatelessWidget {
       child: image == null
           ? fallback
           : ClipOval(
-              child: Image.memory(
-                image!,
-                width: size - 4,
-                height: size - 4,
-                fit: BoxFit.cover,
-                cacheWidth: (size * 2).ceil(),
-                errorBuilder: (context, error, stack) =>
-                    Center(child: fallback),
+              child: SizedBox.square(
+                dimension: size - 4,
+                child: Image.memory(
+                  image!,
+                  width: size - 4,
+                  height: size - 4,
+                  fit: BoxFit.cover,
+                  cacheWidth: (size * 2).ceil(),
+                  errorBuilder: (context, error, stack) =>
+                      Center(child: fallback),
+                ),
               ),
             ),
     );
@@ -261,11 +266,17 @@ class _SpeakingHaloState extends State<_SpeakingHalo>
     vsync: this,
     duration: const Duration(milliseconds: 1400),
   );
+  bool _reduceMotion = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (!_controller.isAnimating) {
+    _reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final tickerEnabled = TickerMode.valuesOf(context).enabled;
+    if (_reduceMotion || !tickerEnabled) {
+      _controller.stop();
+      _controller.value = 0;
+    } else if (!_controller.isAnimating) {
       _controller.repeat();
     }
   }
@@ -278,27 +289,37 @@ class _SpeakingHaloState extends State<_SpeakingHalo>
 
   @override
   Widget build(BuildContext context) {
+    if (_reduceMotion) {
+      return widget.child;
+    }
     final primary = context.status.live;
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        final t = Curves.easeInOut.transform(_controller.value);
-        return DecoratedBox(
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: primary.withValues(alpha: 0.5 * (1 - t)),
-                spreadRadius: 1 + 6 * t,
-              ),
-            ],
-          ),
-          child: child,
-        );
-      },
-      child: widget.child,
+    return RepaintBoundary(
+      child: CustomPaint(
+        painter: _SpeakingHaloPainter(animation: _controller, color: primary),
+        child: widget.child,
+      ),
     );
   }
+}
+
+class _SpeakingHaloPainter extends CustomPainter {
+  _SpeakingHaloPainter({required this.animation, required this.color})
+    : super(repaint: animation);
+
+  final Animation<double> animation;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final t = Curves.easeInOut.transform(animation.value);
+    final radius = math.min(size.width, size.height) / 2 + 1 + 6 * t;
+    final paint = Paint()..color = color.withValues(alpha: 0.5 * (1 - t));
+    canvas.drawCircle(size.center(Offset.zero), radius, paint);
+  }
+
+  @override
+  bool shouldRepaint(_SpeakingHaloPainter oldDelegate) =>
+      oldDelegate.animation != animation || oldDelegate.color != color;
 }
 
 /// 兼容旧调用：昵称进、缩写出。

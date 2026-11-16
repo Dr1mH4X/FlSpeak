@@ -4,10 +4,12 @@ import 'package:flutter/material.dart'
         ButtonStyle,
         FilledButton,
         IconButton,
+        InputDecoration,
         OutlinedButton,
         PopupMenuItem,
         Switch,
-        TextButton;
+        TextButton,
+        TextField;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers.dart';
@@ -33,21 +35,30 @@ class ClientActionsButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final view = ref.watch(sessionViewProvider);
+    final activeServerId = ref.watch(
+      sessionViewProvider.select((view) => view.activeServerId),
+    );
+    final isSelf = ref.watch(
+      sessionViewProvider.select((view) => view.selfClientId == client.id),
+    );
     final scheme = context.scheme;
-    final selectedMember = ref.watch(selectedMemberProvider);
-    final isSelected =
-        selectedMember != null &&
-        selectedMember.serverId == view.activeServerId &&
-        selectedMember.clientId == client.id &&
-        selectedMember.uid == client.uid;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final isSelected = ref.watch(
+      selectedMemberProvider.select(
+        (selected) =>
+            selected != null &&
+            selected.serverId == activeServerId &&
+            selected.clientId == client.id &&
+            selected.uid == client.uid,
+      ),
+    );
     final foreground = isSelected ? scheme.onPrimaryContainer : null;
 
     final details = Semantics(
       button: true,
       selected: isSelected,
       child: AnimatedContainer(
-        duration: Motion.effectsFast,
+        duration: reduceMotion ? Duration.zero : Motion.effectsFast,
         curve: Motion.effectsDefaultCurve,
         decoration: ShapeDecoration(
           color: isSelected ? scheme.primaryContainer : Colors.transparent,
@@ -59,7 +70,7 @@ class ClientActionsButton extends ConsumerWidget {
             onTap: () {
               ref
                   .read(selectedMemberProvider.notifier)
-                  .select(client, serverId: view.activeServerId);
+                  .select(client, serverId: activeServerId);
               ref.read(routerProvider).go(AppRoutes.workspace);
               Scaffold.maybeOf(context)?.closeDrawer();
             },
@@ -77,20 +88,31 @@ class ClientActionsButton extends ConsumerWidget {
         ),
       ),
     );
-    if (client.id == view.selfClientId || client.uid.isEmpty) {
+    if (isSelf || client.uid.isEmpty) {
       return details;
     }
     final l10n = AppLocalizations.of(context);
-    final access = ref.watch(sessionAccessProvider).asData?.value;
+    final access = ref.watch(
+      sessionAccessProvider.select((value) => value.asData?.value),
+    );
     final canManage =
         (access?.memberAddPower ?? 0) > 0 ||
         (access?.memberRemovePower ?? 0) > 0;
-    final stream = view.streamForClient(client.id);
-    final isWatchingStream =
-        stream != null && view.watchingStreamId == stream.id;
+    final (:connected, :busy, :stream, :isWatchingStream) = ref.watch(
+      sessionViewProvider.select((view) {
+        final stream = view.streamForClient(client.id);
+        return (
+          connected: view.connected,
+          busy: view.busy,
+          stream: stream,
+          isWatchingStream:
+              stream != null && view.watchingStreamId == stream.id,
+        );
+      }),
+    );
     return SecondaryMenu(
       openOnSecondaryTap: true,
-      enabled: view.connected && !view.busy,
+      enabled: connected && !busy,
       moreSemanticLabel: l10n.memberActions(client.nickname),
       items: [
         if (stream != null)
@@ -147,8 +169,8 @@ class ClientActionsButton extends ConsumerWidget {
                 : l10n.kickServer,
             danger: true,
             onPressed:
-                view.connected &&
-                    !view.busy &&
+                connected &&
+                    !busy &&
                     access?.connectionEpoch != null &&
                     (target == KickTarget.channel
                             ? access?.kickChannelPower ?? 0
@@ -206,11 +228,19 @@ class _PokeFormState extends ConsumerState<_PokeForm> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Text(
+          l10n.pokeMessage,
+          style: context.texts.bodyMedium?.copyWith(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 6),
         TextField(
           controller: _message,
           autofocus: true,
           enabled: !_busy,
-          decoration: InputDecoration(labelText: l10n.pokeMessage),
+          decoration: const InputDecoration(),
           onSubmitted: (_) => _send(),
         ),
         const SizedBox(height: 16),

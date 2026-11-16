@@ -7,6 +7,8 @@ import 'features/settings/settings_page.dart';
 import 'features/workspace/workspace_page.dart';
 import 'features/workspace/workspace_shell.dart';
 import 'theme/app_motion.dart';
+import 'theme/app_theme.dart';
+import 'widgets/compact_navigation_shell.dart';
 
 abstract final class AppRoutes {
   /// 打开应用落在这里：身份 + 服务器列表。
@@ -23,12 +25,29 @@ final routerProvider = Provider<GoRouter>((ref) {
   final router = GoRouter(
     initialLocation: AppRoutes.connect,
     routes: [
-      GoRoute(
-        path: AppRoutes.connect,
-        pageBuilder: (context, state) => _page(
-          state,
-          ConnectPage(serverId: state.uri.queryParameters['server']),
-        ),
+      ShellRoute(
+        builder: (context, state, child) {
+          if (!context.isCompact) {
+            return child;
+          }
+          return CompactNavigationShell(
+            location: state.uri.path,
+            serverId: state.uri.queryParameters['server'],
+          );
+        },
+        routes: [
+          GoRoute(
+            path: AppRoutes.connect,
+            pageBuilder: (context, state) => _page(
+              state,
+              ConnectPage(serverId: state.uri.queryParameters['server']),
+            ),
+          ),
+          GoRoute(
+            path: AppRoutes.settings,
+            pageBuilder: (context, state) => _page(state, const SettingsPage()),
+          ),
+        ],
       ),
       GoRoute(
         path: AppRoutes.workspace,
@@ -39,10 +58,6 @@ final routerProvider = Provider<GoRouter>((ref) {
             child: WorkspacePage(),
           ),
         ),
-      ),
-      GoRoute(
-        path: AppRoutes.settings,
-        pageBuilder: (context, state) => _page(state, const SettingsPage()),
       ),
     ],
   );

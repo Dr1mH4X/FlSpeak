@@ -1,11 +1,11 @@
 // 本文件包含的代码片段来源于 FlClash（https://github.com/chen08209/FlClash）项目。
 // 原始许可证：FlClash 应用代码为 GPL-3.0；其 plugins/window 插件为 MIT。
-// 来源提交：7fd417fb9a9a277c6a9339a8ac87f907df7c25f7。
-// 本片段取自 plugins/window（MIT），可按 MIT 或 GPL-3.0 使用：对应
-// plugins/window/lib/src/desktop_window.dart 的 startDragging、minimize、
-// maximize、unmaximize、close、isMaximized、setAlwaysOnTop 以及窗口事件。
+// 来源提交：7fd417fb9a9a277c6a9339a8ac87f907df7c25f7 与 be84736605527034689c95bf27828ff27d912c5e。
+// 本片段取自 plugins/window（MIT）与 lib/common/window.dart（GPL-3.0）：对应
+// desktop_window.dart 窗口动作与事件，以及 setBlur / _resolveBlurEffect。
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -215,7 +215,10 @@ class WindowChrome {
     await setAlwaysOnTop(!current);
   }
 
-  /// 查询是否支持指定的窗口特效（如 mica、acrylic、blur）。
+  static const double sidebarBlurTintOpacity = 0.5;
+  static String? _cachedBlurEffect;
+
+  /// 查询是否支持指定的窗口特效（如 mica、acrylic、blur、glass）。
   static Future<bool> isEffectSupported(String effect) async {
     try {
       return await _channel.invokeMethod<bool>('isEffectSupported', effect) ??
@@ -228,7 +231,7 @@ class WindowChrome {
   }
 
   /// 设置窗口系统材质特效。
-  static Future<void> setEffect(
+  static Future<bool> setEffect(
     String effect, {
     int? tint,
     Brightness? brightness,
@@ -242,11 +245,51 @@ class WindowChrome {
         args['brightness'] = brightness.name;
       }
       await _channel.invokeMethod<void>('setEffect', args);
+      return true;
     } on PlatformException {
-      // 平台不支持时静默。
+      return false;
     } on MissingPluginException {
-      // 没有原生实现。
+      return false;
     }
+  }
+
+  static Future<String> _resolveBlurEffect() async {
+    final cached = _cachedBlurEffect;
+    if (cached != null) {
+      return cached;
+    }
+    final candidates = Platform.isMacOS
+        ? const ['glass', 'blur']
+        : const ['mica', 'blur'];
+    for (final effect in candidates) {
+      if (await isEffectSupported(effect)) {
+        return _cachedBlurEffect = effect;
+      }
+    }
+    return 'none';
+  }
+
+  /// 开启或关闭侧栏窗口底层模糊特效，成功时返回需叠加到侧栏表面色的不透明度。
+  static Future<double?> setSidebarBlur({
+    required bool enabled,
+    required Brightness brightness,
+    required Color tint,
+  }) async {
+    if (kIsWeb || (!Platform.isMacOS && !Platform.isWindows)) {
+      return null;
+    }
+    final effect = enabled ? await _resolveBlurEffect() : 'none';
+    final applied = await setEffect(
+      effect,
+      tint: Platform.isWindows
+          ? tint.withValues(alpha: sidebarBlurTintOpacity).toARGB32()
+          : null,
+      brightness: brightness,
+    );
+    if (!applied || effect == 'none') {
+      return null;
+    }
+    return sidebarBlurTintOpacity;
   }
 
   /// 用主题的 surface 色刷新窗口底色。
