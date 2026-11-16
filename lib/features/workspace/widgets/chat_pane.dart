@@ -306,57 +306,61 @@ class _ChatPaneState extends State<ChatPane> {
     final send = widget.onSend;
     var text = draft.text.trim();
     final image = _image;
+    var uploadedUrl = _uploadedImageUrl;
     if ((text.isEmpty && image == null) ||
         widget.busy ||
         _sending ||
         !_canSend) {
       return;
     }
-    setState(() => _sending = true);
+    if ((ModalRoute.of(context)?.isCurrent ?? false) && !_focus.hasFocus) {
+      _focus.requestFocus();
+    }
+    _input.clear();
+    setState(() {
+      _sending = true;
+      _image = null;
+      _uploadedImageUrl = null;
+    });
+
+    void restoreDraft() {
+      if (!mounted) return;
+      if (destination == _target(widget)) {
+        if (_input.text.isEmpty && _image == null) {
+          _input.value = draft;
+          setState(() {
+            _image = image;
+            _uploadedImageUrl = uploadedUrl;
+          });
+        }
+      } else {
+        _drafts.putIfAbsent(
+          destination,
+          () => _ComposerDraft(
+            value: draft,
+            image: image,
+            uploadedUrl: uploadedUrl,
+          ),
+        );
+      }
+    }
+
+    var sent = false;
     try {
       if (image != null) {
-        final url =
-            _uploadedImageUrl ?? await widget.onUploadImage?.call(image.bytes);
-        if (!mounted || url == null) return;
-        if (destination != _target(widget)) {
-          final pending = _drafts[destination];
-          if (pending != null && identical(pending.image, image)) {
-            _drafts[destination] = _ComposerDraft(
-              value: pending.value,
-              image: image,
-              uploadedUrl: url,
-            );
-          }
+        uploadedUrl ??= await widget.onUploadImage?.call(image.bytes);
+        if (!mounted || uploadedUrl == null || destination != _target(widget)) {
           return;
         }
-        if (identical(_image, image)) _uploadedImageUrl = url;
-        text = [if (text.isNotEmpty) text, '![](<$url>)'].join('\n');
+        text = [if (text.isNotEmpty) text, '![](<$uploadedUrl>)'].join('\n');
       }
-      final sent = await send(text);
-      if (mounted && sent && destination != _target(widget)) {
-        final pending = _drafts[destination];
-        if (pending?.value == draft && identical(pending?.image, image)) {
-          _drafts.remove(destination);
-        }
-      }
-      if (mounted &&
-          sent &&
-          _input.value == draft &&
-          identical(_image, image) &&
-          destination == _target(widget)) {
-        _input.clear();
-        setState(() {
-          _image = null;
-          _uploadedImageUrl = null;
-        });
-      }
+      sent = await send(text);
     } finally {
+      if (!sent) {
+        restoreDraft();
+      }
       if (mounted) {
         setState(() => _sending = false);
-        if (destination == _target(widget) &&
-            (ModalRoute.of(context)?.isCurrent ?? false)) {
-          _focus.requestFocus();
-        }
       }
     }
   }
@@ -673,147 +677,154 @@ class _ChatPaneState extends State<ChatPane> {
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: _contentMaxWidth),
-          child: DecoratedBox(
-            decoration: ShapeDecoration(
-              // 暗色主面板本身就是 surfaceContainer，输入条往上一级
-              // （Highest）才浮得出来；亮色维持原状。
-              color: scheme.surfaceContainerHigh,
-              shape: RoundedSuperellipseBorder(
-                borderRadius: AppRadius.xl,
-                side: BorderSide(color: scheme.outline),
+          child: TextFieldTapRegion(
+            child: DecoratedBox(
+              decoration: ShapeDecoration(
+                // 暗色主面板本身就是 surfaceContainer，输入条往上一级
+                // （Highest）才浮得出来；亮色维持原状。
+                color: scheme.surfaceContainerHigh,
+                shape: RoundedSuperellipseBorder(
+                  borderRadius: AppRadius.xl,
+                  side: BorderSide(color: scheme.outline),
+                ),
               ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  _ScopeButton(
-                    scope: scope,
-                    onChanged: widget.onScopeChanged,
-                    recipients: widget.recipients,
-                    onRecipientChanged: widget.onRecipientChanged,
-                    onRecipientSelected: widget.onRecipientSelected,
-                    selectedRecipient: _selectedRecipient,
-                    unreadScopes: widget.unreadScopes,
-                    unreadPeers: widget.unreadPeers,
-                    enabled: !_sending && !widget.busy,
-                  ),
-                  if (widget.onPickImage != null || widget.onPasteImage != null)
-                    SecondaryMenu(
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    _ScopeButton(
+                      scope: scope,
+                      onChanged: widget.onScopeChanged,
+                      recipients: widget.recipients,
+                      onRecipientChanged: widget.onRecipientChanged,
+                      onRecipientSelected: widget.onRecipientSelected,
+                      selectedRecipient: _selectedRecipient,
+                      unreadScopes: widget.unreadScopes,
+                      unreadPeers: widget.unreadPeers,
                       enabled: !_sending && !widget.busy,
-                      items: [
-                        if (widget.onPickImage != null)
-                          PopupMenuItem(
-                            label: l10n.chatChooseImage,
-                            onPressed: () => _selectImage(widget.onPickImage!),
+                    ),
+                    if (widget.onPickImage != null ||
+                        widget.onPasteImage != null)
+                      SecondaryMenu(
+                        enabled: !_sending && !widget.busy,
+                        items: [
+                          if (widget.onPickImage != null)
+                            PopupMenuItem(
+                              label: l10n.chatChooseImage,
+                              onPressed: () =>
+                                  _selectImage(widget.onPickImage!),
+                            ),
+                          if (widget.onPasteImage != null)
+                            PopupMenuItem(
+                              label: l10n.chatPasteImage,
+                              onPressed: () =>
+                                  _selectImage(widget.onPasteImage!),
+                            ),
+                          if (widget.onConfigureImageHost != null)
+                            PopupMenuItem(
+                              label: l10n.imageHostTitle,
+                              onPressed: widget.onConfigureImageHost,
+                            ),
+                        ],
+                        builder: (context, openMenu) => IconButton(
+                          onPressed: openMenu,
+                          icon: Icon(
+                            Icons.add_photo_alternate_outlined,
+                            size: IconSizes.toolbar,
+                            semanticLabel: l10n.chatAttachImage,
                           ),
-                        if (widget.onPasteImage != null)
-                          PopupMenuItem(
-                            label: l10n.chatPasteImage,
-                            onPressed: () => _selectImage(widget.onPasteImage!),
-                          ),
-                        if (widget.onConfigureImageHost != null)
-                          PopupMenuItem(
-                            label: l10n.imageHostTitle,
-                            onPressed: widget.onConfigureImageHost,
-                          ),
-                      ],
-                      builder: (context, openMenu) => IconButton(
-                        onPressed: openMenu,
+                        ),
+                      ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final hintStyle = texts.bodyMedium?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          );
+                          var hintText = l10n.chatComposerHintTo(target);
+                          if (scope == ChatScope.channel) {
+                            final textWidth = math.max(
+                              0.0,
+                              constraints.maxWidth - 44,
+                            );
+                            final painter = TextPainter(
+                              text: TextSpan(text: hintText, style: hintStyle),
+                              maxLines: 1,
+                              textDirection: Directionality.of(context),
+                              textScaler: MediaQuery.textScalerOf(context),
+                            )..layout(maxWidth: textWidth);
+                            final overflows = painter.didExceedMaxLines;
+                            painter.dispose();
+                            if (overflows) {
+                              hintText = l10n.chatComposerHintTo(
+                                l10n.chatScopeChannel,
+                              );
+                            }
+                          }
+                          return Focus(
+                            canRequestFocus: false,
+                            skipTraversal: true,
+                            onKeyEvent: _handleKeyEvent,
+                            child: TextField(
+                              controller: _input,
+                              focusNode: _focus,
+                              enabled: _canSend,
+                              minLines: 1,
+                              maxLines: 5,
+                              keyboardType: TextInputType.multiline,
+                              // 触屏没有 Tab 键：点输入框外收起键盘。
+                              onTapOutside: (_) =>
+                                  FocusManager.instance.primaryFocus?.unfocus(),
+                              style: texts.bodyMedium?.copyWith(
+                                color: scheme.onSurface,
+                              ),
+                              decoration: InputDecoration(
+                                hintText: hintText,
+                                hintMaxLines: 1,
+                                hintStyle: hintStyle,
+                                filled: false,
+                                isDense: true,
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                disabledBorder: InputBorder.none,
+                                // 文本距弧边的总内边距 = 容器 8 + 22 = 30，
+                                // 与有效圆角半径（60 高钳制后的 30）光学对齐。
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 22,
+                                  vertical: 11,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: _input,
+                      builder: (context, value, child) => IconButton(
+                        onPressed:
+                            !widget.busy &&
+                                !_sending &&
+                                _canSend &&
+                                (value.text.trim().isNotEmpty || _image != null)
+                            ? _send
+                            : null,
+                        style: ButtonStyle.from(
+                          foregroundColor: scheme.primary,
+                        ),
                         icon: Icon(
-                          Icons.add_photo_alternate_outlined,
+                          Icons.send_rounded,
                           size: IconSizes.toolbar,
-                          semanticLabel: l10n.chatAttachImage,
+                          semanticLabel: l10n.chatSend,
                         ),
                       ),
                     ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final hintStyle = texts.bodyMedium?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        );
-                        var hintText = l10n.chatComposerHintTo(target);
-                        if (scope == ChatScope.channel) {
-                          final textWidth = math.max(
-                            0.0,
-                            constraints.maxWidth - 44,
-                          );
-                          final painter = TextPainter(
-                            text: TextSpan(text: hintText, style: hintStyle),
-                            maxLines: 1,
-                            textDirection: Directionality.of(context),
-                            textScaler: MediaQuery.textScalerOf(context),
-                          )..layout(maxWidth: textWidth);
-                          final overflows = painter.didExceedMaxLines;
-                          painter.dispose();
-                          if (overflows) {
-                            hintText = l10n.chatComposerHintTo(
-                              l10n.chatScopeChannel,
-                            );
-                          }
-                        }
-                        return Focus(
-                          canRequestFocus: false,
-                          skipTraversal: true,
-                          onKeyEvent: _handleKeyEvent,
-                          child: TextField(
-                            controller: _input,
-                            focusNode: _focus,
-                            enabled: !_sending && !widget.busy && _canSend,
-                            minLines: 1,
-                            maxLines: 5,
-                            keyboardType: TextInputType.multiline,
-                            // 触屏没有 Tab 键：点输入框外收起键盘。
-                            onTapOutside: (_) =>
-                                FocusManager.instance.primaryFocus?.unfocus(),
-                            style: texts.bodyMedium?.copyWith(
-                              color: scheme.onSurface,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: hintText,
-                              hintMaxLines: 1,
-                              hintStyle: hintStyle,
-                              filled: false,
-                              isDense: true,
-                              border: InputBorder.none,
-                              enabledBorder: InputBorder.none,
-                              focusedBorder: InputBorder.none,
-                              disabledBorder: InputBorder.none,
-                              // 文本距弧边的总内边距 = 容器 8 + 22 = 30，
-                              // 与有效圆角半径（60 高钳制后的 30）光学对齐。
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 22,
-                                vertical: 11,
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  ValueListenableBuilder<TextEditingValue>(
-                    valueListenable: _input,
-                    builder: (context, value, child) => IconButton(
-                      onPressed:
-                          !widget.busy &&
-                              !_sending &&
-                              _canSend &&
-                              (value.text.trim().isNotEmpty || _image != null)
-                          ? _send
-                          : null,
-                      style: ButtonStyle.from(foregroundColor: scheme.primary),
-                      icon: Icon(
-                        Icons.send_rounded,
-                        size: IconSizes.toolbar,
-                        semanticLabel: l10n.chatSend,
-                      ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

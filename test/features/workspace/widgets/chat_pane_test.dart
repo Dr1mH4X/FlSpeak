@@ -2,7 +2,6 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:flutter/material.dart'
@@ -13,6 +12,7 @@ import 'package:flutter/material.dart'
         OutlinedButton,
         Switch,
         TextButton;
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flspeak/core/models.dart';
@@ -286,8 +286,9 @@ void main() {
       await tester.tap(find.byIcon(Icons.send_rounded));
       await tester.pump();
       final input = tester.widget<TextField>(find.byType(TextField));
-      expect(input.controller!.text, 'unsent draft');
-      expect(input.enabled, isFalse);
+      expect(input.controller!.text, '');
+      expect(input.enabled, isTrue);
+      expect(input.focusNode!.hasFocus, isTrue);
       expect(
         tester
             .widget<IconButton>(
@@ -299,16 +300,20 @@ void main() {
             .onPressed,
         isNull,
       );
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
       expect(sends, 1);
       response.complete(false);
       await tester.pumpAndSettle();
       expect(input.controller!.text, 'unsent draft');
+      expect(input.focusNode!.hasFocus, isTrue);
       response = Completer<bool>();
       await tester.tap(find.byIcon(Icons.send_rounded));
       await tester.pump();
       response.complete(true);
       await tester.pumpAndSettle();
       expect(input.controller!.text, '');
+      expect(input.focusNode!.hasFocus, isTrue);
       expect(sends, 2);
     },
   );
@@ -862,6 +867,211 @@ void main() {
       expect(find.text('/ask'), findsOneWidget);
       expect(find.text('ClawBot'), findsOneWidget);
       expect(find.text('!play'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'enter and send button both preserve composer focus across busy sends for consecutive messages',
+    (tester) async {
+      final sent = <String>[];
+      var busy = false;
+      late StateSetter updateState;
+
+      await tester.pumpWidget(
+        StatefulBuilder(
+          builder: (context, setState) {
+            updateState = setState;
+            return MaterialApp(
+              theme: buildAppTheme(Brightness.light),
+              locale: const Locale('zh'),
+              localizationsDelegates: const [
+                ...AppLocalizations.localizationsDelegates,
+                PrismUiLocalizationsDelegate(),
+              ],
+              supportedLocales: AppLocalizations.supportedLocales,
+              builder: (context, child) =>
+                  PrismRootScope(brightness: Brightness.light, child: child!),
+              home: Scaffold(
+                body: ChatPane(
+                  channelName: 'Lobby',
+                  messages: const [],
+                  scope: ChatScope.channel,
+                  canSendChannel: true,
+                  busy: busy,
+                  selfUid: 'self',
+                  recipients: const [],
+                  recipientUid: null,
+                  onRecipientChanged: (_) {},
+                  onReply: (_) {},
+                  onScopeChanged: (_) {},
+                  onSend: (text) async {
+                    updateState(() => busy = true);
+                    await Future<void>.delayed(Duration.zero);
+                    sent.add(text);
+                    updateState(() => busy = false);
+                    return true;
+                  },
+                ),
+              ),
+            );
+          },
+        ),
+      );
+
+      final field = find.byType(TextField);
+      await tester.tap(field);
+      await tester.pump();
+      tester.testTextInput.enterText('first');
+      await tester.pump();
+      expect(tester.widget<TextField>(field).focusNode!.hasFocus, isTrue);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(tester.widget<TextField>(field).focusNode!.hasFocus, isTrue);
+      await tester.pumpAndSettle();
+      expect(sent, ['first']);
+      expect(tester.widget<TextField>(field).focusNode!.hasFocus, isTrue);
+
+      // 不重新点击输入框，直接键入第二条并点击发送按钮。
+      tester.testTextInput.enterText('second');
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.send_rounded));
+      await tester.pumpAndSettle();
+      expect(sent, ['first', 'second']);
+      expect(tester.widget<TextField>(field).focusNode!.hasFocus, isTrue);
+
+      // 点击输入框与发送栏外部区域时仍能正常收起焦点。
+      await tester.tap(find.byType(ListView));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(field).focusNode!.hasFocus, isFalse);
+    },
+  );
+
+  testWidgets(
+    'typing a new message during pending send keeps it clean on both success and failure',
+    (tester) async {
+      var pending = Completer<bool>();
+      final sent = <String>[];
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            ...AppLocalizations.localizationsDelegates,
+            PrismUiLocalizationsDelegate(),
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
+          home: Scaffold(
+            body: ChatPane(
+              channelName: 'Lobby',
+              messages: const [],
+              scope: ChatScope.channel,
+              canSendChannel: true,
+              busy: false,
+              selfUid: 'self',
+              recipients: const [],
+              recipientUid: null,
+              onRecipientChanged: (_) {},
+              onReply: (_) {},
+              onScopeChanged: (_) {},
+              onSend: (text) {
+                sent.add(text);
+                return pending.future;
+              },
+            ),
+          ),
+        ),
+      );
+
+      final field = find.byType(TextField);
+      await tester.enterText(field, 'first');
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+
+      // 第一条尚未完成时立即输入第二条，成功完成不会混入旧文本。
+      tester.testTextInput.enterText('second');
+      await tester.pump();
+      pending.complete(true);
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(field).controller!.text, 'second');
+
+      // 第二条发送期间若又输入第三条，即使第二条失败也不覆盖用户新输入。
+      pending = Completer<bool>();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      tester.testTextInput.enterText('third');
+      await tester.pump();
+      pending.complete(false);
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(field).controller!.text, 'third');
+      expect(sent, ['first', 'second']);
+    },
+  );
+
+  testWidgets(
+    'tapping outside during async image upload does not yank focus back after completion',
+    (tester) async {
+      final upload = Completer<String?>();
+      final sent = <String>[];
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            ...AppLocalizations.localizationsDelegates,
+            PrismUiLocalizationsDelegate(),
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
+          home: Scaffold(
+            body: ChatPane(
+              channelName: 'Lobby',
+              messages: const [],
+              scope: ChatScope.channel,
+              canSendChannel: true,
+              busy: false,
+              selfUid: 'self',
+              recipients: const [],
+              recipientUid: null,
+              onRecipientChanged: (_) {},
+              onReply: (_) {},
+              onScopeChanged: (_) {},
+              onPickImage: () async => _picked(),
+              onUploadImage: (_) => upload.future,
+              onSend: (text) async {
+                sent.add(text);
+                return true;
+              },
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byIcon(Icons.add_photo_alternate_outlined));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('选择图片'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.send_rounded));
+      await tester.pump();
+      final field = find.byType(TextField);
+      expect(tester.widget<TextField>(field).focusNode!.hasFocus, isTrue);
+
+      // 上传期间用户主动点到消息列表失焦。
+      await tester.tap(find.byType(ListView));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(field).focusNode!.hasFocus, isFalse);
+
+      upload.complete('https://images.example.com/async.png');
+      await tester.pumpAndSettle();
+      expect(sent, ['![](<https://images.example.com/async.png>)']);
+      expect(tester.widget<TextField>(field).focusNode!.hasFocus, isFalse);
     },
   );
 }
