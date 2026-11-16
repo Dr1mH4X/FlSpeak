@@ -81,8 +81,35 @@ pub struct UiSettings {
     pub nickname: String,
     /// 主题模式：system / light / dark。
     pub theme: String,
+    /// 是否启用深色纯黑背景。
+    pub pure_black: bool,
+    /// 当前主题种子色（ARGB32）。
+    #[serde(
+        default = "UiSettings::default_primary_color",
+        deserialize_with = "UiSettings::deserialize_primary_color"
+    )]
+    pub primary_color: u32,
+    /// 主题预设与自定义色板列表（ARGB32）。
+    #[serde(default = "UiSettings::default_primary_colors")]
+    pub primary_colors: Vec<u32>,
+    /// 主题色彩生成风格：vivid / tinted / soft / monochrome。
+    pub color_style: String,
+    /// 窄屏是否启用悬浮底部导航栏（否则停靠底边）。
+    pub floating_navigation_bar: bool,
+    /// 窄屏底部导航切换动画：slide / fade。
+    pub tab_animation: String,
+    /// 桌面端侧栏窗口背景模糊开关。
+    pub sidebar_blur: bool,
+    /// 自定义全局字体族名称（None 表示跟随默认字体）。
+    pub font_family: Option<String>,
+    /// 是否启用自定义全局字体缩放。
+    pub text_scale_enabled: bool,
+    /// 自定义字体缩放倍率（0.8 - 1.4）。
+    pub text_scale: f64,
     /// 动效设置：system / on / off。
     pub motion: String,
+    /// 液态玻璃效果档位：none / standard / ultra。
+    pub liquid_glass: String,
     /// 按住说话快捷键键码（LogicalKeyboardKey keyId）。
     pub ptt_hotkey: Option<i64>,
     /// 频道栏宽度（逻辑像素）。
@@ -113,6 +140,37 @@ impl UiSettings {
     /// 默认昵称常量。
     pub const DEFAULT_NICKNAME: &'static str = "FlSpeakUser";
 
+    /// 默认主题主色（ARGB32）。
+    pub const DEFAULT_PRIMARY_COLOR: u32 = 0xFFC4_4D78;
+
+    /// 默认色板列表（首项为品牌默认色，其余对齐经典系统色板）。
+    pub const DEFAULT_PRIMARY_COLORS: [u32; 9] = [
+        Self::DEFAULT_PRIMARY_COLOR,
+        0xFF00_7AFF,
+        0xFFCB_30E0,
+        0xFFFF_2D55,
+        0xFFFF_383C,
+        0xFFFF_8D28,
+        0xFFFF_CC00,
+        0xFF34_C759,
+        0xFF8E_8E93,
+    ];
+
+    pub fn default_primary_color() -> u32 {
+        Self::DEFAULT_PRIMARY_COLOR
+    }
+
+    pub fn default_primary_colors() -> Vec<u32> {
+        Self::DEFAULT_PRIMARY_COLORS.to_vec()
+    }
+
+    fn deserialize_primary_color<'de, D>(deserializer: D) -> Result<u32, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(Option::<u32>::deserialize(deserializer)?.unwrap_or(Self::DEFAULT_PRIMARY_COLOR))
+    }
+
     /// 当前构建形态的默认日志等级。
     pub fn default_log_level() -> &'static str {
         if cfg!(debug_assertions) {
@@ -138,7 +196,18 @@ impl Default for UiSettings {
         Self {
             nickname: Self::DEFAULT_NICKNAME.to_string(),
             theme: "system".to_string(),
+            pure_black: false,
+            primary_color: Self::DEFAULT_PRIMARY_COLOR,
+            primary_colors: Self::DEFAULT_PRIMARY_COLORS.to_vec(),
+            color_style: "vivid".to_string(),
+            floating_navigation_bar: true,
+            tab_animation: "slide".to_string(),
+            sidebar_blur: false,
+            font_family: None,
+            text_scale_enabled: false,
+            text_scale: 1.0,
             motion: "system".to_string(),
+            liquid_glass: "none".to_string(),
             ptt_hotkey: None,
             channel_panel_width: None,
             voice_meter_source: "microphone".to_string(),
@@ -162,9 +231,31 @@ mod tests {
     #[test]
     fn ui_settings_screen_share_defaults_match_spec() {
         let ui = UiSettings::default();
+        assert_eq!(ui.liquid_glass, "none");
+        assert!(!ui.pure_black);
+        assert_eq!(ui.primary_color, UiSettings::DEFAULT_PRIMARY_COLOR);
+        assert_eq!(ui.primary_colors, UiSettings::DEFAULT_PRIMARY_COLORS);
+        assert_eq!(ui.color_style, "vivid");
+        assert!(ui.floating_navigation_bar);
+        assert_eq!(ui.tab_animation, "slide");
+        assert!(!ui.sidebar_blur);
+        assert_eq!(ui.font_family, None);
+        assert!(!ui.text_scale_enabled);
+        assert_eq!(ui.text_scale, 1.0);
         assert_eq!(ui.screen_share_resolution, "720p");
         assert_eq!(ui.screen_share_frame_rate, 30);
         assert_eq!(ui.screen_share_codec, "h264");
         assert_eq!(ui.screen_share_degradation, "maintainFramerate");
+    }
+
+    #[test]
+    fn ui_settings_backfills_missing_theme_fields_from_legacy_json() {
+        let ui: UiSettings =
+            serde_json::from_str(r#"{"nickname":"Alice","primaryColor":null}"#).unwrap();
+        assert_eq!(ui.nickname, "Alice");
+        assert_eq!(ui.primary_color, UiSettings::DEFAULT_PRIMARY_COLOR);
+        assert_eq!(ui.primary_colors, UiSettings::DEFAULT_PRIMARY_COLORS);
+        assert!(ui.floating_navigation_bar);
+        assert_eq!(ui.tab_animation, "slide");
     }
 }
