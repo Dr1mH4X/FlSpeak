@@ -22,32 +22,36 @@ abstract final class AppRoutes {
 }
 
 final routerProvider = Provider<GoRouter>((ref) {
-  final router = GoRouter(
+  late final GoRouter router;
+  router = GoRouter(
     initialLocation: AppRoutes.connect,
     routes: [
-      ShellRoute(
-        builder: (context, state, child) {
-          if (!context.isCompact) {
-            return child;
+      GoRoute(
+        path: AppRoutes.connect,
+        pageBuilder: (context, state) {
+          final isRoot = _isRootMatch(router, state);
+          if (!context.isCompact || !isRoot) {
+            return _page(
+              state,
+              ConnectPage(serverId: state.uri.queryParameters['server']),
+            );
           }
-          return CompactNavigationShell(
-            location: state.uri.path,
+          return _compactShellPage(
+            state,
+            location: AppRoutes.connect,
             serverId: state.uri.queryParameters['server'],
           );
         },
-        routes: [
-          GoRoute(
-            path: AppRoutes.connect,
-            pageBuilder: (context, state) => _page(
-              state,
-              ConnectPage(serverId: state.uri.queryParameters['server']),
-            ),
-          ),
-          GoRoute(
-            path: AppRoutes.settings,
-            pageBuilder: (context, state) => _page(state, const SettingsPage()),
-          ),
-        ],
+      ),
+      GoRoute(
+        path: AppRoutes.settings,
+        pageBuilder: (context, state) {
+          final isRoot = _isRootMatch(router, state);
+          if (!context.isCompact || !isRoot) {
+            return _page(state, const SettingsPage());
+          }
+          return _compactShellPage(state, location: AppRoutes.settings);
+        },
       ),
       GoRoute(
         path: AppRoutes.workspace,
@@ -65,11 +69,32 @@ final routerProvider = Provider<GoRouter>((ref) {
   return router;
 });
 
+bool _isRootMatch(GoRouter router, GoRouterState state) {
+  final matches = router.routerDelegate.currentConfiguration.matches;
+  return matches.isEmpty || matches.first.pageKey == state.pageKey;
+}
+
+CustomTransitionPage<void> _compactShellPage(
+  GoRouterState state, {
+  required String location,
+  String? serverId,
+}) {
+  return _page(
+    state,
+    CompactNavigationShell(location: location, serverId: serverId),
+    key: const ValueKey<String>('compact-navigation-shell'),
+  );
+}
+
 // go_router 的 material_ui.MaterialApp 与 SDK MaterialApp 是不同类型；
 // 显式提供页面，避免默认检测回退到 NoTransitionPage。
-CustomTransitionPage<void> _page(GoRouterState state, Widget child) {
+CustomTransitionPage<void> _page(
+  GoRouterState state,
+  Widget child, {
+  LocalKey? key,
+}) {
   return CustomTransitionPage<void>(
-    key: state.pageKey,
+    key: key ?? state.pageKey,
     transitionDuration: Motion.effectsDefault,
     reverseTransitionDuration: Motion.effectsFast,
     child: child,

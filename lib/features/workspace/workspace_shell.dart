@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/notices.dart';
 import '../../core/providers.dart';
+import '../../core/stream_viewer.dart';
 import '../../l10n/app_localizations.dart';
 import '../../router.dart';
 import '../../theme/app_theme.dart';
@@ -15,8 +16,20 @@ import '../../widgets/prism.dart' show AppShape, Surface;
 import 'widgets/channel_pane.dart';
 import 'widgets/channel_pane_resizer.dart';
 
+/// 工作区统一的返回动作：优先退出已入栈路由，否则回到连接页且保留会话连接。
+void navigateWorkspaceBack(BuildContext context) {
+  final router = GoRouter.maybeOf(context);
+  if (router != null && router.canPop()) {
+    router.pop();
+  } else if (Navigator.of(context).canPop()) {
+    Navigator.of(context).pop();
+  } else if (router != null) {
+    router.go(AppRoutes.connect);
+  }
+}
+
 /// 工作区三栏布局；窄屏将服务器与频道收进抽屉。
-class WorkspaceShell extends ConsumerWidget {
+class WorkspaceShell extends ConsumerStatefulWidget {
   const WorkspaceShell({
     required this.location,
     required this.child,
@@ -27,7 +40,29 @@ class WorkspaceShell extends ConsumerWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<WorkspaceShell> createState() => _WorkspaceShellState();
+}
+
+class _WorkspaceShellState extends ConsumerState<WorkspaceShell> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  void _handleBackPop(bool didPop, Object? result) {
+    if (didPop) {
+      return;
+    }
+    if (ref.read(streamViewerProvider).isFullScreen) {
+      unawaited(ref.read(streamViewerProvider.notifier).setFullScreen(false));
+      return;
+    }
+    if (_scaffoldKey.currentState?.isDrawerOpen == true) {
+      _scaffoldKey.currentState?.closeDrawer();
+      return;
+    }
+    navigateWorkspaceBack(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final scheme = context.scheme;
     final l10n = AppLocalizations.of(context);
     final activeServerId = ref.watch(
@@ -75,7 +110,7 @@ class WorkspaceShell extends ConsumerWidget {
 
     // 设置页或连接页嵌在外壳里时，选中频道要回到工作区主区域。
     void selectChannel() {
-      if (location != AppRoutes.workspace) {
+      if (widget.location != AppRoutes.workspace) {
         context.go(AppRoutes.workspace);
       }
     }
@@ -96,14 +131,16 @@ class WorkspaceShell extends ConsumerWidget {
       ),
     );
     final surface = RepaintBoundary(
-      child: _MainSurface(compact: compact, child: child),
+      child: _MainSurface(compact: compact, child: widget.child),
     );
 
     final compactWidth = AppNavigationSidebar.compactWidthOf(context);
 
+    final Widget scaffold;
     if (compact) {
       final isLtr = Directionality.of(context) == TextDirection.ltr;
-      return Scaffold(
+      scaffold = Scaffold(
+        key: _scaffoldKey,
         backgroundColor: context.pageColor,
         drawer: Drawer(
           width: math.min(compactWidth + Sizes.channelPanel, width - 24),
@@ -132,41 +169,47 @@ class WorkspaceShell extends ConsumerWidget {
         ),
         body: surface,
       );
-    }
-
-    final blurOpacity = ref.watch(windowBlurOpacityProvider);
-    return Scaffold(
-      backgroundColor: blurOpacity != null
-          ? Colors.transparent
-          : context.pageColor,
-      body: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          rail,
-          Expanded(
-            child: SidebarContentInset(
-              hasSidebar: true,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  ChannelPaneResizer(
-                    // 分隔条自身也占地，算上限时一并扣掉，主区域不再被它挤穿。
-                    maxWidth: math.max(
-                      Sizes.channelPanelMin,
-                      width -
-                          compactWidth -
-                          Sizes.mainPaneMin -
-                          ChannelPaneResizer.handleWidth,
+    } else {
+      final blurOpacity = ref.watch(windowBlurOpacityProvider);
+      scaffold = Scaffold(
+        backgroundColor: blurOpacity != null
+            ? Colors.transparent
+            : context.pageColor,
+        body: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            rail,
+            Expanded(
+              child: SidebarContentInset(
+                hasSidebar: true,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ChannelPaneResizer(
+                      // 分隔条自身也占地，算上限时一并扣掉，主区域不再被它挤穿。
+                      maxWidth: math.max(
+                        Sizes.channelPanelMin,
+                        width -
+                            compactWidth -
+                            Sizes.mainPaneMin -
+                            ChannelPaneResizer.handleWidth,
+                      ),
+                      child: panel,
                     ),
-                    child: panel,
-                  ),
-                  Expanded(child: surface),
-                ],
+                    Expanded(child: surface),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
+      );
+    }
+
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: _handleBackPop,
+      child: scaffold,
     );
   }
 }

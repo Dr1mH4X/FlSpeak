@@ -22,12 +22,14 @@ import 'prism.dart';
 class CompactRootTabScope extends InheritedWidget {
   const CompactRootTabScope({
     required this.active,
+    this.activeTabIndex = 0,
     this.onExitToHome,
     required super.child,
     super.key,
   });
 
   final bool active;
+  final int activeTabIndex;
   final VoidCallback? onExitToHome;
 
   static CompactRootTabScope? maybeOf(BuildContext context) =>
@@ -35,7 +37,9 @@ class CompactRootTabScope extends InheritedWidget {
 
   @override
   bool updateShouldNotify(CompactRootTabScope oldWidget) =>
-      active != oldWidget.active || onExitToHome != oldWidget.onExitToHome;
+      active != oldWidget.active ||
+      activeTabIndex != oldWidget.activeTabIndex ||
+      onExitToHome != oldWidget.onExitToHome;
 }
 
 /// 通知窄屏外壳设置页是否停留在总览层级，用于进入设置二级页时自动收起底栏。
@@ -223,6 +227,7 @@ class _CompactNavigationShellState
       },
       child: CompactRootTabScope(
         active: true,
+        activeTabIndex: _currentIndex,
         onExitToHome: () => _selectTab(0),
         child: CompactBottomInsetScope(
           inset: showBottomBar && floating

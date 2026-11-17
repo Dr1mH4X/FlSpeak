@@ -72,7 +72,8 @@
 
 外观偏好持久化在 Rust `UiSettings`（`core/session`）与 Dart `SessionPreferences`，默认主题种子色为 `#C44D78` 并由 `buildAppColorScheme` 与 `buildPrismTheme` 结合 `seededColorScheme`、`AppColorStyle`、`pureBlack` 及对比度守护统一出表色，支持经 `lib/core/system_fonts.dart` 异步加载并筛选系统字体以及经 `PrismRootScope`、`MediaQuery.textScaler` 与 `MeasureScope` 控制文字缩放比例（`0.8–1.4`）。
 
-- **窄屏底部导航与转场**：窗口宽度低于 `Breakpoints.compact` 时，`GoRouter` 将「首页」与「设置」纳入 `CompactNavigationShell`，按 `floatingNavigationBar` 在悬浮胶囊 `NavigationDock`（开启 `LiquidGlassScope` 时附带真实透视玻璃与 `BarItemPresence` 过渡）与停靠 `NavigationBar` 间切换，并按 `tabAnimation` 在水平滑动或 `SnapshotWidget` 原位交叉淡入淡出（`_FadeTabPage`）间切换；钻入设置二三级子页、键盘弹出或切入工作区 `/workspace` 时自动收起底栏，窄屏工作区频道顶栏左侧固定保留退回首页/设置入口的返回按钮与抽屉按钮。
+- **窄屏底部导航与转场**：窗口宽度低于 `Breakpoints.compact` 时，`lib/router.dart` 将根路径 `/connect` 与 `/settings` 映射到共享 `ValueKey('compact-navigation-shell')` 的 `CompactNavigationShell`（`context.push(AppRoutes.settings)` 仍按独立页面入栈），按 `floatingNavigationBar` 在悬浮胶囊 `NavigationDock`（开启 `LiquidGlassScope` 时附带真实透视玻璃与 `BarItemPresence` 过渡）与停靠 `NavigationBar` 间切换，并按 `tabAnimation` 在水平滑动或 `SnapshotWidget` 原位交叉淡入淡出（`_FadeTabPage`）间切换；钻入设置二三级子页、键盘弹出或切入工作区 `/workspace` 时自动收起底栏，窄屏工作区频道顶栏左侧固定保留退回首页/设置入口的返回按钮与抽屉按钮。
+- **Android 系统返回导航**：`WorkspaceShell` 的 `PopScope` 按顺序退出全屏观看、关闭侧滑抽屉或在不中断当前连接的前提下回到 `/connect`；`SettingsPage` 由 `CompactRootTabScope.activeTabIndex` 隔离激活页签后逐级退回总览并恢复底栏，在根设置总览页切回首页标签（`push` 入栈时直接 `pop` 回原页面）；`ConnectPage` 处于 Android 根界面且无待弹出路由时，已连接/连接中/重连中通过 `AndroidAppLifecycle` 调用原生 `MainActivity` `moveTaskToBack(true)` 退回后台保持语音，未连接时首次返回由 `NoticeCenter` 提示并在 2 秒内二次返回调用 `SystemNavigator.pop()` 退出。
 
 ## 液态玻璃开关与渲染档位
 

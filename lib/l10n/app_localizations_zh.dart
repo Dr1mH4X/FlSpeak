@@ -1066,4 +1066,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get navWorkspace => '工作区';
+
+  @override
+  String get pressBackAgainToExit => '再按一次返回退出应用';
 }

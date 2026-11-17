@@ -1096,4 +1096,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get navWorkspace => 'Workspace';
+
+  @override
+  String get pressBackAgainToExit => 'Press back again to exit';
 }

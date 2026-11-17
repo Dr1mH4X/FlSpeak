@@ -2107,6 +2107,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Workspace'**
   String get navWorkspace;
+
+  /// No description provided for @pressBackAgainToExit.
+  ///
+  /// In en, this message translates to:
+  /// **'Press back again to exit'**
+  String get pressBackAgainToExit;
 }
 
 class _AppLocalizationsDelegate

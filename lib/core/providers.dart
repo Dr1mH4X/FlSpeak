@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../l10n/app_localizations.dart';
+import 'android_app_lifecycle.dart';
 import 'android_audio_permission.dart';
 import 'audio_selection.dart';
 import 'logging/logger.dart';
@@ -37,6 +38,12 @@ final coreSessionProvider = Provider<CoreSession>(
 final microphonePermissionProvider = Provider<MicrophonePermissionGateway>(
   (ref) => const AndroidAudioPermission(),
 );
+
+final androidAppLifecycleProvider = Provider<AndroidAppLifecycleGateway>(
+  (ref) => const AndroidAppLifecycle(),
+);
+
+final clockProvider = Provider<DateTime Function()>((ref) => DateTime.now);
 
 /// `preferences.json` 的绝对路径，设置页展示与复制用。同样在 `main()` 里覆盖。
 final storePathProvider = Provider<String>(

@@ -485,5 +485,6 @@
   "settingsTextScaleSystem": "跟随系统",
   "settingsTextScaleCustom": "自定义",
   "settingsTextScalePreview": "预览当前文字大小",
-  "navWorkspace": "工作区"
+  "navWorkspace": "工作区",
+  "pressBackAgainToExit": "再按一次返回退出应用"
 }

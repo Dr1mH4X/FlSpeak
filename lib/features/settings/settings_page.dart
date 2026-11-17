@@ -557,6 +557,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       ),
     );
 
+    final tabScope = CompactRootTabScope.maybeOf(context);
+    final isActiveTab = tabScope == null || tabScope.activeTabIndex == 1;
+    final hasRouteBack =
+        (GoRouter.maybeOf(context)?.canPop() ?? false) ||
+        Navigator.of(context).canPop();
+    final canPopAtOverview =
+        _activeCategory == null &&
+        _activeGeneralSubcategory == null &&
+        (hasRouteBack || tabScope?.onExitToHome == null);
+
     return Shortcuts(
       shortcuts: const {
         SingleActivator(LogicalKeyboardKey.escape): DismissIntent(),
@@ -573,15 +583,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         child: Focus(
           autofocus: true,
           child: PopScope(
-            canPop:
-                _activeCategory == null && _activeGeneralSubcategory == null,
+            canPop: !isActiveTab || canPopAtOverview,
             onPopInvokedWithResult: (didPop, _) {
-              if (didPop) return;
-              if (_activeGeneralSubcategory != null) {
-                setState(() => _activeGeneralSubcategory = null);
-              } else if (_activeCategory != null) {
-                setState(() => _activeCategory = null);
-              }
+              if (didPop || !isActiveTab) return;
+              _back();
             },
             child: Material(
               color: !compact && ref.watch(windowBlurOpacityProvider) != null

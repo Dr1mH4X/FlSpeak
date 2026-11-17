@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' show lerpDouble;
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart'
     hide
         ButtonStyle,
@@ -18,6 +21,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/notices.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../router.dart';
@@ -45,10 +49,13 @@ class ConnectPage extends ConsumerStatefulWidget {
 }
 
 class _ConnectPageState extends ConsumerState<ConnectPage> {
+  static const Duration _doubleBackExitWindow = Duration(seconds: 2);
+
   /// 正在连接的目标。用来在状态事件到达前就把对应行标成连接中。
   String? _pendingServerId;
   bool _autoConnectTried = false;
   String _query = '';
+  DateTime? _lastBackPressedAt;
 
   @override
   void didUpdateWidget(ConnectPage oldWidget) {
@@ -355,24 +362,68 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
     );
 
     final blurOpacity = desktop ? ref.watch(windowBlurOpacityProvider) : null;
-    return Material(
-      color: blurOpacity != null ? Colors.transparent : context.pageColor,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (desktop)
-            const AppNavigationSidebar(
-              selectedDestination: AppNavDestination.home,
+    final tabScope = CompactRootTabScope.maybeOf(context);
+    final isActiveTab = tabScope == null || tabScope.activeTabIndex == 0;
+    if (!isActiveTab) {
+      _lastBackPressedAt = null;
+    }
+    final isAndroid =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+    final hasRouteBack =
+        (GoRouter.maybeOf(context)?.canPop() ?? false) ||
+        Navigator.of(context).canPop();
+    final interceptAndroidRootBack = isAndroid && isActiveTab && !hasRouteBack;
+
+    return PopScope(
+      canPop: !interceptAndroidRootBack,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop || !interceptAndroidRootBack) {
+          return;
+        }
+        unawaited(_handleAndroidRootBack());
+      },
+      child: Material(
+        color: blurOpacity != null ? Colors.transparent : context.pageColor,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (desktop)
+              const AppNavigationSidebar(
+                selectedDestination: AppNavDestination.home,
+              ),
+            Expanded(
+              child: SidebarContentInset(
+                hasSidebar: desktop,
+                child: pageScaffold,
+              ),
             ),
-          Expanded(
-            child: SidebarContentInset(
-              hasSidebar: desktop,
-              child: pageScaffold,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
+  }
+
+  Future<void> _handleAndroidRootBack() async {
+    final view = ref.read(sessionViewProvider);
+    if (view.connected || view.connecting || view.reconnecting) {
+      _lastBackPressedAt = null;
+      await ref.read(androidAppLifecycleProvider).moveToBackground();
+      return;
+    }
+    final now = ref.read(clockProvider)();
+    final last = _lastBackPressedAt;
+    if (last != null && now.difference(last) <= _doubleBackExitWindow) {
+      _lastBackPressedAt = null;
+      await ref.read(androidAppLifecycleProvider).exitApp();
+      return;
+    }
+    _lastBackPressedAt = now;
+    ref
+        .read(noticeCenterProvider.notifier)
+        .show(
+          AppLocalizations.of(context).pressBackAgainToExit,
+          tone: NoticeTone.info,
+        );
   }
 }
 

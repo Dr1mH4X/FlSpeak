@@ -1,5 +1,9 @@
 // ignore_for_file: depend_on_referenced_packages
 
+import 'dart:async';
+
+import 'package:flutter/foundation.dart'
+    show debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart'
     hide
         ButtonStyle,
@@ -14,9 +18,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flspeak/app.dart';
+import 'package:flspeak/core/android_app_lifecycle.dart';
 import 'package:flspeak/core/models.dart';
 import 'package:flspeak/core/preferences.dart';
 import 'package:flspeak/core/providers.dart';
+import 'package:flspeak/core/stream_viewer.dart';
 import 'package:flspeak/core/update_check.dart';
 import 'package:flspeak/features/connect/connect_page.dart';
 import 'package:flspeak/features/settings/settings_page.dart';
@@ -35,11 +41,48 @@ class _Session extends SessionController {
 
   @override
   SessionView build() => _initial;
+
+  void setView(SessionView next) => state = next;
 }
 
 class _Update extends UpdateController {
   @override
   UpdateStateView build() => const UpdateStateView(available: false);
+}
+
+class _FakeLifecycle implements AndroidAppLifecycleGateway {
+  int moveToBackgroundCalls = 0;
+  int exitAppCalls = 0;
+
+  @override
+  Future<bool> moveToBackground() async {
+    moveToBackgroundCalls++;
+    return true;
+  }
+
+  @override
+  Future<void> exitApp() async {
+    exitAppCalls++;
+  }
+}
+
+class _Viewer extends StreamViewerController {
+  int exitFullScreenCalls = 0;
+
+  @override
+  StreamViewerState build() => const StreamViewerState();
+
+  void setTestFullScreen(bool value) {
+    state = state.copyWith(isFullScreen: value);
+  }
+
+  @override
+  Future<void> setFullScreen(bool fullScreen) async {
+    if (!fullScreen && state.isFullScreen) {
+      exitFullScreenCalls++;
+    }
+    state = state.copyWith(isFullScreen: fullScreen);
+  }
 }
 
 Future<ProviderContainer> _mountCompactApp(
@@ -50,6 +93,9 @@ Future<ProviderContainer> _mountCompactApp(
   ),
   SessionView sessionView = const SessionView(),
   Size size = const Size(390, 844),
+  AndroidAppLifecycleGateway? lifecycle,
+  DateTime Function()? clock,
+  _Viewer? viewer,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -64,6 +110,10 @@ Future<ProviderContainer> _mountCompactApp(
       sessionViewProvider.overrideWith(() => _Session(sessionView)),
       updateProvider.overrideWith(_Update.new),
       appVersionProvider.overrideWithValue('0.1.0'),
+      if (lifecycle != null)
+        androidAppLifecycleProvider.overrideWithValue(lifecycle),
+      if (clock != null) clockProvider.overrideWithValue(clock),
+      if (viewer != null) streamViewerProvider.overrideWith(() => viewer),
       storePathProvider.overrideWithValue('/tmp/flspeak-test/preferences.json'),
       preferencesStoreProvider.overrideWithValue(
         PreferencesStore.inMemory(preferences: preferences),
@@ -206,6 +256,249 @@ void main() {
       expect(find.byType(WorkspacePage), findsNothing);
       expect(find.byType(CompactNavigationShell), findsOneWidget);
       expect(find.byType(NavigationDock), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'Android system back closes workspace fullscreen/drawer first and returns to Connect without disconnecting',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      final lifecycle = _FakeLifecycle();
+      final viewer = _Viewer();
+      final container = await _mountCompactApp(
+        tester,
+        lifecycle: lifecycle,
+        viewer: viewer,
+        sessionView: const SessionView(
+          state: CoreSessionState.connected(clientId: 1, channelId: 1),
+          activeServerId: 'srv-1',
+          channels: [
+            ChannelView(id: 1, parentId: 0, name: '大厅', description: ''),
+          ],
+          clients: [
+            ClientView(id: 1, nickname: 'Tester', uid: 'tester', channelId: 1),
+          ],
+        ),
+      );
+
+      container.read(routerProvider).go(AppRoutes.workspace);
+      await tester.pumpAndSettle();
+      expect(find.byType(WorkspacePage), findsOneWidget);
+
+      // 1. 全屏观看期间侧滑先退出全屏。
+      viewer.setTestFullScreen(true);
+      await tester.pump();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(viewer.exitFullScreenCalls, 1);
+      expect(container.read(streamViewerProvider).isFullScreen, isFalse);
+      expect(find.byType(WorkspacePage), findsOneWidget);
+
+      // 2. 打开抽屉后侧滑先收起抽屉。
+      await tester.tap(find.bySemanticsLabel('打开频道菜单'));
+      await tester.pumpAndSettle();
+      expect(find.byType(Drawer), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(Drawer), findsNothing);
+      expect(find.byType(WorkspacePage), findsOneWidget);
+
+      // 3. 工作区正常态侧滑返回首页，会话保持在线且不退出应用。
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(WorkspacePage), findsNothing);
+      expect(find.byType(ConnectPage), findsOneWidget);
+      expect(container.read(sessionViewProvider).connected, isTrue);
+      expect(lifecycle.exitAppCalls, 0);
+      expect(lifecycle.moveToBackgroundCalls, 0);
+    },
+  );
+
+  testWidgets(
+    'Android system back navigates Settings subpages back to overview with dock, then returns to Home tab; pushed Settings pops to caller',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      final lifecycle = _FakeLifecycle();
+      final container = await _mountCompactApp(
+        tester,
+        lifecycle: lifecycle,
+        sessionView: const SessionView(
+          state: CoreSessionState.connected(clientId: 1, channelId: 1),
+          activeServerId: 'srv-1',
+          channels: [
+            ChannelView(id: 1, parentId: 0, name: '大厅', description: ''),
+          ],
+          clients: [
+            ClientView(id: 1, nickname: 'Tester', uid: 'tester', channelId: 1),
+          ],
+        ),
+      );
+
+      // 切到设置标签并进入「通用」->「语音」。
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NavigationDock),
+          matching: find.text('设置'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(SettingsTile, '通用'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(SettingsTile, '语音'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<AnimatedVisibility>(find.byType(AnimatedVisibility))
+            .visible,
+        isFalse,
+      );
+
+      // 三级 -> 二级
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(SettingsTile, '语音'), findsOneWidget);
+      expect(
+        tester
+            .widget<AnimatedVisibility>(find.byType(AnimatedVisibility))
+            .visible,
+        isFalse,
+      );
+
+      // 二级 -> 一级概览，底栏重新显现
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(SettingsTile, '通用'), findsOneWidget);
+      expect(
+        tester
+            .widget<AnimatedVisibility>(find.byType(AnimatedVisibility))
+            .visible,
+        isTrue,
+      );
+
+      // 一级概览侧滑 -> 切回主页标签，不退出应用
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(ConnectPage), findsOneWidget);
+      expect(lifecycle.exitAppCalls, 0);
+      expect(lifecycle.moveToBackgroundCalls, 0);
+
+      // 从工作区抽屉 push 打开设置，概览态侧滑应 pop 回工作区。
+      container.read(routerProvider).go(AppRoutes.workspace);
+      await tester.pumpAndSettle();
+      unawaited(container.read(routerProvider).push(AppRoutes.settings));
+      await tester.pumpAndSettle();
+      expect(find.byType(SettingsPage), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(WorkspacePage), findsOneWidget);
+      expect(lifecycle.exitAppCalls, 0);
+    },
+  );
+
+  testWidgets(
+    'Android root back moves app to background when connected and requires double back within 2s when disconnected',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      var now = DateTime(2026, 1, 1, 12, 0, 0);
+      final lifecycle = _FakeLifecycle();
+      final container = await _mountCompactApp(
+        tester,
+        lifecycle: lifecycle,
+        clock: () => now,
+        sessionView: const SessionView(
+          state: CoreSessionState.connected(clientId: 1, channelId: 1),
+          activeServerId: 'srv-1',
+        ),
+      );
+
+      // 1. 已连接状态下首页根返回：直接退回后台。
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(lifecycle.moveToBackgroundCalls, 1);
+      expect(lifecycle.exitAppCalls, 0);
+      expect(find.text('再按一次返回退出应用'), findsNothing);
+
+      // 2. 断开连接后：首次返回展示提示，超时后需重新计时，2 秒内连按两次退出。
+      (container.read(sessionViewProvider.notifier) as _Session).setView(
+        const SessionView(),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('再按一次返回退出应用'), findsOneWidget);
+      expect(lifecycle.exitAppCalls, 0);
+
+      // 超过 2 秒后再次返回，不退出。
+      now = now.add(const Duration(seconds: 3));
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(lifecycle.exitAppCalls, 0);
+
+      // 2 秒内第二次返回，退出应用。
+      now = now.add(const Duration(seconds: 1));
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(lifecycle.exitAppCalls, 1);
+      expect(lifecycle.moveToBackgroundCalls, 1);
+    },
+  );
+
+  testWidgets(
+    'Android system back on wide layout pops pushed settings and workspace returns to Connect before root exit guard',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      final lifecycle = _FakeLifecycle();
+      final container = await _mountCompactApp(
+        tester,
+        size: const Size(1000, 800),
+        lifecycle: lifecycle,
+        sessionView: const SessionView(
+          state: CoreSessionState.connected(clientId: 1, channelId: 1),
+          activeServerId: 'srv-1',
+          channels: [
+            ChannelView(id: 1, parentId: 0, name: '大厅', description: ''),
+          ],
+          clients: [
+            ClientView(id: 1, nickname: 'Tester', uid: 'tester', channelId: 1),
+          ],
+        ),
+      );
+
+      // 宽屏下从首页 push 打开设置，侧滑返回应回到首页。
+      unawaited(container.read(routerProvider).push(AppRoutes.settings));
+      await tester.pumpAndSettle();
+      expect(find.byType(SettingsPage), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(SettingsPage), findsNothing);
+      expect(find.byType(ConnectPage), findsOneWidget);
+
+      // 宽屏下进入工作区后侧滑返回，应回到首页且保持连接。
+      container.read(routerProvider).go(AppRoutes.workspace);
+      await tester.pumpAndSettle();
+      expect(find.byType(WorkspacePage), findsOneWidget);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(WorkspacePage), findsNothing);
+      expect(find.byType(ConnectPage), findsOneWidget);
+
+      // 在首页已连接状态下侧滑返回 -> 退回后台。
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(lifecycle.moveToBackgroundCalls, 1);
+      expect(lifecycle.exitAppCalls, 0);
     },
   );
 }

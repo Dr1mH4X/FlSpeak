@@ -39,6 +39,7 @@ class MainActivity : FlutterActivity() {
         registerFilesChannel(flutterEngine)
         registerNetworkDnsChannels(flutterEngine)
         registerAudioPermissionChannel(flutterEngine)
+        registerAppLifecycleChannel(flutterEngine)
     }
 
     override fun onDestroy() {
@@ -112,6 +113,16 @@ class MainActivity : FlutterActivity() {
                             }
                         result.success(launched)
                     }
+                    else -> result.notImplemented()
+                }
+            }
+    }
+
+    private fun registerAppLifecycleChannel(flutterEngine: FlutterEngine) {
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "flspeak/app_lifecycle")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "moveToBackground" -> result.success(moveTaskToBack(true))
                     else -> result.notImplemented()
                 }
             }

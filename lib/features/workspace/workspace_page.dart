@@ -12,7 +12,6 @@ import 'package:flutter/material.dart'
         TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../core/channel_display.dart';
 import '../../core/models.dart';
@@ -20,7 +19,6 @@ import '../../core/providers.dart';
 import '../../core/stream_publisher.dart';
 import '../../core/stream_viewer.dart';
 import '../../l10n/app_localizations.dart';
-import '../../router.dart';
 import '../../theme/app_motion.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common.dart';
@@ -38,6 +36,7 @@ import 'widgets/media_viewer.dart';
 import 'widgets/members_pane.dart';
 import 'widgets/member_avatar.dart';
 import 'widgets/stream_viewer_pane.dart';
+import 'workspace_shell.dart';
 import 'workspace_state.dart';
 
 /// 主区域：频道标题 + 消息 / 媒体两个视图，以及掉线后的空状态。
@@ -221,7 +220,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
       return app_scaffold.Scaffold(
         backgroundColor: context.pageColor,
         title: channel != null ? channelDisplayName(channel) : l10n.appName,
-        backAction: () => _navigateBack(context),
+        backAction: () => navigateWorkspaceBack(context),
         actions: [
           IconButton(
             onPressed: () => Scaffold.maybeOf(context)?.openDrawer(),
@@ -284,17 +283,6 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
         Expanded(child: SafeArea(top: false, left: false, child: mainPane)),
       ],
     );
-  }
-
-  void _navigateBack(BuildContext context) {
-    final router = GoRouter.maybeOf(context);
-    if (router != null && router.canPop()) {
-      router.pop();
-    } else if (Navigator.of(context).canPop()) {
-      Navigator.of(context).pop();
-    } else if (router != null) {
-      router.go(AppRoutes.connect);
-    }
   }
 
   Widget _buildBody(
