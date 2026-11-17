@@ -61,7 +61,7 @@ Poked / AccessChanged / Transfer* / Log / Denied / Failed
 
 ## 版本更新检查
 
-FFI 的 `check_for_updates` 直接调用 `core/session` 的独立函数，不进入 Actor 命令队列；连接与消息命令不能被一次 HTTP 请求排在后面。请求固定访问 `api.github.com` 的 Releases 列表，按 SemVer 选出当前通道可用的最高版本，缓存 6 小时并携带 ETag。缓存文件 `update-cache.json` 与 `preferences.json` 同目录，只保存远端候选版本与 URL。Rust 用全局异步锁串行化检查，并把网络或解析失败合并为最近一次成功缓存的状态；Dart 只接收并渲染最终 `UpdateStateView`。
+FFI 的 `check_for_updates` 直接调用 `core/session` 的独立函数，不进入 Actor 命令队列；连接与消息命令不能被一次 HTTP 请求排在后面。请求固定访问 `api.github.com` 的 Releases 列表，按 SemVer 选出当前通道可用的最高版本，缓存 6 小时并携带 ETag。缓存文件 `update-cache.json` 与 `preferences.json` 同目录，只保存远端候选版本与 URL。Rust 用全局异步锁串行化检查，并把网络或解析失败合并为最近一次成功缓存的状态；Dart 只接收并渲染最终 `UpdateStateView`。应用展示版本号经 `plugins/flspeak_ffi` 的 `app_version` 返回，支持在构建时注入 `APP_DISPLAY_VERSION` 覆盖而保持 `CARGO_PKG_VERSION` 作为更新检查的唯一 SemVer 基准。
 
 ## 日志
 

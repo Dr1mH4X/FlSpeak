@@ -244,18 +244,50 @@ jobs:
           printf '%s' "$ANDROID_DEBUG_KEYSTORE_BASE64" | base64 --decode > android/app/debug-upload.jks
           echo 'ANDROID_DEBUG_KEYSTORE_PATH=debug-upload.jks' >> "$GITHUB_ENV"
 
+      - name: Derive debug version
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          base_version=$(sed -n 's/^version:[[:space:]]*\([^+[:space:]]*\).*/\1/p' pubspec.yaml | head -n 1)
+          test -n "$base_version" || { echo '拿不到 pubspec.yaml 基础版本号' >&2; exit 1; }
+          build_number="${{ github.run_number }}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            short_sha="${PR_HEAD_SHA:0:7}"
+            version_name="${base_version}-pr.${PR_NUMBER}.${build_number}.${short_sha}"
+          elif [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref_name }}" = "main" ]; then
+            short_sha="${GITHUB_SHA:0:7}"
+            version_name="${base_version}-main.${build_number}.${short_sha}"
+          else
+            short_sha="${GITHUB_SHA:0:7}"
+            version_name="${base_version}-dev.${build_number}.${short_sha}"
+          fi
+          echo "APP_BUILD_NAME=${version_name}" >> "$GITHUB_ENV"
+          echo "APP_BUILD_NUMBER=${build_number}" >> "$GITHUB_ENV"
+          echo "APP_DISPLAY_VERSION=${version_name}" >> "$GITHUB_ENV"
+          echo "Debug APK 版本: ${version_name} (${build_number})"
+
       - name: Build debug apk
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
           ANDROID_DEBUG_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_DEBUG_KEYSTORE_PASSWORD }}
           ANDROID_DEBUG_KEY_ALIAS: ${{ secrets.ANDROID_DEBUG_KEY_ALIAS }}
           ANDROID_DEBUG_KEY_PASSWORD: ${{ secrets.ANDROID_DEBUG_KEY_PASSWORD }}
-        run: flutter build apk --debug
+          APP_DISPLAY_VERSION: ${{ env.APP_DISPLAY_VERSION }}
+        run: |
+          flutter build apk --debug \
+            --build-name "${APP_BUILD_NAME}" \
+            --build-number "${APP_BUILD_NUMBER}"
+
+      - name: Archive Android APK
+        run: |
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-debug.apk "dist/flspeak-${APP_BUILD_NAME}-android-debug.apk"
 
       - name: Upload Android APK
         uses: actions/upload-artifact@v7
         with:
           name: flspeak-android-debug
-          path: build/app/outputs/flutter-apk/app-debug.apk
+          path: dist/*.apk
           if-no-files-found: error
           retention-days: 14

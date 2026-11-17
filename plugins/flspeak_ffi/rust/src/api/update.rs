@@ -13,10 +13,20 @@ pub struct UpdateStateView {
     pub release_url: Option<String>,
 }
 
-/// 当前构建的版本号，与 Cargo workspace 版本一致。
+/// 当前构建的展示版本号；未注入 `APP_DISPLAY_VERSION` 时回退到 Cargo workspace 版本。
 #[frb(sync)]
 pub fn app_version() -> String {
-    env!("CARGO_PKG_VERSION").to_string()
+    resolve_display_version(
+        option_env!("APP_DISPLAY_VERSION"),
+        env!("CARGO_PKG_VERSION"),
+    )
+}
+
+fn resolve_display_version(override_version: Option<&str>, package_version: &str) -> String {
+    match override_version {
+        Some(version) if !version.is_empty() => version.to_string(),
+        _ => package_version.to_string(),
+    }
 }
 
 /// 刷新更新状态，返回可直接渲染的最终结果。
@@ -31,5 +41,20 @@ impl From<CoreUpdateState> for UpdateStateView {
             latest_version: state.latest_version,
             release_url: state.release_url,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_display_version;
+
+    #[test]
+    fn resolve_display_version_prefers_non_empty_override() {
+        assert_eq!(
+            resolve_display_version(Some("0.1.13-pr.42.10.abc1234"), "0.1.13"),
+            "0.1.13-pr.42.10.abc1234"
+        );
+        assert_eq!(resolve_display_version(Some(""), "0.1.13"), "0.1.13");
+        assert_eq!(resolve_display_version(None, "0.1.13"), "0.1.13");
     }
 }
