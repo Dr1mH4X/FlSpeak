@@ -1,7 +1,6 @@
 // ignore_for_file: depend_on_referenced_packages
 
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:flutter/material.dart'
@@ -13,6 +12,7 @@ import 'package:flutter/material.dart'
         Switch,
         TextButton,
         TextField;
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -870,6 +870,50 @@ void main() {
     await tester.tap(segment('消息'));
     await tester.pump();
     expect(find.byType(ChatPane), findsOneWidget);
+  });
+
+  testWidgets('工作区视图图标不触发窗口拖动', (tester) async {
+    const channel = MethodChannel('flspeak/window');
+    final calls = <MethodCall>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
+      call,
+    ) async {
+      calls.add(call);
+      return null;
+    });
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        channel,
+        null,
+      ),
+    );
+
+    await _mount(tester);
+    calls.clear();
+
+    // 标题区域继续承担窗口拖动。
+    final titleGesture = await tester.startGesture(
+      tester.getCenter(find.text('Lounge')),
+    );
+    await titleGesture.moveBy(const Offset(30, 0));
+    await titleGesture.up();
+    await tester.pump();
+    expect(calls.where((call) => call.method == 'startDragging'), isNotEmpty);
+    // 双击识别器的判定窗口。
+    await tester.pump(const Duration(milliseconds: 50));
+
+    calls.clear();
+    // 视图图标不在 WindowDragRegion 内，按住滑动不会开始窗口拖动。
+    final segment = find.descendant(
+      of: find.byWidgetPredicate((widget) => widget is GlyphSegmentedControl),
+      matching: find.bySemanticsLabel('媒体'),
+    );
+    final segmentGesture = await tester.startGesture(tester.getCenter(segment));
+    await segmentGesture.moveBy(const Offset(30, 0));
+    await segmentGesture.up();
+    await tester.pump();
+    expect(calls.where((call) => call.method == 'startDragging'), isEmpty);
+    await tester.pump(const Duration(milliseconds: 50));
   });
 
   testWidgets('工作区详情面板标题使用 glyph 图标', (tester) async {

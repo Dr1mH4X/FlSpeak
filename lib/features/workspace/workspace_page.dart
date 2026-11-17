@@ -102,7 +102,7 @@ Future<void> showMemberDetailsSheet(
   return showWorkspaceDetailSheet(
     context,
     title: AppLocalizations.of(context).memberDetails,
-    glyph: AppGlyphs.person,
+    glyph: AppGlyphs.account,
     child: MemberDetailsPane(client: client, isOffline: isOffline),
   );
 }
@@ -171,7 +171,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
     final channelId = ref.watch(activeChannelIdProvider);
     final detailsTarget = ref.watch(activeDetailsTargetProvider);
     final detailsGlyph = detailsTarget is MemberDetailsTarget
-        ? AppGlyphs.person
+        ? AppGlyphs.account
         : AppGlyphs.info;
     final (
       :connected,
@@ -347,13 +347,13 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
                     unawaited(showChannelFilesSheet(context, channel.id)),
               ),
               PopupMenuItem(
-                glyph: AppGlyphs.media,
+                glyph: AppGlyphs.photos,
                 label: l10n.chatTabMedia,
                 onPressed: () => unawaited(
                   showWorkspaceDetailSheet(
                     context,
                     title: l10n.chatTabMedia,
-                    glyph: AppGlyphs.media,
+                    glyph: AppGlyphs.photos,
                     child: _ChannelMediaBody(channelId: channel.id),
                   ),
                 ),
@@ -938,7 +938,7 @@ class _ChannelHeader extends StatelessWidget {
                         ),
                         GlyphSegment(
                           value: _MainTab.media,
-                          glyph: AppGlyphs.media,
+                          glyph: AppGlyphs.photos,
                           label: l10n.chatTabMedia,
                         ),
                         GlyphSegment(

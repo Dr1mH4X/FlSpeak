@@ -127,7 +127,7 @@ class ClientActionsButton extends ConsumerWidget {
     final menuItems = [
       if (compactMenuOnTap && onShowDetails != null)
         PopupMenuItem(
-          glyph: AppGlyphs.person,
+          glyph: AppGlyphs.account,
           label: l10n.memberDetails,
           onPressed: onShowDetails,
         ),

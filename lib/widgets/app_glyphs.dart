@@ -1,5 +1,5 @@
 // 本文件包含的代码片段来源于 FlClash（https://github.com/chen08209/FlClash）项目，原始许可证为 GPL-3.0，来源提交 be84736605527034689c95bf27828ff27d912c5e。
-// dashboard、settings、reset、add、edit、palette、delete、layers、sun、pureBlack、paintbrush、eyedropper、motion、blur、liquidGlass、font、textSize 沿用 FlClash 的 lib/ui/icons/app_glyphs.dart 矢量定义，其余为 FlSpeak 业务动作补充。
+// dashboard、settings、reset、add、edit、palette、delete、layers、sun、pureBlack、paintbrush、eyedropper、motion、blur、liquidGlass、font、textSize、info、account、photos 沿用 FlClash 的 lib/ui/icons/app_glyphs.dart 矢量定义，其余为 FlSpeak 业务动作补充。
 
 import 'dart:math' as math;
 
@@ -468,11 +468,41 @@ abstract final class AppGlyphs {
 
   static const info = Glyph([
     GlyphCircle(12, 12, 8.8),
+    GlyphCircle(12, 7.5, 1.4, role: GlyphRole.detail, solid: true),
     GlyphPolyline([
-      GlyphVertex(12, 11.2),
-      GlyphVertex(12, 16),
+      GlyphVertex(12, 11.8),
+      GlyphVertex(12, 16.7),
     ], role: GlyphRole.detail),
-    GlyphCircle(12, 8, 1.1, role: GlyphRole.detail, solid: true),
+  ]);
+
+  static const account = Glyph([
+    GlyphCircle(12, 12, 8.8),
+    GlyphCircle(12, 9.4, 2.8, role: GlyphRole.detail),
+    GlyphArc(
+      12,
+      22.6,
+      7,
+      math.pi * -0.8087,
+      math.pi * 0.6173,
+      role: GlyphRole.detail,
+    ),
+  ]);
+
+  static const photos = Glyph([
+    GlyphBox(3, 6.4, 17.6, 21, 2.6),
+    GlyphPolyline([
+      GlyphVertex(6.4, 3),
+      GlyphVertex(21, 3, 2.6),
+      GlyphVertex(21, 17.6),
+    ], role: GlyphRole.line),
+    GlyphPolyline([
+      GlyphVertex(3, 17.2),
+      GlyphVertex(7.8, 12.4, 0.8),
+      GlyphVertex(12.2, 16.8, 0.8),
+      GlyphVertex(14, 15, 0.8),
+      GlyphVertex(17.6, 18.6),
+    ], role: GlyphRole.detail),
+    GlyphCircle(13.4, 10.6, 1.4, role: GlyphRole.detail, solid: true),
   ]);
 
   static const folder = Glyph([
