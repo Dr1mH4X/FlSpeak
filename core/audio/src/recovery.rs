@@ -126,6 +126,97 @@ pub fn pick_fallback_default_index(input: bool, candidates: &[DeviceCandidate]) 
     }
 }
 
+/// 用于过滤与去重 Android 音频设备的精简设备类别。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeviceKind {
+    Speaker,
+    Microphone,
+    Earpiece,
+    Virtual,
+    Tuner,
+    Unknown,
+    Other,
+}
+
+/// 用于过滤与去重 Android 音频设备的接口来源。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeviceInterfaceKind {
+    BuiltIn,
+    Virtual,
+    Unknown,
+    Other,
+}
+
+/// Android 枚举候选设备元数据。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AndroidDeviceCandidate<'a> {
+    pub kind: DeviceKind,
+    pub interface: DeviceInterfaceKind,
+    pub is_default: bool,
+    pub is_virtual_default: bool,
+    pub address: Option<&'a str>,
+}
+
+/// 过滤 Android 虚拟/系统内部路由端点，并对多颗物理内置麦克风（或重复内置扬声器）
+/// 只保留主设备，返回应保留的原始候选索引（按原顺序）。
+pub fn select_android_device_indices(
+    input: bool,
+    candidates: &[AndroidDeviceCandidate<'_>],
+) -> Vec<usize> {
+    let target_kind = if input {
+        DeviceKind::Microphone
+    } else {
+        DeviceKind::Speaker
+    };
+
+    let mut primary_builtin: Option<((u8, usize), usize)> = None;
+    let mut eligible = vec![false; candidates.len()];
+
+    for (index, candidate) in candidates.iter().enumerate() {
+        if candidate.is_virtual_default
+            || candidate.kind == DeviceKind::Virtual
+            || candidate.interface == DeviceInterfaceKind::Virtual
+            || (matches!(candidate.kind, DeviceKind::Unknown | DeviceKind::Tuner)
+                && candidate.interface == DeviceInterfaceKind::Unknown)
+        {
+            continue;
+        }
+
+        if candidate.kind == target_kind && candidate.interface == DeviceInterfaceKind::BuiltIn {
+            let priority = if candidate.is_default {
+                0
+            } else if input
+                && candidate
+                    .address
+                    .is_some_and(|addr| addr.trim().eq_ignore_ascii_case("bottom"))
+            {
+                1
+            } else if candidate.address.is_none_or(|addr| addr.trim().is_empty()) {
+                2
+            } else {
+                3
+            };
+            let rank = (priority, index);
+            if primary_builtin.is_none_or(|(best_rank, _)| rank < best_rank) {
+                primary_builtin = Some((rank, index));
+            }
+            continue;
+        }
+
+        eligible[index] = true;
+    }
+
+    if let Some((_, winner_index)) = primary_builtin {
+        eligible[winner_index] = true;
+    }
+
+    eligible
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, keep)| keep.then_some(index))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -215,5 +306,156 @@ mod tests {
             },
         ];
         assert_eq!(pick_fallback_default_index(true, &inputs), Some(1));
+    }
+
+    #[test]
+    fn android_input_filter_keeps_single_primary_mic_and_drops_virtual_and_internal_unknown() {
+        let candidates = [
+            // (1) Built-in mic (back/secondary) listed first
+            AndroidDeviceCandidate {
+                kind: DeviceKind::Microphone,
+                interface: DeviceInterfaceKind::BuiltIn,
+                is_default: false,
+                is_virtual_default: false,
+                address: Some("back"),
+            },
+            // (2) Internal system source (Telephony / EchoReference -> Unknown + Unknown)
+            AndroidDeviceCandidate {
+                kind: DeviceKind::Unknown,
+                interface: DeviceInterfaceKind::Unknown,
+                is_default: false,
+                is_virtual_default: false,
+                address: None,
+            },
+            // (3) Built-in primary mic (bottom)
+            AndroidDeviceCandidate {
+                kind: DeviceKind::Microphone,
+                interface: DeviceInterfaceKind::BuiltIn,
+                is_default: false,
+                is_virtual_default: false,
+                address: Some("bottom"),
+            },
+            // (4) RemoteSubmix (Virtual)
+            AndroidDeviceCandidate {
+                kind: DeviceKind::Virtual,
+                interface: DeviceInterfaceKind::Virtual,
+                is_default: false,
+                is_virtual_default: false,
+                address: None,
+            },
+        ];
+
+        assert_eq!(select_android_device_indices(true, &candidates), vec![2]);
+    }
+
+    #[test]
+    fn android_input_filter_retains_external_usb_headset_and_bluetooth_mics() {
+        let candidates = [
+            AndroidDeviceCandidate {
+                kind: DeviceKind::Virtual,
+                interface: DeviceInterfaceKind::Virtual,
+                is_default: false,
+                is_virtual_default: true,
+                address: None,
+            },
+            AndroidDeviceCandidate {
+                kind: DeviceKind::Microphone,
+                interface: DeviceInterfaceKind::BuiltIn,
+                is_default: false,
+                is_virtual_default: false,
+                address: None,
+            },
+            AndroidDeviceCandidate {
+                kind: DeviceKind::Microphone,
+                interface: DeviceInterfaceKind::BuiltIn,
+                is_default: false,
+                is_virtual_default: false,
+                address: Some("top"),
+            },
+            // cpal maps Android UsbDevice to DeviceType::Unknown + InterfaceType::Usb
+            AndroidDeviceCandidate {
+                kind: DeviceKind::Unknown,
+                interface: DeviceInterfaceKind::Other,
+                is_default: false,
+                is_virtual_default: false,
+                address: None,
+            },
+            AndroidDeviceCandidate {
+                kind: DeviceKind::Other, // Headset
+                interface: DeviceInterfaceKind::Other,
+                is_default: false,
+                is_virtual_default: false,
+                address: None,
+            },
+            AndroidDeviceCandidate {
+                kind: DeviceKind::Tuner,
+                interface: DeviceInterfaceKind::Unknown,
+                is_default: false,
+                is_virtual_default: false,
+                address: None,
+            },
+        ];
+
+        assert_eq!(
+            select_android_device_indices(true, &candidates),
+            vec![1, 3, 4]
+        );
+    }
+
+    #[test]
+    fn android_output_filter_retains_earpiece_single_speaker_and_external_outputs() {
+        let candidates = [
+            AndroidDeviceCandidate {
+                kind: DeviceKind::Earpiece,
+                interface: DeviceInterfaceKind::BuiltIn,
+                is_default: false,
+                is_virtual_default: false,
+                address: None,
+            },
+            AndroidDeviceCandidate {
+                kind: DeviceKind::Speaker,
+                interface: DeviceInterfaceKind::BuiltIn,
+                is_default: false,
+                is_virtual_default: false,
+                address: None,
+            },
+            // Duplicate BuiltinSpeakerSafe
+            AndroidDeviceCandidate {
+                kind: DeviceKind::Speaker,
+                interface: DeviceInterfaceKind::BuiltIn,
+                is_default: false,
+                is_virtual_default: false,
+                address: Some("safe"),
+            },
+            // Telephony output
+            AndroidDeviceCandidate {
+                kind: DeviceKind::Unknown,
+                interface: DeviceInterfaceKind::Unknown,
+                is_default: false,
+                is_virtual_default: false,
+                address: None,
+            },
+            // RemoteSubmix output
+            AndroidDeviceCandidate {
+                kind: DeviceKind::Virtual,
+                interface: DeviceInterfaceKind::Virtual,
+                is_default: false,
+                is_virtual_default: false,
+                address: None,
+            },
+            // Bluetooth A2DP (cpal maps to DeviceType::Unknown + InterfaceType::Bluetooth)
+            AndroidDeviceCandidate {
+                kind: DeviceKind::Unknown,
+                interface: DeviceInterfaceKind::Other,
+                is_default: false,
+                is_virtual_default: false,
+                address: Some("AA:BB:CC:DD:EE:FF"),
+            },
+        ];
+
+        assert_eq!(
+            select_android_device_indices(false, &candidates),
+            vec![0, 1, 5]
+        );
     }
 }

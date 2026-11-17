@@ -12,6 +12,10 @@ use crossbeam_queue::ArrayQueue;
 
 use crate::AudioError;
 use crate::format::AudioFormat;
+#[cfg(target_os = "android")]
+use crate::recovery::{
+    AndroidDeviceCandidate, DeviceInterfaceKind, DeviceKind, select_android_device_indices,
+};
 use crate::recovery::{
     DeviceCandidate, StreamError, StreamErrorKind, is_virtual_default_device_id,
     pick_fallback_default_index,
@@ -191,7 +195,8 @@ fn list_devices(input: bool) -> Result<Vec<DeviceInfo>, AudioError> {
 
     let mut entries = Vec::with_capacity(devices.len());
     let mut candidates = Vec::with_capacity(devices.len());
-    let mut matched_default = false;
+    #[cfg(target_os = "android")]
+    let mut descriptions = Vec::with_capacity(devices.len());
     for device in devices {
         let id = device.id().map_err(device_error)?.to_string();
         let description = device.description().ok();
@@ -212,16 +217,20 @@ fn list_devices(input: bool) -> Result<Vec<DeviceInfo>, AudioError> {
             },
         );
         let is_default = default_id.as_deref() == Some(id.as_str());
-        if is_default {
-            matched_default = true;
-        }
         candidates.push(candidate);
         entries.push(DeviceInfo {
             id,
             name,
             is_default,
         });
+        #[cfg(target_os = "android")]
+        descriptions.push(description);
     }
+
+    #[cfg(target_os = "android")]
+    let (mut entries, candidates) =
+        filter_android_devices(input, entries, candidates, &descriptions);
+    let matched_default = entries.iter().any(|entry| entry.is_default);
 
     if !matched_default
         && default_id
@@ -233,6 +242,62 @@ fn list_devices(input: bool) -> Result<Vec<DeviceInfo>, AudioError> {
     }
 
     Ok(entries)
+}
+
+#[cfg(target_os = "android")]
+fn filter_android_devices(
+    input: bool,
+    entries: Vec<DeviceInfo>,
+    candidates: Vec<DeviceCandidate>,
+    descriptions: &[Option<cpal::DeviceDescription>],
+) -> (Vec<DeviceInfo>, Vec<DeviceCandidate>) {
+    let android_candidates: Vec<AndroidDeviceCandidate<'_>> = entries
+        .iter()
+        .zip(descriptions.iter())
+        .map(|(entry, desc)| {
+            let (kind, interface, address) = match desc {
+                Some(desc) => (
+                    match desc.device_type() {
+                        DeviceType::Speaker => DeviceKind::Speaker,
+                        DeviceType::Microphone => DeviceKind::Microphone,
+                        DeviceType::Earpiece => DeviceKind::Earpiece,
+                        DeviceType::Virtual => DeviceKind::Virtual,
+                        DeviceType::Tuner => DeviceKind::Tuner,
+                        DeviceType::Unknown => DeviceKind::Unknown,
+                        _ => DeviceKind::Other,
+                    },
+                    match desc.interface_type() {
+                        InterfaceType::BuiltIn => DeviceInterfaceKind::BuiltIn,
+                        InterfaceType::Virtual => DeviceInterfaceKind::Virtual,
+                        InterfaceType::Unknown => DeviceInterfaceKind::Unknown,
+                        _ => DeviceInterfaceKind::Other,
+                    },
+                    desc.address(),
+                ),
+                None => (DeviceKind::Unknown, DeviceInterfaceKind::Unknown, None),
+            };
+            AndroidDeviceCandidate {
+                kind,
+                interface,
+                is_default: entry.is_default,
+                is_virtual_default: is_virtual_default_device_id(&entry.id),
+                address,
+            }
+        })
+        .collect();
+
+    let kept = select_android_device_indices(input, &android_candidates);
+    let mut entries: Vec<Option<DeviceInfo>> = entries.into_iter().map(Some).collect();
+    let mut candidates: Vec<Option<DeviceCandidate>> = candidates.into_iter().map(Some).collect();
+    let mut filtered_entries = Vec::with_capacity(kept.len());
+    let mut filtered_candidates = Vec::with_capacity(kept.len());
+    for index in kept {
+        if let (Some(entry), Some(candidate)) = (entries[index].take(), candidates[index].take()) {
+            filtered_entries.push(entry);
+            filtered_candidates.push(candidate);
+        }
+    }
+    (filtered_entries, filtered_candidates)
 }
 
 fn default_device(host: &cpal::Host, input: bool) -> Result<cpal::Device, AudioError> {
