@@ -457,6 +457,16 @@ class _WindowFrame extends StatelessWidget {
         !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
     final size = MediaQuery.sizeOf(context);
     final isMobileView = size.width < Breakpoints.compact;
+    // 标题栏只存在于 macOS 窄屏与 Windows；它随断点出现/消失时不能重建
+    // BannerHost，否则桥接状态会重放 NoticeCenter 里已经过期的提示。
+    final headerHeight =
+        showsWindowHeader(
+          isMacOS: isMacOS,
+          isWindows: isWindows,
+          isMobileView: isMobileView,
+        )
+        ? getWindowHeaderHeight(isMacOS: isMacOS)
+        : 0.0;
     return ValueListenableBuilder<bool>(
       valueListenable: WindowChrome.fullScreen,
       builder: (context, fullScreen, _) => ViewScope(
@@ -467,15 +477,17 @@ class _WindowFrame extends StatelessWidget {
           isMobileView: isMobileView,
           isFullScreen: fullScreen,
         ),
-        child: WindowHeaderContainer(
-          isMacOS: isMacOS,
-          isWindows: isWindows,
-          isMobileView: isMobileView,
-          // WindowHeaderContainer 已把子内容压在标题栏下方，topInset 只避让页面顶栏。
-          child: BannerHost(
-            stacked: !isMobileView,
-            topInset: Sizes.header + 8,
-            child: _NoticeBannerBridge(child: child),
+        child: BannerHost(
+          stacked: !isMobileView,
+          // BannerHost 覆盖整个窗口；topInset 同时避让窗口标题栏与页面顶栏。
+          topInset: headerHeight + Sizes.header + 8,
+          child: _NoticeBannerBridge(
+            child: WindowHeaderContainer(
+              isMacOS: isMacOS,
+              isWindows: isWindows,
+              isMobileView: isMobileView,
+              child: child,
+            ),
           ),
         ),
       ),
@@ -500,8 +512,9 @@ class _NoticeBannerBridgeState extends ConsumerState<_NoticeBannerBridge> {
   @override
   void initState() {
     super.initState();
-    final initial = ref.read(noticeCenterProvider);
-    if (initial.isNotEmpty) {
+    final notices = ref.read(noticeCenterProvider);
+    _lastForwardedId = ref.read(noticeCenterProvider.notifier).forwardedId;
+    if (notices.any((notice) => notice.id > _lastForwardedId)) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _forwardNew(ref.read(noticeCenterProvider));
@@ -527,6 +540,7 @@ class _NoticeBannerBridgeState extends ConsumerState<_NoticeBannerBridge> {
         },
       );
     }
+    ref.read(noticeCenterProvider.notifier).markForwarded(_lastForwardedId);
   }
 
   @override

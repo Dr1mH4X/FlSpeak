@@ -27,6 +27,17 @@ class NoticeCenter extends Notifier<List<AppNotice>> {
 
   var _nextId = 0;
 
+  /// 已交给横幅宿主的最大提示 id。宿主重建后从这里继续，避免重放历史提示。
+  var _forwardedId = -1;
+
+  int get forwardedId => _forwardedId;
+
+  void markForwarded(int id) {
+    if (id > _forwardedId) {
+      _forwardedId = id;
+    }
+  }
+
   @override
   List<AppNotice> build() => const [];
 

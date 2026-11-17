@@ -511,7 +511,7 @@ void main() {
 
       final host = tester.widget<BannerHost>(find.byType(BannerHost));
       expect(host.stacked, isTrue);
-      expect(host.topInset, Sizes.header + 8);
+      expect(host.topInset, 32 + Sizes.header + 8);
 
       container.read(noticeCenterProvider.notifier)
         ..show('操作已完成', tone: NoticeTone.info)
@@ -521,7 +521,7 @@ void main() {
       expect(find.text('操作已完成'), findsOneWidget);
       expect(find.text('连接失败'), findsOneWidget);
 
-      // Windows 32px 标题栏已由 WindowHeaderContainer 扣除，横幅从 32 + 56 = 88 下方展开。
+      // BannerHost 位于标题栏之上，topInset 计入 Windows 32px 标题栏，横幅从 32 + 56 = 88 下方展开。
       final topBannerY = tester.getTopLeft(find.text('连接失败')).dy;
       expect(topBannerY, greaterThanOrEqualTo(32 + Sizes.header + 8));
       expect(topBannerY, lessThan(32 + 32 + Sizes.header + 8));
@@ -699,6 +699,62 @@ void main() {
       tester.view.padding = const FakeViewPadding(top: 44, bottom: 24);
       await tester.pumpAndSettle();
       expect(MediaQuery.paddingOf(scopeContext).top, 44.0);
+    },
+  );
+
+  testWidgets(
+    'crossing the compact breakpoint on macOS keeps the banner host state',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_PttCore()),
+          storePathProvider.overrideWithValue(
+            '/tmp/flspeak-test/preferences.json',
+          ),
+          sessionViewProvider.overrideWith(_PttSession.new),
+          preferencesStoreProvider.overrideWithValue(
+            PreferencesStore.inMemory(
+              preferences: const SessionPreferences(
+                nickname: 'Test',
+                locale: 'zh',
+              ),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const TsClientApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      container.read(noticeCenterProvider.notifier).show('连接失败：连接超时');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('连接失败：连接超时'), findsOneWidget);
+      expect(container.read(noticeCenterProvider.notifier).forwardedId, 0);
+
+      // 等错误横幅自动收起并完成退场动画。
+      await tester.pump(const Duration(seconds: 7));
+      await tester.pumpAndSettle();
+      expect(find.text('连接失败：连接超时'), findsNothing);
+
+      // 跨过 compact 断点：macOS 标题栏出现，BannerHost 与桥接状态必须保留。
+      tester.view.physicalSize = const Size(600, 800);
+      await tester.pumpAndSettle();
+      expect(find.text('连接失败：连接超时'), findsNothing);
     },
   );
 }
