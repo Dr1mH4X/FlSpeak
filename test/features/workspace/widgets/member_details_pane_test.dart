@@ -237,8 +237,8 @@ void main() {
 
       expect(find.byType(MemberDetailsPane), findsOneWidget);
 
-      // Tap Messages tab (icon Icons.chat_bubble_rounded)
-      final messagesTab = find.byIcon(Icons.chat_bubble_rounded);
+      // Tap the messages segment.
+      final messagesTab = find.text('消息');
       await tester.tap(messagesTab);
       await tester.pumpAndSettle();
 

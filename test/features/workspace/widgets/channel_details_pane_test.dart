@@ -181,8 +181,8 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // Find details tab icon in the header
-      final detailsTab = find.byIcon(Icons.info_outline_rounded);
+      // Find details segment in the header
+      final detailsTab = find.text('详情');
       expect(detailsTab, findsOneWidget);
 
       // Switch to details tab
@@ -237,8 +237,8 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      // Switch to media tab
-      final mediaTab = find.byIcon(Icons.photo_library_rounded);
+      // Switch to media segment
+      final mediaTab = find.text('媒体');
       expect(mediaTab, findsOneWidget);
       await tester.tap(mediaTab);
       await tester.pumpAndSettle();

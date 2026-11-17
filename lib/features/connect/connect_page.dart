@@ -331,7 +331,7 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
         backgroundColor: context.pageColor,
         title: desktop ? l10n.serversTitle : l10n.appName,
         actions: [
-          if (connected)
+          if (connected && (desktop || !inCompactTabs))
             desktop
                 ? TextButton.icon(
                     onPressed: () => context.go(AppRoutes.workspace),

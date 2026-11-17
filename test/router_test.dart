@@ -13,6 +13,7 @@ import 'package:flspeak/core/models.dart';
 import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/features/connect/connect_page.dart';
 import 'package:flspeak/features/settings/settings_page.dart';
+import 'package:flspeak/features/workspace/workspace_shell.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
 import 'package:flspeak/router.dart';
 import 'package:flspeak/theme/app_theme.dart';
@@ -81,6 +82,17 @@ void main() {
     expect(route.animation!.value, inExclusiveRange(0.0, 1.0));
     await tester.pumpAndSettle();
     expect(find.byType(SettingsPage), findsNothing);
+  });
+
+  testWidgets('宽屏根标签切换与 FlClash 一致直接替换页面', (tester) async {
+    final router = await _mount(tester);
+    expect(find.byType(ConnectPage), findsOneWidget);
+
+    router.go(AppRoutes.workspace);
+    await tester.pump();
+
+    expect(find.byType(ConnectPage), findsNothing);
+    expect(find.byType(WorkspaceShell), findsOneWidget);
   });
 
   testWidgets('从连接页侧栏进入设置后，一级菜单点击返回能回到连接页而非连接丢失页', (tester) async {

@@ -452,4 +452,54 @@ abstract final class AppGlyphs {
       GlyphVertex(17.9, 19.6),
     ], role: GlyphRole.line),
   ]);
+
+  static const workspace = Glyph([
+    GlyphArc(12, 12.8, 7.5, math.pi, math.pi, role: GlyphRole.line),
+    GlyphBox(3.5, 12.2, 7.5, 19.2, 2.0),
+    GlyphBox(16.5, 12.2, 20.5, 19.2, 2.0),
+  ]);
+
+  static const workspaceConnected = Glyph([
+    GlyphArc(12, 12.8, 7.5, math.pi, math.pi, role: GlyphRole.line),
+    GlyphBox(3.5, 12.2, 7.5, 19.2, 2.0),
+    GlyphBox(16.5, 12.2, 20.5, 19.2, 2.0),
+    GlyphCircle(12, 15.2, 2.1, role: GlyphRole.line, solid: true),
+  ]);
+
+  static const info = Glyph([
+    GlyphCircle(12, 12, 8.8),
+    GlyphPolyline([
+      GlyphVertex(12, 11.2),
+      GlyphVertex(12, 16),
+    ], role: GlyphRole.detail),
+    GlyphCircle(12, 8, 1.1, role: GlyphRole.detail, solid: true),
+  ]);
+
+  static const folder = Glyph([
+    GlyphPolyline([
+      GlyphVertex(3.5, 6.2, 2),
+      GlyphVertex(9.6, 6.2, 1),
+      GlyphVertex(11.6, 8.4, 1),
+      GlyphVertex(20.5, 8.4, 2),
+      GlyphVertex(20.5, 18.8, 2),
+      GlyphVertex(3.5, 18.8, 2),
+    ], closed: true),
+  ]);
+
+  static const media = Glyph([
+    GlyphBox(3.5, 4.5, 20.5, 19.5, 2.5),
+    GlyphCircle(8.6, 9.2, 1.4, role: GlyphRole.detail, solid: true),
+    GlyphPolyline([
+      GlyphVertex(5.2, 17.5),
+      GlyphVertex(10.2, 12.5, 0.6),
+      GlyphVertex(13.4, 15.6, 0.5),
+      GlyphVertex(16, 13.2, 0.6),
+      GlyphVertex(18.8, 17.5),
+    ], role: GlyphRole.detail),
+  ]);
+
+  static const person = Glyph([
+    GlyphCircle(12, 7.8, 3.2),
+    GlyphArc(12, 19.4, 5.6, math.pi, math.pi, role: GlyphRole.line),
+  ]);
 }

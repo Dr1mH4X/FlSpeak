@@ -58,7 +58,7 @@
 
 - **节结构与间距**：`ListHeader` 使用 `headline` 字阶并可右侧挂载 36 dp 高度的 `TonalButtonSize.section` 操作组；`ListFooter` 使用 `footnote` 字阶（`onSurfaceVariant`）置于卡片下方。
 - **行几何**：`ListRow` 在行高内对 `leading`、标题/副标题列与 `trailing`（如 `Switch` 与收紧 `minimumSize: Size.zero` 的 `OptionsValueButton`）执行纵轴居中对齐，`PopupMenu` 展开后的内部选项行与设置项共享 `prism_ui` 列表规范。
-- **子页面过渡与材质隔离**：设置多级钻取（概览页与二/三级子页切换）外层采用 [lib/widgets/scaffold/scaffold.dart](../../lib/widgets/scaffold/scaffold.dart) 的悬浮 `Scaffold` 承担标题与返回按钮（带 `Semantics` 无障碍标签，内部动作按钮保留 FlClash 原样），主体内容区为每个页面槽位绑定独立 `ValueKey` 与本地 `Material` 边界，并在 `AnimatedSwitcher` 中执行双向水平推入/拉回转场（进入自右侧推入，返回自左侧退回并揭开上一级，采用 `300 ms` 临界阻尼弹簧）。
+- **子页面过渡与材质隔离**：设置多级钻取的外层采用 [lib/widgets/scaffold/scaffold.dart](../../lib/widgets/scaffold/scaffold.dart) 的悬浮 `Scaffold` 承担标题与返回按钮（带 `Semantics` 无障碍标签，内部动作按钮保留 FlClash 原样）。窄屏下每级分类以 `prism_ui` `CardPageRoute` 推入独立详情页，返回退栈并恢复根底栏；宽屏在右侧内容区内以 `AnimatedSwitcher` 执行双向水平推入/拉回转场（进入自右侧推入，返回自左侧退回并揭开上一级，采用 `300 ms` 临界阻尼弹簧）。各层级视图绑定独立 `ValueKey` 与本地 `Material` 边界。
 - **行内容与分组位置**：前置图标统一为 `24 dp` 裸图标（无额外背景框）；分组内每行经 `ItemPositionScope` 感知首/中/尾/单项位置，中间插入 1 物理像素高的 `14% onSurface` 分隔线。
 
 ## 状态栏与安全区退避
@@ -72,8 +72,8 @@
 
 外观偏好持久化在 Rust `UiSettings`（`core/session`）与 Dart `SessionPreferences`，默认主题种子色为 `#C44D78` 并由 `buildAppColorScheme` 与 `buildPrismTheme` 结合 `seededColorScheme`、`AppColorStyle`、`pureBlack` 及对比度守护统一出表色，支持经 `lib/core/system_fonts.dart` 异步加载并筛选系统字体以及经 `PrismRootScope`、`MediaQuery.textScaler` 与 `MeasureScope` 控制文字缩放比例（`0.8–1.4`）。
 
-- **窄屏底部导航与转场**：窗口宽度低于 `Breakpoints.compact` 时，`lib/router.dart` 将根路径 `/connect` 与 `/settings` 映射到共享 `ValueKey('compact-navigation-shell')` 的 `CompactNavigationShell`（`context.push(AppRoutes.settings)` 仍按独立页面入栈），按 `floatingNavigationBar` 在悬浮胶囊 `NavigationDock`（开启 `LiquidGlassScope` 时附带真实透视玻璃与 `BarItemPresence` 过渡）与停靠 `NavigationBar` 间切换，并按 `tabAnimation` 在水平滑动或 `SnapshotWidget` 原位交叉淡入淡出（`_FadeTabPage`）间切换；钻入设置二三级子页、键盘弹出或切入工作区 `/workspace` 时自动收起底栏，窄屏工作区频道顶栏左侧固定保留退回首页/设置入口的返回按钮与抽屉按钮。
-- **Android 系统返回导航**：`WorkspaceShell` 的 `PopScope` 按顺序退出全屏观看、关闭侧滑抽屉或在不中断当前连接的前提下回到 `/connect`；`SettingsPage` 由 `CompactRootTabScope.activeTabIndex` 隔离激活页签后逐级退回总览并恢复底栏，在根设置总览页切回首页标签（`push` 入栈时直接 `pop` 回原页面）；`ConnectPage` 处于 Android 根界面且无待弹出路由时，已连接/连接中/重连中通过 `AndroidAppLifecycle` 调用原生 `MainActivity` `moveTaskToBack(true)` 退回后台保持语音，未连接时首次返回由 `NoticeCenter` 提示并在 2 秒内二次返回调用 `SystemNavigator.pop()` 退出。
+- **窄屏底部导航与转场**：窗口宽度低于 `Breakpoints.compact` 时，`lib/router.dart` 将根路径 `/connect`、`/workspace` 与 `/settings` 映射到共享 `ValueKey('compact-navigation-shell')` 的 `CompactNavigationShell`（`context.push(AppRoutes.settings)` 仍按独立页面入栈），底部导航展示「主页 / 工作区 / 设置」三标签（已连接时工作区切换为在线图标，未连接仍可切入查看空态），按 `floatingNavigationBar` 在悬浮胶囊 `NavigationDock`（开启 `LiquidGlassScope` 时附带真实透视玻璃与 `BarItemPresence` 过渡）与停靠 `NavigationBar` 间切换，并按 `tabAnimation` 在水平滑动或 `SnapshotWidget` 原位交叉淡入淡出（`_FadeTabPage`）间切换；宽屏主页与工作区根标签切换与 FlClash 一致直接替换页面，不做路由转场，`tabAnimation` 只在窄屏底部三标签生效；钻入设置二三级子页、键盘弹出或进入窄屏工作区二级频道页时自动收起根底栏。窄屏工作区采用两级结构：一级为频道树总览（单行顶栏包含服务器标题与延时胶囊弹窗入口，右侧放置麦克风、扬声器与红色断开按钮，单击频道立即加入并以 `CardPageRoute` 推入二级频道页，长按频道或点按成员弹出菜单或 `showSheet` 详情）；二级为当前频道页，顶部保留返回键与溢出菜单（频道详情、频道文件、频道媒体均经 `showSheet` 呈现），正文包含横向可滚动成员条与聊天区域，底部提供适配 VAD 与按键说话（`pttMode`）的三槽双模式工具栏（随 `floatingNavigationBar` 切换悬浮三槽或贴底停靠栏）。
+- **Android 系统返回导航**：`WorkspaceShell` 的 `PopScope` 按顺序退出全屏观看，或在工作区一级总览页通过 `CompactRootTabScope.onExitToHome` 在不中断当前连接的前提下回到 `/connect`；窄屏二级频道页由 `CardPageRoute` 承载，页面内 `PopScope` 先退出全屏观看，返回键退栈回一级总览并恢复根底栏；`SettingsPage` 总览页由 `CompactRootTabScope.activeTabIndex` 隔离激活页签，窄屏二三级详情页由卡片路由逐级退栈，宽屏逐级退回总览，在根设置总览页切回首页标签（`push` 入栈时直接 `pop` 回原页面）；`ConnectPage` 处于 Android 根界面且无待弹出路由时，已连接/连接中/重连中通过 `AndroidAppLifecycle` 调用原生 `MainActivity` `moveTaskToBack(true)` 退回后台保持语音，未连接时首次返回由 `NoticeCenter` 提示并在 2 秒内二次返回调用 `SystemNavigator.pop()` 退出。
 
 ## 液态玻璃开关与渲染档位
 

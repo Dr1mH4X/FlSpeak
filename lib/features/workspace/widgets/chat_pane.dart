@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart'
@@ -14,10 +15,12 @@ import 'package:flutter/material.dart'
         TextField;
 import 'package:flutter/rendering.dart' show RenderProxyBox, ScrollDirection;
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../../../core/image_host.dart';
 import '../../../core/models.dart';
+import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
@@ -541,7 +544,34 @@ class _ChatPaneState extends State<ChatPane> {
                   children: [
                     // 没有当前投递目标时保留范围选择入口，禁止发送。
                     if (_image != null) _buildImagePreview(context, l10n),
-                    _buildComposer(context, l10n),
+                    context.isCompact
+                        ? _CompactWorkspaceBottomBar(
+                            input: _input,
+                            focusNode: _focus,
+                            canSend: _canSend,
+                            sending: _sending,
+                            busy: widget.busy,
+                            hasImage: _image != null,
+                            hintText: _composerHintText(context, l10n),
+                            scope: widget.scope,
+                            onScopeChanged: widget.onScopeChanged,
+                            recipients: widget.recipients,
+                            onRecipientChanged: widget.onRecipientChanged,
+                            onRecipientSelected: widget.onRecipientSelected,
+                            selectedRecipient: _selectedRecipient,
+                            unreadScopes: widget.unreadScopes,
+                            unreadPeers: widget.unreadPeers,
+                            onSend: _send,
+                            onKeyEvent: _handleKeyEvent,
+                            onPickImage: widget.onPickImage == null
+                                ? null
+                                : () => _selectImage(widget.onPickImage!),
+                            onPasteImage: widget.onPasteImage == null
+                                ? null
+                                : () => _selectImage(widget.onPasteImage!),
+                            onConfigureImageHost: widget.onConfigureImageHost,
+                          )
+                        : _buildComposer(context, l10n),
                   ],
                 ),
               ),
@@ -770,18 +800,22 @@ class _ChatPaneState extends State<ChatPane> {
     );
   }
 
+  String _composerHintText(BuildContext context, AppLocalizations l10n) {
+    final target = switch (widget.scope) {
+      ChatScope.server => l10n.chatScopeServer,
+      ChatScope.channel => widget.channelName,
+      ChatScope.direct =>
+        _selectedRecipient?.nickname ?? l10n.chatRecipientUnavailable,
+    };
+    return l10n.chatComposerHintTo(target);
+  }
+
   Widget _buildComposer(BuildContext context, AppLocalizations l10n) {
     final scheme = context.scheme;
     final texts = context.texts;
     final horizontal = context.isCompact ? 16.0 : 32.0;
     final bottom = context.isCompact ? 16.0 : 24.0;
     final scope = widget.scope;
-    final target = switch (scope) {
-      ChatScope.server => l10n.chatScopeServer,
-      ChatScope.channel => widget.channelName,
-      ChatScope.direct =>
-        _selectedRecipient?.nickname ?? l10n.chatRecipientUnavailable,
-    };
 
     return Padding(
       padding: EdgeInsets.fromLTRB(horizontal, 8, horizontal, bottom),
@@ -851,7 +885,7 @@ class _ChatPaneState extends State<ChatPane> {
                           final hintStyle = texts.bodyMedium?.copyWith(
                             color: scheme.onSurfaceVariant,
                           );
-                          var hintText = l10n.chatComposerHintTo(target);
+                          var hintText = _composerHintText(context, l10n);
                           if (scope == ChatScope.channel) {
                             final textWidth = math.max(0.0, width - 44);
                             final painter = TextPainter(
@@ -933,6 +967,743 @@ class _ChatPaneState extends State<ChatPane> {
                     ),
                   ],
                 ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CompactWorkspaceBottomBar extends ConsumerStatefulWidget {
+  const _CompactWorkspaceBottomBar({
+    required this.input,
+    required this.focusNode,
+    required this.canSend,
+    required this.sending,
+    required this.busy,
+    required this.hasImage,
+    required this.hintText,
+    required this.scope,
+    required this.onScopeChanged,
+    required this.recipients,
+    required this.onRecipientChanged,
+    required this.onRecipientSelected,
+    required this.selectedRecipient,
+    required this.unreadScopes,
+    required this.unreadPeers,
+    required this.onSend,
+    required this.onKeyEvent,
+    this.onPickImage,
+    this.onPasteImage,
+    this.onConfigureImageHost,
+  });
+
+  final TextEditingController input;
+  final FocusNode focusNode;
+  final bool canSend;
+  final bool sending;
+  final bool busy;
+  final bool hasImage;
+  final String hintText;
+  final ChatScope scope;
+  final ValueChanged<ChatScope> onScopeChanged;
+  final List<ClientView> recipients;
+  final ValueChanged<String> onRecipientChanged;
+  final ValueChanged<ClientView>? onRecipientSelected;
+  final ClientView? selectedRecipient;
+  final Set<ChatScope> unreadScopes;
+  final Set<String> unreadPeers;
+  final Future<void> Function() onSend;
+  final KeyEventResult Function(FocusNode, KeyEvent) onKeyEvent;
+  final VoidCallback? onPickImage;
+  final VoidCallback? onPasteImage;
+  final VoidCallback? onConfigureImageHost;
+
+  @override
+  ConsumerState<_CompactWorkspaceBottomBar> createState() =>
+      _CompactWorkspaceBottomBarState();
+}
+
+class _CompactWorkspaceBottomBarState
+    extends ConsumerState<_CompactWorkspaceBottomBar> {
+  static const double _slotHeight = 48.0;
+
+  late bool _voiceControlMode = ref.read(sessionViewProvider).pttMode;
+  SessionController? _pttOwner;
+
+  bool get _hasUnread =>
+      widget.unreadScopes.isNotEmpty || widget.unreadPeers.isNotEmpty;
+
+  void _setPttHeld(bool active) {
+    if (!active) {
+      final owner = _pttOwner;
+      _pttOwner = null;
+      if (owner != null) {
+        unawaited(owner.setPttActive(false));
+      }
+      return;
+    }
+    if (_pttOwner != null) {
+      return;
+    }
+    final owner = ref.read(sessionViewProvider.notifier);
+    _pttOwner = owner;
+    unawaited(owner.setPttActive(true));
+  }
+
+  @override
+  void dispose() {
+    _setPttHeld(false);
+    super.dispose();
+  }
+
+  void _switchToVoiceControl() {
+    widget.focusNode.unfocus();
+    setState(() => _voiceControlMode = true);
+  }
+
+  void _switchToTextInput() {
+    _setPttHeld(false);
+    setState(() => _voiceControlMode = false);
+  }
+
+  Widget _buildSlotSurface(
+    BuildContext context, {
+    required bool floating,
+    required OutlinedBorder shape,
+    required BorderRadius glassRadius,
+    Color? color,
+    required Widget child,
+  }) {
+    final scheme = context.scheme;
+    final glass = floating && LiquidGlassScope.of(context);
+    final fill =
+        color ??
+        (floating
+            ? surfaceColorFor(floatingSurfaceLevelFor(scheme), scheme)
+            : context.raisedSurfaceColor);
+    if (glass && color == null) {
+      return LiquidGlass(
+        style: glassPillStyleOf(context),
+        borderRadius: glassRadius,
+        shadows: dockShadowsOf(context),
+        child: child,
+      );
+    }
+    return DecoratedBox(
+      decoration: ShapeDecoration(
+        color: fill,
+        shape: shape,
+        shadows: floating ? dockShadowsOf(context) : const [],
+      ),
+      child: child,
+    );
+  }
+
+  Widget _buildCircleSlot(
+    BuildContext context, {
+    required bool floating,
+    Color? color,
+    required Widget child,
+  }) {
+    return SizedBox.square(
+      dimension: _slotHeight,
+      child: _buildSlotSurface(
+        context,
+        floating: floating,
+        shape: AppShape.full,
+        glassRadius: AppRadius.full,
+        color: color,
+        child: ClipRSuperellipse(borderRadius: AppRadius.full, child: child),
+      ),
+    );
+  }
+
+  Widget _buildTextLeftButton(
+    BuildContext context,
+    AppLocalizations l10n, {
+    required bool floating,
+  }) {
+    final canAttach = widget.onPickImage != null || widget.onPasteImage != null;
+    final enabled = canAttach && !widget.sending && !widget.busy;
+    final scheme = context.scheme;
+    return _buildCircleSlot(
+      context,
+      floating: floating,
+      child: canAttach
+          ? SecondaryMenu(
+              enabled: enabled,
+              items: [
+                if (widget.onPickImage != null)
+                  PopupMenuItem(
+                    label: l10n.chatChooseImage,
+                    onPressed: widget.onPickImage,
+                  ),
+                if (widget.onPasteImage != null)
+                  PopupMenuItem(
+                    label: l10n.chatPasteImage,
+                    onPressed: widget.onPasteImage,
+                  ),
+                if (widget.onConfigureImageHost != null)
+                  PopupMenuItem(
+                    label: l10n.imageHostTitle,
+                    onPressed: widget.onConfigureImageHost,
+                  ),
+              ],
+              builder: (context, openMenu) => IconButton(
+                onPressed: openMenu,
+                style: ButtonStyle.from(
+                  foregroundColor: scheme.onSurface,
+                  minimumSize: const Size.square(_slotHeight),
+                  padding: EdgeInsets.zero,
+                ),
+                icon: Icon(
+                  Icons.add_photo_alternate_outlined,
+                  size: IconSizes.toolbar,
+                  semanticLabel: l10n.chatAttachImage,
+                ),
+              ),
+            )
+          : IconButton(
+              onPressed: null,
+              style: ButtonStyle.from(
+                minimumSize: const Size.square(_slotHeight),
+                padding: EdgeInsets.zero,
+              ),
+              icon: Icon(
+                Icons.add_photo_alternate_outlined,
+                size: IconSizes.toolbar,
+                semanticLabel: l10n.chatAttachImage,
+              ),
+            ),
+    );
+  }
+
+  Widget _buildTextCenterCapsule(
+    BuildContext context,
+    AppLocalizations l10n, {
+    required bool floating,
+  }) {
+    final scheme = context.scheme;
+    final texts = context.texts;
+    return _buildSlotSurface(
+      context,
+      floating: floating,
+      shape: AppShape.xl,
+      glassRadius: AppRadius.xl,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: _slotHeight),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: Focus(
+                  canRequestFocus: false,
+                  skipTraversal: true,
+                  onKeyEvent: widget.onKeyEvent,
+                  child: TextField(
+                    controller: widget.input,
+                    focusNode: widget.focusNode,
+                    enabled: widget.canSend,
+                    minLines: 1,
+                    maxLines: 5,
+                    keyboardType: TextInputType.multiline,
+                    onTapOutside: (_) =>
+                        FocusManager.instance.primaryFocus?.unfocus(),
+                    style: texts.bodyMedium?.copyWith(color: scheme.onSurface),
+                    decoration: InputDecoration(
+                      hintText: widget.hintText,
+                      hintMaxLines: 1,
+                      hintStyle: texts.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                      filled: false,
+                      hoverColor: Colors.transparent,
+                      isDense: true,
+                      border: const NoInputBorder(),
+                      enabledBorder: const NoInputBorder(),
+                      focusedBorder: const NoInputBorder(),
+                      disabledBorder: const NoInputBorder(),
+                      errorBorder: const NoInputBorder(),
+                      focusedErrorBorder: const NoInputBorder(),
+                      contentPadding: const EdgeInsets.fromLTRB(14, 10, 4, 10),
+                    ),
+                  ),
+                ),
+              ),
+              _ScopeButton(
+                scope: widget.scope,
+                onChanged: widget.onScopeChanged,
+                recipients: widget.recipients,
+                onRecipientChanged: widget.onRecipientChanged,
+                onRecipientSelected: widget.onRecipientSelected,
+                selectedRecipient: widget.selectedRecipient,
+                unreadScopes: widget.unreadScopes,
+                unreadPeers: widget.unreadPeers,
+                enabled: !widget.sending && !widget.busy,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextRightButton(
+    BuildContext context,
+    AppLocalizations l10n, {
+    required bool floating,
+    required bool pttMode,
+    required bool muted,
+    required bool selfSpeaking,
+  }) {
+    final scheme = context.scheme;
+    return ValueListenableBuilder<TextEditingValue>(
+      valueListenable: widget.input,
+      builder: (context, value, _) {
+        final hasContent = value.text.trim().isNotEmpty || widget.hasImage;
+        if (hasContent) {
+          final canSubmit = !widget.busy && !widget.sending && widget.canSend;
+          return _buildCircleSlot(
+            context,
+            floating: floating,
+            color: canSubmit ? scheme.primary : null,
+            child: IconButton(
+              onPressed: canSubmit ? () => unawaited(widget.onSend()) : null,
+              style: ButtonStyle.from(
+                foregroundColor: canSubmit
+                    ? scheme.onPrimary
+                    : scheme.onSurfaceVariant,
+                minimumSize: const Size.square(_slotHeight),
+                padding: EdgeInsets.zero,
+              ),
+              icon: Icon(
+                Icons.send_rounded,
+                size: IconSizes.toolbar,
+                semanticLabel: l10n.chatSend,
+              ),
+            ),
+          );
+        }
+
+        if (!pttMode) {
+          final Color? bgColor = muted
+              ? scheme.errorContainer
+              : selfSpeaking
+              ? scheme.primaryContainer
+              : null;
+          final Color fgColor = muted
+              ? scheme.onErrorContainer
+              : selfSpeaking
+              ? scheme.onPrimaryContainer
+              : scheme.onSurface;
+          return _buildCircleSlot(
+            context,
+            floating: floating,
+            color: bgColor,
+            child: Semantics(
+              button: true,
+              label: muted ? l10n.voiceUnmute : l10n.voiceMute,
+              child: AnimatedInkWell(
+                customBorder: AppShape.full,
+                onTap: () => unawaited(
+                  ref.read(sessionViewProvider.notifier).setMuted(!muted),
+                ),
+                onLongPress: () {
+                  HapticFeedback.selectionClick();
+                  _switchToVoiceControl();
+                },
+                child: Center(
+                  child: Icon(
+                    muted ? Icons.mic_off_rounded : Icons.mic_rounded,
+                    size: IconSizes.toolbar,
+                    color: fgColor,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+
+        final pttActive = _pttOwner != null || selfSpeaking;
+        return _buildCircleSlot(
+          context,
+          floating: floating,
+          color: pttActive ? scheme.primary : null,
+          child: Semantics(
+            button: true,
+            label: l10n.voiceHoldToTalk,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _switchToVoiceControl,
+              onLongPressStart: (_) {
+                HapticFeedback.selectionClick();
+                _setPttHeld(true);
+              },
+              onLongPressEnd: (_) => _setPttHeld(false),
+              onLongPressCancel: () => _setPttHeld(false),
+              child: Center(
+                child: Icon(
+                  pttActive ? Icons.mic_rounded : Icons.mic_none_rounded,
+                  size: IconSizes.toolbar,
+                  color: pttActive ? scheme.onPrimary : scheme.onSurface,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildVoiceLeftButton(
+    BuildContext context,
+    AppLocalizations l10n, {
+    required bool floating,
+  }) {
+    final scheme = context.scheme;
+    return _buildCircleSlot(
+      context,
+      floating: floating,
+      child: IconButton(
+        onPressed: _switchToTextInput,
+        style: ButtonStyle.from(
+          foregroundColor: scheme.onSurface,
+          minimumSize: const Size.square(_slotHeight),
+          padding: EdgeInsets.zero,
+        ),
+        icon: Badge(
+          isLabelVisible: _hasUnread,
+          smallSize: 8,
+          backgroundColor: scheme.error,
+          child: Icon(
+            Icons.keyboard_alt_outlined,
+            size: IconSizes.toolbar,
+            semanticLabel: l10n.chatSwitchToText,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVoiceCenterCapsule(
+    BuildContext context,
+    AppLocalizations l10n, {
+    required bool floating,
+    required bool pttMode,
+    required bool muted,
+    required bool deafened,
+    required bool selfSpeaking,
+  }) {
+    final scheme = context.scheme;
+    if (pttMode) {
+      final active = _pttOwner != null || selfSpeaking;
+      return SizedBox(
+        height: _slotHeight,
+        child: _buildSlotSurface(
+          context,
+          floating: floating,
+          shape: AppShape.full,
+          glassRadius: AppRadius.full,
+          color: active ? scheme.primary : null,
+          child: ClipRSuperellipse(
+            borderRadius: AppRadius.full,
+            child: Semantics(
+              button: true,
+              label: active ? l10n.voiceTalking : l10n.voiceHoldToTalk,
+              child: Listener(
+                behavior: HitTestBehavior.opaque,
+                onPointerDown: (_) => _setPttHeld(true),
+                onPointerUp: (_) => _setPttHeld(false),
+                onPointerCancel: (_) => _setPttHeld(false),
+                child: Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        active ? Icons.mic_rounded : Icons.mic_none_rounded,
+                        size: IconSizes.toolbar,
+                        color: active ? scheme.onPrimary : scheme.onSurface,
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          active ? l10n.voiceTalking : l10n.voiceHoldToTalk,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: context.texts.labelLarge?.copyWith(
+                            color: active ? scheme.onPrimary : scheme.onSurface,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: _slotHeight,
+      child: _buildSlotSurface(
+        context,
+        floating: floating,
+        shape: AppShape.full,
+        glassRadius: AppRadius.full,
+        child: ClipRSuperellipse(
+          borderRadius: AppRadius.full,
+          child: Row(
+            children: [
+              Expanded(
+                child: _VoiceControlSegment(
+                  icon: muted ? Icons.mic_off_rounded : Icons.mic_rounded,
+                  label: muted ? l10n.voiceUnmute : l10n.voiceMute,
+                  backgroundColor: muted
+                      ? scheme.errorContainer
+                      : selfSpeaking
+                      ? scheme.primaryContainer
+                      : Colors.transparent,
+                  foregroundColor: muted
+                      ? scheme.onErrorContainer
+                      : selfSpeaking
+                      ? scheme.onPrimaryContainer
+                      : scheme.onSurface,
+                  onTap: () => unawaited(
+                    ref.read(sessionViewProvider.notifier).setMuted(!muted),
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 1,
+                height: 24,
+                child: ColoredBox(color: dividerColorOf(context)),
+              ),
+              Expanded(
+                child: _VoiceControlSegment(
+                  icon: deafened
+                      ? Icons.headset_off_rounded
+                      : Icons.headphones_rounded,
+                  label: deafened ? l10n.voiceUndeafen : l10n.voiceDeafen,
+                  backgroundColor: deafened
+                      ? scheme.errorContainer
+                      : Colors.transparent,
+                  foregroundColor: deafened
+                      ? scheme.onErrorContainer
+                      : scheme.onSurface,
+                  onTap: () => unawaited(
+                    ref
+                        .read(sessionViewProvider.notifier)
+                        .setDeafened(!deafened),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVoiceRightDisconnectButton(
+    BuildContext context,
+    AppLocalizations l10n, {
+    required bool floating,
+    required bool sessionBusy,
+  }) {
+    final scheme = context.scheme;
+    return _buildCircleSlot(
+      context,
+      floating: floating,
+      color: scheme.error,
+      child: IconButton(
+        onPressed: sessionBusy
+            ? null
+            : () => unawaited(
+                ref.read(sessionViewProvider.notifier).disconnect(),
+              ),
+        style: ButtonStyle.from(
+          foregroundColor: scheme.onError,
+          minimumSize: const Size.square(_slotHeight),
+          padding: EdgeInsets.zero,
+        ),
+        icon: Icon(
+          Icons.call_end_rounded,
+          size: IconSizes.toolbar,
+          semanticLabel: l10n.serverDisconnect,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final scheme = context.scheme;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final floating = ref.watch(
+      preferencesProvider.select((prefs) => prefs.floatingNavigationBar),
+    );
+    final (:pttMode, :muted, :deafened, :selfSpeaking, :sessionBusy) = ref
+        .watch(
+          sessionViewProvider.select(
+            (view) => (
+              pttMode: view.pttMode,
+              muted: view.muted,
+              deafened: view.deafened,
+              selfSpeaking: view.selfSpeaking,
+              sessionBusy: view.busy,
+            ),
+          ),
+        );
+
+    ref.listen<bool>(sessionViewProvider.select((view) => view.pttMode), (
+      previous,
+      next,
+    ) {
+      if (previous != next && mounted) {
+        if (!next) {
+          _setPttHeld(false);
+        }
+        setState(() => _voiceControlMode = next);
+      }
+    });
+
+    final Widget barRow = AnimatedSwitcher(
+      duration: reduceMotion ? Duration.zero : Motion.effectsFast,
+      switchInCurve: Motion.effectsFastCurve,
+      switchOutCurve: Motion.effectsFastCurve.flipped,
+      child: _voiceControlMode
+          ? Row(
+              key: const ValueKey<bool>(true),
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                _buildVoiceLeftButton(context, l10n, floating: floating),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildVoiceCenterCapsule(
+                    context,
+                    l10n,
+                    floating: floating,
+                    pttMode: pttMode,
+                    muted: muted,
+                    deafened: deafened,
+                    selfSpeaking: selfSpeaking,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _buildVoiceRightDisconnectButton(
+                  context,
+                  l10n,
+                  floating: floating,
+                  sessionBusy: sessionBusy,
+                ),
+              ],
+            )
+          : Row(
+              key: const ValueKey<bool>(false),
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                _buildTextLeftButton(context, l10n, floating: floating),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildTextCenterCapsule(
+                    context,
+                    l10n,
+                    floating: floating,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _buildTextRightButton(
+                  context,
+                  l10n,
+                  floating: floating,
+                  pttMode: pttMode,
+                  muted: muted,
+                  selfSpeaking: selfSpeaking,
+                ),
+              ],
+            ),
+    );
+
+    final Widget content = Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: Sizes.chatContent),
+        child: TextFieldTapRegion(child: barRow),
+      ),
+    );
+
+    if (floating) {
+      final safeBottom = MediaQuery.paddingOf(context).bottom;
+      return Padding(
+        padding: EdgeInsets.fromLTRB(16, 8, 16, math.max(16.0, safeBottom)),
+        child: content,
+      );
+    }
+
+    return Surface(
+      color: surfaceColorFor(floatingSurfaceLevelFor(scheme), scheme),
+      shape: Border(top: BorderSide(color: dividerColorOf(context))),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+          child: content,
+        ),
+      ),
+    );
+  }
+}
+
+class _VoiceControlSegment extends StatelessWidget {
+  const _VoiceControlSegment({
+    required this.icon,
+    required this.label,
+    required this.backgroundColor,
+    required this.foregroundColor,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color backgroundColor;
+  final Color foregroundColor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: label,
+      child: SizedBox.expand(
+        child: DecoratedBox(
+          decoration: BoxDecoration(color: backgroundColor),
+          child: AnimatedInkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, size: IconSizes.medium, color: foregroundColor),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.texts.labelLarge?.copyWith(
+                        color: foregroundColor,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

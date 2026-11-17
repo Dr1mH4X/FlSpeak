@@ -846,6 +846,27 @@ void main() {
     expect(container.read(sessionViewProvider).chatScope, ChatScope.channel);
   });
 
+  testWidgets('宽屏频道视图由 SegmentedControl 切换并即时替换内容', (tester) async {
+    await _mount(tester);
+    expect(
+      find.byWidgetPredicate((widget) => widget is SegmentedControl),
+      findsOneWidget,
+    );
+    expect(find.byType(ChatPane), findsOneWidget);
+
+    await tester.tap(find.text('媒体'));
+    await tester.pump();
+    expect(find.byType(ChatPane), findsNothing);
+
+    await tester.tap(find.text('详情'));
+    await tester.pump();
+    expect(find.byType(ChatPane), findsNothing);
+
+    await tester.tap(find.text('消息'));
+    await tester.pump();
+    expect(find.byType(ChatPane), findsOneWidget);
+  });
+
   testWidgets('工作区在窄屏与平板宽屏均让顶栏与侧栏退避状态栏', (tester) async {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -860,6 +881,8 @@ void main() {
     addTearDown(container.dispose);
 
     Future<void> mount(Size size) async {
+      // 先卸掉上一轮页面，避免窄屏推入的频道路由盖住宽屏外壳。
+      await tester.pumpWidget(const SizedBox.shrink());
       tester.view.physicalSize = size;
       await tester.pumpWidget(
         UncontrolledProviderScope(
@@ -891,21 +914,45 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    // 窄屏使用 FlClash Scaffold，返回与抽屉按钮退避状态栏，Tab 条位于顶栏下方
+    // 窄屏一级频道总览使用 FlClash Scaffold，顶栏语音/断开操作退避状态栏
     await mount(const Size(390, 844));
     expect(find.byType(app_scaffold.Scaffold), findsOneWidget);
+    expect(find.byType(ChannelPanel), findsOneWidget);
+    expect(find.byType(WorkspacePage), findsNothing);
+    expect(
+      tester.getTopLeft(find.byIcon(Icons.mic_rounded)).dy,
+      greaterThanOrEqualTo(40.0),
+    );
+    expect(
+      tester.getTopLeft(find.byIcon(Icons.call_end_rounded)).dy,
+      greaterThanOrEqualTo(40.0),
+    );
+
+    // 点按频道推入二级频道页：无视图切换条，返回键与溢出菜单均退避状态栏
+    await tester.tap(find.text('Lounge'));
+    await tester.pumpAndSettle();
+    expect(find.byType(WorkspacePage), findsOneWidget);
+    expect(
+      find.byWidgetPredicate((widget) => widget is SegmentedControl),
+      findsNothing,
+    );
     final backFinder = find.bySemanticsLabel(
       MaterialLocalizations.of(tester.element(find.byType(WorkspacePage)))
           .backButtonTooltip,
     );
     expect(tester.getTopLeft(backFinder).dy, greaterThanOrEqualTo(40.0));
     expect(
-      tester.getTopLeft(find.byIcon(Icons.menu_rounded)).dy,
+      tester
+          .getTopLeft(
+            find.descendant(
+              of: find.byType(WorkspacePage),
+              matching: find.byWidgetPredicate(
+                (w) => w is GlyphIcon && w.glyph == Glyphs.more,
+              ),
+            ),
+          )
+          .dy,
       greaterThanOrEqualTo(40.0),
-    );
-    expect(
-      tester.getTopLeft(find.byType(TabBar)).dy,
-      greaterThanOrEqualTo(40.0 + pageToolbarHeight),
     );
 
     // 宽屏（Android 平板）：全局侧栏、频道栏顶栏、主区域顶栏全部退避状态栏
@@ -931,7 +978,11 @@ void main() {
       greaterThanOrEqualTo(40.0),
     );
     expect(
-      tester.getTopLeft(find.byType(TabBar)).dy,
+      tester
+          .getTopLeft(
+            find.byWidgetPredicate((widget) => widget is SegmentedControl),
+          )
+          .dy,
       greaterThanOrEqualTo(40.0),
     );
   });

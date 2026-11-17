@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart'
     hide
         ButtonStyle,
@@ -8,6 +10,7 @@ import 'package:flutter/material.dart'
         IconButton,
         LinearProgressIndicator,
         OutlinedButton,
+        PopupMenuItem,
         Switch,
         TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -30,18 +33,72 @@ import '../settings/widgets/image_host_dialog.dart';
 import 'widgets/chat_pane.dart';
 import 'widgets/channel_files_pane.dart';
 import 'widgets/channel_details_pane.dart';
+import 'widgets/client_actions.dart';
 import 'widgets/member_details_pane.dart';
 import 'widgets/media_grid.dart';
 import 'widgets/media_viewer.dart';
 import 'widgets/members_pane.dart';
 import 'widgets/member_avatar.dart';
+import 'widgets/member_status_flags.dart';
 import 'widgets/stream_viewer_pane.dart';
 import 'workspace_shell.dart';
 import 'workspace_state.dart';
 
+/// 以 `prism_ui` 底部抽屉（窄屏）或侧栏（宽屏）承载工作区详情、文件与媒体面板。
+Future<void> showWorkspaceDetailSheet(
+  BuildContext context, {
+  required String title,
+  required Widget child,
+}) {
+  return showSheet<void>(
+    context: context,
+    builder: (sheetContext) => Material(
+      type: MaterialType.transparency,
+      child: app_scaffold.Scaffold(
+        title: title,
+        body: SafeArea(top: false, child: AppBarClearance(child: child)),
+      ),
+    ),
+  );
+}
+
+Future<void> showChannelDetailsSheet(
+  BuildContext context,
+  ChannelView channel,
+) {
+  return showWorkspaceDetailSheet(
+    context,
+    title: AppLocalizations.of(context).channelDetails,
+    child: ChannelDetailsPane(channel: channel),
+  );
+}
+
+Future<void> showChannelFilesSheet(BuildContext context, int channelId) {
+  return showWorkspaceDetailSheet(
+    context,
+    title: AppLocalizations.of(context).chatTabFiles,
+    child: ChannelFilesPane(channelId: channelId),
+  );
+}
+
+Future<void> showMemberDetailsSheet(
+  BuildContext context,
+  ClientView client, {
+  bool isOffline = false,
+}) {
+  return showWorkspaceDetailSheet(
+    context,
+    title: AppLocalizations.of(context).memberDetails,
+    child: MemberDetailsPane(client: client, isOffline: isOffline),
+  );
+}
+
 /// 主区域：频道标题 + 消息 / 媒体两个视图，以及掉线后的空状态。
 class WorkspacePage extends ConsumerStatefulWidget {
-  const WorkspacePage({super.key});
+  const WorkspacePage({this.forceCompact = false, super.key});
+
+  /// 由窄屏频道页路由承载时固定使用单栏布局，窗口变宽也不切成缺少侧栏的宽屏骨架。
+  final bool forceCompact;
 
   @override
   ConsumerState<WorkspacePage> createState() => _WorkspacePageState();
@@ -49,50 +106,56 @@ class WorkspacePage extends ConsumerStatefulWidget {
 
 enum _MainTab { chat, media, files, details }
 
-class _WorkspacePageState extends ConsumerState<WorkspacePage>
-    with SingleTickerProviderStateMixin {
-  // M3 primary tabs：页签状态由 TabController 持有，指示器动画随组件自带。
-  late final TabController _tabController = TabController(
-    length: 4,
-    vsync: this,
-  )..addListener(_handleTabChanged);
+class _WorkspacePageState extends ConsumerState<WorkspacePage> {
   _MainTab _tab = _MainTab.chat;
 
-  void _handleTabChanged() {
-    // 目标内容与指示器同时切换，不等待指示器动画结束。
-    final tab = _MainTab.values[_tabController.index];
-    if (tab != _tab) {
-      if (tab == _MainTab.chat) {
-        final selectedMember = ref.read(selectedMemberProvider);
-        if (selectedMember != null &&
-            selectedMember.serverId ==
-                ref.read(sessionViewProvider).activeServerId) {
-          ref
-              .read(sessionViewProvider.notifier)
-              .selectDirectRecipient(
-                selectedMember.uid,
-                clientId: selectedMember.clientId,
-              );
-        }
-      }
-      setState(() => _tab = tab);
+  void _selectTab(_MainTab tab) {
+    if (tab == _tab) {
+      return;
     }
+    if (tab == _MainTab.chat) {
+      final selectedMember = ref.read(selectedMemberProvider);
+      if (selectedMember != null &&
+          selectedMember.serverId ==
+              ref.read(sessionViewProvider).activeServerId) {
+        ref
+            .read(sessionViewProvider.notifier)
+            .selectDirectRecipient(
+              selectedMember.uid,
+              clientId: selectedMember.clientId,
+            );
+      }
+    }
+    setState(() => _tab = tab);
   }
 
   @override
-  void dispose() {
-    _tabController.removeListener(_handleTabChanged);
-    _tabController.dispose();
-    super.dispose();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!widget.forceCompact ||
+        MediaQuery.sizeOf(context).width < Breakpoints.compact) {
+      return;
+    }
+    // 频道页只在窄屏作为路由承载；窗口变宽后退回宽屏三栏骨架。
+    if (ModalRoute.of(context)?.isCurrent != true) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        unawaited(Navigator.of(context).maybePop());
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final compact =
+        widget.forceCompact ||
+        MediaQuery.sizeOf(context).width < Breakpoints.compact;
     final channelId = ref.watch(activeChannelIdProvider);
     final detailsTarget = ref.watch(activeDetailsTargetProvider);
-    final isMemberDetails = detailsTarget is MemberDetailsTarget;
     final (
       :connected,
       :connecting,
@@ -125,7 +188,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
       (previous, next) {
         if (next.$1 != ChatScope.direct) return;
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && _tabController.index != 0) _tabController.index = 0;
+          if (mounted && _tab != _MainTab.chat) _selectTab(_MainTab.chat);
         });
       },
     );
@@ -133,29 +196,44 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
     ref.listen(selectedMemberProvider, (previous, next) {
       if (next != null) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && _tabController.index != 3) {
-            _tabController.index = 3;
+          if (mounted && !compact && _tab != _MainTab.details) {
+            _selectTab(_MainTab.details);
           }
         });
       }
     });
 
-    final compact = MediaQuery.sizeOf(context).width < Breakpoints.compact;
+    // 窄屏二级频道页是推入的路由；连接结束后退回一级频道总览。
+    ref.listen<bool>(
+      sessionViewProvider.select(
+        (view) => view.connected || view.connecting || view.reconnecting,
+      ),
+      (previous, hasSession) {
+        if (hasSession || !mounted || !compact) {
+          return;
+        }
+        final navigator = Navigator.maybeOf(context);
+        if (navigator?.canPop() == true) {
+          unawaited(navigator!.maybePop());
+        }
+      },
+    );
+
     final mainPane = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (identityUpgradeTarget != null)
-          _IdentityBanner(
+          WorkspaceIdentityBanner(
             target: identityUpgradeTarget,
             onCancel: ref
                 .read(sessionViewProvider.notifier)
                 .cancelIdentityUpgrade,
           ),
-        const _VoiceAlerts(),
+        const WorkspaceVoiceAlerts(),
         const _WorkspaceStreamViewer(),
         Expanded(
-          // 视图替换走 crossfade（M3 effects default）：同一容器内换内容
-          // 不做位移，避免整块内容跳来跳去。
+          // 频道或连接变化时整块内容走 crossfade（M3 effects default），不做位移；
+          // 页签切换由内层 key 即时替换，指示器动画由 SegmentedControl 承担。
           child: RepaintBoundary(
             child: WidthBuilder(
               builder: (context, width) => Row(
@@ -183,24 +261,28 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
                         ),
                         child: KeyedSubtree(
                           key: ValueKey((
-                            _tab,
                             activeServerId,
                             connectionEpoch,
                             channelId,
                             connected,
                             connecting || reconnecting,
-                            _tab == _MainTab.details ? detailsTarget : null,
                           )),
-                          child: _buildBody(
-                            context,
-                            l10n,
-                            connected: connected,
-                            connecting: connecting,
-                            reconnecting: reconnecting,
-                            reconnectAttempt: reconnectAttempt,
-                            connectionEpoch: connectionEpoch,
-                            channel: channel,
-                            detailsTarget: detailsTarget,
+                          child: KeyedSubtree(
+                            key: ValueKey((
+                              _tab,
+                              _tab == _MainTab.details ? detailsTarget : null,
+                            )),
+                            child: _buildBody(
+                              context,
+                              l10n,
+                              connected: connected,
+                              connecting: connecting,
+                              reconnecting: reconnecting,
+                              reconnectAttempt: reconnectAttempt,
+                              connectionEpoch: connectionEpoch,
+                              channel: channel,
+                              detailsTarget: detailsTarget,
+                            ),
                           ),
                         ),
                       ),
@@ -217,54 +299,111 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
     );
 
     if (compact) {
-      return app_scaffold.Scaffold(
-        backgroundColor: context.pageColor,
-        title: channel != null ? channelDisplayName(channel) : l10n.appName,
-        backAction: () => navigateWorkspaceBack(context),
-        actions: [
-          IconButton(
-            onPressed: () => Scaffold.maybeOf(context)?.openDrawer(),
-            icon: Icon(
-              Icons.menu_rounded,
-              semanticLabel: l10n.workspaceOpenMenu,
-            ),
-          ),
-        ],
-        body: Builder(
-          builder: (context) => Material(
-            type: MaterialType.transparency,
-            child: Padding(
-              padding: EdgeInsets.only(top: context.appBarInset),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (channel != null)
-                    DecoratedBox(
-                      decoration: BoxDecoration(
-                        border: Border(
-                          bottom: BorderSide(color: dividerColorOf(context)),
-                        ),
+      final fullScreen = ref.watch(
+        streamViewerProvider.select((state) => state.isFullScreen),
+      );
+      return PopScope(
+        canPop: !fullScreen,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop && fullScreen) {
+            unawaited(
+              ref.read(streamViewerProvider.notifier).setFullScreen(false),
+            );
+          }
+        },
+        child: app_scaffold.Scaffold(
+          backgroundColor: context.pageColor,
+          title: channel != null ? channelDisplayName(channel) : l10n.appName,
+          backAction: () => navigateWorkspaceBack(context),
+          menuItems: [
+            if (channel != null) ...[
+              PopupMenuItem(
+                glyph: AppGlyphs.info,
+                label: l10n.channelDetails,
+                onPressed: () =>
+                    unawaited(showChannelDetailsSheet(context, channel)),
+              ),
+              PopupMenuItem(
+                glyph: AppGlyphs.folder,
+                label: l10n.chatTabFiles,
+                onPressed: () =>
+                    unawaited(showChannelFilesSheet(context, channel.id)),
+              ),
+              PopupMenuItem(
+                glyph: AppGlyphs.media,
+                label: l10n.chatTabMedia,
+                onPressed: () => unawaited(
+                  showWorkspaceDetailSheet(
+                    context,
+                    title: l10n.chatTabMedia,
+                    child: _ChannelMediaBody(channelId: channel.id),
+                  ),
+                ),
+              ),
+            ],
+          ],
+          body: Builder(
+            builder: (context) => Material(
+              type: MaterialType.transparency,
+              child: Padding(
+                padding: EdgeInsets.only(top: context.appBarInset),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (identityUpgradeTarget != null)
+                      WorkspaceIdentityBanner(
+                        target: identityUpgradeTarget,
+                        onCancel: ref
+                            .read(sessionViewProvider.notifier)
+                            .cancelIdentityUpgrade,
                       ),
-                      child: SafeArea(
-                        top: false,
-                        bottom: false,
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            child: _ViewTabs(
-                              tabs: _tabSpecs(
-                                l10n,
-                                isMemberDetails: isMemberDetails,
-                              ),
-                              controller: _tabController,
+                    const WorkspaceVoiceAlerts(),
+                    const _WorkspaceStreamViewer(),
+                    if (channel != null && connected)
+                      _CompactChannelMembersStrip(channelId: channel.id),
+                    Expanded(
+                      child: RepaintBoundary(
+                        child: AnimatedSwitcher(
+                          duration: reduceMotion
+                              ? Duration.zero
+                              : Motion.effectsDefault,
+                          switchInCurve: Motion.effectsDefaultCurve,
+                          switchOutCurve: Motion.effectsDefaultCurve.flipped,
+                          layoutBuilder: (current, previous) => Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              for (final child in previous)
+                                ExcludeFocus(
+                                  child: IgnorePointer(
+                                    child: ExcludeSemantics(child: child),
+                                  ),
+                                ),
+                              ?current,
+                            ],
+                          ),
+                          child: KeyedSubtree(
+                            key: ValueKey((
+                              activeServerId,
+                              connectionEpoch,
+                              channelId,
+                              connected,
+                              connecting || reconnecting,
+                            )),
+                            child: _buildCompactBody(
+                              context,
+                              l10n,
+                              connected: connected,
+                              connecting: connecting,
+                              reconnecting: reconnecting,
+                              reconnectAttempt: reconnectAttempt,
+                              channel: channel,
                             ),
                           ),
                         ),
                       ),
                     ),
-                  Expanded(child: SafeArea(top: false, child: mainPane)),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -275,14 +414,50 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _ChannelHeader(
-          channel: channel,
-          tabController: _tabController,
-          isMemberDetails: isMemberDetails,
-        ),
+        _ChannelHeader(channel: channel, tab: _tab, onTabSelected: _selectTab),
         Expanded(child: SafeArea(top: false, left: false, child: mainPane)),
       ],
     );
+  }
+
+  Widget _buildCompactBody(
+    BuildContext context,
+    AppLocalizations l10n, {
+    required bool connected,
+    required bool connecting,
+    required bool reconnecting,
+    required int? reconnectAttempt,
+    required ChannelView? channel,
+  }) {
+    if (connecting || reconnecting) {
+      final scheme = context.scheme;
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const ActivityIndicator(size: 36),
+            const SizedBox(height: 16),
+            Text(
+              reconnecting
+                  ? l10n.voiceReconnectingAttempt(reconnectAttempt ?? 1)
+                  : l10n.sessionConnecting,
+              style: context.texts.bodyMedium?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (channel == null) {
+      return EmptyState(
+        icon: connected ? Icons.forum_rounded : Icons.link_off_rounded,
+        body: connected ? l10n.workspaceNoChannels : l10n.workspaceDropped,
+      );
+    }
+
+    return _ChannelChatBody(channel: channel);
   }
 
   Widget _buildBody(
@@ -364,6 +539,108 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage>
       case _MainTab.chat:
         return _ChannelChatBody(channel: channel);
     }
+  }
+}
+
+class _CompactChannelMembersStrip extends ConsumerWidget {
+  const _CompactChannelMembersStrip({required this.channelId});
+
+  final int channelId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final members = ref.watch(
+      sessionViewProvider.select(
+        (view) => view.clients
+            .where((client) => client.channelId == channelId)
+            .toList(growable: false),
+      ),
+    );
+    if (members.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: dividerColorOf(context))),
+      ),
+      child: SafeArea(
+        top: false,
+        bottom: false,
+        child: SizedBox(
+          height: 50,
+          child: PrismListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            gap: 8,
+            estimatedItemExtent: 120,
+            itemCount: members.length,
+            itemBuilder: (context, index) => _CompactMemberChip(
+              key: ValueKey(members[index].id),
+              member: members[index],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CompactMemberChip extends ConsumerWidget {
+  const _CompactMemberChip({required this.member, super.key});
+
+  final ClientView member;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final speaking = ref.watch(
+      sessionViewProvider.select(
+        (view) =>
+            view.speaking.contains(member.id) ||
+            (member.id == view.selfClientId && view.selfSpeaking),
+      ),
+    );
+    final sharingScreen = ref.watch(
+      sessionViewProvider.select(
+        (view) => view.streamForClient(member.id) != null,
+      ),
+    );
+    return Surface(
+      color: context.cardColor,
+      shape: AppShape.full,
+      clipBehavior: Clip.antiAlias,
+      child: ClientActionsButton(
+        client: member,
+        compactMenuOnTap: true,
+        onShowDetails: () => unawaited(showMemberDetailsSheet(context, member)),
+        onDirectChat: () {},
+        onWatchStream: (_) {},
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(6, 4, 10, 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SessionMemberAvatar(
+                uid: member.uid,
+                nickname: member.nickname,
+                size: 26,
+                speaking: speaking,
+              ),
+              const SizedBox(width: 6),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 112),
+                child: Text(
+                  member.nickname,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.texts.labelMedium,
+                ),
+              ),
+              MemberStatusFlags(client: member, sharingScreen: sharingScreen),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -572,50 +849,25 @@ class _ChannelChatBodyState extends ConsumerState<_ChannelChatBody> {
   }
 }
 
-class _TabSpec {
-  const _TabSpec({required this.tab, required this.label, required this.icon});
+typedef _TabSpec = ({_MainTab tab, String label});
 
-  final _MainTab tab;
-  final String label;
-  final IconData icon;
-}
-
-List<_TabSpec> _tabSpecs(
-  AppLocalizations l10n, {
-  required bool isMemberDetails,
-}) => [
-  _TabSpec(
-    tab: _MainTab.chat,
-    label: l10n.chatTabMessages,
-    icon: Icons.chat_bubble_rounded,
-  ),
-  _TabSpec(
-    tab: _MainTab.media,
-    label: l10n.chatTabMedia,
-    icon: Icons.photo_library_rounded,
-  ),
-  _TabSpec(
-    tab: _MainTab.files,
-    label: l10n.chatTabFiles,
-    icon: Icons.folder_rounded,
-  ),
-  _TabSpec(
-    tab: _MainTab.details,
-    label: isMemberDetails ? l10n.memberDetails : l10n.channelDetails,
-    icon: Icons.info_outline_rounded,
-  ),
+List<_TabSpec> _tabSpecs(AppLocalizations l10n) => [
+  (tab: _MainTab.chat, label: l10n.chatTabMessages),
+  (tab: _MainTab.media, label: l10n.chatTabMedia),
+  (tab: _MainTab.files, label: l10n.chatTabFiles),
+  (tab: _MainTab.details, label: l10n.chatTabDetails),
 ];
 
 class _ChannelHeader extends StatelessWidget {
   const _ChannelHeader({
     required this.channel,
-    required this.tabController,
-    required this.isMemberDetails,
+    required this.tab,
+    required this.onTabSelected,
   });
 
   final ChannelView? channel;
-  final TabController tabController;
-  final bool isMemberDetails;
+  final _MainTab tab;
+  final ValueChanged<_MainTab> onTabSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -636,6 +888,7 @@ class _ChannelHeader extends StatelessWidget {
             child: Row(
               children: [
                 Expanded(
+                  flex: 5,
                   child: WindowDragRegion(
                     child: Semantics(
                       header: true,
@@ -657,10 +910,17 @@ class _ChannelHeader extends StatelessWidget {
                   ),
                 ),
                 if (hasChannel) ...[
-                  const SizedBox(width: 6),
-                  _ViewTabs(
-                    tabs: _tabSpecs(l10n, isMemberDetails: isMemberDetails),
-                    controller: tabController,
+                  const SizedBox(width: 12),
+                  Flexible(
+                    flex: 4,
+                    child: SegmentedControl<_MainTab>(
+                      segments: [
+                        for (final spec in _tabSpecs(l10n))
+                          (spec.tab, spec.label),
+                      ],
+                      value: tab,
+                      onChanged: onTabSelected,
+                    ),
                   ),
                 ],
               ],
@@ -672,40 +932,12 @@ class _ChannelHeader extends StatelessWidget {
   }
 }
 
-/// 频道头里的视图切换：M3 primary tabs（`TabBar`），是同级视图切换的规范组件，
-/// 指示器动画与语义由组件自带。
-class _ViewTabs extends StatelessWidget {
-  const _ViewTabs({required this.tabs, required this.controller});
-
-  final List<_TabSpec> tabs;
-  final TabController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return TabBar(
-      controller: controller,
-      isScrollable: true,
-      // M3 scrollable tabs 的默认对齐：首签偏移一个 tab 边距。
-      tabAlignment: TabAlignment.start,
-      // 频道头为 48 高，页签压到 36 垂直居中。
-      splashBorderRadius: Radii.pillAll,
-      tabs: [
-        for (final tab in tabs)
-          Tab(
-            height: 36,
-            child: Icon(
-              tab.icon,
-              size: IconSizes.medium,
-              semanticLabel: tab.label,
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _IdentityBanner extends StatelessWidget {
-  const _IdentityBanner({required this.target, required this.onCancel});
+class WorkspaceIdentityBanner extends StatelessWidget {
+  const WorkspaceIdentityBanner({
+    required this.target,
+    required this.onCancel,
+    super.key,
+  });
 
   final int target;
   final VoidCallback onCancel;
@@ -746,8 +978,8 @@ class _IdentityBanner extends StatelessWidget {
 }
 
 /// 语音设备状态 chip，任何页签下都可见。瞬时语音错误走右上角提示。
-class _VoiceAlerts extends ConsumerWidget {
-  const _VoiceAlerts();
+class WorkspaceVoiceAlerts extends ConsumerWidget {
+  const WorkspaceVoiceAlerts({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

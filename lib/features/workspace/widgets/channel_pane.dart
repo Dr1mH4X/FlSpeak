@@ -41,39 +41,68 @@ import 'voice_activity_ribbon.dart';
 /// 所以设计稿里的「文字频道 / 语音频道」两段在真实数据上没有依据，这里只保留
 /// 一棵按 `parentId` 展开的频道树，成员跟随所属频道缩进显示。
 class ChannelPanel extends StatelessWidget {
-  const ChannelPanel({this.onChannelSelected, this.onDisconnect, super.key});
+  const ChannelPanel({
+    this.onChannelSelected,
+    this.onDisconnect,
+    this.showHeader = true,
+    this.showUserFooter = true,
+    this.bottomInset = 0,
+    this.onCompactDirectChat,
+    this.onCompactWatchStream,
+    this.onShowChannelDetails,
+    this.onShowChannelFiles,
+    this.onShowMemberDetails,
+    super.key,
+  });
 
-  /// 点频道后离开设置页，回到工作区。
+  /// 点频道后离开设置页，回到工作区；窄屏模式下触发推入二级频道页。
   final VoidCallback? onChannelSelected;
   final VoidCallback? onDisconnect;
+  final bool showHeader;
+  final bool showUserFooter;
+  final double bottomInset;
+  final VoidCallback? onCompactDirectChat;
+  final ValueChanged<StreamView>? onCompactWatchStream;
+  final ValueChanged<ChannelView>? onShowChannelDetails;
+  final ValueChanged<ChannelView>? onShowChannelFiles;
+  final ValueChanged<ClientView>? onShowMemberDetails;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
     return Surface(
-      color: scheme.surfaceContainerLow,
+      color: showHeader ? scheme.surfaceContainerLow : context.pageColor,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const _ChannelHeader(),
+          if (showHeader) const _ChannelHeader(),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 SectionLabel(label: l10n.channelsSection),
                 Expanded(
-                  child: _ChannelTree(onChannelSelected: onChannelSelected),
+                  child: _ChannelTree(
+                    onChannelSelected: onChannelSelected,
+                    bottomInset: bottomInset,
+                    onCompactDirectChat: onCompactDirectChat,
+                    onCompactWatchStream: onCompactWatchStream,
+                    onShowChannelDetails: onShowChannelDetails,
+                    onShowChannelFiles: onShowChannelFiles,
+                    onShowMemberDetails: onShowMemberDetails,
+                  ),
                 ),
               ],
             ),
           ),
-          SafeArea(
-            top: false,
-            left: false,
-            right: false,
-            child: _UserFooter(onDisconnect: onDisconnect),
-          ),
+          if (showUserFooter)
+            SafeArea(
+              top: false,
+              left: false,
+              right: false,
+              child: _UserFooter(onDisconnect: onDisconnect),
+            ),
         ],
       ),
     );
@@ -127,9 +156,23 @@ class _ChannelHeader extends ConsumerWidget {
 }
 
 class _ChannelTree extends ConsumerStatefulWidget {
-  const _ChannelTree({this.onChannelSelected});
+  const _ChannelTree({
+    this.onChannelSelected,
+    this.bottomInset = 0,
+    this.onCompactDirectChat,
+    this.onCompactWatchStream,
+    this.onShowChannelDetails,
+    this.onShowChannelFiles,
+    this.onShowMemberDetails,
+  });
 
   final VoidCallback? onChannelSelected;
+  final double bottomInset;
+  final VoidCallback? onCompactDirectChat;
+  final ValueChanged<StreamView>? onCompactWatchStream;
+  final ValueChanged<ChannelView>? onShowChannelDetails;
+  final ValueChanged<ChannelView>? onShowChannelFiles;
+  final ValueChanged<ClientView>? onShowMemberDetails;
 
   @override
   ConsumerState<_ChannelTree> createState() => _ChannelTreeState();
@@ -276,10 +319,49 @@ class _ChannelTreeState extends ConsumerState<_ChannelTree> {
     bool canJoinChannel(ChannelView channel) =>
         connected && !busy && selfChannelId != channel.id;
 
-    // 单击只看、双击进入。不用 `InkWell.onDoubleTap`：它会把手势竞技场按到
-    // `kDoubleTapTimeout` 之后，单击反馈也跟着晚一拍。改成按点击间隔自己判定，
-    // 单击当场派发，第二次点击落在窗口内才算双击。
+    // 窄屏单击即加入（若未在该频道）并推入二级页，无 300ms 双击延迟；
+    // 桌面端维持单击预览、双击加入。
     void tap(ChannelView channel) {
+      if (context.isCompact) {
+        if (selfChannelId == channel.id) {
+          select(channel);
+          return;
+        }
+        if (!canJoinChannel(channel)) {
+          return;
+        }
+        final currentSelected = ref.read(selectedChannelProvider);
+        final fallback = currentSelected?.channelId == channel.id
+            ? null
+            : currentSelected;
+        unawaited(() async {
+          await ref
+              .read(selectedChannelProvider.notifier)
+              .join(
+                channel.id,
+                serverId: activeServerId,
+                fallback: fallback,
+                requestPassword: () =>
+                    requestChannelPassword(context, ref, channel.id),
+              );
+          if (!mounted) {
+            return;
+          }
+          final view = ref.read(sessionViewProvider);
+          final joined =
+              view.connected &&
+              view.activeServerId == activeServerId &&
+              (view.selfChannelId == channel.id ||
+                  ref.read(selectedChannelProvider)?.channelId == channel.id);
+          if (joined) {
+            ref
+                .read(sessionViewProvider.notifier)
+                .selectChatScope(ChatScope.channel);
+            widget.onChannelSelected?.call();
+          }
+        }());
+        return;
+      }
       final pending = _pendingTap;
       _pendingTap?.timer.cancel();
       if (pending != null &&
@@ -322,10 +404,11 @@ class _ChannelTreeState extends ConsumerState<_ChannelTree> {
       );
     }
 
+    final compact = context.isCompact;
     final dividerColor = dividerColorOf(context);
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     return PrismListView(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      padding: EdgeInsets.fromLTRB(12, 0, 12, 12 + widget.bottomInset),
       estimatedItemExtent: 40,
       itemCount: rows.length,
       itemBuilder: (context, index) {
@@ -345,6 +428,9 @@ class _ChannelTreeState extends ConsumerState<_ChannelTree> {
                 scheme.onSurfaceVariant,
                 dividerColor,
                 reduceMotion,
+                compact,
+                widget.onShowChannelDetails != null,
+                widget.onShowChannelFiles != null,
               ],
               builder: (context) => _ChannelTile(
                 channel: channel,
@@ -354,11 +440,33 @@ class _ChannelTreeState extends ConsumerState<_ChannelTree> {
                 onJoin: () => joinFromMenu(channel),
                 canJoin: canJoinChannel(channel),
                 spacer: spacer,
+                onShowDetails: compact && widget.onShowChannelDetails != null
+                    ? () => widget.onShowChannelDetails!(channel)
+                    : null,
+                onShowFiles: compact && widget.onShowChannelFiles != null
+                    ? () => widget.onShowChannelFiles!(channel)
+                    : null,
               ),
             ),
           _MemberRow(:final client, :final depth) => MemoBuilder(
-            inputs: [client, depth],
-            builder: (context) => _MemberTile(client: client, depth: depth),
+            inputs: [
+              client,
+              depth,
+              compact,
+              widget.onShowMemberDetails != null,
+              widget.onCompactDirectChat != null,
+              widget.onCompactWatchStream != null,
+            ],
+            builder: (context) => _MemberTile(
+              client: client,
+              depth: depth,
+              compactMenuOnTap: compact,
+              onShowDetails: widget.onShowMemberDetails == null
+                  ? null
+                  : () => widget.onShowMemberDetails!(client),
+              onDirectChat: widget.onCompactDirectChat,
+              onWatchStream: widget.onCompactWatchStream,
+            ),
           ),
         };
       },
@@ -394,22 +502,26 @@ class _ChannelTile extends StatelessWidget {
     required this.onJoin,
     required this.canJoin,
     this.spacer,
+    this.onShowDetails,
+    this.onShowFiles,
   });
 
   final ChannelView channel;
   final int depth;
   final bool selected;
 
-  /// 单击：只换主区域展示的频道；双击由父级按点击间隔判定后另外加入。
+  /// 桌面单击预览、窄屏单击直接加入并进入二级频道页。
   final VoidCallback onTap;
 
-  /// 双击或右键菜单加入；已在频道里、未连接或命令进行中时不可用。
+  /// 双击或右键/长按菜单加入；已在频道里、未连接或命令进行中时不可用。
   final VoidCallback onJoin;
   final bool canJoin;
 
   /// 非 null 表示这是 spacer 频道：行高与点击、加入行为和普通频道一致，
   /// 只有名字区域换成装饰画法。
   final ChannelSpacer? spacer;
+  final VoidCallback? onShowDetails;
+  final VoidCallback? onShowFiles;
 
   @override
   Widget build(BuildContext context) {
@@ -419,19 +531,33 @@ class _ChannelTile extends StatelessWidget {
     final foreground = selected
         ? scheme.onPrimaryContainer
         : scheme.onSurfaceVariant;
+    final menuItems = [
+      if (canJoin)
+        PopupMenuItem(
+          glyph: AppGlyphs.login,
+          label: l10n.channelJoinMenu,
+          onPressed: onJoin,
+        ),
+      if (onShowDetails != null)
+        PopupMenuItem(
+          glyph: AppGlyphs.info,
+          label: l10n.channelDetails,
+          onPressed: onShowDetails,
+        ),
+      if (onShowFiles != null)
+        PopupMenuItem(
+          glyph: AppGlyphs.folder,
+          label: l10n.chatTabFiles,
+          onPressed: onShowFiles,
+        ),
+    ];
 
     return Padding(
       padding: EdgeInsets.only(left: depth * 16.0),
       child: SecondaryMenu(
-        enabled: canJoin,
+        enabled: menuItems.isNotEmpty,
         openOnSecondaryTap: true,
-        items: [
-          PopupMenuItem(
-            glyph: AppGlyphs.login,
-            label: l10n.channelJoinMenu,
-            onPressed: canJoin ? onJoin : null,
-          ),
-        ],
+        items: menuItems,
         builder: (context, _) => Semantics(
           button: true,
           selected: selected,
@@ -576,10 +702,21 @@ class _FillSpacerText extends StatelessWidget {
 }
 
 class _MemberTile extends ConsumerWidget {
-  const _MemberTile({required this.client, required this.depth});
+  const _MemberTile({
+    required this.client,
+    required this.depth,
+    this.compactMenuOnTap = false,
+    this.onShowDetails,
+    this.onDirectChat,
+    this.onWatchStream,
+  });
 
   final ClientView client;
   final int depth;
+  final bool compactMenuOnTap;
+  final VoidCallback? onShowDetails;
+  final VoidCallback? onDirectChat;
+  final ValueChanged<StreamView>? onWatchStream;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -625,6 +762,10 @@ class _MemberTile extends ConsumerWidget {
       padding: EdgeInsets.only(left: 32.0 + (depth - 1) * 16.0, right: 6),
       child: ClientActionsButton(
         client: client,
+        compactMenuOnTap: compactMenuOnTap,
+        onShowDetails: onShowDetails,
+        onDirectChat: onDirectChat,
+        onWatchStream: onWatchStream,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: Row(

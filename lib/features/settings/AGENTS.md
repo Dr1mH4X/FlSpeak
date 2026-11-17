@@ -31,7 +31,7 @@
 ```
 
 ### 交互规则
-1. **多级菜单非抽屉**：点击分类卡片或子项入口后，**直接占满右侧主内容区**进入对应子页面，严禁使用从右侧滑出一半的导航抽屉；设置外层采用 `lib/widgets/scaffold/scaffold.dart` 的 `Scaffold` 承担悬浮顶栏与状态栏退避，一级与二/三级子页面主体在 `AnimatedSwitcher` 中采用双向水平推入/拉回转场（进入自右侧推入，返回反向退回），并为各层级视图分配独立 `ValueKey` 与本地 `Material` 边界。字体选择与自定义调色板分别通过 `OpenContainer`（窄屏）或 `showSheet`（桌面）打开独立选择器。
+1. **多级菜单非抽屉**：点击分类卡片或子项入口后，**直接占满主内容区**进入对应子页面，严禁使用从右侧滑出一半的导航抽屉；设置外层采用 `lib/widgets/scaffold/scaffold.dart` 的 `Scaffold` 承担悬浮顶栏与状态栏退避。窄屏下每级分类以 `prism_ui` `CardPageRoute` 推入独立详情页，返回退栈；宽屏在右侧内容区内以 `AnimatedSwitcher` 执行双向水平推入/拉回转场（进入自右侧推入，返回反向退回），并为各层级视图分配独立 `ValueKey` 与本地 `Material` 边界。字体选择与自定义调色板分别通过 `OpenContainer`（窄屏）或 `showSheet`（桌面）打开独立选择器。
 2. **面包屑式逐级返回机制**：`Scaffold` 的 `backAction` 统一承接顶部返回按钮（带 `Semantics` 无障碍标签）；同时绑定物理按键 `LogicalKeyboardKey.escape`。
    - 三级页面（语音 / 屏幕共享）按返回按钮或 `ESC` 键退回二级通用页面。
    - 二级页面按返回按钮或 `ESC` 键退回一级概览页。

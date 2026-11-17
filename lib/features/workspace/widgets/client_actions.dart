@@ -27,11 +27,19 @@ class ClientActionsButton extends ConsumerWidget {
   const ClientActionsButton({
     required this.client,
     this.child = const SizedBox.shrink(),
+    this.compactMenuOnTap = false,
+    this.onShowDetails,
+    this.onDirectChat,
+    this.onWatchStream,
     super.key,
   });
 
   final ClientView client;
   final Widget child;
+  final bool compactMenuOnTap;
+  final VoidCallback? onShowDetails;
+  final VoidCallback? onDirectChat;
+  final ValueChanged<StreamView>? onWatchStream;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -43,18 +51,20 @@ class ClientActionsButton extends ConsumerWidget {
     );
     final scheme = context.scheme;
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
-    final isSelected = ref.watch(
-      selectedMemberProvider.select(
-        (selected) =>
-            selected != null &&
-            selected.serverId == activeServerId &&
-            selected.clientId == client.id &&
-            selected.uid == client.uid,
-      ),
-    );
+    final isSelected =
+        !compactMenuOnTap &&
+        ref.watch(
+          selectedMemberProvider.select(
+            (selected) =>
+                selected != null &&
+                selected.serverId == activeServerId &&
+                selected.clientId == client.id &&
+                selected.uid == client.uid,
+          ),
+        );
     final foreground = isSelected ? scheme.onPrimaryContainer : null;
 
-    final details = Semantics(
+    Widget buildTile(VoidCallback? onTap) => Semantics(
       button: true,
       selected: isSelected,
       child: AnimatedContainer(
@@ -67,13 +77,7 @@ class ClientActionsButton extends ConsumerWidget {
         child: ClipRSuperellipse(
           borderRadius: AppRadius.md,
           child: AnimatedInkWell(
-            onTap: () {
-              ref
-                  .read(selectedMemberProvider.notifier)
-                  .select(client, serverId: activeServerId);
-              ref.read(routerProvider).go(AppRoutes.workspace);
-              Scaffold.maybeOf(context)?.closeDrawer();
-            },
+            onTap: onTap,
             customBorder: AppShape.md,
             child: DefaultTextStyle.merge(
               style: isSelected ? TextStyle(color: foreground) : null,
@@ -88,8 +92,18 @@ class ClientActionsButton extends ConsumerWidget {
         ),
       ),
     );
+
     if (isSelf || client.uid.isEmpty) {
-      return details;
+      if (compactMenuOnTap) {
+        return buildTile(client.uid.isNotEmpty ? onShowDetails : null);
+      }
+      return buildTile(() {
+        ref
+            .read(selectedMemberProvider.notifier)
+            .select(client, serverId: activeServerId);
+        ref.read(routerProvider).go(AppRoutes.workspace);
+        Scaffold.maybeOf(context)?.closeDrawer();
+      });
     }
     final l10n = AppLocalizations.of(context);
     final access = ref.watch(
@@ -110,81 +124,118 @@ class ClientActionsButton extends ConsumerWidget {
         );
       }),
     );
+    final menuItems = [
+      if (compactMenuOnTap && onShowDetails != null)
+        PopupMenuItem(
+          glyph: AppGlyphs.person,
+          label: l10n.memberDetails,
+          onPressed: onShowDetails,
+        ),
+      if (stream != null)
+        PopupMenuItem(
+          glyph: isWatchingStream
+              ? AppGlyphs.stopScreenShare
+              : AppGlyphs.screenShare,
+          label: isWatchingStream
+              ? l10n.streamStopWatching
+              : l10n.streamWatchScreen,
+          onPressed: () {
+            final controller = ref.read(sessionViewProvider.notifier);
+            if (isWatchingStream) {
+              controller.leaveStream(stream.id);
+            } else {
+              controller.watchStream(stream);
+            }
+            if (onWatchStream != null) {
+              onWatchStream!(stream);
+            } else {
+              ref.read(routerProvider).go(AppRoutes.workspace);
+            }
+          },
+        ),
+      PopupMenuItem(
+        glyph: AppGlyphs.chat,
+        label: l10n.chatDirectAction,
+        onPressed: () {
+          ref
+              .read(sessionViewProvider.notifier)
+              .selectDirectRecipient(client.uid, clientId: client.id);
+          if (onDirectChat != null) {
+            onDirectChat!();
+          } else {
+            ref.read(routerProvider).go(AppRoutes.workspace);
+          }
+        },
+      ),
+      PopupMenuItem(
+        glyph: AppGlyphs.poke,
+        label: l10n.pokeAction,
+        onPressed: () => showAppModal<void>(
+          context,
+          title: l10n.pokeTitle(client.nickname),
+          builder: (_) => _PokeForm(client: client),
+        ),
+      ),
+      PopupMenuItem(
+        glyph: AppGlyphs.permissions,
+        label: l10n.memberPermissions,
+        onPressed: canManage
+            ? () => showMemberPermissions(context, client)
+            : null,
+      ),
+      for (final target in KickTarget.values)
+        PopupMenuItem(
+          glyph: target == KickTarget.channel
+              ? AppGlyphs.logout
+              : AppGlyphs.personRemove,
+          label: target == KickTarget.channel
+              ? l10n.kickChannel
+              : l10n.kickServer,
+          danger: true,
+          onPressed:
+              connected &&
+                  !busy &&
+                  access?.connectionEpoch != null &&
+                  (target == KickTarget.channel
+                          ? access?.kickChannelPower ?? 0
+                          : access?.kickServerPower ?? 0) >
+                      0
+              ? () => showKickClient(
+                  context,
+                  client,
+                  target,
+                  access!.connectionEpoch!,
+                )
+              : null,
+        ),
+    ];
+
+    if (compactMenuOnTap) {
+      final menuEnabled = connected && !busy;
+      return PopupAnchor(
+        bare: true,
+        placement: PopupPlacement.overAnchorStart,
+        targetBuilder: (open) => ContextMenuRegion(
+          menuItems: menuEnabled ? menuItems : null,
+          child: buildTile(menuEnabled ? open : (onShowDetails ?? () {})),
+        ),
+        popupBuilder: (_) => PopupMenu(items: menuItems),
+      );
+    }
+
+    final details = buildTile(() {
+      ref
+          .read(selectedMemberProvider.notifier)
+          .select(client, serverId: activeServerId);
+      ref.read(routerProvider).go(AppRoutes.workspace);
+      Scaffold.maybeOf(context)?.closeDrawer();
+    });
+
     return SecondaryMenu(
       openOnSecondaryTap: true,
       enabled: connected && !busy,
       moreSemanticLabel: l10n.memberActions(client.nickname),
-      items: [
-        if (stream != null)
-          PopupMenuItem(
-            glyph: isWatchingStream
-                ? AppGlyphs.stopScreenShare
-                : AppGlyphs.screenShare,
-            label: isWatchingStream
-                ? l10n.streamStopWatching
-                : l10n.streamWatchScreen,
-            onPressed: () {
-              final controller = ref.read(sessionViewProvider.notifier);
-              if (isWatchingStream) {
-                controller.leaveStream(stream.id);
-              } else {
-                controller.watchStream(stream);
-              }
-              ref.read(routerProvider).go(AppRoutes.workspace);
-            },
-          ),
-        PopupMenuItem(
-          glyph: AppGlyphs.chat,
-          label: l10n.chatDirectAction,
-          onPressed: () {
-            ref
-                .read(sessionViewProvider.notifier)
-                .selectDirectRecipient(client.uid, clientId: client.id);
-            ref.read(routerProvider).go(AppRoutes.workspace);
-          },
-        ),
-        PopupMenuItem(
-          glyph: AppGlyphs.poke,
-          label: l10n.pokeAction,
-          onPressed: () => showAppModal<void>(
-            context,
-            title: l10n.pokeTitle(client.nickname),
-            builder: (_) => _PokeForm(client: client),
-          ),
-        ),
-        PopupMenuItem(
-          glyph: AppGlyphs.permissions,
-          label: l10n.memberPermissions,
-          onPressed: canManage
-              ? () => showMemberPermissions(context, client)
-              : null,
-        ),
-        for (final target in KickTarget.values)
-          PopupMenuItem(
-            glyph: target == KickTarget.channel
-                ? AppGlyphs.logout
-                : AppGlyphs.personRemove,
-            label: target == KickTarget.channel
-                ? l10n.kickChannel
-                : l10n.kickServer,
-            danger: true,
-            onPressed:
-                connected &&
-                    !busy &&
-                    access?.connectionEpoch != null &&
-                    (target == KickTarget.channel
-                            ? access?.kickChannelPower ?? 0
-                            : access?.kickServerPower ?? 0) >
-                        0
-                ? () => showKickClient(
-                    context,
-                    client,
-                    target,
-                    access!.connectionEpoch!,
-                  )
-                : null,
-          ),
-      ],
+      items: menuItems,
       builder: (_, _) => details,
     );
   }

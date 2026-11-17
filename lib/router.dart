@@ -34,6 +34,8 @@ final routerProvider = Provider<GoRouter>((ref) {
             return _page(
               state,
               ConnectPage(serverId: state.uri.queryParameters['server']),
+              // 宽屏根标签与 FlClash 一致直接跳转，不做路由转场。
+              root: !context.isCompact,
             );
           }
           return _compactShellPage(
@@ -55,13 +57,21 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: AppRoutes.workspace,
-        pageBuilder: (context, state) => _page(
-          state,
-          const WorkspaceShell(
-            location: AppRoutes.workspace,
-            child: WorkspacePage(),
-          ),
-        ),
+        pageBuilder: (context, state) {
+          final isRoot = _isRootMatch(router, state);
+          if (!context.isCompact || !isRoot) {
+            return _page(
+              state,
+              const WorkspaceShell(
+                location: AppRoutes.workspace,
+                child: WorkspacePage(),
+              ),
+              // 宽屏根标签与 FlClash 一致直接跳转，不做路由转场。
+              root: !context.isCompact,
+            );
+          }
+          return _compactShellPage(state, location: AppRoutes.workspace);
+        },
       ),
     ],
   );
@@ -92,11 +102,12 @@ CustomTransitionPage<void> _page(
   GoRouterState state,
   Widget child, {
   LocalKey? key,
+  bool root = false,
 }) {
   return CustomTransitionPage<void>(
     key: key ?? state.pageKey,
-    transitionDuration: Motion.effectsDefault,
-    reverseTransitionDuration: Motion.effectsFast,
+    transitionDuration: root ? Duration.zero : Motion.effectsDefault,
+    reverseTransitionDuration: root ? Duration.zero : Motion.effectsFast,
     child: child,
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
       final progress = animation.drive(

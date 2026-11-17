@@ -1346,6 +1346,12 @@ abstract class AppLocalizations {
   /// **'Files'**
   String get chatTabFiles;
 
+  /// No description provided for @chatTabDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Details'**
+  String get chatTabDetails;
+
   /// No description provided for @fileParent.
   ///
   /// In en, this message translates to:
@@ -2113,6 +2119,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Press back again to exit'**
   String get pressBackAgainToExit;
+
+  /// No description provided for @voiceHoldToTalk.
+  ///
+  /// In en, this message translates to:
+  /// **'Hold to talk'**
+  String get voiceHoldToTalk;
+
+  /// No description provided for @voiceTalking.
+  ///
+  /// In en, this message translates to:
+  /// **'Talking…'**
+  String get voiceTalking;
+
+  /// No description provided for @chatSwitchToText.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to text input'**
+  String get chatSwitchToText;
+
+  /// No description provided for @chatSwitchToVoice.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to voice controls'**
+  String get chatSwitchToVoice;
 }
 
 class _AppLocalizationsDelegate

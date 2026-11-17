@@ -685,6 +685,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatTabFiles => 'Files';
 
   @override
+  String get chatTabDetails => 'Details';
+
+  @override
   String get fileParent => 'Parent folder';
 
   @override
@@ -1099,4 +1102,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get pressBackAgainToExit => 'Press back again to exit';
+
+  @override
+  String get voiceHoldToTalk => 'Hold to talk';
+
+  @override
+  String get voiceTalking => 'Talking…';
+
+  @override
+  String get chatSwitchToText => 'Switch to text input';
+
+  @override
+  String get chatSwitchToVoice => 'Switch to voice controls';
 }

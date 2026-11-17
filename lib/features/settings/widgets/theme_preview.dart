@@ -178,9 +178,9 @@ class _ThemeLivePreviewState extends ConsumerState<ThemeLivePreview>
   }
 }
 
-enum _MiniPage { connect, settings }
+enum _MiniPage { connect, workspace, settings }
 
-/// 缩略预览设备草图，按传入 [colorScheme] 与底部栏模式渲染首页与设置两个页签。
+/// 缩略预览设备草图，按传入 [colorScheme] 与底部栏模式渲染首页、工作区与设置三个页签。
 class MiniScreen extends StatelessWidget {
   const MiniScreen({
     super.key,
@@ -196,7 +196,7 @@ class MiniScreen extends StatelessWidget {
     this.onSelect,
   });
 
-  static const int destinationCount = 2;
+  static const int destinationCount = 3;
 
   final ColorScheme colorScheme;
   final bool floatingBar;
@@ -594,6 +594,8 @@ class _PageSketch {
     switch (page) {
       case _MiniPage.connect:
         _connect(_header(actions: 1));
+      case _MiniPage.workspace:
+        _workspace(_header(actions: 3));
       case _MiniPage.settings:
         _settings(_header(actions: 0));
     }
@@ -699,6 +701,39 @@ class _PageSketch {
     _block(composer, inset, extent: 3.4);
     _pill(1.1, y + 1.7, width - 5.2, 0.85, line);
     _dot(width - 1.7, y + 2.1, 0.95, colorScheme.primary);
+  }
+
+  void _workspace(double top) {
+    var y = top;
+    // 一级频道树列表草图（含选中频道与在线成员）
+    for (var i = 0; i < 3; i++) {
+      final active = i == 0;
+      final row = _rect(0, y, width, active ? 5.6 : 3.8);
+      _block(
+        row,
+        active ? colorScheme.primaryContainer.withValues(alpha: 0.7) : card,
+        extent: 4.0,
+      );
+      _dot(1.6, y + 1.9, 0.75, active ? colorScheme.primary : line);
+      _pill(
+        3.2,
+        y + 1.5,
+        active ? 6.8 : 5.4,
+        0.8,
+        active ? colorScheme.onPrimaryContainer : text,
+      );
+      if (active) {
+        _dot(2.4, y + 3.9, 0.65, colorScheme.primary);
+        _pill(3.8, y + 3.6, 5.2, 0.65, colorScheme.onPrimaryContainer);
+        _dot(width - 1.8, y + 3.9, 0.45, colorScheme.primary);
+      }
+      y += (active ? 5.6 : 3.8) + _gap;
+    }
+
+    final footer = _rect(0, y + 0.4, width, 4.4);
+    _block(footer, card, extent: 4.4);
+    _dot(1.8, y + 2.6, 0.9, colorScheme.primary);
+    _pill(3.5, y + 2.1, 6.2, 0.9, text);
   }
 
   void _settings(double top) {

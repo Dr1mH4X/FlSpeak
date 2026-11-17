@@ -47,7 +47,19 @@ final Curve _settingsPushCurve = SpringCurve(
 
 /// 设置项页面：左侧全局导航侧边栏，右侧为多级菜单设计（二级/三级占满内容区）。
 class SettingsPage extends ConsumerStatefulWidget {
-  const SettingsPage({super.key});
+  const SettingsPage({
+    super.key,
+    this.initialCategory,
+    this.initialGeneralSubcategory,
+    this.asDetail = false,
+  });
+
+  /// 以卡片推入的二级/三级页初始层级；总览页两者都为 null。
+  final SettingsCategory? initialCategory;
+  final GeneralSubcategory? initialGeneralSubcategory;
+
+  /// 独立推入的详情页：返回键退栈而不是回到总览。
+  final bool asDetail;
 
   @override
   ConsumerState<SettingsPage> createState() => _SettingsPageState();
@@ -58,36 +70,60 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   GeneralSubcategory? _activeGeneralSubcategory;
   int _navDirection = 1;
 
-  void _notifyCompactOverview() {
-    final atOverview =
-        _activeCategory == null && _activeGeneralSubcategory == null;
-    CompactSettingsOverviewNotification(atOverview).dispatch(context);
+  @override
+  void initState() {
+    super.initState();
+    _activeCategory = widget.initialCategory;
+    _activeGeneralSubcategory = widget.initialGeneralSubcategory;
+  }
+
+  bool get _pushesDetail => widget.asDetail || context.isCompact;
+
+  void _pushDetail(SettingsPage page) {
+    unawaited(
+      Navigator.of(context).push(CardPageRoute<void>(builder: (_) => page)),
+    );
   }
 
   void _enterCategory(SettingsCategory category) {
+    if (_pushesDetail) {
+      _pushDetail(SettingsPage(initialCategory: category, asDetail: true));
+      return;
+    }
     setState(() {
       _navDirection = 1;
       _activeCategory = category;
       _activeGeneralSubcategory = null;
     });
-    _notifyCompactOverview();
   }
 
   void _enterGeneralSubcategory(GeneralSubcategory subcategory) {
+    if (_pushesDetail) {
+      _pushDetail(
+        SettingsPage(
+          initialCategory: SettingsCategory.general,
+          initialGeneralSubcategory: subcategory,
+          asDetail: true,
+        ),
+      );
+      return;
+    }
     setState(() {
       _navDirection = 1;
       _activeGeneralSubcategory = subcategory;
     });
-    _notifyCompactOverview();
   }
 
   void _back() {
+    if (widget.asDetail) {
+      unawaited(Navigator.of(context).maybePop());
+      return;
+    }
     if (_activeGeneralSubcategory != null) {
       setState(() {
         _navDirection = -1;
         _activeGeneralSubcategory = null;
       });
-      _notifyCompactOverview();
       return;
     }
     if (_activeCategory != null) {
@@ -95,7 +131,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         _navDirection = -1;
         _activeCategory = null;
       });
-      _notifyCompactOverview();
       return;
     }
     final router = GoRouter.maybeOf(context);
@@ -558,14 +593,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
 
     final tabScope = CompactRootTabScope.maybeOf(context);
-    final isActiveTab = tabScope == null || tabScope.activeTabIndex == 1;
+    final isActiveTab = tabScope == null || tabScope.activeTabIndex == 2;
     final hasRouteBack =
         (GoRouter.maybeOf(context)?.canPop() ?? false) ||
         Navigator.of(context).canPop();
     final canPopAtOverview =
+        !widget.asDetail &&
         _activeCategory == null &&
         _activeGeneralSubcategory == null &&
         (hasRouteBack || tabScope?.onExitToHome == null);
+    final showSidebar = !compact;
 
     return Shortcuts(
       shortcuts: const {
@@ -583,25 +620,28 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         child: Focus(
           autofocus: true,
           child: PopScope(
-            canPop: !isActiveTab || canPopAtOverview,
+            canPop: widget.asDetail || !isActiveTab || canPopAtOverview,
             onPopInvokedWithResult: (didPop, _) {
               if (didPop || !isActiveTab) return;
               _back();
             },
             child: Material(
-              color: !compact && ref.watch(windowBlurOpacityProvider) != null
+              color:
+                  showSidebar &&
+                      !widget.asDetail &&
+                      ref.watch(windowBlurOpacityProvider) != null
                   ? Colors.transparent
                   : pageColor,
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (!compact)
+                  if (showSidebar)
                     const AppNavigationSidebar(
                       selectedDestination: AppNavDestination.settings,
                     ),
                   Expanded(
                     child: SidebarContentInset(
-                      hasSidebar: !compact,
+                      hasSidebar: showSidebar,
                       child: rightContent,
                     ),
                   ),

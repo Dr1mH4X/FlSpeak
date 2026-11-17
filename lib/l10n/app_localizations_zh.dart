@@ -671,6 +671,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatTabFiles => '文件';
 
   @override
+  String get chatTabDetails => '详情';
+
+  @override
   String get fileParent => '上级目录';
 
   @override
@@ -1069,4 +1072,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get pressBackAgainToExit => '再按一次返回退出应用';
+
+  @override
+  String get voiceHoldToTalk => '按住说话';
+
+  @override
+  String get voiceTalking => '正在说话…';
+
+  @override
+  String get chatSwitchToText => '切换到文字输入';
+
+  @override
+  String get chatSwitchToVoice => '切换到语音控制';
 }

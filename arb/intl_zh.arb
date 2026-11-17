@@ -310,6 +310,7 @@
   "groupCurrent": "当前",
   "groupAssign": "设置",
   "chatTabFiles": "文件",
+  "chatTabDetails": "详情",
   "fileParent": "上级目录",
   "fileDownload": "下载文件",
   "fileUnlock": "打开",
@@ -486,5 +487,9 @@
   "settingsTextScaleCustom": "自定义",
   "settingsTextScalePreview": "预览当前文字大小",
   "navWorkspace": "工作区",
-  "pressBackAgainToExit": "再按一次返回退出应用"
+  "pressBackAgainToExit": "再按一次返回退出应用",
+  "voiceHoldToTalk": "按住说话",
+  "voiceTalking": "正在说话…",
+  "chatSwitchToText": "切换到文字输入",
+  "chatSwitchToVoice": "切换到语音控制"
 }

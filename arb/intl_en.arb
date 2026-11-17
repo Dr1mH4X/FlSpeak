@@ -310,6 +310,7 @@
   "groupCurrent": "Current",
   "groupAssign": "Assign",
   "chatTabFiles": "Files",
+  "chatTabDetails": "Details",
   "fileParent": "Parent folder",
   "fileDownload": "Download file",
   "fileUnlock": "Open",
@@ -493,5 +494,9 @@
   "settingsTextScaleCustom": "Custom",
   "settingsTextScalePreview": "Preview text at this size",
   "navWorkspace": "Workspace",
-  "pressBackAgainToExit": "Press back again to exit"
+  "pressBackAgainToExit": "Press back again to exit",
+  "voiceHoldToTalk": "Hold to talk",
+  "voiceTalking": "Talking…",
+  "chatSwitchToText": "Switch to text input",
+  "chatSwitchToVoice": "Switch to voice controls"
 }

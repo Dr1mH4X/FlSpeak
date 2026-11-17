@@ -40,7 +40,7 @@ class NetworkStatus extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final color = _qualityColor(
+    final color = networkQualityColorOf(
       context,
       connected: connected,
       telemetry: network,
@@ -258,7 +258,7 @@ class _NetworkTelemetryPanelState extends ConsumerState<NetworkTelemetryPanel>
       },
     );
     final telemetry = network;
-    final color = _qualityColor(
+    final color = networkQualityColorOf(
       context,
       connected: connected,
       telemetry: network,
@@ -353,7 +353,7 @@ class _NetworkTelemetryPanelState extends ConsumerState<NetworkTelemetryPanel>
                   const SizedBox(height: 4),
                   _MetricTraceRow(
                     label: l10n.networkPing,
-                    value: _formatMilliseconds(l10n, telemetry?.roundTripMs),
+                    value: formatNetworkPing(l10n, telemetry?.roundTripMs),
                     history: _pingHistory,
                     color: color,
                     traceWidth: traceWidth,
@@ -363,7 +363,7 @@ class _NetworkTelemetryPanelState extends ConsumerState<NetworkTelemetryPanel>
                   ),
                   _MetricTraceRow(
                     label: l10n.networkJitter,
-                    value: _formatMilliseconds(l10n, telemetry?.jitterMs),
+                    value: formatNetworkPing(l10n, telemetry?.jitterMs),
                     history: _jitterHistory,
                     color: color,
                     traceWidth: traceWidth,
@@ -474,7 +474,7 @@ class _MetricTraceRow extends StatelessWidget {
   }
 }
 
-Color _qualityColor(
+Color networkQualityColorOf(
   BuildContext context, {
   required bool connected,
   required NetworkTelemetry? telemetry,
@@ -492,7 +492,7 @@ Color _qualityColor(
   };
 }
 
-String _formatMilliseconds(AppLocalizations l10n, double? value) {
+String formatNetworkPing(AppLocalizations l10n, double? value) {
   if (value == null) {
     return l10n.networkUnavailable;
   }

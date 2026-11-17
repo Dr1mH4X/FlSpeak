@@ -787,21 +787,6 @@ ThemeData buildAppTheme(
           side: focusRing,
         ),
       ),
-      // M3 primary tabs：指示器取 primary、标签取 titleSmall；选中态文字
-      // onSurface、未选中 onSurfaceVariant。应用把它放在频道头里当视图切换，
-      // 底部分隔线交给外层容器画，这里关掉。
-      tabBarTheme: TabBarThemeData(
-        labelColor: scheme.onSurface,
-        unselectedLabelColor: scheme.onSurfaceVariant,
-        labelStyle: text.titleSmall,
-        unselectedLabelStyle: text.titleSmall,
-        indicatorColor: scheme.primary,
-        indicatorSize: TabBarIndicatorSize.label,
-        dividerColor: Colors.transparent,
-        overlayColor: WidgetStatePropertyAll(
-          scheme.onSurface.withValues(alpha: 0.04),
-        ),
-      ),
       dialogTheme: DialogThemeData(
         backgroundColor: floatingSurface,
         surfaceTintColor: Colors.transparent,
