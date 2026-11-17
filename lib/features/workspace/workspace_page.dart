@@ -25,6 +25,7 @@ import '../../l10n/app_localizations.dart';
 import '../../theme/app_motion.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common.dart';
+import '../../widgets/glyph_segmented_control.dart';
 import '../../widgets/monogram.dart';
 import '../../widgets/prism.dart';
 import '../../widgets/scaffold/scaffold.dart' as app_scaffold;
@@ -48,6 +49,7 @@ import 'workspace_state.dart';
 Future<void> showWorkspaceDetailSheet(
   BuildContext context, {
   required String title,
+  required Glyph glyph,
   required Widget child,
 }) {
   return showSheet<void>(
@@ -55,7 +57,16 @@ Future<void> showWorkspaceDetailSheet(
     builder: (sheetContext) => Material(
       type: MaterialType.transparency,
       child: app_scaffold.Scaffold(
-        title: title,
+        titleWidget: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            GlyphIcon(glyph, size: IconSizes.medium),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+          ],
+        ),
         body: SafeArea(top: false, child: AppBarClearance(child: child)),
       ),
     ),
@@ -69,6 +80,7 @@ Future<void> showChannelDetailsSheet(
   return showWorkspaceDetailSheet(
     context,
     title: AppLocalizations.of(context).channelDetails,
+    glyph: AppGlyphs.info,
     child: ChannelDetailsPane(channel: channel),
   );
 }
@@ -77,6 +89,7 @@ Future<void> showChannelFilesSheet(BuildContext context, int channelId) {
   return showWorkspaceDetailSheet(
     context,
     title: AppLocalizations.of(context).chatTabFiles,
+    glyph: AppGlyphs.folder,
     child: ChannelFilesPane(channelId: channelId),
   );
 }
@@ -89,6 +102,7 @@ Future<void> showMemberDetailsSheet(
   return showWorkspaceDetailSheet(
     context,
     title: AppLocalizations.of(context).memberDetails,
+    glyph: AppGlyphs.person,
     child: MemberDetailsPane(client: client, isOffline: isOffline),
   );
 }
@@ -156,6 +170,9 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
         MediaQuery.sizeOf(context).width < Breakpoints.compact;
     final channelId = ref.watch(activeChannelIdProvider);
     final detailsTarget = ref.watch(activeDetailsTargetProvider);
+    final detailsGlyph = detailsTarget is MemberDetailsTarget
+        ? AppGlyphs.person
+        : AppGlyphs.info;
     final (
       :connected,
       :connecting,
@@ -233,7 +250,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
         const _WorkspaceStreamViewer(),
         Expanded(
           // 频道或连接变化时整块内容走 crossfade（M3 effects default），不做位移；
-          // 页签切换由内层 key 即时替换，指示器动画由 SegmentedControl 承担。
+          // 页签切换由内层 key 即时替换，指示器与图标动效由 GlyphSegmentedControl 承担。
           child: RepaintBoundary(
             child: WidthBuilder(
               builder: (context, width) => Row(
@@ -336,6 +353,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
                   showWorkspaceDetailSheet(
                     context,
                     title: l10n.chatTabMedia,
+                    glyph: AppGlyphs.media,
                     child: _ChannelMediaBody(channelId: channel.id),
                   ),
                 ),
@@ -414,7 +432,12 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _ChannelHeader(channel: channel, tab: _tab, onTabSelected: _selectTab),
+        _ChannelHeader(
+          channel: channel,
+          tab: _tab,
+          detailsGlyph: detailsGlyph,
+          onTabSelected: _selectTab,
+        ),
         Expanded(child: SafeArea(top: false, left: false, child: mainPane)),
       ],
     );
@@ -849,24 +872,17 @@ class _ChannelChatBodyState extends ConsumerState<_ChannelChatBody> {
   }
 }
 
-typedef _TabSpec = ({_MainTab tab, String label});
-
-List<_TabSpec> _tabSpecs(AppLocalizations l10n) => [
-  (tab: _MainTab.chat, label: l10n.chatTabMessages),
-  (tab: _MainTab.media, label: l10n.chatTabMedia),
-  (tab: _MainTab.files, label: l10n.chatTabFiles),
-  (tab: _MainTab.details, label: l10n.chatTabDetails),
-];
-
 class _ChannelHeader extends StatelessWidget {
   const _ChannelHeader({
     required this.channel,
     required this.tab,
+    required this.detailsGlyph,
     required this.onTabSelected,
   });
 
   final ChannelView? channel;
   final _MainTab tab;
+  final Glyph detailsGlyph;
   final ValueChanged<_MainTab> onTabSelected;
 
   @override
@@ -911,12 +927,30 @@ class _ChannelHeader extends StatelessWidget {
                 ),
                 if (hasChannel) ...[
                   const SizedBox(width: 12),
-                  Flexible(
-                    flex: 4,
-                    child: SegmentedControl<_MainTab>(
+                  SizedBox(
+                    width: 184,
+                    child: GlyphSegmentedControl<_MainTab>(
                       segments: [
-                        for (final spec in _tabSpecs(l10n))
-                          (spec.tab, spec.label),
+                        GlyphSegment(
+                          value: _MainTab.chat,
+                          glyph: AppGlyphs.chat,
+                          label: l10n.chatTabMessages,
+                        ),
+                        GlyphSegment(
+                          value: _MainTab.media,
+                          glyph: AppGlyphs.media,
+                          label: l10n.chatTabMedia,
+                        ),
+                        GlyphSegment(
+                          value: _MainTab.files,
+                          glyph: AppGlyphs.folder,
+                          label: l10n.chatTabFiles,
+                        ),
+                        GlyphSegment(
+                          value: _MainTab.details,
+                          glyph: detailsGlyph,
+                          label: l10n.chatTabDetails,
+                        ),
                       ],
                       value: tab,
                       onChanged: onTabSelected,

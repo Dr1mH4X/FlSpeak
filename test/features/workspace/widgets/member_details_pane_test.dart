@@ -22,6 +22,7 @@ import 'package:flspeak/features/workspace/widgets/members_pane.dart';
 import 'package:flspeak/features/workspace/workspace_page.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
 import 'package:flspeak/theme/app_theme.dart';
+import 'package:flspeak/widgets/glyph_segmented_control.dart';
 import 'package:flspeak/widgets/prism.dart' hide Divider;
 
 const _peer = ClientView(
@@ -238,7 +239,10 @@ void main() {
       expect(find.byType(MemberDetailsPane), findsOneWidget);
 
       // Tap the messages segment.
-      final messagesTab = find.text('消息');
+      final messagesTab = find.descendant(
+        of: find.byWidgetPredicate((widget) => widget is GlyphSegmentedControl),
+        matching: find.bySemanticsLabel('消息'),
+      );
       await tester.tap(messagesTab);
       await tester.pumpAndSettle();
 

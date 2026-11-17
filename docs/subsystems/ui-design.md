@@ -40,6 +40,8 @@
 
 字号与行高依据 `AppTextStyle`（由 `lib/widgets/prism.dart` 导出）采用 iOS Dynamic Type 默认比例，提供 `largeTitle`、`title1`、`title2`、`title3`、`headline`、`body`、`callout`、`subheadline`、`footnote`、`caption1`、`caption2` 及 `pageTitle`、`display` 档位，支持 `of(context, emphasized: ...)` 切换常规或强调字重。主要文本取 `onSurface`，次要与说明文本取 `onSurfaceVariant`，不以 `outline` 作为正文颜色。
 
+- **图标体系**：业务图标使用 `prism_ui` `Glyphs` 与 `AppGlyphs` 的 24×24 线条矢量，经 `GlyphIcon` 渲染；需要选中态动效的图标使用 `AnimatedGlyph`（填充过渡与轻微弹起）。工作区视图切换使用 `GlyphSegmentedControl`，成员/频道/文件/媒体详情面板标题使用 `GlyphIcon`。
+
 ## 按压、悬停与减少动效
 
 所有按压与悬停反馈均由 `prism_ui` 原生原语驱动：

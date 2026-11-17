@@ -4,8 +4,8 @@
 
 | 来源 | 原始许可证 | 引入形式与内容 |
 | --- | --- | --- |
-| [FlClash](https://github.com/chen08209/FlClash) | GPL-3.0 | macOS 标题条布局、窗口尺寸与红绿灯让位，Windows 标题栏控制按钮与 Segoe Fluent 矢量图标，Windows Inno Setup 安装脚本与简体中文语言包，窄屏底部导航与标签切换动画，系统字体枚举、调色板、外观设置与交互预览卡片，设置行与设置文本卡片适配，页面 `Scaffold` / `ScaffoldBar` / `BaseScaffold`、系统栏与异常顶部边距保护及 Android `values-v27` 挖孔屏配置 |
-| [prism_ui](https://pub.dev/packages/prism_ui) | GPL-3.0 | Pub 依赖 `prism_ui`，直接提供按钮、弹性按压、`PressSurface`、表面层级、超椭圆形状、开关、滑块、`SegmentedControl`、弹出菜单、`ListRow`、`DecorationListItem`、`NavigationDock`/`NavigationBar`、`PrismScaffold`/`ScaffoldBar`/`FloatingHeader`/`BuildContextExtension`、`AnimatedVisibility`、`OpenContainer`、`showSheet`、`SearchField`、`NullStatus`、seeded 取色与纯黑映射、Liquid Glass、Goo 与主题过渡原语 |
+| [FlClash](https://github.com/chen08209/FlClash) | GPL-3.0 | macOS 标题条布局、窗口尺寸与红绿灯让位，Windows 标题栏控制按钮与 Segoe Fluent 矢量图标，Windows Inno Setup 安装脚本与简体中文语言包，窄屏底部导航与标签切换动画，业务图标矢量定义（`AppGlyphs`），系统字体枚举、调色板、外观设置与交互预览卡片，设置行与设置文本卡片适配，页面 `Scaffold` / `ScaffoldBar` / `BaseScaffold`、系统栏与异常顶部边距保护及 Android `values-v27` 挖孔屏配置 |
+| [prism_ui](https://pub.dev/packages/prism_ui) | GPL-3.0 | Pub 依赖 `prism_ui`，直接提供按钮、弹性按压、`PressSurface`、表面层级、超椭圆形状、开关、滑块、`SegmentedControl`、`Glyph`/`GlyphIcon`/`AnimatedGlyph`、弹出菜单、`ListRow`、`DecorationListItem`、`NavigationDock`/`NavigationBar`、`PrismScaffold`/`ScaffoldBar`/`FloatingHeader`/`BuildContextExtension`、`AnimatedVisibility`、`OpenContainer`、`showSheet`、`SearchField`、`NullStatus`、seeded 取色与纯黑映射、Liquid Glass、Goo 与主题过渡原语 |
 | [FlClash 的 `plugins/window`](https://github.com/chen08209/FlClash/tree/main/plugins/window) | MIT | 隐藏标题栏、窗口拖拽、双击缩放、最小化/最大化/关闭、置顶、系统材质特效（macOS NSVisualEffectView / NSGlassEffectView、Windows Mica/Acrylic）、单实例检测与全屏状态 |
 | [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | MIT | Markdown 正文段落单物理行检查门禁脚本 |
 
@@ -49,7 +49,7 @@ FlSpeak 通过 `pubspec.yaml` Pub 依赖与 [lib/widgets/prism.dart](../lib/widg
 | 本仓库接入位置 | 对应模块内容 |
 | --- | --- |
 | `pubspec.yaml` | 完整引入 `prism_ui`（按钮、按压表面、弹性缩放、表面层级、形状、开关、弹出菜单、分组列表、Liquid Glass 着色器、Goo 与主题过渡） |
-| `lib/widgets/prism.dart` | `PrismRootScope`、`PrismUiLocalizationsDelegate`、`SurfaceCard`、`ElevatedSurfaceTheme`、`AnimatedInkWell`、`OptionsValueButton`、`Slider`、`SegmentedControl`、`NavigationDock`/`NavigationBar`、`PrismScaffold`/`ScaffoldBar`/`FloatingHeader`/`BuildContextExtension`、`OpenContainer`、`showSheet`、`SearchField`、`NullStatus`、seeded 取色/纯黑接口桥接与统一导出 |
+| `lib/widgets/prism.dart` | `PrismRootScope`、`PrismUiLocalizationsDelegate`、`SurfaceCard`、`ElevatedSurfaceTheme`、`AnimatedInkWell`、`OptionsValueButton`、`Slider`、`SegmentedControl`、`GlyphIcon`/`AnimatedGlyph`、`NavigationDock`/`NavigationBar`、`PrismScaffold`/`ScaffoldBar`/`FloatingHeader`/`BuildContextExtension`、`OpenContainer`、`showSheet`/`showExtend`、`SearchField`、`NullStatus`、seeded 取色/纯黑接口桥接与统一导出 |
 | `lib/features/settings/settings_page.dart` | 沿用 FlClash 的设置多级导航与 `showExtend(forceFull: true)` 整页推入 |
 
 ## FlClash 的 window 插件

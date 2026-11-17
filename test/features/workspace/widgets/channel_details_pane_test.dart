@@ -15,6 +15,7 @@ import 'package:flspeak/features/workspace/workspace_shell.dart';
 import 'package:flspeak/features/workspace/workspace_state.dart';
 import 'package:flspeak/features/workspace/widgets/channel_details_pane.dart';
 import 'package:flspeak/features/workspace/widgets/media_grid.dart';
+import 'package:flspeak/widgets/glyph_segmented_control.dart';
 import 'package:flspeak/widgets/prism.dart';
 
 class _FakeCore extends Fake implements CoreSession {
@@ -182,7 +183,10 @@ void main() {
       await tester.pumpAndSettle();
 
       // Find details segment in the header
-      final detailsTab = find.text('详情');
+      final detailsTab = find.descendant(
+        of: find.byWidgetPredicate((widget) => widget is GlyphSegmentedControl),
+        matching: find.bySemanticsLabel('详情'),
+      );
       expect(detailsTab, findsOneWidget);
 
       // Switch to details tab
@@ -238,7 +242,10 @@ void main() {
       await tester.pumpAndSettle();
 
       // Switch to media segment
-      final mediaTab = find.text('媒体');
+      final mediaTab = find.descendant(
+        of: find.byWidgetPredicate((widget) => widget is GlyphSegmentedControl),
+        matching: find.bySemanticsLabel('媒体'),
+      );
       expect(mediaTab, findsOneWidget);
       await tester.tap(mediaTab);
       await tester.pumpAndSettle();

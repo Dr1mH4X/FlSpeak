@@ -1,5 +1,6 @@
 // ignore_for_file: depend_on_referenced_packages
 
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
@@ -28,6 +29,7 @@ import 'package:flspeak/features/workspace/workspace_page.dart';
 import 'package:flspeak/features/workspace/workspace_shell.dart';
 import 'package:flspeak/features/workspace/workspace_state.dart';
 import 'package:flspeak/widgets/app_navigation_sidebar.dart';
+import 'package:flspeak/widgets/glyph_segmented_control.dart';
 import 'package:flspeak/widgets/monogram.dart';
 import 'package:flspeak/widgets/prism.dart';
 import 'package:flspeak/widgets/scaffold/scaffold.dart' as app_scaffold;
@@ -846,25 +848,52 @@ void main() {
     expect(container.read(sessionViewProvider).chatScope, ChatScope.channel);
   });
 
-  testWidgets('宽屏频道视图由 SegmentedControl 切换并即时替换内容', (tester) async {
+  testWidgets('宽屏频道视图由 GlyphSegmentedControl 切换并即时替换内容', (tester) async {
     await _mount(tester);
+    final control = find.byWidgetPredicate(
+      (widget) => widget is GlyphSegmentedControl,
+    );
+    expect(control, findsOneWidget);
+    expect(find.byType(ChatPane), findsOneWidget);
+
+    Finder segment(String label) =>
+        find.descendant(of: control, matching: find.bySemanticsLabel(label));
+
+    await tester.tap(segment('媒体'));
+    await tester.pump();
+    expect(find.byType(ChatPane), findsNothing);
+
+    await tester.tap(segment('详情'));
+    await tester.pump();
+    expect(find.byType(ChatPane), findsNothing);
+
+    await tester.tap(segment('消息'));
+    await tester.pump();
+    expect(find.byType(ChatPane), findsOneWidget);
+  });
+
+  testWidgets('工作区详情面板标题使用 glyph 图标', (tester) async {
+    await _mount(tester);
+    unawaited(
+      showWorkspaceDetailSheet(
+        tester.element(find.byType(WorkspacePage)),
+        title: '频道详情',
+        glyph: AppGlyphs.info,
+        child: const SizedBox.shrink(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
     expect(
-      find.byWidgetPredicate((widget) => widget is SegmentedControl),
+      find.descendant(
+        of: find.byType(ScaffoldBar),
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is GlyphIcon && identical(widget.glyph, AppGlyphs.info),
+        ),
+      ),
       findsOneWidget,
     );
-    expect(find.byType(ChatPane), findsOneWidget);
-
-    await tester.tap(find.text('媒体'));
-    await tester.pump();
-    expect(find.byType(ChatPane), findsNothing);
-
-    await tester.tap(find.text('详情'));
-    await tester.pump();
-    expect(find.byType(ChatPane), findsNothing);
-
-    await tester.tap(find.text('消息'));
-    await tester.pump();
-    expect(find.byType(ChatPane), findsOneWidget);
   });
 
   testWidgets('工作区在窄屏与平板宽屏均让顶栏与侧栏退避状态栏', (tester) async {
@@ -933,7 +962,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(WorkspacePage), findsOneWidget);
     expect(
-      find.byWidgetPredicate((widget) => widget is SegmentedControl),
+      find.byWidgetPredicate((widget) => widget is GlyphSegmentedControl),
       findsNothing,
     );
     final backFinder = find.bySemanticsLabel(
@@ -980,7 +1009,7 @@ void main() {
     expect(
       tester
           .getTopLeft(
-            find.byWidgetPredicate((widget) => widget is SegmentedControl),
+            find.byWidgetPredicate((widget) => widget is GlyphSegmentedControl),
           )
           .dy,
       greaterThanOrEqualTo(40.0),
