@@ -44,13 +44,13 @@
 
 原始许可证为 GNU General Public License v3.0，见上游仓库 `LICENSE`，原文见 https://www.gnu.org/licenses/gpl-3.0.txt 。该包代码版权归 `prism_ui` 作者所有。
 
-FlSpeak 通过 `pubspec.yaml` Pub 依赖与 [lib/widgets/prism.dart](../lib/widgets/prism.dart) 桥接直接引用 `package:prism_ui/prism_ui.dart` 的原生组件，同时保留与 Flutter 设置转场（`page_transition.dart` 的 `300 ms` 临界阻尼推入弹簧参数）的一致性。
+FlSpeak 通过 `pubspec.yaml` Pub 依赖与 [lib/widgets/prism.dart](../lib/widgets/prism.dart) 桥接直接引用 `package:prism_ui/prism_ui.dart` 的原生组件；设置详情通过 `showExtend(forceFull: true)` 复用上游的 `FadePageRoute` 与 `CardPageRoute`。
 
 | 本仓库接入位置 | 对应模块内容 |
 | --- | --- |
 | `pubspec.yaml` | 完整引入 `prism_ui`（按钮、按压表面、弹性缩放、表面层级、形状、开关、弹出菜单、分组列表、Liquid Glass 着色器、Goo 与主题过渡） |
 | `lib/widgets/prism.dart` | `PrismRootScope`、`PrismUiLocalizationsDelegate`、`SurfaceCard`、`ElevatedSurfaceTheme`、`AnimatedInkWell`、`OptionsValueButton`、`Slider`、`SegmentedControl`、`NavigationDock`/`NavigationBar`、`PrismScaffold`/`ScaffoldBar`/`FloatingHeader`/`BuildContextExtension`、`OpenContainer`、`showSheet`、`SearchField`、`NullStatus`、seeded 取色/纯黑接口桥接与统一导出 |
-| `lib/features/settings/settings_page.dart` | 沿用 `page_transition.dart` 的 `300 ms` 临界阻尼推入弹簧参数与导航架构 |
+| `lib/features/settings/settings_page.dart` | 沿用 FlClash 的设置多级导航与 `showExtend(forceFull: true)` 整页推入 |
 
 ## FlClash 的 window 插件
 

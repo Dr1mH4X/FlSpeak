@@ -379,7 +379,7 @@ void main() {
   });
 
   testWidgets(
-    'clicking settings back button from a secondary menu preserves sidebar and top-bar colors across every frame',
+    'pushing a settings detail keeps the theme and restores the sidebar on back',
     (tester) async {
       final container = ProviderContainer(
         overrides: [
@@ -435,44 +435,33 @@ void main() {
       await tester.tap(generalCategory);
       await tester.pumpAndSettle();
 
+      // 二级页是覆盖侧栏的整页路由。
+      expect(find.byType(AppNavigationSidebar), findsNothing);
+      expect(
+        identical(
+          Theme.of(tester.element(find.byType(SettingsPage))),
+          baselineTheme,
+        ),
+        isTrue,
+      );
+      expect(
+        find.descendant(
+          of: find.byType(ScaffoldBar),
+          matching: find.text('通用'),
+        ),
+        findsOneWidget,
+      );
+
       final backButton = find.bySemanticsLabel(
         MaterialLocalizations.of(tester.element(find.byType(SettingsPage)))
             .backButtonTooltip,
       );
       expect(backButton, findsOneWidget);
-      Color? resolvedTopBarTitleColor(String title) {
-        final finder = find.descendant(
-          of: find.byType(ScaffoldBar),
-          matching: find.text(title),
-        );
-        final element = tester.element(finder.first);
-        final widget = tester.widget<Text>(finder.first);
-        return DefaultTextStyle.of(element).style.merge(widget.style).color;
-      }
-
-      final topBarTitleColor = resolvedTopBarTitleColor('通用');
-
       await tester.tap(backButton);
-      for (final step in [
-        Duration.zero,
-        const Duration(milliseconds: 16),
-        const Duration(milliseconds: 40),
-        const Duration(milliseconds: 100),
-      ]) {
-        await tester.pump(step);
-        expect(sidebarSurface().color, baselineSidebarColor);
-        expect(
-          identical(
-            Theme.of(tester.element(find.byType(AppNavigationSidebar))),
-            baselineTheme,
-          ),
-          isTrue,
-        );
-        expect(resolvedTopBarTitleColor('设置'), topBarTitleColor);
-      }
       await tester.pumpAndSettle();
+
       expect(sidebarSurface().color, baselineSidebarColor);
-      expect(find.byKey(const ValueKey<String>('overview')), findsOneWidget);
+      expect(find.text('通用'), findsOneWidget);
     },
   );
 

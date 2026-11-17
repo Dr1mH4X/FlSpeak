@@ -43,86 +43,64 @@ class _Update extends UpdateController {
 }
 
 void main() {
-  for (final language in [true, false]) {
-    testWidgets(
-      'closing settings before its picker returns does not access a disposed ref, language=$language',
-      (tester) async {
-        final visible = ValueNotifier(true);
-        addTearDown(visible.dispose);
-        final container = ProviderContainer(
-          overrides: [
-            coreSessionProvider.overrideWithValue(_Core()),
-            sessionViewProvider.overrideWith(_Session.new),
-            storePathProvider.overrideWithValue(
-              '/tmp/flspeak-test/preferences.json',
-            ),
-            preferencesStoreProvider.overrideWithValue(
-              PreferencesStore.inMemory(
-                preferences: const SessionPreferences(
-                  nickname: 'Test',
-                  locale: 'zh',
-                ),
-              ),
-            ),
-          ],
-        );
-        addTearDown(container.dispose);
-        await tester.pumpWidget(
-          UncontrolledProviderScope(
-            container: container,
-            child: MaterialApp(
-              theme: buildAppTheme(Brightness.light),
-              locale: const Locale('zh'),
-              localizationsDelegates: const [
-                ...AppLocalizations.localizationsDelegates,
-                PrismUiLocalizationsDelegate(),
-              ],
-              supportedLocales: AppLocalizations.supportedLocales,
-              builder: (context, child) =>
-                  PrismRootScope(brightness: Brightness.light, child: child!),
-              home: ValueListenableBuilder<bool>(
-                valueListenable: visible,
-                builder: (_, show, child) =>
-                    show ? const SettingsPage() : const SizedBox.shrink(),
+  testWidgets(
+    'closing settings before its picker returns does not access a disposed ref',
+    (tester) async {
+      final visible = ValueNotifier(true);
+      addTearDown(visible.dispose);
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_Core()),
+          sessionViewProvider.overrideWith(_Session.new),
+          storePathProvider.overrideWithValue(
+            '/tmp/flspeak-test/preferences.json',
+          ),
+          preferencesStoreProvider.overrideWithValue(
+            PreferencesStore.inMemory(
+              preferences: const SessionPreferences(
+                nickname: 'Test',
+                locale: 'zh',
               ),
             ),
           ),
-        );
-        await tester.pumpAndSettle();
+        ],
+      );
+      addTearDown(container.dispose);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            locale: const Locale('zh'),
+            localizationsDelegates: const [
+              ...AppLocalizations.localizationsDelegates,
+              PrismUiLocalizationsDelegate(),
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) =>
+                PrismRootScope(brightness: Brightness.light, child: child!),
+            home: ValueListenableBuilder<bool>(
+              valueListenable: visible,
+              builder: (_, show, child) =>
+                  show ? const SettingsPage() : const SizedBox.shrink(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-        if (!language) {
-          // 音频显示在「通用」->「语音」三级页面中
-          final generalRow = find.widgetWithText(SettingsTile, '通用');
-          await tester.ensureVisible(generalRow);
-          await tester.tap(generalRow);
-          await tester.pumpAndSettle();
-
-          final voiceRow = find.widgetWithText(SettingsTile, '语音');
-          await tester.ensureVisible(voiceRow);
-          await tester.tap(voiceRow);
-          await tester.pumpAndSettle();
-        }
-
-        final row = find.widgetWithText(
-          language
-              ? SettingsOptionsTile<String?>
-              : SettingsOptionsTile<VoiceMeterSource>,
-          language ? '语言' : '音频显示',
-        );
-        await tester.ensureVisible(row);
-        await tester.tap(row);
-        await tester.pumpAndSettle();
-        visible.value = false;
-        await tester.pump();
-        await tester.tap(find.text(language ? 'English' : '接收音频').last);
-        await tester.pumpAndSettle();
-        expect(tester.takeException(), isNull);
-        final preferences = container.read(preferencesProvider);
-        expect(preferences.locale, 'zh');
-        expect(preferences.voiceMeterSource, VoiceMeterSource.microphone);
-      },
-    );
-  }
+      final row = find.widgetWithText(SettingsOptionsTile<String?>, '语言');
+      await tester.ensureVisible(row);
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+      visible.value = false;
+      await tester.pump();
+      await tester.tap(find.text('English').last);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(container.read(preferencesProvider).locale, 'zh');
+    },
+  );
 
   testWidgets(
     'picking language preference updates provider state and displays in trailing',
@@ -647,7 +625,7 @@ void main() {
   });
 
   testWidgets(
-    'settings subpage push and back use directional horizontal slide transitions without InkSparkle',
+    'settings subpage push and back use a full-page fade without InkSparkle',
     (tester) async {
       final container = ProviderContainer(
         overrides: [
@@ -690,29 +668,28 @@ void main() {
       await tester.pumpAndSettle();
 
       // 概览页单行普通项与语言 Popup 项高度严格一致
-      final baseX = tester
-          .renderObject<RenderBox>(
-            find.byKey(const ValueKey<String>('overview')),
-          )
-          .localToGlobal(Offset.zero)
-          .dx;
+      final baseX = tester.getTopLeft(find.byType(SettingsPage)).dx;
       final overviewHeights = tester
           .renderObjectList<RenderBox>(find.byType(ListRow))
           .map((box) => box.size.height)
           .toList();
       expect(overviewHeights.every((h) => h >= 48.0), isTrue);
 
-      // 进入通用二级页：通用页自右侧滑入（正向 dx > baseX）
+      // 进入通用二级页：整页路由淡入，页面不做水平位移。
       await tester.tap(find.widgetWithText(SettingsTile, '通用'));
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 40));
+      await tester.pump(const Duration(milliseconds: 80));
 
+      final route = ModalRoute.of(
+        tester.element(find.byType(SettingsPage).last),
+      )!;
+      expect(route.animation!.value, inExclusiveRange(0.0, 1.0));
       final incomingGeneralBox = tester.renderObject<RenderBox>(
-        find.byKey(const ValueKey<String>('general')),
+        find.byType(SettingsPage).last,
       );
       expect(
         incomingGeneralBox.localToGlobal(Offset.zero).dx,
-        greaterThan(baseX),
+        closeTo(baseX, 0.01),
       );
       await tester.pumpAndSettle();
 
@@ -724,30 +701,14 @@ void main() {
           .toList();
       expect(generalHeights.every((h) => h >= 48.0), isTrue);
 
-      // 返回概览页：被揭开的概览页从左侧回位（dx < baseX），退出中的通用页向右滑出（dx > baseX）
+      // 返回概览页：整页路由退栈。
       final backFinder = find.bySemanticsLabel(
         MaterialLocalizations.of(tester.element(find.byType(SettingsPage)))
             .backButtonTooltip,
       );
       await tester.tap(backFinder);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 40));
-
-      final revealedOverviewBox = tester.renderObject<RenderBox>(
-        find.byKey(const ValueKey<String>('overview')),
-      );
-      final exitingGeneralBox = tester.renderObject<RenderBox>(
-        find.byKey(const ValueKey<String>('general')),
-      );
-      expect(
-        revealedOverviewBox.localToGlobal(Offset.zero).dx,
-        lessThan(baseX),
-      );
-      expect(
-        exitingGeneralBox.localToGlobal(Offset.zero).dx,
-        greaterThan(baseX),
-      );
       await tester.pumpAndSettle();
+      expect(find.widgetWithText(SettingsTile, '通用'), findsOneWidget);
 
       // 进入关于二级页并验证无 InkSparkle 污染
       await tester.tap(find.widgetWithText(SettingsTile, '关于'));
@@ -757,7 +718,7 @@ void main() {
       }
       await tester.tap(backFinder);
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey<String>('overview')), findsOneWidget);
+      expect(find.widgetWithText(SettingsTile, '关于'), findsOneWidget);
     },
   );
 

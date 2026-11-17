@@ -35,17 +35,9 @@ enum SettingsCategory { appearance, general, about }
 
 enum GeneralSubcategory { voice, screenShare }
 
-const _settingsTransitionDuration = Duration(milliseconds: 300);
-const _coveredSlideFactor = 0.3;
-const _coveredDimAlpha = 0.1;
-final Curve _settingsPushCurve = SpringCurve(
-  SpringDescription.withDurationAndBounce(
-    duration: _settingsTransitionDuration,
-  ),
-  seconds: 0.3,
-);
-
-/// 设置项页面：左侧全局导航侧边栏，右侧为多级菜单设计（二级/三级占满内容区）。
+/// 设置项页面：宽屏为左侧全局导航侧边栏 + 右侧总览；窄屏为总览。
+/// 二三级详情通过 `showExtend(forceFull: true)` 整页推入，窄屏为 CardPageRoute，
+/// 宽屏为 FadePageRoute。
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({
     super.key,
@@ -54,7 +46,7 @@ class SettingsPage extends ConsumerStatefulWidget {
     this.asDetail = false,
   });
 
-  /// 以卡片推入的二级/三级页初始层级；总览页两者都为 null。
+  /// 整页推入的二级/三级页初始层级；总览页两者都为 null。
   final SettingsCategory? initialCategory;
   final GeneralSubcategory? initialGeneralSubcategory;
 
@@ -68,7 +60,6 @@ class SettingsPage extends ConsumerStatefulWidget {
 class _SettingsPageState extends ConsumerState<SettingsPage> {
   SettingsCategory? _activeCategory;
   GeneralSubcategory? _activeGeneralSubcategory;
-  int _navDirection = 1;
 
   @override
   void initState() {
@@ -77,60 +68,33 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     _activeGeneralSubcategory = widget.initialGeneralSubcategory;
   }
 
-  bool get _pushesDetail => widget.asDetail || context.isCompact;
-
-  void _pushDetail(SettingsPage page) {
+  void _openDetail(SettingsPage page) {
     unawaited(
-      Navigator.of(context).push(CardPageRoute<void>(builder: (_) => page)),
+      showExtend<void>(
+        context,
+        props: const ExtendProps(forceFull: true),
+        builder: (_) => page,
+      ),
     );
   }
 
   void _enterCategory(SettingsCategory category) {
-    if (_pushesDetail) {
-      _pushDetail(SettingsPage(initialCategory: category, asDetail: true));
-      return;
-    }
-    setState(() {
-      _navDirection = 1;
-      _activeCategory = category;
-      _activeGeneralSubcategory = null;
-    });
+    _openDetail(SettingsPage(initialCategory: category, asDetail: true));
   }
 
   void _enterGeneralSubcategory(GeneralSubcategory subcategory) {
-    if (_pushesDetail) {
-      _pushDetail(
-        SettingsPage(
-          initialCategory: SettingsCategory.general,
-          initialGeneralSubcategory: subcategory,
-          asDetail: true,
-        ),
-      );
-      return;
-    }
-    setState(() {
-      _navDirection = 1;
-      _activeGeneralSubcategory = subcategory;
-    });
+    _openDetail(
+      SettingsPage(
+        initialCategory: SettingsCategory.general,
+        initialGeneralSubcategory: subcategory,
+        asDetail: true,
+      ),
+    );
   }
 
   void _back() {
     if (widget.asDetail) {
       unawaited(Navigator.of(context).maybePop());
-      return;
-    }
-    if (_activeGeneralSubcategory != null) {
-      setState(() {
-        _navDirection = -1;
-        _activeGeneralSubcategory = null;
-      });
-      return;
-    }
-    if (_activeCategory != null) {
-      setState(() {
-        _navDirection = -1;
-        _activeCategory = null;
-      });
       return;
     }
     final router = GoRouter.maybeOf(context);
@@ -481,23 +445,25 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         subPageContent = const SizedBox.shrink();
     }
 
-    final ValueKey<String> pageKey = switch ((
-      _activeCategory,
-      _activeGeneralSubcategory,
-    )) {
-      (null, _) => const ValueKey<String>('overview'),
-      (SettingsCategory.appearance, _) => const ValueKey<String>('appearance'),
-      (SettingsCategory.general, null) => const ValueKey<String>('general'),
-      (SettingsCategory.general, GeneralSubcategory.voice) =>
-        const ValueKey<String>('general/voice'),
-      (SettingsCategory.general, GeneralSubcategory.screenShare) =>
-        const ValueKey<String>('general/screenShare'),
-      (SettingsCategory.about, _) => const ValueKey<String>('about'),
-    };
     final Color pageColor = context.pageColor;
-    final double rtlSign = Directionality.of(context) == TextDirection.rtl
-        ? -1.0
-        : 1.0;
+    final safePadding = MediaQuery.paddingOf(context);
+    final Widget pageContent = Material(
+      color: pageColor,
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          (compact ? 16.0 : 32.0) + safePadding.left,
+          context.appBarInset + 16.0,
+          (compact ? 16.0 : 32.0) + safePadding.right,
+          40.0 + CompactBottomInsetScope.of(context) + safePadding.bottom,
+        ),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: isSubPage ? subPageContent : overviewContent,
+          ),
+        ),
+      ),
+    );
 
     final Widget rightContent = SurfaceScope(
       level: SurfaceLevel.page,
@@ -505,90 +471,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         backgroundColor: pageColor,
         title: pageTitle,
         backAction: _back,
-        body: Builder(
-          builder: (context) {
-            final safePadding = MediaQuery.paddingOf(context);
-            final Widget activePage = KeyedSubtree(
-              key: pageKey,
-              child: Material(
-                color: pageColor,
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.fromLTRB(
-                    (compact ? 16.0 : 32.0) + safePadding.left,
-                    context.appBarInset + 16.0,
-                    (compact ? 16.0 : 32.0) + safePadding.right,
-                    40.0 +
-                        CompactBottomInsetScope.of(context) +
-                        safePadding.bottom,
-                  ),
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 720),
-                      child: isSubPage ? subPageContent : overviewContent,
-                    ),
-                  ),
-                ),
-              ),
-            );
-            return ClipRect(
-              child: AnimatedSwitcher(
-                duration: _settingsTransitionDuration,
-                switchInCurve: _settingsPushCurve,
-                switchOutCurve: _settingsPushCurve.flipped,
-                layoutBuilder: (currentChild, previousChildren) => Stack(
-                  fit: StackFit.expand,
-                  children: _navDirection >= 0
-                      ? [...previousChildren, ?currentChild]
-                      : [?currentChild, ...previousChildren],
-                ),
-                transitionBuilder: (child, animation) {
-                  final isIncoming = child.key == pageKey;
-                  final bool isCoverLayer =
-                      (_navDirection >= 0 && !isIncoming) ||
-                      (_navDirection < 0 && isIncoming);
-                  final Offset beginOffset = isCoverLayer
-                      ? Offset(-_coveredSlideFactor * rtlSign, 0)
-                      : Offset(rtlSign, 0);
-                  Widget animated = SlideTransition(
-                    position: Tween<Offset>(
-                      begin: beginOffset,
-                      end: Offset.zero,
-                    ).animate(animation),
-                    child: child,
-                  );
-                  if (isCoverLayer) {
-                    animated = AnimatedBuilder(
-                      animation: animation,
-                      builder: (context, inner) {
-                        final dim =
-                            _coveredDimAlpha *
-                            (1.0 - animation.value).clamp(0.0, 1.0);
-                        return Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            inner!,
-                            if (dim > 0)
-                              IgnorePointer(
-                                child: ColoredBox(
-                                  color: Colors.black.withValues(alpha: dim),
-                                ),
-                              ),
-                          ],
-                        );
-                      },
-                      child: animated,
-                    );
-                  }
-                  if (!isIncoming) {
-                    animated = IgnorePointer(child: animated);
-                  }
-                  return animated;
-                },
-                child: activePage,
-              ),
-            );
-          },
-        ),
+        body: pageContent,
       ),
     );
 
@@ -602,7 +485,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         _activeCategory == null &&
         _activeGeneralSubcategory == null &&
         (hasRouteBack || tabScope?.onExitToHome == null);
-    final showSidebar = !compact;
+    final showSidebar = !compact && !widget.asDetail;
 
     return Shortcuts(
       shortcuts: const {
@@ -626,10 +509,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               _back();
             },
             child: Material(
-              color:
-                  showSidebar &&
-                      !widget.asDetail &&
-                      ref.watch(windowBlurOpacityProvider) != null
+              color: showSidebar && ref.watch(windowBlurOpacityProvider) != null
                   ? Colors.transparent
                   : pageColor,
               child: Row(

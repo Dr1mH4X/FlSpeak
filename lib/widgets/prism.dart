@@ -59,6 +59,7 @@ export 'package:prism_ui/prism_ui.dart'
         ElasticHover,
         ElasticPress,
         ElevatedSurfaceExt,
+        ExtendProps,
         FilledInputTheme,
         FloatingBarScope,
         FloatingHeader,
@@ -164,6 +165,7 @@ export 'package:prism_ui/prism_ui.dart'
         sheetNavigatorOf,
         sheetScrollController,
         sheetToolbarHeight,
+        showExtend,
         showSheet,
         snapSheetDetents;
 
