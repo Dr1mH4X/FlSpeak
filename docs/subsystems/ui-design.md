@@ -84,7 +84,7 @@
 - **`none`（默认）**：关闭 `LiquidGlassScope`，不进行离屏画布捕捉与玻璃着色器绘制，弹出菜单、开关与横幅直接落盘常规纯色表面，消除低端机每帧额外的离屏纹理抓取与模糊耗时。
 - **`standard`**：开启 `LiquidGlassScope` 并通过 `LiquidGlassStyle._standard` 省略色散与独立前雾分层，将双层模糊合并为单次降采样的统一 `blur`，`PopupMenu` 弹出形变采用 `coarse` 粗轮廓采样，兼顾透视观感与 GPU 负载。
 - **`ultra`**：启用完整着色参数，保留色散效果、双层 `haze + blur` 混合及精细轮廓采样，适用于高负载渲染性能充裕的设备。
-- **玻璃附着边界**：`LiquidGlass` 仅用于下层有内容滚动或页面正文透出的悬浮组件（聊天页悬浮于 `PrismListView` 之上的输入栏、附件预览条与斜杠命令面板，连接页顶栏通过 `GooSurface` 与 `GooPane` 承载的搜索按钮/胶囊，窄屏悬浮 `NavigationDock`，以及窄屏展开的侧栏浮层 `_SidebarOverlay`）；桌面端固定停靠的侧栏默认保持纯色 `Surface`，在 macOS 或 Windows 开启 `sidebarBlur` 时将根脚手架置透明、原生 window backdrop 同步开启系统材质（macOS `NSGlassEffectView` / `NSVisualEffectView` 或 Windows Acrylic/Mica）并将 `AppNavigationSidebar` 叠加为半透明着色表面，右侧内容面板始终保持不透明。
+- **玻璃附着边界**：`LiquidGlass` 仅用于下层有内容滚动或页面正文透出的悬浮组件（聊天页悬浮于 `PrismListView` 之上的输入栏、附件预览条与斜杠命令面板，连接页顶栏通过 `GooSurface` 与 `GooPane` 承载的搜索按钮/胶囊，窄屏悬浮 `NavigationDock`，以及窄屏展开的侧栏浮层 `_SidebarOverlay`）；桌面端固定停靠的侧栏保持纯色 `Surface`，右侧内容面板始终保持不透明。
 
 ## 重建作用域、重绘隔离与后台休眠
 

@@ -8,9 +8,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../core/providers.dart';
 import '../core/window_chrome.dart';
 import '../core/window_metrics.dart';
 import '../l10n/app_localizations.dart';
@@ -95,21 +93,17 @@ class WindowHeaderLayout extends StatelessWidget {
   }
 }
 
-class WindowHeader extends ConsumerWidget {
+class WindowHeader extends StatelessWidget {
   const WindowHeader({super.key, this.title, this.isWindows = false});
 
   final Widget? title;
   final bool isWindows;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final height = getWindowHeaderHeight(isMacOS: !isWindows);
-    final backdropOpacity = isWindows
-        ? ref.watch(windowBlurOpacityProvider)
-        : null;
     return WindowHeaderBar(
       height: height,
-      backdropOpacity: backdropOpacity,
       onDragStart: () => unawaited(WindowChrome.startDragging()),
       onDoubleTap: () => unawaited(
         isWindows ? WindowChrome.toggleMaximize() : WindowChrome.toggleZoom(),
@@ -124,7 +118,6 @@ class WindowHeaderBar extends StatelessWidget {
   const WindowHeaderBar({
     super.key,
     required this.height,
-    this.backdropOpacity,
     required this.onDragStart,
     required this.onDoubleTap,
     this.title,
@@ -132,7 +125,6 @@ class WindowHeaderBar extends StatelessWidget {
   });
 
   final double height;
-  final double? backdropOpacity;
   final VoidCallback onDragStart;
   final VoidCallback onDoubleTap;
   final Widget? title;
@@ -140,12 +132,8 @@ class WindowHeaderBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final baseColor = _chromeSurface(context);
-    final color = backdropOpacity != null
-        ? baseColor.withValues(alpha: backdropOpacity)
-        : baseColor;
     return Material(
-      color: color,
+      color: _chromeSurface(context),
       shape: Border(bottom: Divider.createBorderSide(context)),
       child: SizedBox(
         height: height,

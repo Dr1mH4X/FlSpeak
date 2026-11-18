@@ -26,7 +26,7 @@ enum AppThemePreference {
         return mode;
       }
     }
-    return AppThemePreference.dark;
+    return AppThemePreference.system;
   }
 }
 
@@ -267,7 +267,7 @@ class SessionPreferences {
     required this.nickname,
     this.lastConnected = const <String, DateTime>{},
     this.locale,
-    this.theme = AppThemePreference.dark,
+    this.theme = AppThemePreference.system,
     this.pureBlack = false,
     this.primaryColor = defaultPrimaryColor,
     this.primaryColors = defaultPrimaryColors,
@@ -275,7 +275,6 @@ class SessionPreferences {
     this.floatingNavigationBar = true,
     this.tabAnimation = TabAnimation.slide,
     this.liquidGlass = LiquidGlassMode.none,
-    this.sidebarBlur = false,
     this.fontFamily,
     this.textScaleEnabled = false,
     this.textScale = 1.0,
@@ -315,7 +314,6 @@ class SessionPreferences {
   final bool floatingNavigationBar;
   final TabAnimation tabAnimation;
   final LiquidGlassMode liquidGlass;
-  final bool sidebarBlur;
   final String? fontFamily;
   final bool textScaleEnabled;
   final double textScale;
@@ -351,7 +349,6 @@ class SessionPreferences {
     bool? floatingNavigationBar,
     TabAnimation? tabAnimation,
     LiquidGlassMode? liquidGlass,
-    bool? sidebarBlur,
     Object? fontFamily = _unset,
     bool? textScaleEnabled,
     double? textScale,
@@ -378,7 +375,6 @@ class SessionPreferences {
     floatingNavigationBar: floatingNavigationBar ?? this.floatingNavigationBar,
     tabAnimation: tabAnimation ?? this.tabAnimation,
     liquidGlass: liquidGlass ?? this.liquidGlass,
-    sidebarBlur: sidebarBlur ?? this.sidebarBlur,
     fontFamily: identical(fontFamily, _unset)
         ? this.fontFamily
         : fontFamily as String?,
@@ -420,7 +416,6 @@ class SessionPreferences {
     'floatingNavigationBar': floatingNavigationBar,
     'tabAnimation': tabAnimation.id,
     'liquidGlass': liquidGlass.id,
-    'sidebarBlur': sidebarBlur,
     'fontFamily': fontFamily,
     'textScaleEnabled': textScaleEnabled,
     'textScale': textScale,
@@ -514,9 +509,6 @@ class SessionPreferences {
           : true,
       tabAnimation: TabAnimation.fromId(ui['tabAnimation']),
       liquidGlass: LiquidGlassMode.fromId(ui['liquidGlass']),
-      sidebarBlur: ui['sidebarBlur'] is bool
-          ? ui['sidebarBlur'] as bool
-          : false,
       fontFamily: trimmedFontFamily.isNotEmpty ? trimmedFontFamily : null,
       textScaleEnabled: ui['textScaleEnabled'] is bool
           ? ui['textScaleEnabled'] as bool

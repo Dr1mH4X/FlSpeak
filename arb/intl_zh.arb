@@ -475,8 +475,6 @@
   "settingsTabAnimation": "标签切换动画",
   "settingsTabAnimationSlide": "滑动",
   "settingsTabAnimationFade": "淡入淡出",
-  "settingsSidebar": "侧栏",
-  "settingsSidebarBlur": "背景模糊",
   "settingsFontFamily": "字体",
   "settingsFontDefault": "默认",
   "settingsInstalledFonts": "已安装字体",

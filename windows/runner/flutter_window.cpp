@@ -173,48 +173,6 @@ void FlutterWindow::HandleWindowCall(
       }
     }
     result->Error("bad_args", "setAlwaysOnTop: value");
-  } else if (method == "isEffectSupported") {
-    if (call.arguments()) {
-      if (const auto* name = std::get_if<std::string>(call.arguments())) {
-        auto effect = window::ParseEffect(*name);
-        result->Success(flutter::EncodableValue(effect.has_value() && window::IsEffectSupported(*effect)));
-        return;
-      }
-    }
-    result->Error("bad_args", "isEffectSupported: effect");
-  } else if (method == "setEffect") {
-    if (call.arguments()) {
-      if (const auto* map = std::get_if<flutter::EncodableMap>(call.arguments())) {
-        auto it_effect = map->find(flutter::EncodableValue("effect"));
-        if (it_effect != map->end()) {
-          if (const auto* effect_name = std::get_if<std::string>(&it_effect->second)) {
-            auto effect = window::ParseEffect(*effect_name);
-            if (effect.has_value() && window::IsEffectSupported(*effect)) {
-              uint32_t tint = 0;
-              auto it_tint = map->find(flutter::EncodableValue("tint"));
-              if (it_tint != map->end()) {
-                if (const auto* tint32 = std::get_if<int32_t>(&it_tint->second)) {
-                  tint = static_cast<uint32_t>(*tint32);
-                } else if (const auto* tint64 = std::get_if<int64_t>(&it_tint->second)) {
-                  tint = static_cast<uint32_t>(*tint64);
-                }
-              }
-              std::optional<bool> dark;
-              auto it_bright = map->find(flutter::EncodableValue("brightness"));
-              if (it_bright != map->end()) {
-                if (const auto* bright_str = std::get_if<std::string>(&it_bright->second)) {
-                  dark = (*bright_str == "dark");
-                }
-              }
-              window_style_.SetEffect(*effect, tint, dark, window_controller_.GetWindow());
-              result->Success(flutter::EncodableValue(true));
-              return;
-            }
-          }
-        }
-      }
-    }
-    result->Error("bad_args", "setEffect: effect");
   } else if (method == "setBackgroundColor") {
     if (call.arguments()) {
       uint32_t argb = 0;

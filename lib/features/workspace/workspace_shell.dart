@@ -272,11 +272,8 @@ class _WorkspaceShellState extends ConsumerState<WorkspaceShell> {
       final surface = RepaintBoundary(
         child: _MainSurface(compact: compact, child: widget.child),
       );
-      final blurOpacity = ref.watch(windowBlurOpacityProvider);
       scaffold = Scaffold(
-        backgroundColor: blurOpacity != null
-            ? Colors.transparent
-            : context.pageColor,
+        backgroundColor: context.pageColor,
         body: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

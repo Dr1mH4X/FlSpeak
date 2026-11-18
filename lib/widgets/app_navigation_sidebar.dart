@@ -280,12 +280,7 @@ class _AppNavigationSidebarState extends ConsumerState<AppNavigationSidebar>
         );
       },
       child: Surface(
-        color:
-            !context.isCompact && ref.watch(windowBlurOpacityProvider) != null
-            ? scheme.surfaceContainerLowest.withValues(
-                alpha: ref.watch(windowBlurOpacityProvider),
-              )
-            : scheme.surfaceContainerLowest,
+        color: scheme.surfaceContainerLowest,
         shape: BorderDirectional(
           end: BorderSide(color: dividerColorOf(context), width: 1),
         ),

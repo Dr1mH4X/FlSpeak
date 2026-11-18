@@ -482,8 +482,6 @@
   "settingsTabAnimation": "Tab animation",
   "settingsTabAnimationSlide": "Slide",
   "settingsTabAnimationFade": "Fade",
-  "settingsSidebar": "Sidebar",
-  "settingsSidebarBlur": "Background blur",
   "settingsFontFamily": "Font family",
   "settingsFontDefault": "Default",
   "settingsInstalledFonts": "Installed fonts",

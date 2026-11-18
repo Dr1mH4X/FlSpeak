@@ -1035,12 +1035,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsTabAnimationFade => '淡入淡出';
 
   @override
-  String get settingsSidebar => '侧栏';
-
-  @override
-  String get settingsSidebarBlur => '背景模糊';
-
-  @override
   String get settingsFontFamily => '字体';
 
   @override

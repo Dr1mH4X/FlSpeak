@@ -510,9 +510,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               _back();
             },
             child: Material(
-              color: showSidebar && ref.watch(windowBlurOpacityProvider) != null
-                  ? Colors.transparent
-                  : pageColor,
+              color: pageColor,
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [

@@ -1,8 +1,5 @@
 // ignore_for_file: depend_on_referenced_packages
 
-import 'dart:io';
-
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart'
     hide
@@ -167,10 +164,15 @@ void main() {
   );
 
   testWidgets(
-    'theme mode, pure black, bottom bar, tab animation, liquid glass, and sidebar blur update preferences',
+    'theme mode, pure black, bottom bar, tab animation, and liquid glass update preferences',
     (tester) async {
       final container = await _mountSettings(tester);
       await _openAppearance(tester);
+
+      expect(
+        container.read(preferencesProvider).theme,
+        AppThemePreference.system,
+      );
 
       await tester.tap(find.widgetWithText(DecorationListItem, '浅色'));
       await tester.pumpAndSettle();
@@ -209,14 +211,6 @@ void main() {
         container.read(preferencesProvider).liquidGlass,
         LiquidGlassMode.ultra,
       );
-
-      if (!kIsWeb && (Platform.isMacOS || Platform.isWindows)) {
-        final blurTile = find.widgetWithText(ListItem<dynamic>, '背景模糊');
-        await tester.ensureVisible(blurTile);
-        await tester.tap(blurTile);
-        await tester.pumpAndSettle();
-        expect(container.read(preferencesProvider).sidebarBlur, isTrue);
-      }
     },
   );
 

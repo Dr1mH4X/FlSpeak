@@ -361,7 +361,6 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
       ),
     );
 
-    final blurOpacity = desktop ? ref.watch(windowBlurOpacityProvider) : null;
     final tabScope = CompactRootTabScope.maybeOf(context);
     final isActiveTab = tabScope == null || tabScope.activeTabIndex == 0;
     if (!isActiveTab) {
@@ -383,7 +382,7 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
         unawaited(_handleAndroidRootBack());
       },
       child: Material(
-        color: blurOpacity != null ? Colors.transparent : context.pageColor,
+        color: context.pageColor,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

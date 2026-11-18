@@ -1622,13 +1622,6 @@ class PreferencesController extends Notifier<SessionPreferences> {
     _update(state.copyWith(tabAnimation: animation));
   }
 
-  void setSidebarBlur(bool enabled) {
-    if (enabled == state.sidebarBlur) {
-      return;
-    }
-    _update(state.copyWith(sidebarBlur: enabled));
-  }
-
   void setFontFamily(String? family) {
     final trimmed = family?.trim();
     final normalized = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
@@ -1763,21 +1756,3 @@ class PreferencesController extends Notifier<SessionPreferences> {
     }
   }
 }
-
-/// 原生桌面窗口模糊启用时建议给侧栏表面叠加的遮罩透明度；`null` 表示不透明显示。
-class WindowBlurOpacityController extends Notifier<double?> {
-  @override
-  double? build() => null;
-
-  void setOpacity(double? opacity) {
-    if (state == opacity) {
-      return;
-    }
-    state = opacity;
-  }
-}
-
-final windowBlurOpacityProvider =
-    NotifierProvider<WindowBlurOpacityController, double?>(
-      WindowBlurOpacityController.new,
-    );

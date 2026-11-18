@@ -1065,12 +1065,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsTabAnimationFade => 'Fade';
 
   @override
-  String get settingsSidebar => 'Sidebar';
-
-  @override
-  String get settingsSidebarBlur => 'Background blur';
-
-  @override
   String get settingsFontFamily => 'Font family';
 
   @override

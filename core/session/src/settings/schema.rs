@@ -98,8 +98,6 @@ pub struct UiSettings {
     pub floating_navigation_bar: bool,
     /// 窄屏底部导航切换动画：slide / fade。
     pub tab_animation: String,
-    /// 桌面端侧栏窗口背景模糊开关。
-    pub sidebar_blur: bool,
     /// 自定义全局字体族名称（None 表示跟随默认字体）。
     pub font_family: Option<String>,
     /// 是否启用自定义全局字体缩放。
@@ -202,7 +200,6 @@ impl Default for UiSettings {
             color_style: "vivid".to_string(),
             floating_navigation_bar: true,
             tab_animation: "slide".to_string(),
-            sidebar_blur: false,
             font_family: None,
             text_scale_enabled: false,
             text_scale: 1.0,
@@ -238,7 +235,6 @@ mod tests {
         assert_eq!(ui.color_style, "vivid");
         assert!(ui.floating_navigation_bar);
         assert_eq!(ui.tab_animation, "slide");
-        assert!(!ui.sidebar_blur);
         assert_eq!(ui.font_family, None);
         assert!(!ui.text_scale_enabled);
         assert_eq!(ui.text_scale, 1.0);

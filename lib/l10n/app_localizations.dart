@@ -2042,18 +2042,6 @@ abstract class AppLocalizations {
   /// **'Fade'**
   String get settingsTabAnimationFade;
 
-  /// No description provided for @settingsSidebar.
-  ///
-  /// In en, this message translates to:
-  /// **'Sidebar'**
-  String get settingsSidebar;
-
-  /// No description provided for @settingsSidebarBlur.
-  ///
-  /// In en, this message translates to:
-  /// **'Background blur'**
-  String get settingsSidebarBlur;
-
   /// No description provided for @settingsFontFamily.
   ///
   /// In en, this message translates to:
