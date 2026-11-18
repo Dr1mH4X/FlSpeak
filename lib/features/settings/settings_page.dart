@@ -470,7 +470,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       child: Scaffold(
         backgroundColor: pageColor,
         title: pageTitle,
-        backAction: _back,
+        backAction: widget.asDetail ? _back : null,
+        showBackButton: widget.asDetail,
         body: pageContent,
       ),
     );

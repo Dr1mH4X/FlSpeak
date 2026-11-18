@@ -806,7 +806,7 @@ void main() {
   );
 
   testWidgets(
-    'settings back button stays anchored at top-left when window widens',
+    'settings overview has no back button and detail back button stays at top-left when window widens',
     (tester) async {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -857,9 +857,15 @@ void main() {
         MaterialLocalizations.of(tester.element(find.byType(SettingsPage)))
             .backButtonTooltip,
       );
+      expect(backFinder, findsNothing);
+
+      await tester.tap(find.widgetWithText(SettingsTile, '通用'));
+      await tester.pumpAndSettle();
+      expect(backFinder, findsOneWidget);
+
       final backAtNarrow = tester.getTopLeft(backFinder);
       final cardAtNarrow = tester.getTopLeft(
-        find.byType(SettingsOptionsTile<String?>),
+        find.byType(SettingsOptionsTile<AppLogLevel>),
       );
 
       tester.view.physicalSize = const Size(1600, 700);
@@ -867,14 +873,12 @@ void main() {
 
       final backAtWide = tester.getTopLeft(backFinder);
       final cardAtWide = tester.getTopLeft(
-        find.byType(SettingsOptionsTile<String?>),
+        find.byType(SettingsOptionsTile<AppLogLevel>),
       );
-
-      final paneAtWide = tester.getTopLeft(find.byType(AnimatedSwitcher).first);
 
       expect(backAtWide.dx, backAtNarrow.dx);
       expect(backAtWide.dy, backAtNarrow.dy);
-      expect(backAtWide.dx - paneAtWide.dx, lessThan(40));
+      expect(backAtWide.dx, lessThan(40));
       expect(cardAtWide.dx, greaterThan(cardAtNarrow.dx));
     },
   );
@@ -935,11 +939,11 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        final backFinder = find.bySemanticsLabel(
-          MaterialLocalizations.of(tester.element(find.byType(SettingsPage)))
-              .backButtonTooltip,
+        final titleFinder = find.descendant(
+          of: find.byType(ScaffoldBar),
+          matching: find.text('设置'),
         );
-        expect(tester.getTopLeft(backFinder).dy, greaterThanOrEqualTo(40.0));
+        expect(tester.getTopLeft(titleFinder).dy, greaterThanOrEqualTo(40.0));
 
         final tile = find.byType(SettingsOptionsTile<String?>);
         expect(

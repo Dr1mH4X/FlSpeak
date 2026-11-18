@@ -84,6 +84,10 @@ class Scaffold extends StatefulWidget {
   final bool? resizeToAvoidBottomInset;
   final VoidCallback? backAction;
 
+  /// Draws the bar's back button; a page that is a navigation destination
+  /// leaves the way out to its sidebar or tab bar and turns this off.
+  final bool showBackButton;
+
   /// Puts the toggle of the sort mode in the bar.
   final bool canSort;
 
@@ -96,6 +100,7 @@ class Scaffold extends StatefulWidget {
     this.titleMenuItems = const [],
     this.actions,
     this.backAction,
+    this.showBackButton = true,
     this.isLoading = false,
     this.searchState,
     this.searchActions = const [],
@@ -756,7 +761,9 @@ class ScaffoldState extends State<Scaffold>
       listenable: Listenable.merge([_appBarState, _searchCovered]),
       builder: (_) {
         final searchState = _appBarState.value;
-        final leading = _buildLeading(backAction, pop: form.pop);
+        final leading = widget.showBackButton || form.pop != null
+            ? _buildLeading(backAction, pop: form.pop)
+            : null;
         final barSearch = searchState != null && !form.hasDockedSearch;
         final covered = barSearch && _searchCovered.value;
         final hidesBar = covered && _searchFillsBar;

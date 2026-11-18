@@ -95,18 +95,25 @@ void main() {
     expect(find.byType(WorkspaceShell), findsOneWidget);
   });
 
-  testWidgets('从连接页侧栏进入设置后，一级菜单点击返回能回到连接页而非连接丢失页', (tester) async {
+  testWidgets('从连接页侧栏进入设置后，一级页通过侧栏首页返回能回到连接页而非连接丢失页', (tester) async {
     await _mount(tester);
     expect(find.byType(ConnectPage), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.settings_outlined));
     await tester.pumpAndSettle();
     expect(find.byType(SettingsPage), findsOneWidget);
-
-    await tester.tap(
+    expect(
       find.bySemanticsLabel(
         MaterialLocalizations.of(tester.element(find.byType(SettingsPage)))
             .backButtonTooltip,
+      ),
+      findsNothing,
+    );
+
+    await tester.tap(
+      find.descendant(
+        of: find.byType(SettingsPage),
+        matching: find.byIcon(Icons.home_outlined),
       ),
     );
     await tester.pumpAndSettle();
