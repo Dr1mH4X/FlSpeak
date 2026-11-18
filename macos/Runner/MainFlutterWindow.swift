@@ -20,6 +20,7 @@ private enum WindowEffect: String {
 
 @available(macOS 26.0, *)
 private enum SidebarGlass {
+  #if compiler(>=6.2)
   // 分栏侧栏玻璃为私有变体，复制 NSSplitViewController 的侧栏配置以随系统外观自适应。
   private static let sidebarAttributes: [String: Any]? = {
     let split = NSSplitViewController()
@@ -66,6 +67,9 @@ private enum SidebarGlass {
     }
     return nil
   }
+  #else
+  static var isAvailable: Bool { false }
+  #endif
 }
 
 private final class EffectHostViewController: NSViewController {
@@ -107,6 +111,7 @@ private final class EffectHostViewController: NSViewController {
 
   @available(macOS 26.0, *)
   func showGlass(tint: NSColor?) {
+    #if compiler(>=6.2)
     let glass: NSGlassEffectView
     if let existing = glassView as? NSGlassEffectView {
       glass = existing
@@ -119,6 +124,9 @@ private final class EffectHostViewController: NSViewController {
       glassView = glass
     }
     glass.tintColor = tint
+    #else
+    removeGlass()
+    #endif
   }
 
   func removeGlass() {
