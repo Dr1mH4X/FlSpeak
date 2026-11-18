@@ -6,9 +6,10 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
+// These functions are ignored because they are not marked as `pub`: `resolve_display_version`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `fmt`, `from`
 
-/// 当前构建的版本号，与 Cargo workspace 版本一致。
+/// 当前构建的展示版本号；未注入 `APP_DISPLAY_VERSION` 时回退到 Cargo workspace 版本。
 String appVersion() => RustLib.instance.api.crateApiUpdateAppVersion();
 
 /// 刷新更新状态，返回可直接渲染的最终结果。
