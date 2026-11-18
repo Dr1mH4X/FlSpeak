@@ -215,7 +215,7 @@ packages:
       path: "plugins/flspeak_ffi"
       relative: true
     source: path
-    version: "0.1.13"
+    version: "0.1.14"
   flutter:
     dependency: "direct main"
     description: flutter
