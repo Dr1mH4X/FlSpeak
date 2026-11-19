@@ -1035,12 +1035,7 @@ void main() {
           .getTopLeft(
             find.descendant(
               of: find.byType(AppNavigationSidebar),
-              matching: find.byWidgetPredicate(
-                (w) =>
-                    w is Icon &&
-                    (w.icon == Icons.menu_rounded ||
-                        w.icon == Icons.menu_open_rounded),
-              ),
+              matching: find.byType(GlyphIcon),
             ),
           )
           .dy,

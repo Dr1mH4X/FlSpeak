@@ -315,4 +315,87 @@ void main() {
       expect(find.byType(LiquidGlass), findsNothing);
     },
   );
+
+  testWidgets(
+    'AppNavigationSidebar animates Glyphs.sidebar divider with expansion progress',
+    (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_FakeCore()),
+          sessionViewProvider.overrideWith(_TestSessionController.new),
+          storePathProvider.overrideWithValue('/tmp/flspeak/prefs.json'),
+          preferencesStoreProvider.overrideWithValue(
+            PreferencesStore.inMemory(
+              preferences: const SessionPreferences(nickname: 'Test'),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      double readSidebarDivider() {
+        final icon = tester.widget<GlyphIcon>(
+          find.descendant(
+            of: find.byType(AppNavigationSidebar),
+            matching: find.byType(GlyphIcon),
+          ),
+        );
+        final divider = icon.glyph.shapes[1] as GlyphPolyline;
+        return divider.vertices.first.x;
+      }
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            localizationsDelegates: const [
+              ...AppLocalizations.localizationsDelegates,
+              PrismUiLocalizationsDelegate(),
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) =>
+                PrismRootScope(brightness: Brightness.light, child: child!),
+            home: const Scaffold(
+              body: ViewScope(
+                size: Size(1000, 700),
+                isMobile: false,
+                windowControls: Size(78, 32),
+                child: Row(
+                  children: [
+                    AppNavigationSidebar(
+                      selectedDestination: AppNavDestination.home,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(readSidebarDivider(), closeTo(8.5, 0.001));
+
+      await tester.tap(find.bySemanticsLabel('展开侧边栏'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 125));
+      final expandingDivider = readSidebarDivider();
+      expect(expandingDivider, greaterThan(8.5));
+      expect(expandingDivider, lessThan(11.5));
+
+      await tester.pumpAndSettle();
+      expect(readSidebarDivider(), closeTo(11.5, 0.001));
+
+      await tester.tap(find.bySemanticsLabel('收起侧边栏'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 125));
+      final collapsingDivider = readSidebarDivider();
+      expect(collapsingDivider, greaterThan(8.5));
+      expect(collapsingDivider, lessThan(11.5));
+
+      await tester.pumpAndSettle();
+      expect(readSidebarDivider(), closeTo(8.5, 0.001));
+    },
+  );
 }

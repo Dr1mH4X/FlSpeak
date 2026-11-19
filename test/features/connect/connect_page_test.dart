@@ -959,12 +959,7 @@ void main() {
       if (wide) {
         final toggle = find.descendant(
           of: find.byType(AppNavigationSidebar),
-          matching: find.byWidgetPredicate(
-            (w) =>
-                w is Icon &&
-                (w.icon == Icons.menu_rounded ||
-                    w.icon == Icons.menu_open_rounded),
-          ),
+          matching: find.byType(GlyphIcon),
         );
         expect(tester.getTopLeft(toggle).dy, greaterThanOrEqualTo(40.0));
       }

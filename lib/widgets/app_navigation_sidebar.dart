@@ -1,6 +1,6 @@
 // 本文件来源于 FlClash（https://github.com/chen08209/FlClash）项目，原始许可证为 GPL-3.0。
-// 来源提交：7fd417fb9a9a277c6a9339a8ac87f907df7c25f7
-// 对应原文件：lib/ui/sidebar.dart
+// 来源提交：7fd417fb9a9a277c6a9339a8ac87f907df7c25f7、be84736605527034689c95bf27828ff27d912c5e（含上游 prism_ui 0.1.2 的 lib/sidebar.dart 与 Glyphs.sidebar）
+// 对应原文件：lib/ui/sidebar.dart（prism_ui lib/sidebar.dart）
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -468,13 +468,7 @@ class _SidebarPane extends StatelessWidget {
               onTap: onToggle,
               child: SizedBox(
                 width: itemWidth,
-                child: Center(
-                  child: Icon(
-                    expanded ? Icons.menu_open_rounded : Icons.menu_rounded,
-                    size: _iconSize,
-                    color: colors.icon,
-                  ),
-                ),
+                child: Center(child: GlyphIcon(Glyphs.sidebar(progress))),
               ),
             ),
           ),
