@@ -21,8 +21,15 @@ use crate::recovery::{
     pick_fallback_default_index,
 };
 
-/// 采集/播放环形队列容量：2 秒 48kHz 立体声 f32。
-const SAMPLE_QUEUE_CAPACITY: usize = 48_000 * 2 * 2;
+/// 采集环形队列容量：2 秒 48kHz 立体声 f32。
+const CAPTURE_QUEUE_CAPACITY: usize = 48_000 * 2 * 2;
+/// 播放环形队列容量时长：按输出设备实际采样率与声道数动态分配 120ms。
+pub const PLAYBACK_QUEUE_MS: u64 = 120;
+
+pub fn playback_queue_capacity(format: AudioFormat) -> usize {
+    let frames = ((format.sample_rate_hz as u64 * PLAYBACK_QUEUE_MS) / 1000).max(1) as usize;
+    frames * (format.channels as usize).max(1)
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeviceInfo {
@@ -106,14 +113,31 @@ pub struct PlaybackStream {
     pub format: AudioFormat,
     samples: Arc<ArrayQueue<f32>>,
     errors: ErrorSlot,
-    _stream: cpal::Stream,
+    _stream: Option<cpal::Stream>,
 }
 
 impl PlaybackStream {
+    #[cfg(test)]
+    pub(crate) fn new_for_test(format: AudioFormat) -> (Self, Arc<ArrayQueue<f32>>) {
+        let samples = Arc::new(ArrayQueue::new(playback_queue_capacity(format)));
+        let stream = Self {
+            format,
+            samples: Arc::clone(&samples),
+            errors: ErrorSlot::default(),
+            _stream: None,
+        };
+        (stream, samples)
+    }
+
     pub fn push(&self, samples: &[f32]) {
-        for sample in samples {
-            if self.samples.push(*sample).is_err() {
+        let channels = (self.format.channels as usize).max(1);
+        for frame in samples.chunks_exact(channels) {
+            // 仅在剩余空间容纳完整一帧时写入，避免单样本截断导致声道错位。
+            if self.samples.len() + channels > self.samples.capacity() {
                 break;
+            }
+            for &sample in frame {
+                let _ = self.samples.push(sample);
             }
         }
     }
@@ -135,7 +159,7 @@ pub fn start_capture(device_id: Option<&str>) -> Result<CaptureStream, AudioErro
         channels: supported.channels(),
     };
     let errors = ErrorSlot::default();
-    let samples = Arc::new(ArrayQueue::new(SAMPLE_QUEUE_CAPACITY));
+    let samples = Arc::new(ArrayQueue::new(CAPTURE_QUEUE_CAPACITY));
     let stream = build_input_stream(
         &device,
         &supported.config(),
@@ -160,7 +184,7 @@ pub fn start_playback(device_id: Option<&str>) -> Result<PlaybackStream, AudioEr
         channels: supported.channels(),
     };
     let errors = ErrorSlot::default();
-    let samples = Arc::new(ArrayQueue::new(SAMPLE_QUEUE_CAPACITY));
+    let samples = Arc::new(ArrayQueue::new(playback_queue_capacity(format)));
     let stream = build_output_stream(
         &device,
         &supported.config(),
@@ -173,7 +197,7 @@ pub fn start_playback(device_id: Option<&str>) -> Result<PlaybackStream, AudioEr
         format,
         samples,
         errors,
-        _stream: stream,
+        _stream: Some(stream),
     })
 }
 
@@ -438,5 +462,76 @@ fn device_error(err: cpal::Error) -> AudioError {
     match err.kind() {
         cpal::ErrorKind::PermissionDenied => AudioError::PermissionDenied(err.to_string()),
         _ => AudioError::Device(err.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn playback_queue_capacity_scales_with_device_format() {
+        assert_eq!(
+            playback_queue_capacity(AudioFormat {
+                sample_rate_hz: 48_000,
+                channels: 2,
+            }),
+            11_520
+        );
+        assert_eq!(
+            playback_queue_capacity(AudioFormat {
+                sample_rate_hz: 44_100,
+                channels: 2,
+            }),
+            10_584
+        );
+        assert_eq!(
+            playback_queue_capacity(AudioFormat {
+                sample_rate_hz: 48_000,
+                channels: 1,
+            }),
+            5_760
+        );
+    }
+
+    #[test]
+    fn playback_push_keeps_channel_frame_alignment_when_full() {
+        let format = AudioFormat {
+            sample_rate_hz: 48_000,
+            channels: 2,
+        };
+        let (stream, queue) = PlaybackStream::new_for_test(format);
+        let cap = queue.capacity();
+        assert_eq!(cap, 11_520);
+
+        let prefill = vec![0.25f32; cap - 2];
+        stream.push(&prefill);
+        assert_eq!(queue.len(), cap - 2);
+        // 仅剩 1 帧空间时推入 2 帧：写入第 1 帧并整帧丢弃第 2 帧。
+        stream.push(&[0.5, -0.5, 0.9, -0.9]);
+        assert_eq!(queue.len(), cap);
+
+        // 仅剩 1 个样本槽位（不足 1 个立体声帧）时，必须整帧丢弃，绝不产生单声道错位。
+        let odd_queue = Arc::new(ArrayQueue::new(5));
+        let odd_stream = PlaybackStream {
+            format,
+            samples: Arc::clone(&odd_queue),
+            errors: ErrorSlot::default(),
+            _stream: None,
+        };
+        odd_stream.push(&[1.0, -1.0, 2.0, -2.0, 3.0, -3.0]);
+        assert_eq!(odd_queue.len(), 4);
+        assert_eq!(odd_queue.len() % 2, 0);
+        odd_stream.push(&[4.0, -4.0]);
+        assert_eq!(odd_queue.len(), 4);
+        assert_eq!(
+            [
+                odd_queue.pop(),
+                odd_queue.pop(),
+                odd_queue.pop(),
+                odd_queue.pop(),
+            ],
+            [Some(1.0), Some(-1.0), Some(2.0), Some(-2.0)]
+        );
     }
 }

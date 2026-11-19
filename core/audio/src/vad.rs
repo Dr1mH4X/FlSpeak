@@ -24,15 +24,23 @@ pub struct EnergyVad {
 
 impl EnergyVad {
     pub fn new(threshold: f32, hangover_ms: u64) -> Self {
+        Self::with_frames(threshold, (hangover_ms / FRAME_MS).max(1) as usize)
+    }
+
+    pub fn with_frames(threshold: f32, hangover_frames: usize) -> Self {
         Self {
             threshold: threshold.max(0.0),
-            hangover_frames: (hangover_ms / FRAME_MS).max(1) as u32,
+            hangover_frames: u32::try_from(hangover_frames).unwrap_or(u32::MAX),
             remaining: 0,
         }
     }
 
     pub fn threshold(&self) -> f32 {
         self.threshold
+    }
+
+    pub fn hangover_frames(&self) -> u32 {
+        self.hangover_frames
     }
 }
 

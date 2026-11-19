@@ -159,7 +159,7 @@ impl FormatConverter {
                     let sample = self.buffer[(first_frame + tap) * dst_channels + channel];
                     acc += sample * weight;
                 }
-                output.push(acc);
+                output.push(acc.clamp(-1.0, 1.0));
             }
             let next_phase = self.phase_num + src_rate;
             self.buf_frame += (next_phase / dst_rate) as usize;
@@ -341,6 +341,18 @@ mod tests {
 
         assert_eq!(whole_output.len(), chunked_output.len());
         assert_eq!(whole_output, chunked_output);
+    }
+
+    #[test]
+    fn resampling_clamps_sinc_overshoot_within_unit_bounds() {
+        // 48kHz -> 44.1kHz 下对全幅阶跃信号做 Sinc 重采样，输出必须严格钳位在 [-1.0, 1.0]。
+        let mut converter = FormatConverter::new(PCM, format(44_100, 2));
+        let mut input = vec![-1.0f32; 480];
+        input.extend(vec![1.0f32; 480]);
+        let mut output = Vec::new();
+        converter.process(&input, &mut output);
+        assert!(!output.is_empty());
+        assert!(output.iter().all(|s| (-1.0..=1.0).contains(s)));
     }
 
     #[test]

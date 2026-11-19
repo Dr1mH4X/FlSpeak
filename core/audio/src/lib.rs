@@ -1,8 +1,7 @@
 //! 语音模块。
 //!
-//! 默认不启用 `audio` feature：Opus 需要 libopus，设备后端需要系统音频库，都不该
-//! 成为整个 workspace 的构建前提。纯逻辑部分（格式常量、重采样、VAD、软削波）
-//! 始终参与构建与测试。
+//! 默认不启用 `audio` feature：设备后端需要系统音频库，不该成为整个 workspace
+//! 的构建前提。纯逻辑部分（格式常量、重采样、VAD、软削波）始终参与构建与测试。
 
 pub mod convert;
 pub mod format;

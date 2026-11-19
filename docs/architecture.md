@@ -75,7 +75,7 @@ Flutter 启动时把 `<应用支持目录>/logs` 传递给 Rust 与 Dart，两�
 | FFI runtime（2 线程，`OnceLock`） | 事件转发任务（`broadcast` → `StreamSink`）、图片抓取与更新检查请求 |
 | `session` 线程 | current-thread runtime + `LocalSet`，串行执行所有协议调用 |
 | `voice-capture` 线程 | cpal 输入、格式转换、VAD/PTT、20ms Opus、发送节拍 |
-| `voice-playback` 线程 | cpal 输出、每说话人 jitter/解码/混音、设备格式转换 |
+| `voice-playback` 线程 | cpal 输出、基于 seq 的自适应 jitter/FEC/PLC 解码/混音、水位驱动与格式转换 |
 
 会话线程必须独占的原因见 [.agents/notes/implemented/architecture/2026-10-08-session-actor.md](../.agents/notes/implemented/architecture/2026-10-08-session-actor.md)：tsclient-rs 的建连 future 不是 `Send`。
 
@@ -97,6 +97,6 @@ Flutter 启动时把 `<应用支持目录>/logs` 传递给 Rust 与 Dart，两�
 - TSDNS：可选 legacy fallback，当前只做 SRV，未实现 TSDNS。
 - 文件传输：频道文件浏览、下载和进度已接线；普通文件上传 UI、断点续传尚未接线。详见 [channels.md](channels.md)。
 - 历史清除入口：历史已持久化并回放，设置页还不能清除。
-- 音频处理：没有 AEC/降噪/AGC；语音包没有 seq，播放只能按到达顺序做固定延迟 jitter。
+- 音频处理：没有 AEC/降噪/AGC。
 - 频道创建/删除没有实时事件，靠 30s 轮询快照兜底。
 - 身份升级的挖矿进度只有开始/完成事件，没有百分比。

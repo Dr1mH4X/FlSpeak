@@ -26,7 +26,6 @@ codegen 用官方 release 的 x86_64 linux 预编译附件（版本与 sha256 �
 
 环境细节约束：
 - **`rust-toolchain.toml` 放在 `plugins/flspeak_ffi/rust/`**：native assets 钩子只在 crate 目录里找它，找不到就直接失败。因此 cargo 也从那个目录跑（`defaults.run.working-directory`），这样锁定的工具链与 10 个 target 才会生效。同目录的 `rustfmt.toml`（`style_edition = "2024"`）让 rustfmt 的导入排序与 frb 生成代码一致，否则「生成物最新」与「格式干净」两个闸门会互相改写同一个文件。
-- **`CMAKE_POLICY_VERSION_MINIMUM=3.5`**：`audiopus_sys` 内置的 Opus 用 `cmake_minimum_required(VERSION <3.5)`，CMake 4 默认拒绝；没装系统 libopus 的 runner 只能走源码构建这条路。
 
 `FLUTTER_VERSION` 在 `checks.yml`、`ci.yml`、`release.yml` 各有一份，升级时三处一起改。
 
@@ -120,8 +119,8 @@ releaseKeyPassword=<密码>
 # Rust（从 crate 目录跑，吃锁定工具链）
 cd plugins/flspeak_ffi/rust
 cargo fmt --all -- --check
-CMAKE_POLICY_VERSION_MINIMUM=3.5 cargo clippy --workspace --all-targets --all-features -- -D warnings
-CMAKE_POLICY_VERSION_MINIMUM=3.5 cargo test --workspace --all-features
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace --all-features
 
 # Dart
 cd ../../..

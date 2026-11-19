@@ -12,16 +12,25 @@ use crate::AudioError;
 use crate::capture::{CapturePipeline, VoicePacer};
 use crate::convert::FormatConverter;
 use crate::device::{CaptureStream, PlaybackStream, start_capture, start_playback};
-use crate::format::OPUS_STEREO;
+use crate::format::{AudioFormat, OPUS_STEREO};
 use crate::level::{LevelMeter, LevelReading, MeterClock, SharedMeter, rms};
-use crate::playback::{MIX_FRAME_MS, PlaybackPipeline, VoiceFrame};
+use crate::playback::{MIX_SAMPLES_PER_CHANNEL, PlaybackPipeline, VoiceFrame};
 use crate::recovery::{RecoveryFailure, RecoveryState, StreamError, StreamErrorKind};
 
 const CONTROL_CAPACITY: usize = 64;
 const INCOMING_CAPACITY: usize = 256;
 const IO_TICK_MS: u64 = 10;
 const CAPTURE_POLL_MS: u64 = 5;
+const PLAYBACK_POLL_MS: u64 = 5;
+pub const PLAYBACK_TARGET_WATERMARK_MS: u64 = 25;
+const MAX_PLAYBACK_TICKS_PER_WAKE: usize = 2;
 const CATCHUP_PACING_MS: u64 = 2;
+
+pub fn playback_watermark_samples(format: AudioFormat) -> usize {
+    let frames =
+        ((format.sample_rate_hz as u64 * PLAYBACK_TARGET_WATERMARK_MS) / 1000).max(1) as usize;
+    frames * (format.channels as usize).max(1)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AudioStage {
@@ -63,14 +72,24 @@ pub enum AudioEvent {
 }
 
 enum CaptureCommand {
-    Start { device: Option<String>, epoch: u64 },
+    Start {
+        device: Option<String>,
+        epoch: u64,
+    },
     Stop,
-    SetDevice { device: Option<String> },
+    SetDevice {
+        device: Option<String>,
+    },
     SetMuted(bool),
     SetDeafened(bool),
     SetPttMode(bool),
     SetPttActive(bool),
     SetCodec(i32),
+    SetVad {
+        threshold: f32,
+        hangover_frames: usize,
+    },
+    GetVad(std::sync::mpsc::Sender<(f32, usize)>),
     Shutdown,
 }
 
@@ -228,6 +247,24 @@ impl VoiceEngine {
             .map_err(send_error)
     }
 
+    pub fn set_vad_config(&self, threshold: f32, hangover_frames: usize) -> Result<(), AudioError> {
+        self.capture
+            .try_send(CaptureCommand::SetVad {
+                threshold,
+                hangover_frames,
+            })
+            .map_err(send_error)
+    }
+
+    pub fn vad_config(&self) -> Result<(f32, usize), AudioError> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.capture
+            .try_send(CaptureCommand::GetVad(tx))
+            .map_err(send_error)?;
+        rx.recv()
+            .map_err(|_| AudioError::Engine("音频线程已退出".into()))
+    }
+
     pub fn set_deafened(&self, deafened: bool) -> Result<(), AudioError> {
         self.capture
             .try_send(CaptureCommand::SetDeafened(deafened))
@@ -348,6 +385,15 @@ impl CaptureLoopState {
                     message: err.to_string(),
                 }),
             },
+            CaptureCommand::SetVad {
+                threshold,
+                hangover_frames,
+            } => {
+                self.pipeline.set_vad_config(threshold, hangover_frames);
+            }
+            CaptureCommand::GetVad(reply) => {
+                let _ = reply.send(self.pipeline.vad_config());
+            }
         }
         true
     }
@@ -545,6 +591,7 @@ struct PlaybackLoopState {
     pipeline: PlaybackPipeline,
     stream: Option<PlaybackStream>,
     converter: Option<FormatConverter>,
+    converted: Vec<f32>,
     device: Option<String>,
     want_active: bool,
     recovery: RecoveryState,
@@ -553,6 +600,7 @@ struct PlaybackLoopState {
     meter: Arc<SharedMeter>,
     received_meter: LevelMeter,
     received_clock: MeterClock,
+    last_received_level: f32,
     playback_epoch: u64,
     last_talkers: Vec<i32>,
 }
@@ -564,7 +612,7 @@ impl PlaybackLoopState {
             PlaybackCommand::Shutdown => return false,
             PlaybackCommand::Start { device, epoch } => {
                 self.playback_epoch = epoch;
-                self.received_meter.silence();
+                self.last_received_level = self.received_meter.silence();
                 self.received_clock = MeterClock::default();
                 self.pipeline.restart();
                 self.want_active = true;
@@ -574,7 +622,7 @@ impl PlaybackLoopState {
             }
             PlaybackCommand::Stop => {
                 self.playback_epoch = 0;
-                self.received_meter.silence();
+                self.last_received_level = self.received_meter.silence();
                 self.want_active = false;
                 self.recovery.reset();
                 drop(self.stream.take());
@@ -583,7 +631,7 @@ impl PlaybackLoopState {
                 (self.sink)(AudioEvent::PlaybackState { ready: false });
             }
             PlaybackCommand::SetDevice { device } => {
-                self.received_meter.silence();
+                self.last_received_level = self.received_meter.silence();
                 self.device = device;
                 if self.want_active {
                     self.recovery.reset();
@@ -620,6 +668,54 @@ impl PlaybackLoopState {
         }
     }
 
+    fn poll_playback(&mut self, now: Instant) -> usize {
+        let mut ticks = 0;
+        if let (Some(stream), Some(converter)) = (&self.stream, &mut self.converter) {
+            let target_watermark = playback_watermark_samples(stream.format);
+            while ticks < MAX_PLAYBACK_TICKS_PER_WAKE
+                && stream.buffered_samples() < target_watermark
+            {
+                let tick = self.pipeline.tick(now, MIX_SAMPLES_PER_CHANNEL);
+                self.last_received_level = if !tick.talkers.is_empty() {
+                    self.received_meter.update(rms(&tick.samples))
+                } else {
+                    self.received_meter.silence()
+                };
+                if tick.talkers != self.last_talkers {
+                    self.last_talkers = tick.talkers.clone();
+                    (self.sink)(AudioEvent::Talkers {
+                        client_ids: self.last_talkers.clone(),
+                    });
+                }
+                self.converted.clear();
+                converter.process(&tick.samples, &mut self.converted);
+                for sample in &mut self.converted {
+                    *sample = sample.clamp(-1.0, 1.0);
+                }
+                stream.push(&self.converted);
+                ticks += 1;
+            }
+            if let Some(error) = stream.take_error() {
+                self.handle_stream_error(error, now);
+            }
+        } else {
+            self.last_received_level = self.received_meter.silence();
+        }
+
+        if self.received_clock.due(now) {
+            let epoch = self.meter.epoch();
+            let received = if epoch == self.playback_epoch {
+                self.last_received_level
+            } else {
+                0.0
+            };
+            if let Some(reading) = self.meter.reading(epoch, received) {
+                (self.levels)(reading);
+            }
+        }
+        ticks
+    }
+
     fn handle_stream_error(&mut self, error: StreamError, now: Instant) {
         let action = classify_active_stream_error(AudioStage::Playback, error);
         match action {
@@ -627,6 +723,7 @@ impl PlaybackLoopState {
             ActiveErrorAction::FailPermanent(message) => {
                 drop(self.stream.take());
                 self.converter = None;
+                self.last_received_level = self.received_meter.silence();
                 self.recovery.on_open_failed(now, false);
                 (self.sink)(AudioEvent::PlaybackState { ready: false });
                 (self.sink)(AudioEvent::Error {
@@ -637,6 +734,7 @@ impl PlaybackLoopState {
             ActiveErrorAction::Rebuild => {
                 drop(self.stream.take());
                 self.converter = None;
+                self.last_received_level = self.received_meter.silence();
                 (self.sink)(AudioEvent::PlaybackState { ready: false });
                 if self.want_active {
                     self.recovery.reset();
@@ -658,6 +756,7 @@ fn playback_loop(
         pipeline: PlaybackPipeline::new(),
         stream: None,
         converter: None,
+        converted: Vec::new(),
         device: None,
         want_active: false,
         recovery: RecoveryState::default(),
@@ -666,31 +765,38 @@ fn playback_loop(
         meter,
         received_meter: LevelMeter::default(),
         received_clock: MeterClock::default(),
+        last_received_level: 0.0,
         playback_epoch: 0,
         last_talkers: Vec::new(),
     };
-    let mut next_tick = Instant::now();
+    let poll_tick = Duration::from_millis(PLAYBACK_POLL_MS);
+    let mut next_poll = Instant::now();
 
-    loop {
+    'playback: loop {
         let now = Instant::now();
         let deadline_wait = state
             .recovery
             .next_deadline()
             .map(|deadline| deadline.saturating_duration_since(now))
-            .unwrap_or(Duration::from_millis(IO_TICK_MS));
-        let wait = next_tick
+            .unwrap_or(poll_tick);
+        let wait = next_poll
             .saturating_duration_since(now)
             .min(deadline_wait)
-            .min(Duration::from_millis(IO_TICK_MS));
+            .min(poll_tick);
         match commands.recv_timeout(wait) {
-            Ok(PlaybackCommand::Shutdown) => break,
+            Ok(PlaybackCommand::Shutdown) => break 'playback,
             Ok(command) => {
                 if !state.handle_command(command) {
-                    break;
+                    break 'playback;
+                }
+                while let Ok(command) = commands.try_recv() {
+                    if !state.handle_command(command) {
+                        break 'playback;
+                    }
                 }
             }
             Err(RecvTimeoutError::Timeout) => {}
-            Err(RecvTimeoutError::Disconnected) => break,
+            Err(RecvTimeoutError::Disconnected) => break 'playback,
         }
 
         let now = Instant::now();
@@ -698,60 +804,26 @@ fn playback_loop(
             state.open_stream(now);
         }
 
-        // 收包通道与混音节拍解耦：每个 tick 前把已到达的包全部喂给 jitter buffer。
+        let mut drained = 0;
+        while drained < INCOMING_CAPACITY {
+            match incoming.try_recv() {
+                Ok(PlaybackCommand::Incoming(frame)) => {
+                    state.pipeline.push_incoming(frame, now);
+                    drained += 1;
+                }
+                Ok(PlaybackCommand::Shutdown) => break 'playback,
+                Ok(_) => {}
+                Err(_) => break,
+            }
+        }
+
         let now = Instant::now();
-        if now >= next_tick {
-            let mut drained = 0;
-            while drained < 128 {
-                match incoming.try_recv() {
-                    Ok(PlaybackCommand::Incoming(frame)) => {
-                        state.pipeline.push_incoming(frame, now);
-                        drained += 1;
-                    }
-                    Ok(PlaybackCommand::Shutdown) => return,
-                    Ok(_) => {}
-                    Err(_) => break,
-                }
+        if now >= next_poll {
+            next_poll += poll_tick;
+            if next_poll <= now {
+                next_poll = now + poll_tick;
             }
-
-            next_tick += Duration::from_millis(MIX_FRAME_MS);
-            if next_tick <= now {
-                next_tick = now + Duration::from_millis(MIX_FRAME_MS);
-            }
-
-            let tick = state
-                .pipeline
-                .tick(now, crate::playback::MIX_SAMPLES_PER_CHANNEL);
-            let received_level = if state.stream.is_some() && !tick.talkers.is_empty() {
-                state.received_meter.update(rms(&tick.samples))
-            } else {
-                state.received_meter.silence()
-            };
-            if state.received_clock.due(now) {
-                let epoch = state.meter.epoch();
-                let received = if epoch == state.playback_epoch {
-                    received_level
-                } else {
-                    0.0
-                };
-                if let Some(reading) = state.meter.reading(epoch, received) {
-                    (state.levels)(reading);
-                }
-            }
-            if tick.talkers != state.last_talkers {
-                state.last_talkers = tick.talkers.clone();
-                (state.sink)(AudioEvent::Talkers {
-                    client_ids: state.last_talkers.clone(),
-                });
-            }
-            if let (Some(stream), Some(converter)) = (&state.stream, &mut state.converter) {
-                let mut converted = Vec::new();
-                converter.process(&tick.samples, &mut converted);
-                stream.push(&converted);
-                if let Some(error) = stream.take_error() {
-                    state.handle_stream_error(error, now);
-                }
-            }
+            state.poll_playback(now);
         }
     }
 
@@ -997,5 +1069,56 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn playback_loop_watermark_caps_queue_depth_and_burst_ticks() {
+        let format = OPUS_STEREO;
+        let (stream, queue) = PlaybackStream::new_for_test(format);
+        let target = playback_watermark_samples(format);
+        assert_eq!(target, 2_400);
+
+        let mut state = PlaybackLoopState {
+            pipeline: PlaybackPipeline::new(),
+            stream: Some(stream),
+            converter: Some(FormatConverter::new(OPUS_STEREO, format)),
+            converted: Vec::new(),
+            device: None,
+            want_active: true,
+            recovery: RecoveryState::default(),
+            sink: Arc::new(|_| {}),
+            levels: Arc::new(|_| {}),
+            meter: Arc::new(SharedMeter::default()),
+            received_meter: LevelMeter::default(),
+            received_clock: MeterClock::default(),
+            last_received_level: 0.0,
+            playback_epoch: 0,
+            last_talkers: Vec::new(),
+        };
+
+        let mut now = Instant::now();
+        // 空队列首次唤醒：低于 25ms 水位，受单次最多 2 帧上限约束，输出 20ms（1920 样本）。
+        assert_eq!(state.poll_playback(now), 2);
+        assert_eq!(queue.len(), 1_920);
+
+        // 第二次唤醒再补 1 帧达到 30ms（2880 >= 2400），不再继续堆积。
+        now += Duration::from_millis(PLAYBACK_POLL_MS);
+        assert_eq!(state.poll_playback(now), 1);
+        assert_eq!(queue.len(), 2_880);
+
+        // 未被声卡消费时连续多次 5ms 轮询均跳过解码，零延迟堆积。
+        for _ in 0..10 {
+            now += Duration::from_millis(PLAYBACK_POLL_MS);
+            assert_eq!(state.poll_playback(now), 0);
+            assert_eq!(queue.len(), 2_880);
+        }
+
+        // 模拟声卡消费 10ms（960 样本）跌破水位（1920 < 2400），立刻补回 1 帧。
+        for _ in 0..960 {
+            assert!(queue.pop().is_some());
+        }
+        now += Duration::from_millis(PLAYBACK_POLL_MS);
+        assert_eq!(state.poll_playback(now), 1);
+        assert_eq!(queue.len(), 2_880);
     }
 }

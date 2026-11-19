@@ -11,7 +11,6 @@ env:
   # 对应 x86_64-unknown-linux-gnu 的官方预编译附件。
   FRB_CODEGEN_VERSION: '2.13.0'
   FRB_CODEGEN_SHA256: '1bb088e6ea42782848ea6507ab745371dbde58c83abef137d3e1e68ce510d45b'
-  CMAKE_POLICY_VERSION_MINIMUM: '3.5'
 
 jobs:
   rust:
@@ -34,7 +33,7 @@ jobs:
       - name: Install audio build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake pkg-config libopus-dev libasound2-dev
+          sudo apt-get install -y pkg-config libasound2-dev
 
       - name: Check format
         run: cargo fmt --all -- --check
@@ -83,7 +82,7 @@ jobs:
       - name: Install audio build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake pkg-config libopus-dev libasound2-dev
+          sudo apt-get install -y pkg-config libasound2-dev
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2

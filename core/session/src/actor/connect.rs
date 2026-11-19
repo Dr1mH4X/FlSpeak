@@ -798,9 +798,13 @@ fn register_handlers(
             return;
         }
         if let ProtocolEvent::VoiceData(data) = event {
+            let is_end_of_stream = data.data.is_empty();
             voice.send(VoiceFrame {
                 client_id: data.client_id,
                 codec: data.codec,
+                seq: data.seq,
+                received_at: data.received_at,
+                is_end_of_stream,
                 data: data.data.to_vec(),
             });
         }

@@ -13,14 +13,7 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 ```
 
-**macOS 上的 Opus 构建**：`audio` 的 `audio` feature 会拉 `audiopus`。系统装了 Homebrew opus 也只是有 `opus.pc`，没有 `pkg-config` 可执行文件时仍会退化成源码构建，而内置 Opus 的 `cmake_minimum_required(VERSION <3.5)` 会被 CMake 4 拒绝。两种解法选一个：
-
-```sh
-brew install pkgconf                       # 让 pkg-config 找到 /opt/homebrew/lib/pkgconfig
-CMAKE_POLICY_VERSION_MINIMUM=3.5 cargo test --workspace --all-features   # 或放宽 CMake 策略
-```
-
-仓库根 `.cargo/config.toml` 已设置 `CMAKE_POLICY_VERSION_MINIMUM=3.5`；`session` 依赖 `audio` 的 `audio` feature（Opus/cpal），跑它的测试同样需要 Opus 工具链。
+Opus 编解码采用`rusty-opus`；Linux 上跑音频全量测试需要 ALSA 开发库与 `pkg-config`（`libasound2-dev pkg-config`）。
 
 Linux 桌面构建需要 `libsecret-1-dev`，用于图片上传配置的安全存储。开发机使用系统包管理器安装；CI 与发布流水线的 Linux 依赖步骤包含该包。
 

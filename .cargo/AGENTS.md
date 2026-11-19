@@ -4,5 +4,5 @@
 
 ## 规则与约束
 
-- `config.toml` 用于固化构建环境参数（如 Opus CMake 策略版本 `CMAKE_POLICY_VERSION_MINIMUM = "3.5"`）。
+- `config.toml` 用于固化确有需要的跨平台构建环境参数。
 - 不在此处硬编码包含特定个人机器路径的配置；所有跨平台构建环境变量应通过 CI 或 `setup.dart` 统一注入。

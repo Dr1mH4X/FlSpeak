@@ -87,8 +87,9 @@ pub struct CapturePipeline {
     converted: Vec<f32>,
     pcm: VecDeque<f32>,
     frame: Vec<f32>,
-    pcm16: Vec<i16>,
     vad: Box<dyn Vad>,
+    vad_threshold: f32,
+    vad_hangover_frames: usize,
     muted: bool,
     deafened: bool,
     ptt_mode: bool,
@@ -102,6 +103,9 @@ pub struct CapturePipeline {
 impl CapturePipeline {
     pub fn new(codec: i32) -> Result<Self, AudioError> {
         let target = codec_format(codec).ok_or(AudioError::UnsupportedCodec(codec))?;
+        let vad = EnergyVad::default();
+        let vad_threshold = vad.threshold();
+        let vad_hangover_frames = vad.hangover_frames() as usize;
         Ok(Self {
             codec,
             encoder: OpusEncoder::new(codec)?,
@@ -111,8 +115,9 @@ impl CapturePipeline {
             converted: Vec::new(),
             pcm: VecDeque::new(),
             frame: Vec::new(),
-            pcm16: Vec::new(),
-            vad: Box::new(EnergyVad::default()),
+            vad: Box::new(vad),
+            vad_threshold,
+            vad_hangover_frames,
             muted: false,
             deafened: false,
             ptt_mode: false,
@@ -130,6 +135,20 @@ impl CapturePipeline {
 
     pub fn channels(&self) -> u16 {
         self.target.channels
+    }
+
+    pub fn set_vad_config(&mut self, threshold: f32, hangover_frames: usize) {
+        let vad = EnergyVad::with_frames(threshold, hangover_frames);
+        self.vad_threshold = vad.threshold();
+        self.vad_hangover_frames = vad.hangover_frames() as usize;
+        self.vad = Box::new(vad);
+        if !self.ptt_mode {
+            self.speaking = false;
+        }
+    }
+
+    pub fn vad_config(&self) -> (f32, usize) {
+        (self.vad_threshold, self.vad_hangover_frames)
     }
 
     pub fn begin(&mut self) {
@@ -295,15 +314,12 @@ impl CapturePipeline {
         }
         self.speaking = true;
 
-        self.pcm16.clear();
-        self.pcm16.extend(
-            self.frame
-                .iter()
-                .map(|sample| (sample.clamp(-1.0, 1.0) * i16::MAX as f32) as i16),
-        );
+        for sample in &mut self.frame {
+            *sample = sample.clamp(-1.0, 1.0);
+        }
 
         let mut packet = [0u8; MAX_PACKET_BYTES];
-        let written = match self.encoder.encode(&self.pcm16, &mut packet) {
+        let written = match self.encoder.encode(&self.frame, &mut packet) {
             Ok(written) => {
                 self.too_small_streak = 0;
                 written
@@ -400,14 +416,14 @@ mod tests {
             .map(|index| (index as f32 * 0.0007).sin() * 0.92)
             .collect();
         let mut decoder = crate::codec::OpusDecoder::new().unwrap();
-        let mut decoded = vec![0i16; crate::format::MAX_OPUS_SAMPLES];
+        let mut decoded = vec![0.0f32; crate::format::MAX_OPUS_SAMPLES];
         for _ in 0..3 {
             pipeline.set_ptt_active(true);
             pipeline.push_capture(&samples, OPUS_STEREO);
             let packet = pipeline.take_packet().unwrap().unwrap();
             assert!(packet.data.len() <= 484);
             assert_eq!(
-                decoder.decode(Some(&packet.data), &mut decoded).unwrap(),
+                decoder.decode_normal(&packet.data, &mut decoded).unwrap(),
                 FRAME_SAMPLES_PER_CHANNEL
             );
             pipeline.set_ptt_active(false);
@@ -505,8 +521,8 @@ mod tests {
         assert_eq!(pipeline.pcm.len(), 64);
 
         let mut decoder = crate::codec::OpusDecoder::new().unwrap();
-        let mut decoded = vec![0i16; crate::format::MAX_OPUS_SAMPLES];
-        let decoded_samples = decoder.decode(Some(&packet.data), &mut decoded).unwrap();
+        let mut decoded = vec![0.0f32; crate::format::MAX_OPUS_SAMPLES];
+        let decoded_samples = decoder.decode_normal(&packet.data, &mut decoded).unwrap();
         assert_eq!(decoded_samples, FRAME_SAMPLES_PER_CHANNEL);
     }
 
@@ -522,5 +538,31 @@ mod tests {
         assert!(pipeline.take_packet().unwrap().is_none());
         assert_eq!(pipeline.pcm.len(), FRAME_SAMPLES_PER_CHANNEL);
         assert!(pipeline.take_packet().unwrap().is_some());
+    }
+
+    #[test]
+    fn vad_config_updates_threshold_and_hangover_frames() {
+        let mut pipeline = CapturePipeline::new(VOICE_CODEC).unwrap();
+        pipeline.begin();
+        // 提高门限到 0.5、hangover 为 2 帧：0.3 振幅应被门限挡住，0.6 振幅触发并在随后 2 帧保持发送。
+        pipeline.set_vad_config(0.5, 2);
+        let below = vec![0.3; FRAME_SAMPLES_PER_CHANNEL];
+        let above = vec![0.6; FRAME_SAMPLES_PER_CHANNEL];
+        let quiet = vec![0.0; FRAME_SAMPLES_PER_CHANNEL];
+
+        pipeline.push_capture(&below, OPUS_MONO);
+        assert!(pipeline.take_packet().unwrap().is_none());
+
+        pipeline.push_capture(&above, OPUS_MONO);
+        assert!(pipeline.take_packet().unwrap().is_some());
+
+        pipeline.push_capture(&quiet, OPUS_MONO);
+        assert!(pipeline.take_packet().unwrap().is_some());
+
+        pipeline.push_capture(&quiet, OPUS_MONO);
+        assert!(pipeline.take_packet().unwrap().is_some());
+
+        pipeline.push_capture(&quiet, OPUS_MONO);
+        assert!(pipeline.take_packet().unwrap().is_none());
     }
 }
