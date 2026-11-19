@@ -245,6 +245,7 @@ impl Actor {
                     port: resolved.addr.port(),
                 });
                 self.self_client_id = Some(client_id);
+                self.open_protocol.set_self_client_id(Some(client_id));
                 self.self_channel_id = channel_id;
                 self.active_server_id = Some(profile.id.clone());
                 self.last_target = Some(ConnectTarget {
@@ -295,7 +296,7 @@ impl Actor {
                     }
                     self.sync_server_icon(profile.id.clone(), icon_id);
                 }
-                self.maybe_announce_identity().await;
+                self.open_protocol_connected(client_id, self.self_channel_id);
                 self.start_voice();
                 // 服务器端自己的标志在（重）连后是重置过的，重置节流状态并把本地状态重新同步。
                 self.voice_report.reset();
@@ -549,12 +550,7 @@ impl Actor {
         self.channel_tools = Default::default();
         self.transfer_target = None;
         self.last_network_sample_error = None;
-        self.peer_identities.clear();
-        self.peer_commands.clear();
-        self.peer_command_prefixes.clear();
-        self.commands_fetching.clear();
-        self.ack_limiter.reset(Instant::now());
-        self.announce_state.reset();
+        self.open_protocol.reset(Instant::now());
         self.voice_report.reset();
         self.reset_directory_permissions();
         self.subscribed_all_channels = false;

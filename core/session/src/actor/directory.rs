@@ -139,7 +139,7 @@ impl Actor {
             client_type: ClientType::FlSpeak,
             app_name: Some("FlSpeak".into()),
             app_version: Some(env!("CARGO_PKG_VERSION").into()),
-            capabilities: self_capabilities(),
+            capabilities: self.open_protocol.effective_identity().capabilities,
             bot_commands: None,
             bot_command_prefix: None,
         };
@@ -188,7 +188,7 @@ impl Actor {
                 client_type: ClientType::FlSpeak,
                 app_name: Some("FlSpeak".into()),
                 app_version: Some(env!("CARGO_PKG_VERSION").into()),
-                capabilities: self_capabilities(),
+                capabilities: self.open_protocol.effective_identity().capabilities,
                 bot_commands: None,
                 bot_command_prefix: None,
             }),
@@ -259,6 +259,9 @@ impl Actor {
             // cid=0 的行说明这路数据没带频道，不能拿它重置自己的真实频道。
             if me.channel_id != 0 && me.channel_id != self.self_channel_id {
                 self.apply_self_channel(me.channel_id, self_codec);
+                if self.open_protocol.self_channel_id() == 0 {
+                    self.open_protocol_self_moved(me.channel_id);
+                }
             } else {
                 self.apply_channel_codec(self_codec);
             }
@@ -423,7 +426,7 @@ impl Actor {
         }
         self.apply_self_channel(channel_id, codec);
         if channel_id != 0 {
-            self.maybe_announce_identity().await;
+            self.open_protocol_self_moved(channel_id);
         }
     }
 
@@ -532,6 +535,7 @@ impl Actor {
         clients: Vec<ClientView>,
         force: bool,
     ) {
+        self.open_protocol_sync_peers(&clients);
         let changed = force
             || self
                 .last_snapshot
@@ -599,14 +603,25 @@ mod tests {
         actor.self_client_id = Some(1);
         actor.self_channel_id = 5;
         actor.subscribed_all_channels = true;
-        actor.peer_identities.insert(
-            "peer-uid".into(),
-            CachedPeerIdentity {
-                client_type: ClientType::FlSpeak,
-                app_name: "FlSpeak".into(),
-                app_version: "0.1.12".into(),
-                capabilities: vec!["chat".into()],
+        actor.open_protocol.on_connected(1, 5, Instant::now());
+        actor.open_protocol.on_plugin_command(
+            &PluginCommandEvent {
+                name: tsclient_rs::open_protocol::IDENTITY_PLUGIN.into(),
+                data: serde_json::json!({
+                    "v": 1,
+                    "action": "announce_ack",
+                    "client_type": "flspeak",
+                    "app_name": "FlSpeak",
+                    "app_version": "0.1.12",
+                    "capabilities": ["chat"],
+                })
+                .to_string(),
+                invoker_id: 2,
+                invoker_name: "Peer".into(),
+                invoker_uid: "peer-uid".into(),
             },
+            None,
+            Instant::now(),
         );
         actor.channel_codecs.insert(5, 4);
         actor.channel_codecs.insert(99, 5);

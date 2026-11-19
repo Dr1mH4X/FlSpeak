@@ -120,45 +120,32 @@ async fn avatar_negotiation_keeps_audio_and_controls_responsive() {
 #[test]
 fn invalidate_handlers_resets_open_protocol_caches_and_cooldowns() {
     let mut actor = audio_actor();
-    actor.peer_identities.insert(
-        "bot-uid".into(),
-        CachedPeerIdentity {
-            client_type: ClientType::Bot,
-            app_name: "Bot".into(),
-            app_version: "1.0".into(),
-            capabilities: vec!["chat:slash_commands".into()],
-        },
-    );
-    actor.peer_commands.insert("bot-uid".into(), Vec::new());
-    actor
-        .peer_command_prefixes
-        .insert("bot-uid".into(), "!".into());
-    actor.commands_fetching.insert("other-uid".into());
     let now = Instant::now();
-    assert!(
-        actor
-            .ack_limiter
-            .try_acquire("bot-uid", AckCooldownAction::IdentityAnnounce, now)
-    );
-    assert!(matches!(
-        actor
-            .announce_state
-            .try_begin(AnnounceAttemptMode::Normal, now),
-        AnnounceDecision::SendNow { .. }
-    ));
-    let prev_epoch = actor.connection_epoch;
+    actor.open_protocol.on_connected(7, 5, now);
+    actor.handle_open_protocol_command(PluginCommandEvent {
+        name: tsclient_rs::open_protocol::IDENTITY_PLUGIN.into(),
+        data: r#"{"v":1,"action":"announce_ack","client_type":"bot","app_name":"Bot","app_version":"1.0","capabilities":["chat:slash_commands"]}"#.into(),
+        invoker_id: 12,
+        invoker_name: "Bot".into(),
+        invoker_uid: "bot-uid".into(),
+    });
+    actor.handle_open_protocol_command(PluginCommandEvent {
+        name: tsclient_rs::open_protocol::COMMANDS_PLUGIN.into(),
+        data: r#"{"v":1,"action":"list_ack","command_prefix":"!","commands":[{"name":"replay","desc":"Replay"}]}"#.into(),
+        invoker_id: 12,
+        invoker_name: "Bot".into(),
+        invoker_uid: "bot-uid".into(),
+    });
+    assert!(actor.open_protocol.peer_identity("bot-uid").is_some());
+    assert!(actor.open_protocol.peer_commands("bot-uid").is_some());
 
+    let prev_epoch = actor.connection_epoch;
     actor.invalidate_handlers();
 
-    assert!(actor.peer_identities.is_empty());
-    assert!(actor.peer_commands.is_empty());
-    assert!(actor.peer_command_prefixes.is_empty());
-    assert!(actor.commands_fetching.is_empty());
-    assert!(actor.ack_limiter.cooldowns.is_empty());
-    assert_eq!(actor.ack_limiter.tokens, ACK_GLOBAL_BURST);
-    assert!(actor.announce_state.last_attempt.is_none());
-    assert!(!actor.announce_state.trailing_scheduled);
-    assert!(!actor.announce_state.should_run_failure_retry(0));
+    assert!(actor.open_protocol.peer_identity("bot-uid").is_none());
+    assert!(actor.open_protocol.peer_commands("bot-uid").is_none());
+    assert!(actor.open_protocol.self_client_id().is_none());
+    assert_eq!(actor.open_protocol.self_channel_id(), 0);
     assert_eq!(actor.connection_epoch, prev_epoch + 1);
     assert!(actor.channel_list_allowed.is_none());
     assert!(actor.channel_meta_allowed.is_none());

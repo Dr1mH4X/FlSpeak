@@ -32,9 +32,10 @@ use proto::ConnectError;
 use server::{ServerError, ServerProfile, ServerRegistry, ServerTarget};
 use tokio::io::{AsyncRead, ReadBuf};
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
+use tsclient_rs::open_protocol::{OpenProtocolEngine, SendOutcome, SendReceipt, TimerToken};
 use tsclient_rs::{
     AbortSignal, ChannelInfo, Client, ClientInfo, Event as ProtocolEvent, FileDownloadInfo, Logger,
-    PluginCommandEvent, PluginCommandTarget,
+    PluginCommandEvent,
 };
 
 use crate::store::{self, identity_path};
@@ -139,12 +140,19 @@ pub(crate) enum SessionSignal {
         icon_id: u32,
         result: Result<Vec<u8>, SessionError>,
     },
-    /// 开放协议延迟进房广播（去抖尾随广播或失败单次重试）。
-    AnnounceIdentity {
+    /// 开放协议延迟定时器触发（去抖尾随广播或失败单次重试）。
+    OpenProtocolTimer {
         epoch: u64,
-        mode: AnnounceAttemptMode,
-        allow_failure_retry: bool,
-        expected_seq: Option<u64>,
+        token: TimerToken,
+    },
+    /// 开放协议非阻塞发送结果回传，用于确认成功、防洪熔断或回滚限流状态。
+    OpenProtocolSendResult {
+        epoch: u64,
+        plugin: &'static str,
+        target_id: Option<i32>,
+        receipt: SendReceipt,
+        outcome: SendOutcome,
+        error: Option<String>,
     },
     /// 节流/退避延迟后的自身语音状态上报。
     ReportVoiceFlags {
@@ -213,12 +221,7 @@ pub(crate) struct Actor {
     streams_supported: bool,
     network_monitor: Option<crate::network::NetworkMonitor>,
     last_network_sample_error: Option<Instant>,
-    peer_identities: HashMap<String, CachedPeerIdentity>,
-    peer_commands: HashMap<String, Vec<BotCommandView>>,
-    peer_command_prefixes: HashMap<String, String>,
-    commands_fetching: HashSet<String>,
-    ack_limiter: AckRateLimiter,
-    announce_state: AnnounceState,
+    open_protocol: OpenProtocolEngine,
     voice_report: VoiceReportState,
     pending_images: VecDeque<PendingImage>,
     active_image: Option<ActiveImage>,
@@ -306,12 +309,7 @@ impl Actor {
             streams_supported: true,
             network_monitor: None,
             last_network_sample_error: None,
-            peer_identities: HashMap::new(),
-            peer_commands: HashMap::new(),
-            peer_command_prefixes: HashMap::new(),
-            commands_fetching: HashSet::new(),
-            ack_limiter: AckRateLimiter::new(Instant::now()),
-            announce_state: AnnounceState::default(),
+            open_protocol: new_open_protocol_engine(),
             voice_report: VoiceReportState::default(),
             pending_images: VecDeque::new(),
             active_image: None,
@@ -514,7 +512,7 @@ impl Actor {
                     }
                     let _ = self.refresh_snapshot(true).await;
                     if self.self_client_id == Some(client_id) && channel_id != 0 {
-                        self.maybe_announce_identity().await;
+                        self.open_protocol_self_moved(channel_id);
                     }
                 }
                 let _ = reply.send(result);
@@ -837,14 +835,14 @@ impl Actor {
                 let _ = reply.send(self.kick_stream_viewer(viewer_clid).await);
             }
             SessionCommand::QueryPeerIdentity { target_clid, reply } => {
-                let _ = reply.send(self.query_peer_identity(target_clid).await);
+                let _ = reply.send(self.query_peer_identity(target_clid));
             }
             SessionCommand::FetchBotCommands {
                 target_clid,
                 target_uid,
                 reply,
             } => {
-                let _ = reply.send(self.fetch_bot_commands(target_clid, &target_uid).await);
+                let _ = reply.send(self.fetch_bot_commands(target_clid, &target_uid));
             }
         }
         true
@@ -873,6 +871,7 @@ impl Actor {
                 if epoch != self.connection_epoch {
                     return;
                 }
+                self.open_protocol_peer_joined(client.id, &client.uid);
                 self.enrich_client(&mut client);
                 self.emit(SessionEvent::ClientJoined(client));
             }
@@ -898,6 +897,7 @@ impl Actor {
             }
             SessionSignal::ClientLeft { epoch, id } => {
                 if epoch == self.connection_epoch {
+                    self.open_protocol_peer_left(id);
                     let events = self.streams.client_left(id);
                     self.emit_all(events);
                 }
@@ -906,11 +906,7 @@ impl Actor {
                 if epoch != self.connection_epoch {
                     return;
                 }
-                if event.name == IDENTITY_PLUGIN {
-                    self.handle_identity_event(event).await;
-                } else if event.name == COMMANDS_PLUGIN {
-                    self.handle_commands_event(event);
-                }
+                self.handle_open_protocol_command(event);
             }
             SessionSignal::StreamNotification { epoch, name, items } => {
                 if epoch != self.connection_epoch {
@@ -1135,21 +1131,24 @@ impl Actor {
                     }
                 }
             }
-            SessionSignal::AnnounceIdentity {
+            SessionSignal::OpenProtocolTimer { epoch, token } => {
+                if epoch != self.connection_epoch {
+                    return;
+                }
+                self.handle_open_protocol_timer(token);
+            }
+            SessionSignal::OpenProtocolSendResult {
                 epoch,
-                mode,
-                allow_failure_retry,
-                expected_seq,
+                plugin,
+                target_id,
+                receipt,
+                outcome,
+                error,
             } => {
                 if epoch != self.connection_epoch {
                     return;
                 }
-                if let Some(seq) = expected_seq
-                    && !self.announce_state.should_run_failure_retry(seq)
-                {
-                    return;
-                }
-                self.announce_identity_step(mode, allow_failure_retry).await;
+                self.handle_open_protocol_send_result(plugin, target_id, receipt, outcome, error);
             }
             SessionSignal::ReportVoiceFlags { epoch, seq } => {
                 if epoch != self.connection_epoch {

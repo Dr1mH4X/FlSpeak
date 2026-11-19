@@ -1,224 +1,23 @@
+use tsclient_rs::open_protocol::{
+    ClientKind, EngineEffects, OpenProtocolConfig, OpenProtocolEngine, OpenProtocolEvent,
+    PeerIdentity, SendOutcome, SendReceipt, TimerToken,
+};
+
 use super::*;
 
-const PROTOCOL_VERSION: u8 = 1;
-pub(super) const IDENTITY_PLUGIN: &str = "tsclient:identity";
-pub(super) const COMMANDS_PLUGIN: &str = "tsclient:commands";
-const ANNOUNCE_ACK_COOLDOWN: Duration = Duration::from_secs(10);
-const QUERY_ACK_COOLDOWN: Duration = Duration::from_secs(5);
-const SELF_ANNOUNCE_DEBOUNCE: Duration = Duration::from_secs(2);
-const SELF_ANNOUNCE_RETRY_DELAY: Duration = Duration::from_millis(500);
-pub(super) const ACK_GLOBAL_BURST: f64 = 4.0;
-const ACK_GLOBAL_RATE_PER_SEC: f64 = 2.0;
-const MAX_PAYLOAD_BYTES: usize = 1024;
-const MAX_IDENTITY_FIELD_CHARS: usize = 32;
-const MAX_CAPABILITIES: usize = 16;
-const MAX_BOT_COMMANDS: usize = 16;
-const MAX_COMMAND_PREFIX_CHARS: usize = 8;
-const MAX_COMMAND_NAME_CHARS: usize = 24;
-const MAX_COMMAND_ARGS_CHARS: usize = 32;
-const MAX_COMMAND_DESC_CHARS: usize = 64;
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub(super) struct IdentityPayload {
-    v: u8,
-    action: String,
-    #[serde(default)]
-    client_type: String,
-    #[serde(default)]
-    app_name: String,
-    #[serde(default)]
-    app_version: String,
-    #[serde(default)]
-    capabilities: Vec<String>,
+pub(super) fn new_open_protocol_engine() -> OpenProtocolEngine {
+    let identity = PeerIdentity::new(ClientKind::FlSpeak, "FlSpeak", env!("CARGO_PKG_VERSION"));
+    let config = OpenProtocolConfig::new(identity)
+        .with_server_announce_on_join(true)
+        .with_auto_discover_peers(true);
+    OpenProtocolEngine::new(config, Instant::now())
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-struct CommandsPayload {
-    v: u8,
-    action: String,
-    #[serde(default)]
-    command_prefix: Option<String>,
-    #[serde(default)]
-    commands: Vec<BotCommandView>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct CachedPeerIdentity {
-    pub(super) client_type: ClientType,
-    pub(super) app_name: String,
-    pub(super) app_version: String,
-    pub(super) capabilities: Vec<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(super) enum AckCooldownAction {
-    IdentityAnnounce,
-    IdentityQuery,
-}
-
-impl AckCooldownAction {
-    fn from_action(action: &str) -> Option<Self> {
-        match action {
-            "announce" => Some(Self::IdentityAnnounce),
-            "query" => Some(Self::IdentityQuery),
-            _ => None,
-        }
-    }
-
-    fn cooldown(self) -> Duration {
-        match self {
-            Self::IdentityAnnounce => ANNOUNCE_ACK_COOLDOWN,
-            Self::IdentityQuery => QUERY_ACK_COOLDOWN,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(super) struct AckCooldownKey {
-    peer: String,
-    action: AckCooldownAction,
-}
-
-/// 按 `(peer, action)` 隔离单播回复冷却，并用全局令牌桶约束出站 ACK 洪峰。
-pub(super) struct AckRateLimiter {
-    pub(super) cooldowns: HashMap<AckCooldownKey, Instant>,
-    pub(super) tokens: f64,
-    last_refill: Instant,
-}
-
-impl AckRateLimiter {
-    pub(super) fn new(now: Instant) -> Self {
-        Self {
-            cooldowns: HashMap::new(),
-            tokens: ACK_GLOBAL_BURST,
-            last_refill: now,
-        }
-    }
-
-    pub(super) fn try_acquire(
-        &mut self,
-        peer: &str,
-        action: AckCooldownAction,
-        now: Instant,
-    ) -> bool {
-        self.cooldowns
-            .retain(|key, &mut last| now.saturating_duration_since(last) < key.action.cooldown());
-
-        let key = AckCooldownKey {
-            peer: peer.to_string(),
-            action,
-        };
-        if let Some(&last) = self.cooldowns.get(&key)
-            && now.saturating_duration_since(last) < action.cooldown()
-        {
-            return false;
-        }
-
-        let elapsed = now
-            .saturating_duration_since(self.last_refill)
-            .as_secs_f64();
-        self.tokens = (self.tokens + elapsed * ACK_GLOBAL_RATE_PER_SEC).min(ACK_GLOBAL_BURST);
-        self.last_refill = self.last_refill.max(now);
-        if self.tokens < 1.0 {
-            return false;
-        }
-        self.tokens -= 1.0;
-
-        self.cooldowns.insert(key, now);
-        true
-    }
-
-    pub(super) fn rollback(&mut self, peer: &str, action: AckCooldownAction, acquired_at: Instant) {
-        let key = AckCooldownKey {
-            peer: peer.to_string(),
-            action,
-        };
-        if self.cooldowns.get(&key) == Some(&acquired_at) {
-            self.cooldowns.remove(&key);
-        }
-    }
-
-    pub(super) fn reset(&mut self, now: Instant) {
-        self.cooldowns.clear();
-        self.tokens = ACK_GLOBAL_BURST;
-        self.last_refill = now;
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum AnnounceDecision {
-    SendNow {
-        attempt_at: Instant,
-        seq_at_start: u64,
-    },
-    ScheduleTrailing {
-        wait: Duration,
-    },
-    AlreadyScheduled,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum AnnounceAttemptMode {
-    Normal,
-    Trailing,
-}
-
-#[derive(Default)]
-pub(super) struct AnnounceState {
-    pub(super) last_attempt: Option<Instant>,
-    pub(super) trailing_scheduled: bool,
-    success_seq: u64,
-}
-
-impl AnnounceState {
-    pub(super) fn try_begin(
-        &mut self,
-        mode: AnnounceAttemptMode,
-        now: Instant,
-    ) -> AnnounceDecision {
-        if matches!(mode, AnnounceAttemptMode::Trailing) {
-            self.trailing_scheduled = false;
-        }
-        if let Some(last) = self.last_attempt {
-            let elapsed = now.saturating_duration_since(last);
-            if elapsed < SELF_ANNOUNCE_DEBOUNCE {
-                if !self.trailing_scheduled {
-                    self.trailing_scheduled = true;
-                    return AnnounceDecision::ScheduleTrailing {
-                        wait: SELF_ANNOUNCE_DEBOUNCE - elapsed,
-                    };
-                }
-                return AnnounceDecision::AlreadyScheduled;
-            }
-        }
-
-        self.last_attempt = Some(now);
-        self.trailing_scheduled = false;
-        AnnounceDecision::SendNow {
-            attempt_at: now,
-            seq_at_start: self.success_seq,
-        }
-    }
-
-    pub(super) fn record_success(&mut self) {
-        self.success_seq = self.success_seq.wrapping_add(1);
-    }
-
-    pub(super) fn rollback_failure(&mut self, attempt_at: Instant, seq_at_start: u64) -> bool {
-        if self.last_attempt == Some(attempt_at) {
-            self.last_attempt = None;
-        }
-        self.success_seq == seq_at_start
-    }
-
-    pub(super) fn should_run_failure_retry(&self, seq_at_start: u64) -> bool {
-        self.success_seq == seq_at_start
-    }
-
-    pub(super) fn reset(&mut self) {
-        self.last_attempt = None;
-        self.trailing_scheduled = false;
-        self.success_seq = self.success_seq.wrapping_add(1);
+fn map_client_type(kind: &ClientKind) -> ClientType {
+    match kind {
+        ClientKind::FlSpeak => ClientType::FlSpeak,
+        ClientKind::Bot => ClientType::Bot,
+        ClientKind::Custom(_) => ClientType::Custom,
     }
 }
 
@@ -231,10 +30,11 @@ impl Actor {
 
     pub(super) fn enrich_client(&self, client: &mut ClientView) {
         if Some(client.id) == self.self_client_id {
-            client.client_type = ClientType::FlSpeak;
-            client.app_name = Some("FlSpeak".into());
-            client.app_version = Some(env!("CARGO_PKG_VERSION").into());
-            client.capabilities = self_capabilities();
+            let self_id = self.open_protocol.effective_identity();
+            client.client_type = map_client_type(&self_id.client_type);
+            client.app_name = Some(self_id.app_name);
+            client.app_version = Some(self_id.app_version);
+            client.capabilities = self_id.capabilities;
             client.bot_commands = None;
             client.bot_command_prefix = None;
             return;
@@ -242,17 +42,24 @@ impl Actor {
         if client.uid.is_empty() {
             return;
         }
-        if let Some(identity) = self.peer_identities.get(&client.uid) {
-            client.client_type = identity.client_type;
+        if let Some(identity) = self.open_protocol.peer_identity(&client.uid) {
+            client.client_type = map_client_type(&identity.client_type);
             client.app_name = Some(identity.app_name.clone());
             client.app_version = Some(identity.app_version.clone());
             client.capabilities = identity.capabilities.clone();
         }
-        if let Some(commands) = self.peer_commands.get(&client.uid) {
-            client.bot_commands = Some(commands.clone());
-        }
-        if let Some(prefix) = self.peer_command_prefixes.get(&client.uid) {
-            client.bot_command_prefix = Some(prefix.clone());
+        if let Some(list) = self.open_protocol.peer_commands(&client.uid) {
+            client.bot_commands = Some(
+                list.commands
+                    .iter()
+                    .map(|cmd| BotCommandView {
+                        name: cmd.name.clone(),
+                        args: cmd.args.clone().unwrap_or_default(),
+                        desc: cmd.desc.clone(),
+                    })
+                    .collect(),
+            );
+            client.bot_command_prefix = list.command_prefix.clone();
         }
     }
 
@@ -296,339 +103,191 @@ impl Actor {
             .unwrap_or_default()
     }
 
-    fn encode_identity_payload(&self, action: &str) -> Option<String> {
-        let payload = IdentityPayload {
-            v: PROTOCOL_VERSION,
-            action: action.into(),
-            client_type: "flspeak".into(),
-            app_name: "FlSpeak".into(),
-            app_version: env!("CARGO_PKG_VERSION").into(),
-            capabilities: self_capabilities(),
-        };
-        let data = serde_json::to_string(&payload).ok()?;
-        if data.len() >= MAX_PAYLOAD_BYTES {
-            self.emit(SessionEvent::Log {
-                level: "warn".into(),
-                message: format!(
-                    "跳过发送超长开放协议载荷: action={action}, bytes={}, limit={MAX_PAYLOAD_BYTES}",
-                    data.len()
-                ),
-            });
-            return None;
-        }
-        Some(data)
-    }
-
-    fn schedule_announce_signal(
-        &self,
-        delay: Duration,
-        mode: AnnounceAttemptMode,
-        allow_failure_retry: bool,
-        expected_seq: Option<u64>,
-    ) {
-        let epoch = self.connection_epoch;
-        let signals = self.signals.clone();
-        tokio::spawn(async move {
-            tokio::time::sleep(delay).await;
-            let _ = signals.send(SessionSignal::AnnounceIdentity {
-                epoch,
-                mode,
-                allow_failure_retry,
-                expected_seq,
-            });
-        });
-    }
-
-    pub(super) async fn maybe_announce_identity(&mut self) {
-        self.announce_identity_step(AnnounceAttemptMode::Normal, true)
-            .await;
-    }
-
-    pub(super) async fn announce_identity_step(
-        &mut self,
-        mode: AnnounceAttemptMode,
-        allow_failure_retry: bool,
-    ) {
-        if self.self_channel_id == 0 {
-            return;
-        }
-        let Some(client) = self.client.clone() else {
-            return;
-        };
-        let Some(data) = self.encode_identity_payload("announce") else {
-            return;
-        };
-
-        let now = Instant::now();
-        let (attempt_at, seq_at_start) = match self.announce_state.try_begin(mode, now) {
-            AnnounceDecision::SendNow {
-                attempt_at,
-                seq_at_start,
-            } => (attempt_at, seq_at_start),
-            AnnounceDecision::ScheduleTrailing { wait } => {
-                self.schedule_announce_signal(wait, AnnounceAttemptMode::Trailing, true, None);
-                return;
-            }
-            AnnounceDecision::AlreadyScheduled => return,
-        };
-
-        match tsclient_rs::send_plugin_command(
-            &client,
-            IDENTITY_PLUGIN,
-            &data,
-            PluginCommandTarget::CurrentChannel,
-            None,
-        )
-        .await
-        {
-            Ok(()) => self.announce_state.record_success(),
-            Err(err) => {
-                let should_retry = self
-                    .announce_state
-                    .rollback_failure(attempt_at, seq_at_start);
-                self.emit(SessionEvent::Log {
-                    level: "debug".into(),
-                    message: format!("开放协议进房广播失败: {err}"),
-                });
-                if allow_failure_retry && should_retry {
-                    self.schedule_announce_signal(
-                        SELF_ANNOUNCE_RETRY_DELAY,
-                        AnnounceAttemptMode::Normal,
-                        false,
-                        Some(seq_at_start),
-                    );
-                }
+    fn apply_open_protocol_effects(&mut self, effects: EngineEffects) {
+        let mut metadata_changed = false;
+        let mut flood_halted = false;
+        for event in &effects.events {
+            match event {
+                OpenProtocolEvent::PeerIdentityUpdated { .. }
+                | OpenProtocolEvent::PeerCommandsUpdated { .. } => metadata_changed = true,
+                OpenProtocolEvent::ProbeHaltedByFlood => flood_halted = true,
+                OpenProtocolEvent::SendFailed { .. } => {}
             }
         }
-    }
-
-    pub(super) async fn handle_identity_event(&mut self, event: PluginCommandEvent) {
-        let Ok(payload) = serde_json::from_str::<IdentityPayload>(&event.data) else {
-            return;
-        };
-        if payload.v != PROTOCOL_VERSION || self.self_client_id == Some(event.invoker_id) {
-            return;
-        }
-
-        let peer_uid = self.resolve_peer_uid(event.invoker_id, &event.invoker_uid);
-        if !peer_uid.is_empty() && !payload.client_type.is_empty() {
-            let cached = sanitize_identity_payload(&payload);
-            self.peer_identities.insert(peer_uid.clone(), cached);
+        if metadata_changed {
             self.sync_peer_metadata_to_snapshot();
         }
-
-        let Some(action) = AckCooldownAction::from_action(&payload.action) else {
-            return;
-        };
-        let Some(client) = self.client.clone() else {
-            return;
-        };
-        let Some(data) = self.encode_identity_payload("announce_ack") else {
-            return;
-        };
-
-        let cooldown_key = if !peer_uid.is_empty() {
-            peer_uid
-        } else {
-            event.invoker_id.to_string()
-        };
-        let now = Instant::now();
-        if !self.ack_limiter.try_acquire(&cooldown_key, action, now) {
-            return;
+        if flood_halted {
+            self.emit(SessionEvent::Log {
+                level: "warn".into(),
+                message: "服务端触发防洪限制，已暂停跨频道成员自动探测".into(),
+            });
         }
 
-        if let Err(err) = tsclient_rs::send_plugin_command(
-            &client,
-            IDENTITY_PLUGIN,
-            &data,
-            PluginCommandTarget::Client,
-            Some(event.invoker_id),
-        )
-        .await
-        {
-            self.ack_limiter.rollback(&cooldown_key, action, now);
+        let epoch = self.connection_epoch;
+        for timer in effects.timers {
+            let signals = self.signals.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(timer.delay).await;
+                let _ = signals.send(SessionSignal::OpenProtocolTimer {
+                    epoch,
+                    token: timer.token,
+                });
+            });
+        }
+
+        for cmd in effects.outbound {
+            let Ok(client) = self.connected() else {
+                let _ = self
+                    .open_protocol
+                    .on_send_outcome(cmd.receipt, SendOutcome::Failed { flood: false });
+                continue;
+            };
+            let signals = self.signals.clone();
+            tokio::task::spawn_local(async move {
+                let result = tsclient_rs::send_plugin_command(
+                    &client,
+                    cmd.plugin,
+                    &cmd.data,
+                    cmd.target,
+                    cmd.target_id,
+                )
+                .await;
+                let outcome = SendOutcome::from_result(&result);
+                let error = result.err().map(|err| err.to_string());
+                let _ = signals.send(SessionSignal::OpenProtocolSendResult {
+                    epoch,
+                    plugin: cmd.plugin,
+                    target_id: cmd.target_id,
+                    receipt: cmd.receipt,
+                    outcome,
+                    error,
+                });
+            });
+        }
+    }
+
+    pub(super) fn open_protocol_connected(&mut self, clid: i32, channel_id: u64) {
+        let effects = self
+            .open_protocol
+            .on_connected(clid, channel_id, Instant::now());
+        self.apply_open_protocol_effects(effects);
+    }
+
+    pub(super) fn open_protocol_self_moved(&mut self, channel_id: u64) {
+        let effects = self.open_protocol.on_self_moved(channel_id, Instant::now());
+        self.apply_open_protocol_effects(effects);
+    }
+
+    pub(super) fn open_protocol_sync_peers(&mut self, clients: &[ClientView]) {
+        if self.client.is_none() {
+            return;
+        }
+        let peers: Vec<(i32, &str, u64)> = clients
+            .iter()
+            .map(|c| (c.id, c.uid.as_str(), c.channel_id))
+            .collect();
+        let effects = self
+            .open_protocol
+            .sync_directory_peers(&peers, Instant::now());
+        self.apply_open_protocol_effects(effects);
+    }
+
+    pub(super) fn open_protocol_peer_joined(&mut self, clid: i32, uid: &str) {
+        if self.client.is_none() {
+            return;
+        }
+        let effects = self.open_protocol.on_peer_joined(clid, uid, Instant::now());
+        self.apply_open_protocol_effects(effects);
+    }
+
+    pub(super) fn open_protocol_peer_left(&mut self, clid: i32) {
+        self.open_protocol.on_peer_left(clid);
+    }
+
+    pub(super) fn handle_open_protocol_command(&mut self, event: PluginCommandEvent) {
+        let peer_uid = self.resolve_peer_uid(event.invoker_id, &event.invoker_uid);
+        let effects = self.open_protocol.on_plugin_command(
+            &event,
+            (!peer_uid.is_empty()).then_some(peer_uid.as_str()),
+            Instant::now(),
+        );
+        self.apply_open_protocol_effects(effects);
+    }
+
+    pub(super) fn handle_open_protocol_timer(&mut self, token: TimerToken) {
+        let effects = self.open_protocol.on_timer(token, Instant::now());
+        self.apply_open_protocol_effects(effects);
+    }
+
+    pub(super) fn handle_open_protocol_send_result(
+        &mut self,
+        plugin: &'static str,
+        target_id: Option<i32>,
+        receipt: SendReceipt,
+        outcome: SendOutcome,
+        error: Option<String>,
+    ) {
+        if let Some(ref err) = error {
             self.emit(SessionEvent::Log {
                 level: "debug".into(),
                 message: format!(
-                    "开放协议身份回执发送失败: invoker_id={}, err={err}",
-                    event.invoker_id
+                    "开放协议命令发送失败: plugin={plugin}, target_id={target_id:?}, err={err}"
                 ),
             });
         }
+        let effects = self.open_protocol.on_send_outcome(receipt, outcome);
+        self.apply_open_protocol_effects(effects);
     }
 
-    pub(super) async fn query_peer_identity(
-        &mut self,
-        target_clid: i32,
-    ) -> Result<(), SessionError> {
-        let client = self.connected()?;
-        let req = serde_json::json!({
-            "v": PROTOCOL_VERSION,
-            "action": "query"
-        });
-        tsclient_rs::send_plugin_command(
-            &client,
-            IDENTITY_PLUGIN,
-            &req.to_string(),
-            PluginCommandTarget::Client,
-            Some(target_clid),
-        )
-        .await
-        .map_err(protocol_error)
+    pub(super) fn query_peer_identity(&mut self, target_clid: i32) -> Result<(), SessionError> {
+        self.connected()?;
+        let peer_uid = self.resolve_peer_uid(target_clid, "");
+        let effects = self.open_protocol.request_query_peer(
+            target_clid,
+            (!peer_uid.is_empty()).then_some(peer_uid.as_str()),
+            Instant::now(),
+        );
+        self.apply_open_protocol_effects(effects);
+        Ok(())
     }
 
-    pub(super) fn handle_commands_event(&mut self, event: PluginCommandEvent) {
-        let Ok(payload) = serde_json::from_str::<CommandsPayload>(&event.data) else {
-            return;
-        };
-        if payload.v != PROTOCOL_VERSION
-            || payload.action != "list_ack"
-            || self.self_client_id == Some(event.invoker_id)
-        {
-            return;
-        }
-        let peer_uid = self.resolve_peer_uid(event.invoker_id, &event.invoker_uid);
-        if peer_uid.is_empty() {
-            return;
-        }
-        self.commands_fetching.remove(&peer_uid);
-        let sanitized = sanitize_bot_commands(payload.commands);
-        self.peer_commands.insert(peer_uid.clone(), sanitized);
-        if let Some(prefix) = sanitize_command_prefix(payload.command_prefix.as_deref()) {
-            self.peer_command_prefixes.insert(peer_uid, prefix);
-        } else {
-            self.peer_command_prefixes.remove(&peer_uid);
-        }
-        self.sync_peer_metadata_to_snapshot();
-    }
-
-    pub(super) async fn fetch_bot_commands(
+    pub(super) fn fetch_bot_commands(
         &mut self,
         target_clid: i32,
         target_uid: &str,
     ) -> Result<(), SessionError> {
-        if target_uid.is_empty()
-            || self.peer_commands.contains_key(target_uid)
-            || !self.commands_fetching.insert(target_uid.to_string())
-        {
+        let effects =
+            self.open_protocol
+                .request_fetch_commands(target_clid, target_uid, Instant::now());
+        if effects.outbound.is_empty() {
             return Ok(());
         }
-        let client = match self.connected() {
-            Ok(client) => client,
-            Err(err) => {
-                self.commands_fetching.remove(target_uid);
-                return Err(err);
+        if let Err(err) = self.connected() {
+            for cmd in effects.outbound {
+                let _ = self
+                    .open_protocol
+                    .on_send_outcome(cmd.receipt, SendOutcome::Failed { flood: false });
             }
-        };
-        let req = serde_json::json!({
-            "v": PROTOCOL_VERSION,
-            "action": "list_req"
-        });
-        let result = tsclient_rs::send_plugin_command(
-            &client,
-            COMMANDS_PLUGIN,
-            &req.to_string(),
-            PluginCommandTarget::Client,
-            Some(target_clid),
-        )
-        .await
-        .map_err(protocol_error);
-        if result.is_err() {
-            self.commands_fetching.remove(target_uid);
+            return Err(err);
         }
-        result
+        self.apply_open_protocol_effects(effects);
+        Ok(())
     }
-}
-
-pub(super) fn self_capabilities() -> Vec<String> {
-    Vec::new()
-}
-
-fn truncate_chars(s: &str, max_chars: usize) -> String {
-    s.chars().take(max_chars).collect()
-}
-
-pub(super) fn sanitize_identity_payload(payload: &IdentityPayload) -> CachedPeerIdentity {
-    let client_type = match payload.client_type.as_str() {
-        "flspeak" => ClientType::FlSpeak,
-        "bot" => ClientType::Bot,
-        _ => ClientType::Custom,
-    };
-    let app_name = truncate_chars(&payload.app_name, MAX_IDENTITY_FIELD_CHARS);
-    let app_version = truncate_chars(&payload.app_version, MAX_IDENTITY_FIELD_CHARS);
-    let capabilities = payload
-        .capabilities
-        .iter()
-        .take(MAX_CAPABILITIES)
-        .map(|cap| truncate_chars(cap, MAX_IDENTITY_FIELD_CHARS))
-        .collect();
-    CachedPeerIdentity {
-        client_type,
-        app_name,
-        app_version,
-        capabilities,
-    }
-}
-
-pub(super) fn sanitize_command_prefix(raw: Option<&str>) -> Option<String> {
-    let trimmed: String = raw?
-        .trim()
-        .chars()
-        .filter(|c| !c.is_control() && !c.is_whitespace())
-        .take(MAX_COMMAND_PREFIX_CHARS)
-        .collect();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed)
-    }
-}
-
-pub(super) fn sanitize_bot_commands(commands: Vec<BotCommandView>) -> Vec<BotCommandView> {
-    commands
-        .into_iter()
-        .take(MAX_BOT_COMMANDS)
-        .map(|mut cmd| {
-            cmd.name = truncate_chars(&cmd.name, MAX_COMMAND_NAME_CHARS);
-            cmd.args = truncate_chars(&cmd.args, MAX_COMMAND_ARGS_CHARS);
-            cmd.desc = truncate_chars(&cmd.desc, MAX_COMMAND_DESC_CHARS);
-            cmd
-        })
-        .collect()
 }
 
 #[cfg(test)]
 mod tests {
+    use tsclient_rs::open_protocol::{COMMANDS_PLUGIN, IDENTITY_PLUGIN};
+
     use super::*;
     use crate::actor::test_support::*;
-
-    #[test]
-    fn bot_command_view_deserializes_with_default_args_and_desc() {
-        let json = r#"{"v":1,"action":"list_ack","commands":[{"name":"ping"},{"name":"play","args":"<song>","desc":"Play song"}]}"#;
-        let payload: CommandsPayload = serde_json::from_str(json).expect("deserialize commands");
-        assert_eq!(payload.commands.len(), 2);
-        assert_eq!(
-            payload.commands[0],
-            BotCommandView {
-                name: "ping".into(),
-                args: String::new(),
-                desc: String::new(),
-            }
-        );
-        assert_eq!(
-            payload.commands[1],
-            BotCommandView {
-                name: "play".into(),
-                args: "<song>".into(),
-                desc: "Play song".into(),
-            }
-        );
-    }
 
     #[tokio::test]
     async fn identity_event_truncates_fields_ignores_self_and_updates_snapshot() {
         let mut actor = audio_actor();
         actor.self_client_id = Some(7);
+        actor.open_protocol.on_connected(7, 5, Instant::now());
         actor.last_snapshot = Some((
             Vec::new(),
             vec![
@@ -648,21 +307,17 @@ mod tests {
         ));
         let mut events = actor.events.subscribe();
 
-        // 自身广播回显直接忽略，不写入缓存也不触发回复。
-        actor
-            .handle_identity_event(PluginCommandEvent {
-                name: IDENTITY_PLUGIN.into(),
-                data: r#"{"v":1,"action":"announce","client_type":"bot","app_name":"FakeSelf","app_version":"9.9"}"#.into(),
-                invoker_id: 7,
-                invoker_name: "Self".into(),
-                invoker_uid: "self-uid".into(),
-            })
-            .await;
-        assert!(!actor.peer_identities.contains_key("self-uid"));
-        assert!(actor.ack_limiter.cooldowns.is_empty());
+        // 自身广播回显直接忽略，不写入缓存也不触发事件。
+        actor.handle_open_protocol_command(PluginCommandEvent {
+            name: IDENTITY_PLUGIN.into(),
+            data: r#"{"v":1,"action":"announce","client_type":"bot","app_name":"FakeSelf","app_version":"9.9"}"#.into(),
+            invoker_id: 7,
+            invoker_name: "Self".into(),
+            invoker_uid: "self-uid".into(),
+        });
+        assert!(actor.open_protocol.peer_identity("self-uid").is_none());
         assert!(events.try_recv().is_err());
 
-        // 对端宣告超长字段与过多 capability 时按上限截断，并同步刷新内存快照。
         let long_name = "B".repeat(50);
         let long_ver = "1".repeat(40);
         let caps: Vec<String> = (0..20)
@@ -678,15 +333,13 @@ mod tests {
         })
         .to_string();
 
-        actor
-            .handle_identity_event(PluginCommandEvent {
-                name: IDENTITY_PLUGIN.into(),
-                data,
-                invoker_id: 12,
-                invoker_name: "MusicBot".into(),
-                invoker_uid: "bot-uid".into(),
-            })
-            .await;
+        actor.handle_open_protocol_command(PluginCommandEvent {
+            name: IDENTITY_PLUGIN.into(),
+            data,
+            invoker_id: 12,
+            invoker_name: "MusicBot".into(),
+            invoker_uid: "bot-uid".into(),
+        });
 
         let Some(SessionEvent::Snapshot { clients, .. }) = events.try_recv().ok() else {
             panic!("expected Snapshot event after identity update");
@@ -703,6 +356,7 @@ mod tests {
     async fn identity_and_commands_events_ignore_unsupported_protocol_version() {
         let mut actor = audio_actor();
         actor.self_client_id = Some(7);
+        actor.open_protocol.on_connected(7, 5, Instant::now());
         actor.last_snapshot = Some((
             Vec::new(),
             vec![ClientView::from(ClientInfo {
@@ -712,28 +366,25 @@ mod tests {
                 ..client_info(12, 5, "MusicBot")
             })],
         ));
-        actor.commands_fetching.insert("bot-uid".into());
         let mut events = actor.events.subscribe();
 
         for bad_version in [0, 2] {
-            actor
-                .handle_identity_event(PluginCommandEvent {
-                    name: IDENTITY_PLUGIN.into(),
-                    data: serde_json::json!({
-                        "v": bad_version,
-                        "action": "announce",
-                        "client_type": "bot",
-                        "app_name": "MusicBot",
-                        "app_version": "2.0",
-                    })
-                    .to_string(),
-                    invoker_id: 12,
-                    invoker_name: "MusicBot".into(),
-                    invoker_uid: "bot-uid".into(),
+            actor.handle_open_protocol_command(PluginCommandEvent {
+                name: IDENTITY_PLUGIN.into(),
+                data: serde_json::json!({
+                    "v": bad_version,
+                    "action": "announce",
+                    "client_type": "bot",
+                    "app_name": "MusicBot",
+                    "app_version": "2.0",
                 })
-                .await;
+                .to_string(),
+                invoker_id: 12,
+                invoker_name: "MusicBot".into(),
+                invoker_uid: "bot-uid".into(),
+            });
 
-            actor.handle_commands_event(PluginCommandEvent {
+            actor.handle_open_protocol_command(PluginCommandEvent {
                 name: COMMANDS_PLUGIN.into(),
                 data: serde_json::json!({
                     "v": bad_version,
@@ -747,150 +398,16 @@ mod tests {
             });
         }
 
-        assert!(!actor.peer_identities.contains_key("bot-uid"));
-        assert!(!actor.peer_commands.contains_key("bot-uid"));
-        assert!(actor.commands_fetching.contains("bot-uid"));
+        assert!(actor.open_protocol.peer_identity("bot-uid").is_none());
+        assert!(actor.open_protocol.peer_commands("bot-uid").is_none());
         assert!(events.try_recv().is_err());
-    }
-
-    #[test]
-    fn ack_rate_limiter_isolates_actions_enforces_global_bucket_and_rolls_back() {
-        let t0 = Instant::now();
-        let mut limiter = AckRateLimiter::new(t0);
-
-        // 同一对端的 announce 与 query 冷却相互独立，不交叉阻塞。
-        assert!(limiter.try_acquire("peer-a", AckCooldownAction::IdentityAnnounce, t0));
-        assert!(limiter.try_acquire("peer-a", AckCooldownAction::IdentityQuery, t0));
-        assert!(!limiter.try_acquire(
-            "peer-a",
-            AckCooldownAction::IdentityQuery,
-            t0 + Duration::from_secs(4)
-        ));
-        assert!(limiter.try_acquire(
-            "peer-a",
-            AckCooldownAction::IdentityQuery,
-            t0 + Duration::from_secs(5)
-        ));
-        assert!(!limiter.try_acquire(
-            "peer-a",
-            AckCooldownAction::IdentityAnnounce,
-            t0 + Duration::from_secs(9)
-        ));
-        assert!(limiter.try_acquire(
-            "peer-a",
-            AckCooldownAction::IdentityAnnounce,
-            t0 + Duration::from_secs(10)
-        ));
-
-        // 全局令牌桶初始突发为 4，耗尽后第 5 个请求被拒绝且不会污染该对端冷却记录。
-        let t_burst = t0 + Duration::from_secs(30);
-        let mut burst = AckRateLimiter::new(t_burst);
-        for i in 0..4 {
-            assert!(burst.try_acquire(
-                &format!("peer-{i}"),
-                AckCooldownAction::IdentityAnnounce,
-                t_burst
-            ));
-        }
-        assert!(!burst.try_acquire("peer-blocked", AckCooldownAction::IdentityAnnounce, t_burst));
-
-        // 0.5 秒后补回 1 个令牌，刚才被全局限流拒绝的 peer-blocked 立刻可请求。
-        assert!(burst.try_acquire(
-            "peer-blocked",
-            AckCooldownAction::IdentityAnnounce,
-            t_burst + Duration::from_millis(500)
-        ));
-
-        // 发送失败回滚后无需等待 5 秒冷却，且 11 秒后过期记录会被清理。
-        let t_rb = t_burst + Duration::from_secs(20);
-        assert!(burst.try_acquire("peer-rb", AckCooldownAction::IdentityQuery, t_rb));
-        burst.rollback("peer-rb", AckCooldownAction::IdentityQuery, t_rb);
-        assert!(burst.try_acquire(
-            "peer-rb",
-            AckCooldownAction::IdentityQuery,
-            t_rb + Duration::from_millis(100)
-        ));
-
-        let t_prune = t_rb + Duration::from_secs(11);
-        assert!(burst.try_acquire("peer-fresh", AckCooldownAction::IdentityQuery, t_prune));
-        assert_eq!(burst.cooldowns.len(), 1);
-        assert!(burst.cooldowns.contains_key(&AckCooldownKey {
-            peer: "peer-fresh".to_string(),
-            action: AckCooldownAction::IdentityQuery,
-        }));
-    }
-
-    #[test]
-    fn announce_state_schedules_trailing_and_rolls_back_on_failure() {
-        let mut state = AnnounceState::default();
-        let t0 = Instant::now();
-
-        assert_eq!(
-            state.try_begin(AnnounceAttemptMode::Normal, t0),
-            AnnounceDecision::SendNow {
-                attempt_at: t0,
-                seq_at_start: 0,
-            }
-        );
-
-        // 去抖窗口内多次切房仅调度一次尾随广播。
-        assert_eq!(
-            state.try_begin(AnnounceAttemptMode::Normal, t0 + Duration::from_millis(500)),
-            AnnounceDecision::ScheduleTrailing {
-                wait: Duration::from_millis(1500),
-            }
-        );
-        assert_eq!(
-            state.try_begin(AnnounceAttemptMode::Normal, t0 + Duration::from_secs(1)),
-            AnnounceDecision::AlreadyScheduled
-        );
-
-        // 尾随触发时到达 2 秒窗口即刻发送。
-        let t_trailing = t0 + Duration::from_secs(2);
-        assert_eq!(
-            state.try_begin(AnnounceAttemptMode::Trailing, t_trailing),
-            AnnounceDecision::SendNow {
-                attempt_at: t_trailing,
-                seq_at_start: 0,
-            }
-        );
-
-        // 发送失败回滚后允许单次重试，成功后阻止过期重试。
-        assert!(state.rollback_failure(t_trailing, 0));
-        assert!(state.should_run_failure_retry(0));
-        assert_eq!(
-            state.try_begin(
-                AnnounceAttemptMode::Normal,
-                t0 + Duration::from_millis(2100)
-            ),
-            AnnounceDecision::SendNow {
-                attempt_at: t0 + Duration::from_millis(2100),
-                seq_at_start: 0,
-            }
-        );
-        state.record_success();
-        assert!(!state.should_run_failure_retry(0));
-    }
-
-    #[test]
-    fn encode_identity_payload_stays_within_payload_limit() {
-        let actor = audio_actor();
-        for action in ["announce", "announce_ack"] {
-            let encoded = actor
-                .encode_identity_payload(action)
-                .expect("serialized identity payload");
-            assert!(encoded.len() < MAX_PAYLOAD_BYTES);
-            let value: serde_json::Value =
-                serde_json::from_str(&encoded).expect("valid json payload");
-            assert_eq!(value["v"], PROTOCOL_VERSION);
-            assert_eq!(value["action"], action);
-        }
     }
 
     #[tokio::test]
     async fn commands_event_truncates_fields_clears_inflight_and_updates_snapshot() {
         let mut actor = audio_actor();
         actor.self_client_id = Some(7);
+        actor.open_protocol.on_connected(7, 5, Instant::now());
         actor.last_snapshot = Some((
             Vec::new(),
             vec![ClientView::from(ClientInfo {
@@ -900,10 +417,11 @@ mod tests {
                 ..client_info(12, 5, "MusicBot")
             })],
         ));
-        actor.commands_fetching.insert("bot-uid".into());
-
-        // 请求仍在途中时，重复调用 fetch_bot_commands 直接幂等跳过。
-        assert!(actor.fetch_bot_commands(12, "bot-uid").await.is_ok());
+        // 模拟在途请求未连客户端时回退：应返回 NotConnected
+        assert!(matches!(
+            actor.fetch_bot_commands(12, "bot-uid"),
+            Err(SessionError::NotConnected)
+        ));
 
         let mut events = actor.events.subscribe();
         let raw_commands: Vec<serde_json::Value> = (0..20)
@@ -923,7 +441,7 @@ mod tests {
         })
         .to_string();
 
-        actor.handle_commands_event(PluginCommandEvent {
+        actor.handle_open_protocol_command(PluginCommandEvent {
             name: COMMANDS_PLUGIN.into(),
             data: payload,
             invoker_id: 12,
@@ -931,12 +449,19 @@ mod tests {
             invoker_uid: "bot-uid".into(),
         });
 
-        assert!(!actor.commands_fetching.contains("bot-uid"));
-        let cached = actor.peer_commands.get("bot-uid").expect("cached commands");
-        assert_eq!(cached.len(), 16);
-        assert!(cached.iter().all(|c| c.name.chars().count() <= 24));
-        assert!(cached.iter().all(|c| c.args.chars().count() <= 32));
-        assert!(cached.iter().all(|c| c.desc.chars().count() <= 64));
+        let cached = actor
+            .open_protocol
+            .peer_commands("bot-uid")
+            .expect("cached commands");
+        assert_eq!(cached.commands.len(), 16);
+        assert!(cached.commands.iter().all(|c| c.name.chars().count() <= 24));
+        assert!(
+            cached
+                .commands
+                .iter()
+                .all(|c| c.args.as_deref().is_none_or(|a| a.chars().count() <= 32))
+        );
+        assert!(cached.commands.iter().all(|c| c.desc.chars().count() <= 64));
 
         let Some(SessionEvent::Snapshot { clients, .. }) = events.try_recv().ok() else {
             panic!("expected Snapshot event after commands update");
@@ -946,7 +471,47 @@ mod tests {
         assert_eq!(bot.bot_command_prefix.as_deref(), Some("!"));
 
         // 命中本地缓存时 fetch_bot_commands 直接返回 Ok(())，跳过网络请求。
-        assert!(actor.fetch_bot_commands(12, "bot-uid").await.is_ok());
-        assert!(!actor.commands_fetching.contains("bot-uid"));
+        assert!(actor.fetch_bot_commands(12, "bot-uid").is_ok());
+    }
+
+    #[tokio::test]
+    async fn flood_error_524_halts_background_probe_and_logs_warning() {
+        let mut actor = audio_actor();
+        let now = Instant::now();
+        actor.open_protocol.on_connected(7, 5, now);
+        let mut events = actor.events.subscribe();
+
+        let eff = actor.open_protocol.sync_directory_peers(
+            &[(7, "self-uid", 5), (12, "peer-a", 8), (13, "peer-b", 9)],
+            now,
+        );
+        assert_eq!(eff.timers.len(), 1);
+        let probe_eff = actor
+            .open_protocol
+            .on_timer(TimerToken::ProbeNext, now + Duration::from_millis(1500));
+        assert_eq!(probe_eff.outbound.len(), 1);
+
+        actor.handle_open_protocol_send_result(
+            IDENTITY_PLUGIN,
+            Some(12),
+            probe_eff.outbound[0].receipt.clone(),
+            SendOutcome::Failed { flood: true },
+            Some("TeamSpeak server error: flooding (id=524)".into()),
+        );
+
+        let drained: Vec<SessionEvent> = std::iter::from_fn(|| events.try_recv().ok()).collect();
+        assert!(drained.iter().any(|ev| {
+            matches!(
+                ev,
+                SessionEvent::Log { level, message }
+                    if level == "warn" && message.contains("防洪")
+            )
+        }));
+
+        let after_halt = actor
+            .open_protocol
+            .on_timer(TimerToken::ProbeNext, now + Duration::from_millis(2400));
+        assert!(after_halt.outbound.is_empty());
+        assert!(after_halt.timers.is_empty());
     }
 }
