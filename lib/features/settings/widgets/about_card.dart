@@ -18,6 +18,8 @@ const String _issuesUrl = 'https://github.com/Dr1mH4X/FlSpeak/issues';
 const String _licenseUrl =
     'https://github.com/Dr1mH4X/FlSpeak/blob/main/LICENSE';
 const String _tsclientUrl = 'https://github.com/Dr1mH4X/tsclient-rs';
+const String _openProtocolUrl =
+    'https://github.com/Dr1mH4X/tsclient-rs/blob/master/docs/open-protocol.md';
 
 /// 在系统默认浏览器中打开外部链接。
 Future<bool> openExternalUrl(String url) async {
@@ -204,12 +206,14 @@ class _AboutCardState extends ConsumerState<AboutCard> {
             ),
             const SizedBox(height: 24),
 
-            // 6. 分割线与底部 Powered by tsclient-rs
+            // 6. 分割线与底部 Powered by tsclient-rs · Supports OpenProtocol
             Divider(color: dividerColorOf(context), height: 1),
             const SizedBox(height: 16),
             Center(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
+              child: Wrap(
+                alignment: WrapAlignment.center,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                runSpacing: 4,
                 children: [
                   Text(
                     'Powered by ',
@@ -222,6 +226,23 @@ class _AboutCardState extends ConsumerState<AboutCard> {
                     text: 'tsclient-rs',
                     url: _tsclientUrl,
                     onTap: () => widget.onOpenUrl(_tsclientUrl),
+                    textStyle: context.texts.bodySmall?.copyWith(
+                      color: scheme.primary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
+                  ),
+                  Text(
+                    ' · Supports ',
+                    style: context.texts.bodySmall?.copyWith(
+                      color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+                      fontSize: 12,
+                    ),
+                  ),
+                  _InteractiveLink(
+                    text: 'OpenProtocol',
+                    url: _openProtocolUrl,
+                    onTap: () => widget.onOpenUrl(_openProtocolUrl),
                     textStyle: context.texts.bodySmall?.copyWith(
                       color: scheme.primary,
                       fontWeight: FontWeight.w600,

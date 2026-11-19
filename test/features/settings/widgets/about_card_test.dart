@@ -97,6 +97,8 @@ void main() {
     );
     expect(find.text('Powered by '), findsOneWidget);
     expect(find.text('tsclient-rs'), findsOneWidget);
+    expect(find.text(' · Supports '), findsOneWidget);
+    expect(find.text('OpenProtocol'), findsOneWidget);
 
     // 验证所有链接 MouseRegion 鼠标悬停均为可点击手型
     final mouseRegions = tester.widgetList<MouseRegion>(
@@ -169,6 +171,18 @@ void main() {
       await tester.tap(find.text('tsclient-rs'));
       await tester.pumpAndSettle();
       expect(opened, contains('https://github.com/Dr1mH4X/tsclient-rs'));
+
+      // 点击 OpenProtocol 链接
+      await tester.ensureVisible(find.text('OpenProtocol'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OpenProtocol'));
+      await tester.pumpAndSettle();
+      expect(
+        opened,
+        contains(
+          'https://github.com/Dr1mH4X/tsclient-rs/blob/master/docs/open-protocol.md',
+        ),
+      );
     },
   );
 
