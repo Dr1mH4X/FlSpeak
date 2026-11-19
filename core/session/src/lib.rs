@@ -542,6 +542,7 @@ pub enum SessionCommand {
         target_uid: String,
         reply: oneshot::Sender<Result<(), SessionError>>,
     },
+    SyncAudioSettings(AudioSettings),
     Shutdown,
 }
 

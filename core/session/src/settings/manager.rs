@@ -9,6 +9,8 @@ use std::sync::{OnceLock, RwLock};
 use crate::settings::schema::{AppSettings, AudioSettings, UiSettings};
 
 static SETTINGS_MANAGER: OnceLock<SettingsManager> = OnceLock::new();
+type AudioListener = Box<dyn Fn(&AudioSettings) -> bool + Send + Sync>;
+static AUDIO_LISTENERS: OnceLock<RwLock<Vec<AudioListener>>> = OnceLock::new();
 
 /// 设置管理器。
 pub struct SettingsManager {
@@ -17,6 +19,23 @@ pub struct SettingsManager {
 }
 
 impl SettingsManager {
+    fn listeners() -> &'static RwLock<Vec<AudioListener>> {
+        AUDIO_LISTENERS.get_or_init(|| RwLock::new(Vec::new()))
+    }
+
+    /// 订阅音频设置变更；返回 `false` 时自动注销监听器。
+    pub fn subscribe_audio(listener: impl Fn(&AudioSettings) -> bool + Send + Sync + 'static) {
+        if let Ok(mut guard) = Self::listeners().write() {
+            guard.push(Box::new(listener));
+        }
+    }
+
+    fn notify_audio_listeners(audio: &AudioSettings) {
+        if let Ok(mut guard) = Self::listeners().write() {
+            guard.retain(|listener| listener(audio));
+        }
+    }
+
     /// 初始化或重置全局设置单例（幂等设计，兼容 Flutter Hot Restart）。
     ///
     /// 若单例已存在，将重新读取 `path` 处的配置文件并更新内存缓存，返回已有的单例。
@@ -24,20 +43,24 @@ impl SettingsManager {
         let loaded = Self::load_and_migrate(&path)?;
 
         if let Some(existing) = SETTINGS_MANAGER.get() {
-            let mut guard = existing
-                .inner
-                .write()
-                .map_err(|e| format!("获取设置写锁失败: {e}"))?;
-            *guard = loaded;
+            {
+                let mut guard = existing
+                    .inner
+                    .write()
+                    .map_err(|e| format!("获取设置写锁失败: {e}"))?;
+                *guard = loaded.clone();
+            }
+            Self::notify_audio_listeners(&loaded.audio);
             return Ok(existing);
         }
 
         let manager = Self {
             path,
-            inner: RwLock::new(loaded),
+            inner: RwLock::new(loaded.clone()),
         };
 
         let _ = SETTINGS_MANAGER.set(manager);
+        Self::notify_audio_listeners(&loaded.audio);
         SETTINGS_MANAGER
             .get()
             .ok_or_else(|| "初始化 SettingsManager 单例失败".to_string())
@@ -78,13 +101,21 @@ impl SettingsManager {
     /// 修改设置并执行原子写盘保存。
     pub fn update<R, F: FnOnce(&mut AppSettings) -> R>(f: F) -> Result<R, String> {
         let manager = Self::global()?;
-        let mut guard = manager
-            .inner
-            .write()
-            .map_err(|e| format!("获取设置写锁失败: {e}"))?;
+        let (result, changed_audio) = {
+            let mut guard = manager
+                .inner
+                .write()
+                .map_err(|e| format!("获取设置写锁失败: {e}"))?;
 
-        let result = f(&mut guard);
-        Self::save_atomic(&manager.path, &guard)?;
+            let prev_audio = guard.audio.clone();
+            let result = f(&mut guard);
+            Self::save_atomic(&manager.path, &guard)?;
+            let changed_audio = (guard.audio != prev_audio).then(|| guard.audio.clone());
+            (result, changed_audio)
+        };
+        if let Some(audio) = changed_audio {
+            Self::notify_audio_listeners(&audio);
+        }
         Ok(result)
     }
 
@@ -452,5 +483,41 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn subscribe_audio_notifies_and_prunes_disconnected_listeners() {
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let active = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+
+        let seen_cb = std::sync::Arc::clone(&seen);
+        let active_cb = std::sync::Arc::clone(&active);
+        SettingsManager::subscribe_audio(move |audio| {
+            if !active_cb.load(std::sync::atomic::Ordering::Relaxed) {
+                return false;
+            }
+            seen_cb
+                .lock()
+                .unwrap()
+                .push((audio.vad_threshold, audio.vad_hangover_frames));
+            true
+        });
+
+        let first = AudioSettings {
+            vad_threshold: 0.032,
+            vad_hangover_frames: 9,
+            ..AudioSettings::default()
+        };
+        SettingsManager::notify_audio_listeners(&first);
+        assert_eq!(seen.lock().unwrap().as_slice(), &[(0.032, 9)]);
+
+        active.store(false, std::sync::atomic::Ordering::Relaxed);
+        let second = AudioSettings {
+            vad_threshold: 0.055,
+            vad_hangover_frames: 4,
+            ..AudioSettings::default()
+        };
+        SettingsManager::notify_audio_listeners(&second);
+        assert_eq!(seen.lock().unwrap().len(), 1);
     }
 }

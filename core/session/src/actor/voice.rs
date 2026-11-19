@@ -649,6 +649,7 @@ impl Actor {
         if self.capture_active {
             return;
         }
+        self.sync_persisted_vad();
         let _ = self.voice.set_muted(self.voice_state.muted);
         let _ = self.voice.set_deafened(self.voice_state.deafened);
         let _ = self.voice.set_ptt_mode(self.voice_state.ptt_mode);
@@ -766,10 +767,22 @@ impl Actor {
             .can_send_voice(codec, produced_at, now)
     }
 
+    pub(super) fn apply_audio_settings(&mut self, audio: &AudioSettings) {
+        let _ = self
+            .voice
+            .set_vad_config(audio.vad_threshold, audio.vad_hangover_frames);
+    }
+
+    pub(super) fn sync_persisted_vad(&mut self) {
+        let audio = SettingsManager::with(|s| s.audio.clone()).unwrap_or_default();
+        self.apply_audio_settings(&audio);
+    }
+
     pub(super) fn start_voice(&mut self) {
         if !self.audio_enabled {
             return;
         }
+        self.sync_persisted_vad();
         let _ = self.voice.set_muted(self.voice_state.muted);
         let _ = self.voice.set_deafened(self.voice_state.deafened);
         let _ = self.voice.set_ptt_mode(self.voice_state.ptt_mode);
@@ -1386,5 +1399,28 @@ mod tests {
         actor.set_mic_permitted(true).unwrap();
         actor.apply_muted(false).unwrap();
         assert!(!actor.voice_state.muted);
+    }
+
+    #[tokio::test]
+    async fn audio_settings_vad_parameters_reach_voice_engine() {
+        tokio::task::LocalSet::new()
+            .run_until(async {
+                let mut actor = audio_actor();
+                // 默认取 AudioSettings::default()（0.015, 15）。
+                assert_eq!(actor.voice.vad_config().unwrap(), (0.015, 15));
+
+                let custom = AudioSettings {
+                    vad_threshold: 0.045,
+                    vad_hangover_frames: 6,
+                    ..AudioSettings::default()
+                };
+                assert!(
+                    actor
+                        .handle(SessionCommand::SyncAudioSettings(custom))
+                        .await
+                );
+                assert_eq!(actor.voice.vad_config().unwrap(), (0.045, 6));
+            })
+            .await;
     }
 }

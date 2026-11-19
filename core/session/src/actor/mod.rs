@@ -41,9 +41,9 @@ use tsclient_rs::{
 use crate::store::{self, identity_path};
 use crate::streams::{StreamCoordinator, StreamEndReason};
 use crate::{
-    AudioDeviceView, AudioDevicesView, BotCommandView, ChannelView, ClientType, ClientView,
-    ServerIconView, SessionCommand, SessionError, SessionEvent, SessionState, SettingsManager,
-    TextMessageView, TransferDirection, VoiceStateView,
+    AudioDeviceView, AudioDevicesView, AudioSettings, BotCommandView, ChannelView, ClientType,
+    ClientView, ServerIconView, SessionCommand, SessionError, SessionEvent, SessionState,
+    SettingsManager, TextMessageView, TransferDirection, VoiceStateView,
 };
 
 use connect::*;
@@ -259,6 +259,17 @@ impl Actor {
             .collect();
         let server_icons = crate::server_icons::load(&store_path, &active_server_ids);
         crate::channel_icons::prune_orphans(&store_path, &active_server_ids);
+        let initial_audio = SettingsManager::with(|s| s.audio.clone()).unwrap_or_default();
+        let _ = voice.set_vad_config(
+            initial_audio.vad_threshold,
+            initial_audio.vad_hangover_frames,
+        );
+        let audio_sync_tx = commands.clone();
+        SettingsManager::subscribe_audio(move |audio| {
+            audio_sync_tx
+                .send(SessionCommand::SyncAudioSettings(audio.clone()))
+                .is_ok()
+        });
         Self {
             registry,
             store_path,
@@ -413,7 +424,7 @@ impl Actor {
         self.teardown().await;
     }
 
-    async fn handle(&mut self, command: SessionCommand) -> bool {
+    pub(super) async fn handle(&mut self, command: SessionCommand) -> bool {
         match command {
             SessionCommand::Shutdown => return false,
             SessionCommand::RegisterServer {
@@ -843,6 +854,9 @@ impl Actor {
                 reply,
             } => {
                 let _ = reply.send(self.fetch_bot_commands(target_clid, &target_uid));
+            }
+            SessionCommand::SyncAudioSettings(audio) => {
+                self.apply_audio_settings(&audio);
             }
         }
         true
