@@ -214,6 +214,30 @@ void main() {
     },
   );
 
+  test('noiseSuppression defaults to true, round-trips flat and nested audio json, and falls back safely', () {
+    const defaults = SessionPreferences(nickname: 'TestUser');
+    expect(defaults.noiseSuppression, isTrue);
+
+    final flatRoundTrip = SessionPreferences.fromJson(
+      const SessionPreferences(
+        nickname: 'TestUser',
+        noiseSuppression: false,
+      ).toJson(),
+    );
+    expect(flatRoundTrip.noiseSuppression, isFalse);
+
+    final nestedAudio = SessionPreferences.fromJson(const {
+      'audio': {'noiseSuppression': false},
+      'ui': {'nickname': 'TestUser', 'noiseSuppression': true},
+    });
+    expect(nestedAudio.noiseSuppression, isFalse);
+
+    final fallback = SessionPreferences.fromJson(const {
+      'audio': {'noiseSuppression': 'not-a-bool'},
+    });
+    expect(fallback.noiseSuppression, isTrue);
+  });
+
   test('screen share preferences default to 720p, 30fps, h264, maintainFramerate and round-trip', () {
     const defaults = SessionPreferences(nickname: 'TestUser');
     expect(defaults.screenShareResolution, ScreenShareResolutionPreset.p720);

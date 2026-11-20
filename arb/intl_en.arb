@@ -187,6 +187,7 @@
   "settingsPttHotkeyRecordHint": "Press any key… (Esc to cancel)",
   "settingsPttHotkeyUnsupported": "This key is not supported. Try another one.",
   "settingsPttHotkeyClear": "Clear",
+  "settingsNoiseSuppression": "Noise suppression",
   "settingsInputDevice": "Microphone",
   "settingsOutputDevice": "Speaker",
   "settingsVoiceMeter": "Audio display",

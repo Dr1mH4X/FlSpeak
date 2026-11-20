@@ -187,6 +187,7 @@
   "settingsPttHotkeyRecordHint": "按下任意键…（Esc 取消）",
   "settingsPttHotkeyUnsupported": "该按键不支持，请换一个。",
   "settingsPttHotkeyClear": "清除",
+  "settingsNoiseSuppression": "降噪",
   "settingsInputDevice": "麦克风",
   "settingsOutputDevice": "扬声器",
   "settingsVoiceMeter": "音频显示",

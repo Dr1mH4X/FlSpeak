@@ -800,6 +800,12 @@ abstract class AppLocalizations {
   /// **'Clear'**
   String get settingsPttHotkeyClear;
 
+  /// No description provided for @settingsNoiseSuppression.
+  ///
+  /// In en, this message translates to:
+  /// **'Noise suppression'**
+  String get settingsNoiseSuppression;
+
   /// No description provided for @settingsInputDevice.
   ///
   /// In en, this message translates to:

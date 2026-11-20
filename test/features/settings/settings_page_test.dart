@@ -964,4 +964,80 @@ void main() {
       await verifyForSize(const Size(900, 800), wide: true);
     },
   );
+
+  testWidgets(
+    'voice settings shows noise suppression switch under ptt hotkey and toggles preference',
+    (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_Core()),
+          sessionViewProvider.overrideWith(_Session.new),
+          updateProvider.overrideWith(_Update.new),
+          appVersionProvider.overrideWithValue('0.1.0'),
+          storePathProvider.overrideWithValue(
+            '/tmp/flspeak-test/preferences.json',
+          ),
+          preferencesStoreProvider.overrideWithValue(
+            PreferencesStore.inMemory(
+              preferences: const SessionPreferences(
+                nickname: 'Test',
+                locale: 'zh',
+              ),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            locale: const Locale('zh'),
+            localizationsDelegates: const [
+              ...AppLocalizations.localizationsDelegates,
+              PrismUiLocalizationsDelegate(),
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) =>
+                PrismRootScope(brightness: Brightness.light, child: child!),
+            home: const SettingsPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(SettingsTile, '通用'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(SettingsTile, '语音'));
+      await tester.pumpAndSettle();
+
+      final pttHotkeyTile = find.widgetWithText(SettingsTile, '按住说话快捷键');
+      final noiseTile = find.widgetWithText(SettingsTile, '降噪');
+      await tester.ensureVisible(noiseTile);
+      expect(noiseTile, findsOneWidget);
+      expect(
+        tester.getTopLeft(noiseTile).dy,
+        greaterThan(tester.getTopLeft(pttHotkeyTile).dy),
+      );
+      expect(
+        find.descendant(of: noiseTile, matching: find.byType(Switch)),
+        findsOneWidget,
+      );
+      expect(container.read(preferencesProvider).noiseSuppression, isTrue);
+
+      await tester.tap(noiseTile);
+      await tester.pumpAndSettle();
+      expect(container.read(preferencesProvider).noiseSuppression, isFalse);
+
+      await tester.tap(
+        find.descendant(of: noiseTile, matching: find.byType(Switch)),
+      );
+      await tester.pumpAndSettle();
+      expect(container.read(preferencesProvider).noiseSuppression, isTrue);
+      expect(find.byType(Tooltip), findsNothing);
+    },
+  );
 }

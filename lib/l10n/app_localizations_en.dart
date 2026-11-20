@@ -395,6 +395,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsPttHotkeyClear => 'Clear';
 
   @override
+  String get settingsNoiseSuppression => 'Noise suppression';
+
+  @override
   String get settingsInputDevice => 'Microphone';
 
   @override

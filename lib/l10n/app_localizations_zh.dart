@@ -388,6 +388,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsPttHotkeyClear => '清除';
 
   @override
+  String get settingsNoiseSuppression => '降噪';
+
+  @override
   String get settingsInputDevice => '麦克风';
 
   @override

@@ -313,6 +313,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                             : pttHotkeyDisplayName(pttHotkeyKey),
                         onTap: () => unawaited(_pickPttHotkey()),
                       ),
+                      SettingsTile(
+                        icon: Icons.noise_aware_rounded,
+                        title: l10n.settingsNoiseSuppression,
+                        trailing: Switch(
+                          value: preferences.noiseSuppression,
+                          onChanged: ref
+                              .read(preferencesProvider.notifier)
+                              .setNoiseSuppression,
+                        ),
+                        onTap: () => ref
+                            .read(preferencesProvider.notifier)
+                            .setNoiseSuppression(!preferences.noiseSuppression),
+                      ),
                     ],
                   ),
                   generateSection(
