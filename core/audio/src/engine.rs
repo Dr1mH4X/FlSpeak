@@ -367,7 +367,9 @@ impl CaptureLoopState {
                         stage: AudioStage::Codec,
                         message: err.to_string(),
                     });
-                    break;
+                    if !self.pipeline.has_pending_packets() {
+                        break;
+                    }
                 }
             }
         }
@@ -650,7 +652,9 @@ fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, meter: Arc<
                         stage: AudioStage::Codec,
                         message: err.to_string(),
                     });
-                    break;
+                    if !state.pipeline.has_pending_packets() {
+                        break;
+                    }
                 }
             }
         }

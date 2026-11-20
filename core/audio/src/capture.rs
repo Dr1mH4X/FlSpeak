@@ -17,7 +17,7 @@ use crate::vad::{EnergyVad, Vad};
 use crate::{AudioError, CodecError};
 
 /// 采集缓冲上限：约 240ms。超过就丢到两帧，避免延迟累积。
-const MAX_PENDING_FRAMES: usize = 12;
+pub const MAX_PENDING_FRAMES: usize = 12;
 const RESYNC_FRAMES: usize = 2;
 
 /// 开口首帧线性淡入时长：5ms @ 48kHz = 240 样本/声道。
@@ -97,6 +97,11 @@ struct PendingPacket {
     pcm: Vec<f32>,
 }
 
+enum PendingEntry {
+    Packet(PendingPacket),
+    Error(AudioError),
+}
+
 fn apply_fade_in(samples: &mut [f32], channels: u16) {
     let ch = (channels as usize).max(1);
     let total_frames = samples.len() / ch;
@@ -139,7 +144,7 @@ pub struct CapturePipeline {
     pcm: VecDeque<f32>,
     frame: Vec<f32>,
     preroll: Vec<f32>,
-    pending_packets: VecDeque<PendingPacket>,
+    pending_packets: VecDeque<PendingEntry>,
     last_sent_frame: Vec<f32>,
     last_frame_faded_out: bool,
     silent_frames: usize,
@@ -155,6 +160,8 @@ pub struct CapturePipeline {
     enabled: bool,
     received_any: bool,
     too_small_streak: usize,
+    #[cfg(test)]
+    fail_next_encode: bool,
 }
 
 impl CapturePipeline {
@@ -191,6 +198,8 @@ impl CapturePipeline {
             enabled: false,
             received_any: false,
             too_small_streak: 0,
+            #[cfg(test)]
+            fail_next_encode: false,
         })
     }
 
@@ -228,9 +237,9 @@ impl CapturePipeline {
     }
 
     pub fn has_pending_eos(&self) -> bool {
-        self.pending_packets
-            .front()
-            .is_some_and(|pending| pending.packet.data.is_empty())
+        self.pending_packets.front().is_some_and(
+            |pending| matches!(pending, PendingEntry::Packet(p) if p.packet.data.is_empty()),
+        )
     }
 
     pub fn set_vad_config(&mut self, threshold: f32, hangover_frames: usize) {
@@ -239,7 +248,7 @@ impl CapturePipeline {
         self.vad_hangover_frames = vad.hangover_frames() as usize;
         self.vad = Box::new(vad);
         if !self.ptt_mode && self.speaking {
-            self.finish_speaking_with_tail(1);
+            self.finish_speaking_with_tail();
         }
     }
 
@@ -267,13 +276,11 @@ impl CapturePipeline {
 
     pub fn end(&mut self) {
         if self.speaking {
-            self.pending_packets.push_back(PendingPacket {
-                packet: CapturePacket {
-                    codec: self.codec,
-                    data: Vec::new(),
-                },
-                pcm: Vec::new(),
-            });
+            if self.muted || self.deafened {
+                self.discard_queued_audio_for_mute();
+            } else {
+                self.finish_speaking_with_tail();
+            }
         }
         self.pcm.clear();
         self.preroll.clear();
@@ -292,13 +299,11 @@ impl CapturePipeline {
         let target = codec_format(codec).ok_or(AudioError::UnsupportedCodec(codec))?;
         let next_encoder = OpusEncoder::new(codec)?;
         if self.speaking {
-            self.pending_packets.push_back(PendingPacket {
-                packet: CapturePacket {
-                    codec: self.codec,
-                    data: Vec::new(),
-                },
-                pcm: Vec::new(),
-            });
+            if self.muted || self.deafened {
+                self.discard_queued_audio_for_mute();
+            } else {
+                self.finish_speaking_with_tail();
+            }
         }
         self.encoder = next_encoder;
         self.denoiser = DenoiseState::new();
@@ -323,14 +328,7 @@ impl CapturePipeline {
         let was_deafened = self.deafened;
         self.deafened = deafened;
         if deafened {
-            if self.speaking {
-                self.finish_speaking_with_tail(1);
-            }
-            self.pcm.clear();
-            self.preroll.clear();
-            self.vad.reset();
-            self.speaking = false;
-            self.ptt_active = false;
+            self.discard_queued_audio_for_mute();
         } else if was_deafened && !self.muted {
             self.pcm.clear();
             self.preroll.clear();
@@ -341,14 +339,7 @@ impl CapturePipeline {
         let was_muted = self.muted;
         self.muted = muted;
         if muted {
-            if self.speaking {
-                self.finish_speaking_with_tail(1);
-            }
-            self.pcm.clear();
-            self.preroll.clear();
-            self.vad.reset();
-            self.speaking = false;
-            self.ptt_active = false;
+            self.discard_queued_audio_for_mute();
         } else if was_muted && !self.deafened {
             self.pcm.clear();
             self.preroll.clear();
@@ -360,7 +351,11 @@ impl CapturePipeline {
             return;
         }
         if self.speaking {
-            self.finish_speaking_with_tail(1);
+            if self.muted || self.deafened {
+                self.discard_queued_audio_for_mute();
+            } else {
+                self.finish_speaking_with_tail();
+            }
         }
         self.ptt_mode = enabled;
         self.ptt_active = false;
@@ -374,7 +369,11 @@ impl CapturePipeline {
         self.ptt_active = active;
         if !active {
             if self.speaking {
-                self.finish_speaking_with_tail(2);
+                if self.muted || self.deafened {
+                    self.discard_queued_audio_for_mute();
+                } else {
+                    self.finish_speaking_with_tail();
+                }
             }
             self.speaking = false;
             self.pcm.clear();
@@ -460,6 +459,11 @@ impl CapturePipeline {
     }
 
     fn encode_pcm_frame(&mut self, frame: &mut [f32]) -> Result<Option<CapturePacket>, AudioError> {
+        #[cfg(test)]
+        if self.fail_next_encode {
+            self.fail_next_encode = false;
+            return Err(CodecError::Opus("injected encode failure".into()).into());
+        }
         for sample in frame.iter_mut() {
             *sample = sample.clamp(-1.0, 1.0);
         }
@@ -501,7 +505,67 @@ impl CapturePipeline {
         }))
     }
 
-    fn finish_speaking_with_tail(&mut self, max_full_frames: usize) {
+    fn push_pending_packet(&mut self, packet: CapturePacket, pcm: Vec<f32>) {
+        self.pending_packets
+            .push_back(PendingEntry::Packet(PendingPacket { packet, pcm }));
+    }
+
+    fn push_pending_eos(&mut self) {
+        self.pending_packets
+            .push_back(PendingEntry::Packet(PendingPacket {
+                packet: CapturePacket {
+                    codec: self.codec,
+                    data: Vec::new(),
+                },
+                pcm: Vec::new(),
+            }));
+    }
+
+    fn pop_pending_entry(&mut self) -> Option<Result<CapturePacket, AudioError>> {
+        self.pending_packets.pop_front().map(|entry| match entry {
+            PendingEntry::Packet(pending) => {
+                if !pending.pcm.is_empty() {
+                    self.last_sent_frame = pending.pcm;
+                }
+                Ok(pending.packet)
+            }
+            PendingEntry::Error(err) => Err(err),
+        })
+    }
+
+    fn encode_tail_frame(&mut self, tail: &mut [f32]) -> bool {
+        match self.encode_pcm_frame(tail) {
+            Ok(Some(pkt)) => {
+                self.push_pending_packet(pkt, tail.to_vec());
+                true
+            }
+            Ok(None) => true,
+            Err(err) => {
+                self.pending_packets.push_back(PendingEntry::Error(err));
+                false
+            }
+        }
+    }
+
+    fn discard_queued_audio_for_mute(&mut self) {
+        let had_eos = self
+            .pending_packets
+            .iter()
+            .any(|entry| matches!(entry, PendingEntry::Packet(p) if p.packet.data.is_empty()));
+        self.pending_packets.clear();
+        if self.speaking || had_eos {
+            self.push_pending_eos();
+        }
+        self.pcm.clear();
+        self.preroll.clear();
+        self.vad.reset();
+        self.speaking = false;
+        self.silent_frames = 0;
+        self.last_frame_faded_out = false;
+        self.ptt_active = false;
+    }
+
+    fn finish_speaking_with_tail(&mut self) {
         if !self.speaking {
             return;
         }
@@ -509,91 +573,77 @@ impl CapturePipeline {
         self.silent_frames = 0;
         let was_faded_out = std::mem::replace(&mut self.last_frame_faded_out, false);
 
-        if !was_faded_out && max_full_frames > 0 {
+        if !was_faded_out {
             let needed = frame_samples(self.target.channels);
             let ch = (self.target.channels as usize).max(1);
-            let full_frames = (self.pcm.len() / needed).min(max_full_frames);
+            let full_frames = self.pcm.len() / needed;
+            let rem_frames = (self.pcm.len() % needed) / ch;
             let mut tail = std::mem::take(&mut self.frame);
-            if full_frames > 0 {
-                for idx in 0..full_frames {
-                    tail.clear();
-                    tail.extend(self.pcm.drain(..needed));
-                    self.denoise_frame(&mut tail);
-                    if idx + 1 == full_frames {
-                        apply_fade_out(&mut tail, self.target.channels);
-                    }
-                    if let Ok(Some(pkt)) = self.encode_pcm_frame(&mut tail) {
-                        self.pending_packets.push_back(PendingPacket {
-                            packet: pkt,
-                            pcm: tail.clone(),
-                        });
-                    }
-                }
-            } else {
+            let mut encode_ok = true;
+
+            for idx in 0..full_frames {
                 tail.clear();
-                tail.resize(needed, 0.0);
-                let avail_frames = (self.pcm.len() / ch).min(FRAME_SAMPLES_PER_CHANNEL);
-                if avail_frames > 0 {
-                    let count = avail_frames * ch;
-                    for (dst, sample) in tail[..count].iter_mut().zip(self.pcm.drain(..count)) {
-                        *dst = sample;
-                    }
-                    self.denoise_frame(&mut tail);
-                    tail[count..].fill(0.0);
-                    apply_fade_out(&mut tail[..count], self.target.channels);
-                    if let Ok(Some(pkt)) = self.encode_pcm_frame(&mut tail) {
-                        self.pending_packets.push_back(PendingPacket {
-                            packet: pkt,
-                            pcm: tail.clone(),
-                        });
-                    }
-                } else {
-                    let last_tail = self
-                        .pending_packets
-                        .back()
-                        .filter(|p| !p.pcm.is_empty())
-                        .map(|p| p.pcm.as_slice())
-                        .unwrap_or(self.last_sent_frame.as_slice());
-                    if last_tail.len() >= ch {
-                        let base_offset = last_tail.len() - ch;
-                        let fade_frames =
-                            FADE_OUT_FRAMES_PER_CHANNEL.min(FRAME_SAMPLES_PER_CHANNEL);
-                        let denom = (fade_frames - 1).max(1) as f32;
-                        for i in 0..fade_frames {
-                            let gain = (fade_frames - 1 - i) as f32 / denom;
-                            for c in 0..ch {
-                                tail[i * ch + c] = last_tail[base_offset + c] * gain;
-                            }
-                        }
-                        if let Ok(Some(pkt)) = self.encode_pcm_frame(&mut tail) {
-                            self.pending_packets.push_back(PendingPacket {
-                                packet: pkt,
-                                pcm: tail.clone(),
-                            });
-                        }
-                    }
+                tail.extend(self.pcm.drain(..needed));
+                self.denoise_frame(&mut tail);
+                if idx + 1 == full_frames && rem_frames == 0 {
+                    apply_fade_out(&mut tail, self.target.channels);
+                }
+                if !self.encode_tail_frame(&mut tail) {
+                    encode_ok = false;
+                    break;
                 }
             }
+
+            if encode_ok && rem_frames > 0 {
+                tail.clear();
+                tail.resize(needed, 0.0);
+                let count = rem_frames * ch;
+                for (dst, sample) in tail[..count].iter_mut().zip(self.pcm.drain(..count)) {
+                    *dst = sample;
+                }
+                self.denoise_frame(&mut tail);
+                tail[count..].fill(0.0);
+                apply_fade_out(&mut tail[..count], self.target.channels);
+                let _ = self.encode_tail_frame(&mut tail);
+            } else if encode_ok && full_frames == 0 {
+                let last_sample = self
+                    .pending_packets
+                    .iter()
+                    .rev()
+                    .find_map(|entry| match entry {
+                        PendingEntry::Packet(p) if !p.pcm.is_empty() => Some(p.pcm.as_slice()),
+                        _ => None,
+                    })
+                    .unwrap_or(self.last_sent_frame.as_slice());
+                if last_sample.len() >= ch {
+                    tail.clear();
+                    tail.resize(needed, 0.0);
+                    let base_offset = last_sample.len() - ch;
+                    let fade_frames = FADE_OUT_FRAMES_PER_CHANNEL.min(FRAME_SAMPLES_PER_CHANNEL);
+                    let denom = (fade_frames - 1).max(1) as f32;
+                    for i in 0..fade_frames {
+                        let gain = (fade_frames - 1 - i) as f32 / denom;
+                        for c in 0..ch {
+                            tail[i * ch + c] = last_sample[base_offset + c] * gain;
+                        }
+                    }
+                    let _ = self.encode_tail_frame(&mut tail);
+                }
+            }
+
             tail.clear();
             self.frame = tail;
         }
 
-        self.pending_packets.push_back(PendingPacket {
-            packet: CapturePacket {
-                codec: self.codec,
-                data: Vec::new(),
-            },
-            pcm: Vec::new(),
-        });
+        self.pcm.clear();
+        self.preroll.clear();
+        self.push_pending_eos();
     }
 
     /// 产出下一帧完整 20ms 语音包（或收尾 EOS 空包）；样本未凑满 20ms 时等待下一批采集，绝不补零。
     pub fn take_packet(&mut self) -> Result<Option<CapturePacket>, AudioError> {
-        if let Some(pending) = self.pending_packets.pop_front() {
-            if !pending.pcm.is_empty() {
-                self.last_sent_frame = pending.pcm;
-            }
-            return Ok(Some(pending.packet));
+        if let Some(pending) = self.pop_pending_entry() {
+            return pending.map(Some);
         }
 
         if !self.enabled || self.muted || self.deafened || !self.received_any {
@@ -632,26 +682,18 @@ impl CapturePipeline {
                 if !was_faded_out {
                     apply_fade_out(&mut frame, self.target.channels);
                     if let Some(pkt) = self.encode_pcm_frame(&mut frame)? {
-                        self.pending_packets.push_back(PendingPacket {
-                            packet: pkt,
-                            pcm: frame.clone(),
-                        });
+                        self.push_pending_packet(pkt, frame.clone());
                     }
                 }
-                self.pending_packets.push_back(PendingPacket {
-                    packet: CapturePacket {
-                        codec: self.codec,
-                        data: Vec::new(),
-                    },
-                    pcm: Vec::new(),
-                });
-                if let Some(pending) = self.pending_packets.pop_front() {
-                    if !pending.pcm.is_empty() {
-                        self.last_sent_frame = pending.pcm;
+                self.push_pending_eos();
+                match self.pop_pending_entry() {
+                    Some(Ok(packet)) => Some(packet),
+                    Some(Err(err)) => {
+                        frame.clear();
+                        self.frame = frame;
+                        return Err(err);
                     }
-                    Some(pending.packet)
-                } else {
-                    None
+                    None => None,
                 }
             } else {
                 self.silent_frames = self.silent_frames.saturating_add(1);
@@ -682,16 +724,10 @@ impl CapturePipeline {
                 let trigger_pkt = self.encode_pcm_frame(&mut frame)?;
 
                 if let Some(pkt) = preroll_pkt {
-                    self.pending_packets.push_back(PendingPacket {
-                        packet: pkt,
-                        pcm: preroll.clone(),
-                    });
+                    self.push_pending_packet(pkt, preroll.clone());
                 }
                 if let Some(pkt) = trigger_pkt {
-                    self.pending_packets.push_back(PendingPacket {
-                        packet: pkt,
-                        pcm: frame.clone(),
-                    });
+                    self.push_pending_packet(pkt, frame.clone());
                 }
 
                 preroll.clear();
@@ -699,13 +735,10 @@ impl CapturePipeline {
                 frame.clear();
                 self.frame = frame;
 
-                if let Some(pending) = self.pending_packets.pop_front() {
-                    if !pending.pcm.is_empty() {
-                        self.last_sent_frame = pending.pcm;
-                    }
-                    return Ok(Some(pending.packet));
-                }
-                return Ok(None);
+                return match self.pop_pending_entry() {
+                    Some(entry) => entry.map(Some),
+                    None => Ok(None),
+                };
             }
 
             self.preroll.clear();
@@ -1058,18 +1091,144 @@ mod tests {
         assert!(synth_eos.data.is_empty());
         assert!(ptt_pipeline.take_packet().unwrap().is_none());
 
-        // 3. 静音打断通话：同样输出淡出尾帧与 1 个 EOS 包。
-        let mut mute_pipeline = CapturePipeline::new(VOICE_CODEC).unwrap();
-        mute_pipeline.begin();
-        mute_pipeline.push_capture(&loud_frame(1), OPUS_MONO);
-        assert!(mute_pipeline.take_packet().unwrap().is_some());
-        mute_pipeline.set_muted(true);
-        let mute_tail = mute_pipeline.take_packet().unwrap().expect("静音淡出尾帧");
-        assert!(!mute_tail.data.is_empty());
-        assert!(mute_pipeline.last_encoded_pcm()[FRAME_SAMPLES_PER_CHANNEL - 1].abs() < 1e-5);
-        let mute_eos = mute_pipeline.take_packet().unwrap().expect("静音 EOS 包");
-        assert!(mute_eos.data.is_empty());
-        assert!(mute_pipeline.take_packet().unwrap().is_none());
+        // 3. 静音或聋听打断通话：立即丢弃待编码的 PCM 与预录缓冲，只输出单个 0 字节 EOS 包。
+        for use_deafen in [false, true] {
+            let mut mute_pipeline = CapturePipeline::new(VOICE_CODEC).unwrap();
+            mute_pipeline.begin();
+            mute_pipeline.push_capture(&loud_frame(1), OPUS_MONO);
+            assert!(mute_pipeline.take_packet().unwrap().is_some());
+            mute_pipeline.push_capture(&loud_frame(1), OPUS_MONO);
+            if use_deafen {
+                mute_pipeline.set_deafened(true);
+            } else {
+                mute_pipeline.set_muted(true);
+            }
+            let mute_eos = mute_pipeline
+                .take_packet()
+                .unwrap()
+                .expect("静音应仅输出 EOS 包");
+            assert!(mute_eos.data.is_empty());
+            assert!(mute_pipeline.take_packet().unwrap().is_none());
+        }
+    }
+
+    #[test]
+    fn ptt_release_encodes_all_buffered_frames_and_partial_tail_before_eos() {
+        let mut pipeline = CapturePipeline::new(VOICE_CODEC).unwrap();
+        pipeline.begin();
+        pipeline.set_ptt_mode(true);
+        pipeline.set_ptt_active(true);
+
+        // 推入 3 个完整帧 + 半帧残留（480 样本），只先取出第 1 帧，保留 2.5 帧在缓冲中。
+        let mut partial = loud_frame(1);
+        partial.truncate(FRAME_SAMPLES_PER_CHANNEL / 2);
+        for _ in 0..3 {
+            pipeline.push_capture(&loud_frame(1), OPUS_MONO);
+        }
+        pipeline.push_capture(&partial, OPUS_MONO);
+        assert!(pipeline.take_packet().unwrap().is_some());
+
+        pipeline.set_ptt_active(false);
+        let mut emitted = Vec::new();
+        while let Some(pkt) = pipeline.take_packet().unwrap() {
+            emitted.push(pkt);
+        }
+        // 剩余 2 个完整帧 + 1 个部分尾帧 + 1 个 EOS。
+        assert_eq!(emitted.len(), 4);
+        assert!(emitted[..3].iter().all(|p| !p.data.is_empty()));
+        assert!(emitted[3].data.is_empty());
+        assert!(pipeline.pcm.is_empty());
+    }
+
+    #[test]
+    fn vad_reconfigure_drains_buffered_speech_without_replaying_after_eos() {
+        let mut pipeline = CapturePipeline::new(VOICE_CODEC).unwrap();
+        pipeline.set_noise_suppression(false);
+        pipeline.begin();
+        pipeline.set_vad_config(0.015, 2);
+
+        for _ in 0..3 {
+            pipeline.push_capture(&loud_frame(1), OPUS_MONO);
+        }
+        assert!(pipeline.take_packet().unwrap().is_some());
+        pipeline.set_vad_config(0.02, 2);
+
+        let mut packets = Vec::new();
+        while let Some(pkt) = pipeline.take_packet().unwrap() {
+            packets.push(pkt);
+        }
+        assert_eq!(packets.len(), 3);
+        assert!(!packets[0].data.is_empty());
+        assert!(!packets[1].data.is_empty());
+        assert!(packets[2].data.is_empty());
+        assert!(pipeline.pcm.is_empty());
+        assert!(pipeline.take_packet().unwrap().is_none());
+    }
+
+    #[test]
+    fn end_and_codec_switch_emit_faded_tail_before_eos() {
+        let mut end_pipeline = CapturePipeline::new(VOICE_CODEC).unwrap();
+        end_pipeline.begin();
+        end_pipeline.set_ptt_mode(true);
+        end_pipeline.set_ptt_active(true);
+        end_pipeline.push_capture(&loud_frame(1), OPUS_MONO);
+        assert!(end_pipeline.take_packet().unwrap().is_some());
+        end_pipeline.push_capture(&loud_frame(1), OPUS_MONO);
+        end_pipeline.end();
+        let end_tail = end_pipeline
+            .take_packet()
+            .unwrap()
+            .expect("停止采集应先输出淡出尾帧");
+        assert!(!end_tail.data.is_empty());
+        assert!(end_pipeline.last_encoded_pcm()[FRAME_SAMPLES_PER_CHANNEL - 1].abs() < 1e-5);
+        let end_eos = end_pipeline
+            .take_packet()
+            .unwrap()
+            .expect("停止采集应输出 EOS");
+        assert!(end_eos.data.is_empty());
+
+        let mut codec_pipeline = CapturePipeline::new(VOICE_CODEC).unwrap();
+        codec_pipeline.begin();
+        codec_pipeline.set_ptt_mode(true);
+        codec_pipeline.set_ptt_active(true);
+        codec_pipeline.push_capture(&loud_frame(1), OPUS_MONO);
+        assert!(codec_pipeline.take_packet().unwrap().is_some());
+        codec_pipeline.push_capture(&loud_frame(1), OPUS_MONO);
+        codec_pipeline.set_codec(MUSIC_CODEC).unwrap();
+        let old_tail = codec_pipeline
+            .take_packet()
+            .unwrap()
+            .expect("切编码前应输出旧编码淡出尾帧");
+        assert_eq!(old_tail.codec, VOICE_CODEC);
+        assert!(!old_tail.data.is_empty());
+        let old_eos = codec_pipeline
+            .take_packet()
+            .unwrap()
+            .expect("切编码应输出旧编码 EOS");
+        assert_eq!(old_eos.codec, VOICE_CODEC);
+        assert!(old_eos.data.is_empty());
+    }
+
+    #[test]
+    fn tail_encode_error_is_surfaced_before_eos() {
+        let mut pipeline = CapturePipeline::new(VOICE_CODEC).unwrap();
+        pipeline.begin();
+        pipeline.set_ptt_mode(true);
+        pipeline.set_ptt_active(true);
+        pipeline.push_capture(&loud_frame(1), OPUS_MONO);
+        assert!(pipeline.take_packet().unwrap().is_some());
+
+        pipeline.push_capture(&loud_frame(1), OPUS_MONO);
+        pipeline.fail_next_encode = true;
+        pipeline.set_ptt_active(false);
+
+        assert!(pipeline.take_packet().is_err());
+        let eos = pipeline
+            .take_packet()
+            .unwrap()
+            .expect("出错后仍应产出 EOS 避免远端误触发 PLC");
+        assert!(eos.data.is_empty());
+        assert!(pipeline.take_packet().unwrap().is_none());
     }
 
     #[test]
@@ -1145,26 +1304,69 @@ mod tests {
 
     #[test]
     fn nnnoiseless_preserves_voice_in_voice_codec_and_bypasses_music_codec() {
-        // VOICE_CODEC：启用 RNNoise 降噪（×32768 / ÷32768），正常人声保持可观幅值不被压成静音。
+        fn rms_of(pcm: &[f32]) -> f32 {
+            (pcm.iter().map(|s| s * s).sum::<f32>() / pcm.len() as f32).sqrt()
+        }
+
+        fn broadband_noise(seed: &mut u32, amplitude: f32) -> Vec<f32> {
+            (0..FRAME_SAMPLES_PER_CHANNEL)
+                .map(|_| {
+                    *seed ^= *seed << 13;
+                    *seed ^= *seed >> 17;
+                    *seed ^= *seed << 5;
+                    ((*seed as i16) as f32 / 32768.0) * amplitude
+                })
+                .collect()
+        }
+
+        // VOICE_CODEC：启用 RNNoise 降噪时应显著抑制稳态底噪，同时保留带噪人声能量。
         let mut voice = CapturePipeline::new(VOICE_CODEC).unwrap();
         assert!(voice.noise_suppression());
         voice.begin();
         voice.set_ptt_mode(true);
         voice.set_ptt_active(true);
 
+        let mut bypassed = CapturePipeline::new(VOICE_CODEC).unwrap();
+        bypassed.set_noise_suppression(false);
+        bypassed.begin();
+        bypassed.set_ptt_mode(true);
+        bypassed.set_ptt_active(true);
+
+        let mut seed_a = 0x1357_2468u32;
+        let mut seed_b = 0x1357_2468u32;
         let clean_voice = loud_frame(1);
-        for _ in 0..3 {
-            voice.push_capture(&clean_voice, OPUS_MONO);
-            let pkt = voice.take_packet().unwrap().expect("语音帧应编码产出");
-            assert!(!pkt.data.is_empty());
+
+        // 1. 含噪人声段：人声幅值保持在可观水平。
+        for _ in 0..4 {
+            let n_a = broadband_noise(&mut seed_a, 0.06);
+            let n_b = broadband_noise(&mut seed_b, 0.06);
+            let noisy_a: Vec<f32> = clean_voice.iter().zip(&n_a).map(|(v, n)| v + n).collect();
+            let noisy_b: Vec<f32> = clean_voice.iter().zip(&n_b).map(|(v, n)| v + n).collect();
+            voice.push_capture(&noisy_a, OPUS_MONO);
+            bypassed.push_capture(&noisy_b, OPUS_MONO);
+            assert!(voice.take_packet().unwrap().is_some());
+            assert!(bypassed.take_packet().unwrap().is_some());
         }
-        let denoised_rms = {
-            let pcm = voice.last_encoded_pcm();
-            (pcm.iter().map(|s| s * s).sum::<f32>() / pcm.len() as f32).sqrt()
-        };
+        let denoised_voice_rms = rms_of(voice.last_encoded_pcm());
         assert!(
-            denoised_rms > 0.08,
-            "RNNoise 正常人声幅值不应被压成静音，实际 rms={denoised_rms}"
+            denoised_voice_rms > 0.08,
+            "RNNoise 含噪人声幅值不应被压成静音，实际 rms={denoised_voice_rms}"
+        );
+
+        // 2. 纯背景噪声段：启用降噪的输出底噪 RMS 必须明显低于未降噪基线。
+        for _ in 0..10 {
+            let n_a = broadband_noise(&mut seed_a, 0.06);
+            let n_b = broadband_noise(&mut seed_b, 0.06);
+            voice.push_capture(&n_a, OPUS_MONO);
+            bypassed.push_capture(&n_b, OPUS_MONO);
+            assert!(voice.take_packet().unwrap().is_some());
+            assert!(bypassed.take_packet().unwrap().is_some());
+        }
+        let denoised_noise_rms = rms_of(voice.last_encoded_pcm());
+        let bypassed_noise_rms = rms_of(bypassed.last_encoded_pcm());
+        assert!(
+            denoised_noise_rms < bypassed_noise_rms * 0.4,
+            "RNNoise 应抑制背景噪声，denoised={denoised_noise_rms}, bypassed={bypassed_noise_rms}"
         );
 
         // MUSIC_CODEC：即使 noise_suppression=true 也必须自动旁路，不改变立体声原始波形。
