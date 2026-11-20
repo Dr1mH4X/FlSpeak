@@ -332,22 +332,18 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
         title: desktop ? l10n.serversTitle : l10n.appName,
         actions: [
           if (connected && (desktop || !inCompactTabs))
-            desktop
-                ? TextButton.icon(
+            Semantics(
+              label: l10n.workspaceReturn,
+              button: true,
+              child: ElasticPress(
+                child: AppBarActionButton(
+                  data: IconButtonData(
+                    glyph: Glyphs.chevronForward,
                     onPressed: () => context.go(AppRoutes.workspace),
-                    icon: const Icon(
-                      Icons.arrow_forward_rounded,
-                      size: IconSizes.medium,
-                    ),
-                    label: Text(l10n.workspaceReturn),
-                  )
-                : IconButton(
-                    onPressed: () => context.go(AppRoutes.workspace),
-                    icon: Icon(
-                      Icons.arrow_forward_rounded,
-                      semanticLabel: l10n.workspaceReturn,
-                    ),
                   ),
+                ),
+              ),
+            ),
           if (!desktop && !inCompactTabs)
             IconButton(
               onPressed: () => context.push(AppRoutes.settings),

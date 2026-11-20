@@ -34,6 +34,7 @@ export 'package:prism_ui/prism_ui.dart'
         ActivityIndicator,
         AlertDialog,
         AnimatedVisibility,
+        AppBarActionButton,
         AppBarClearance,
         AppCorner,
         AppRadius,
