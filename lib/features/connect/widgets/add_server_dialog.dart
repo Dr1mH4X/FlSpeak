@@ -96,10 +96,10 @@ Future<ServerProfileView?> showAddServerDialog(
                                     : l10n.commonSave,
                               ),
                               const SizedBox(width: 8),
-                              Icon(
+                              GlyphIcon(
                                 server == null
-                                    ? Icons.arrow_forward_rounded
-                                    : Icons.check_rounded,
+                                    ? Glyphs.chevronForward
+                                    : Glyphs.check,
                                 size: IconSizes.small,
                               ),
                             ],

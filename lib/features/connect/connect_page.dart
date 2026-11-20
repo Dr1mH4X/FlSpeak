@@ -523,19 +523,25 @@ class _ServerSection extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             if (context.isCompact)
-              ElasticButton(
-                child: IconButton.filled(
-                  onPressed: onAdd,
-                  icon: Icon(Icons.add_rounded, semanticLabel: l10n.serverAdd),
+              Semantics(
+                label: l10n.serverAdd,
+                button: true,
+                child: TonalButtonTheme(
+                  size: TonalButtonSize.section,
+                  child: ElasticPress(
+                    child: IconButton(
+                      onPressed: onAdd,
+                      icon: const GlyphIcon(AppGlyphs.add),
+                    ),
+                  ),
                 ),
               )
             else
-              ElasticButton(
-                child: FilledButton.icon(
-                  onPressed: onAdd,
-                  icon: const Icon(Icons.add_rounded, size: IconSizes.toolbar),
-                  label: Text(l10n.serverAdd),
-                ),
+              TonalButton(
+                size: TonalButtonSize.section,
+                glyph: AppGlyphs.add,
+                label: l10n.serverAdd,
+                onPressed: onAdd,
               ),
           ],
         ),
@@ -729,9 +735,9 @@ class _ServerSearchControlState extends State<_ServerSearchControl>
                     iconSize: IconSizes.toolbar,
                     shape: AppShape.full,
                   ),
-                  icon: Icon(
-                    Icons.search_rounded,
-                    semanticLabel: l10n.serverSearchLabel,
+                  icon: Semantics(
+                    label: l10n.serverSearchLabel,
+                    child: const GlyphIcon(Glyphs.search),
                   ),
                 ),
               ),
@@ -786,8 +792,8 @@ class _ServerSearchControlState extends State<_ServerSearchControl>
                             focusedBorder: const NoInputBorder(),
                             errorBorder: const NoInputBorder(),
                             focusedErrorBorder: const NoInputBorder(),
-                            prefixIcon: Icon(
-                              Icons.search_rounded,
+                            prefixIcon: GlyphIcon(
+                              Glyphs.search,
                               size: IconSizes.toolbar,
                               color: scheme.onSurface,
                             ),
@@ -813,9 +819,9 @@ class _ServerSearchControlState extends State<_ServerSearchControl>
                                         iconSize: IconSizes.medium,
                                         shape: AppShape.full,
                                       ),
-                                      icon: Icon(
-                                        Icons.close_rounded,
-                                        semanticLabel: l10n.serverSearchClear,
+                                      icon: Semantics(
+                                        label: l10n.serverSearchClear,
+                                        child: const GlyphIcon(Glyphs.close),
                                       ),
                                     ),
                                   ),
@@ -885,7 +891,7 @@ class _EmptyServers extends StatelessWidget {
                   backgroundColor: scheme.secondaryContainer,
                   foregroundColor: scheme.onSecondaryContainer,
                 ),
-                icon: const Icon(Icons.add_rounded, size: IconSizes.toolbar),
+                icon: const GlyphIcon(AppGlyphs.add, size: IconSizes.toolbar),
                 label: Text(l10n.serverEmptyAction),
               ),
             ),
