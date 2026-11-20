@@ -758,6 +758,18 @@ abstract class AppLocalizations {
   /// **'Dark'**
   String get settingsThemeDark;
 
+  /// No description provided for @settingsVoiceMicrophone.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone'**
+  String get settingsVoiceMicrophone;
+
+  /// No description provided for @settingsVoiceDevices.
+  ///
+  /// In en, this message translates to:
+  /// **'Devices'**
+  String get settingsVoiceDevices;
+
   /// No description provided for @settingsPttMode.
   ///
   /// In en, this message translates to:

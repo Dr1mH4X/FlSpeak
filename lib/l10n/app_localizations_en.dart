@@ -373,6 +373,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsThemeDark => 'Dark';
 
   @override
+  String get settingsVoiceMicrophone => 'Microphone';
+
+  @override
+  String get settingsVoiceDevices => 'Devices';
+
+  @override
   String get settingsPttMode => 'Push to talk';
 
   @override

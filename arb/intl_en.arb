@@ -180,6 +180,8 @@
   "settingsThemeSystem": "System",
   "settingsThemeLight": "Light",
   "settingsThemeDark": "Dark",
+  "settingsVoiceMicrophone": "Microphone",
+  "settingsVoiceDevices": "Devices",
   "settingsPttMode": "Push to talk",
   "settingsPttHotkey": "Push-to-talk hotkey",
   "settingsPttHotkeyNone": "Not set",

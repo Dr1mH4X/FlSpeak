@@ -367,6 +367,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsThemeDark => '深色';
 
   @override
+  String get settingsVoiceMicrophone => '麦克风';
+
+  @override
+  String get settingsVoiceDevices => '设备';
+
+  @override
   String get settingsPttMode => '按住说话';
 
   @override

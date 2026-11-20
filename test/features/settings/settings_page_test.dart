@@ -237,8 +237,11 @@ void main() {
       await tester.pumpAndSettle();
 
       // 三级页面允许小标题并完整展示配置
-      expect(find.text('按住说话'), findsWidgets);
-      expect(find.text('麦克风'), findsWidgets);
+      expect(find.widgetWithText(ListHeader, '麦克风'), findsOneWidget);
+      expect(find.widgetWithText(ListHeader, '设备'), findsOneWidget);
+      expect(find.widgetWithText(SettingsTile, '按住说话'), findsOneWidget);
+      expect(find.widgetWithText(SettingsTile, '麦克风'), findsOneWidget);
+      expect(find.widgetWithText(SettingsTile, '扬声器'), findsOneWidget);
 
       // 点击顶部返回按钮返回二级通用菜单
       final backBtn = find.bySemanticsLabel(
@@ -559,8 +562,11 @@ void main() {
       await tester.pumpAndSettle();
 
       // 三级语音拥有小标题
-      expect(find.text('按住说话'), findsWidgets);
-      expect(find.text('麦克风'), findsWidgets);
+      expect(find.widgetWithText(ListHeader, '麦克风'), findsOneWidget);
+      expect(find.widgetWithText(ListHeader, '设备'), findsOneWidget);
+      expect(find.widgetWithText(SettingsTile, '按住说话'), findsOneWidget);
+      expect(find.widgetWithText(SettingsTile, '麦克风'), findsOneWidget);
+      expect(find.widgetWithText(SettingsTile, '扬声器'), findsOneWidget);
 
       // 按 ESC 退回二级通用
       await tester.sendKeyEvent(LogicalKeyboardKey.escape);
