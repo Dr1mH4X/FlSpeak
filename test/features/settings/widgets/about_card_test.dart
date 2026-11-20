@@ -1,9 +1,10 @@
 // ignore_for_file: depend_on_referenced_packages
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide AlertDialog;
 import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flspeak/core/notices.dart';
 import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/core/update_check.dart';
 import 'package:flspeak/features/settings/widgets/about_card.dart';
@@ -217,47 +218,145 @@ void main() {
     expect(opened, isEmpty);
   });
 
-  testWidgets('shows the update dot and opens the release page', (
-    tester,
-  ) async {
-    final semantics = tester.ensureSemantics();
-    final opened = <String>[];
-    var refreshCalls = 0;
-    await tester.pumpWidget(
-      buildTestWidget(
-        version: '0.1.0',
-        updateResult: const UpdateStateView(
-          available: true,
-          latestVersion: '0.2.0',
-          releaseUrl: 'https://github.com/Dr1mH4X/FlSpeak/releases/tag/v0.2.0',
+  testWidgets(
+    'shows the update dot on version pill without making it clickable',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      final opened = <String>[];
+      var refreshCalls = 0;
+      await tester.pumpWidget(
+        buildTestWidget(
+          version: '0.1.0',
+          updateResult: const UpdateStateView(
+            available: true,
+            latestVersion: '0.2.0',
+            releaseUrl:
+                'https://github.com/Dr1mH4X/FlSpeak/releases/tag/v0.2.0',
+            releaseNotes: '## 新增\n\n- 更新日志',
+          ),
+          checkClient: ({bool force = false}) async {
+            refreshCalls++;
+            return const UpdateStateView(available: false);
+          },
+          onOpenUrl: (url) async {
+            opened.add(url);
+            return true;
+          },
         ),
-        checkClient: () async {
-          refreshCalls++;
-          return const UpdateStateView(available: false);
-        },
-        onOpenUrl: (url) async {
-          opened.add(url);
-          return true;
-        },
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    expect(refreshCalls, 0);
-    expect(find.byType(UpdateDot), findsOneWidget);
-    final link = find.bySemanticsLabel('打开版本 0.2.0 的发布页面');
-    expect(link, findsOneWidget);
-    expect(
-      tester
-          .getSemantics(link)
-          .getSemanticsData()
-          .hasAction(SemanticsAction.tap),
-      isTrue,
-    );
+      expect(refreshCalls, 0);
+      expect(find.byType(UpdateDot), findsOneWidget);
+      final badge = find.bySemanticsLabel('有新版本 0.2.0');
+      expect(badge, findsOneWidget);
+      expect(
+        tester
+            .getSemantics(badge)
+            .getSemanticsData()
+            .hasAction(SemanticsAction.tap),
+        isFalse,
+      );
 
-    await tester.tap(find.text('v0.1.0'));
-    await tester.pumpAndSettle();
-    expect(opened, ['https://github.com/Dr1mH4X/FlSpeak/releases/tag/v0.2.0']);
-    semantics.dispose();
-  });
+      await tester.tap(find.text('v0.1.0'));
+      await tester.pumpAndSettle();
+      expect(find.text('发现新版本'), findsNothing);
+      expect(opened, isEmpty);
+      semantics.dispose();
+    },
+  );
+
+  testWidgets(
+    'manual check updates button handles available, up-to-date, and error results',
+    (tester) async {
+      final opened = <String>[];
+      var forceFlags = <bool>[];
+      var mode = 'available';
+
+      final container = ProviderContainer(
+        overrides: [
+          appVersionProvider.overrideWithValue('0.1.0'),
+          updateCheckClientProvider.overrideWithValue(({
+            bool force = false,
+          }) async {
+            forceFlags.add(force);
+            return switch (mode) {
+              'available' => const UpdateStateView(
+                available: true,
+                latestVersion: '0.2.0',
+                releaseUrl:
+                    'https://github.com/Dr1mH4X/FlSpeak/releases/tag/v0.2.0',
+                releaseNotes: '## 修复\n\n- 修复若干问题',
+              ),
+              'upToDate' => const UpdateStateView(available: false),
+              _ => throw StateError('network failed'),
+            };
+          }),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            localizationsDelegates: [
+              ...AppLocalizations.localizationsDelegates,
+              const PrismUiLocalizationsDelegate(),
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            locale: const Locale('zh'),
+            builder: (context, child) =>
+                PrismRootScope(brightness: Brightness.light, child: child!),
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: AboutCard(
+                  version: '0.1.0',
+                  onOpenUrl: (url) async {
+                    opened.add(url);
+                    return true;
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 1. 有更新：弹出更新弹窗（无「不再提醒」），点击「前往下载」打开链接
+      await tester.tap(find.text('检查更新'));
+      await tester.pumpAndSettle();
+      expect(forceFlags, [true]);
+      expect(find.text('发现新版本'), findsOneWidget);
+      expect(find.text('不再提醒'), findsNothing);
+      expect(find.text('取消'), findsOneWidget);
+      await tester.tap(find.text('前往下载'));
+      await tester.pumpAndSettle();
+      expect(opened, [
+        'https://github.com/Dr1mH4X/FlSpeak/releases/tag/v0.2.0',
+      ]);
+
+      // 2. 已是最新：弹出单按钮提示框
+      mode = 'upToDate';
+      await tester.tap(find.text('检查更新'));
+      await tester.pumpAndSettle();
+      expect(forceFlags, [true, true]);
+      expect(find.text('当前应用已经是最新版了'), findsOneWidget);
+      await tester.tap(find.text('关闭'));
+      await tester.pumpAndSettle();
+      expect(find.text('当前应用已经是最新版了'), findsNothing);
+
+      // 3. 网络失败：通过 NoticeCenter 报错误横幅，不弹出「已是最新版」
+      mode = 'error';
+      await tester.tap(find.text('检查更新'));
+      await tester.pumpAndSettle();
+      expect(find.text('当前应用已经是最新版了'), findsNothing);
+      final notices = container.read(noticeCenterProvider);
+      expect(notices, isNotEmpty);
+      expect(notices.first.message, '检查更新失败，请稍后重试');
+      expect(notices.first.tone, NoticeTone.error);
+    },
+  );
 }

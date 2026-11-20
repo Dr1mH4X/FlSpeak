@@ -6,7 +6,7 @@ import 'dart:async';
 import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide AlertDialog;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart' show UpdateStateView;
@@ -23,6 +23,7 @@ import 'l10n/app_localizations.dart';
 import 'router.dart';
 import 'theme/app_theme.dart';
 import 'widgets/prism.dart';
+import 'widgets/update_dialog.dart';
 import 'widgets/window_header.dart';
 
 class TsClientApp extends ConsumerStatefulWidget {
@@ -45,6 +46,7 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
   bool _nativeRegistered = false;
   int _registrationRevision = 0;
   SessionController? _pttOwner;
+  String? _notifiedUpdateVersion;
 
   @override
   void initState() {
@@ -62,7 +64,52 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
     );
     if (ref.read(startupUpdateCheckEnabledProvider) &&
         ref.read(preferencesProvider).autoCheckUpdate) {
-      unawaited(ref.read(updateProvider.notifier).refresh());
+      unawaited(_checkUpdatesOnStartup());
+    }
+  }
+
+  Future<void> _checkUpdatesOnStartup() async {
+    final state = await ref.read(updateProvider.notifier).refresh();
+    if (!mounted ||
+        state == null ||
+        !state.available ||
+        !ref.read(preferencesProvider).autoCheckUpdate) {
+      return;
+    }
+    final version = state.latestVersion;
+    if (version == null || version == _notifiedUpdateVersion) {
+      return;
+    }
+    _notifiedUpdateVersion = version;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(_presentStartupUpdateDialog(state));
+    });
+  }
+
+  Future<void> _presentStartupUpdateDialog(UpdateStateView state) async {
+    final version = state.latestVersion;
+    if (version == null || !ref.read(preferencesProvider).autoCheckUpdate) {
+      return;
+    }
+    final navContext = ref.read(rootNavigatorKeyProvider).currentContext;
+    if (navContext == null || !navContext.mounted) {
+      return;
+    }
+    final result = await showUpdateAvailableDialog(
+      navContext,
+      version: version,
+      releaseNotes: state.releaseNotes,
+      showDoNotRemind: true,
+    );
+    if (!mounted) return;
+    if (result == true) {
+      final releaseUrl = state.releaseUrl;
+      if (releaseUrl != null) {
+        unawaited(ref.read(externalUrlOpenerProvider)(releaseUrl));
+      }
+    } else if (result == false) {
+      ref.read(preferencesProvider.notifier).setAutoCheckUpdate(false);
     }
   }
 
@@ -231,11 +278,7 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
               sized: false,
               child: _WindowBackgroundSync(
                 child: _StartupLoggingNotice(
-                  child: _StartupUpdateNotice(
-                    child: _WindowFrame(
-                      child: child ?? const SizedBox.shrink(),
-                    ),
-                  ),
+                  child: _WindowFrame(child: child ?? const SizedBox.shrink()),
                 ),
               ),
             ),
@@ -347,54 +390,6 @@ class _StartupLoggingNoticeState extends ConsumerState<_StartupLoggingNotice> {
       ref
           .read(noticeCenterProvider.notifier)
           .show(AppLocalizations.of(context).loggingUnavailable);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) => widget.child;
-}
-
-/// 自动检查更新发现新版本时，通过 NoticeCenter 提示一次。
-class _StartupUpdateNotice extends ConsumerStatefulWidget {
-  const _StartupUpdateNotice({required this.child});
-
-  final Widget child;
-
-  @override
-  ConsumerState<_StartupUpdateNotice> createState() =>
-      _StartupUpdateNoticeState();
-}
-
-class _StartupUpdateNoticeState extends ConsumerState<_StartupUpdateNotice> {
-  String? _notifiedVersion;
-
-  @override
-  void initState() {
-    super.initState();
-    ref.listenManual<UpdateStateView>(
-      updateProvider,
-      (previous, next) => _maybeNotify(next),
-      fireImmediately: true,
-    );
-  }
-
-  void _maybeNotify(UpdateStateView state) {
-    final version = state.latestVersion;
-    if (!ref.read(preferencesProvider).autoCheckUpdate ||
-        !state.available ||
-        version == null ||
-        version == _notifiedVersion) {
-      return;
-    }
-    _notifiedVersion = version;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      ref
-          .read(noticeCenterProvider.notifier)
-          .show(
-            AppLocalizations.of(context).updateAvailableBadge(version),
-            tone: NoticeTone.info,
-          );
     });
   }
 

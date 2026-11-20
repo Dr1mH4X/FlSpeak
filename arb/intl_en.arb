@@ -375,14 +375,12 @@
       }
     }
   },
-  "updateAvailableAction": "Open the release page for version {version}",
-  "@updateAvailableAction": {
-    "placeholders": {
-      "version": {
-        "type": "String"
-      }
-    }
-  },
+  "updateCheck": "Check for updates",
+  "updateDiscoverNewVersion": "New version available",
+  "updateUpToDate": "You are already on the latest version",
+  "updateGoDownload": "Download",
+  "updateNoLongerRemind": "Don't remind again",
+  "updateCheckFailed": "Failed to check for updates. Try again later.",
   "aboutLicense": "License",
   "aboutCopySuccess": "Link copied to clipboard",
   "streamSharing": "Sharing screen",

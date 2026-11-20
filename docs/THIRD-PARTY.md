@@ -5,7 +5,7 @@
 | 来源 | 原始许可证 | 引入形式与内容 |
 | --- | --- | --- |
 | [FlClash](https://github.com/chen08209/FlClash) | GPL-3.0 | macOS 标题条布局、窗口尺寸与红绿灯让位，Windows 标题栏控制按钮与 Segoe Fluent 矢量图标，Windows Inno Setup 安装脚本与简体中文语言包，窄屏底部导航与标签切换动画，业务图标矢量定义（`AppGlyphs`），系统字体枚举、调色板、外观设置与交互预览卡片，设置行与设置文本卡片适配，页面 `Scaffold` / `ScaffoldBar` / `BaseScaffold`、系统栏与异常顶部边距保护及 Android `values-v27` 挖孔屏配置 |
-| [prism_ui](https://pub.dev/packages/prism_ui) | GPL-3.0 | Pub 依赖 `prism_ui`，直接提供按钮、弹性按压、`PressSurface`、表面层级、超椭圆形状、开关、滑块、`SegmentedControl`、`Glyph`/`Glyphs`（含 `Glyphs.sidebar`）/`GlyphIcon`/`AnimatedGlyph`、弹出菜单、`ListRow`、`DecorationListItem`、`NavigationDock`/`NavigationBar`、`PrismScaffold`/`ScaffoldBar`/`FloatingHeader`/`BuildContextExtension`、`AnimatedVisibility`、`OpenContainer`、`showSheet`、`SearchField`、`NullStatus`、seeded 取色与纯黑映射、Liquid Glass、Goo 与主题过渡原语 |
+| [prism_ui](https://pub.dev/packages/prism_ui) | GPL-3.0 | Pub 依赖 `prism_ui`，直接提供按钮、弹性按压、`PressSurface`、表面层级、超椭圆形状、开关、滑块、`SegmentedControl`、`Glyph`/`Glyphs`（含 `Glyphs.sidebar`）/`GlyphIcon`/`AnimatedGlyph`、弹出菜单、`ListRow`、`DecorationListItem`、`NavigationDock`/`NavigationBar`、`PrismScaffold`/`ScaffoldBar`/`FloatingHeader`/`BuildContextExtension`、`AnimatedVisibility`、`OpenContainer`、`AlertDialog`/`showFloatingDialog`、`showSheet`、`SearchField`、`NullStatus`、seeded 取色与纯黑映射、Liquid Glass、Goo 与主题过渡原语 |
 | [FlClash 的 `plugins/window`](https://github.com/chen08209/FlClash/tree/main/plugins/window) | MIT | 隐藏标题栏、窗口拖拽、双击缩放、最小化/最大化/关闭、置顶、Windows Mica/Acrylic 样式支持、单实例检测与全屏状态 |
 | [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | MIT | Markdown 正文段落单物理行检查门禁脚本 |
 
@@ -15,7 +15,7 @@
 
 原始许可证为 GNU General Public License v3.0，见 FlClash 仓库根 `LICENSE`，原文见 https://www.gnu.org/licenses/gpl-3.0.txt 。复制片段的版权归 FlClash 作者所有。
 
-复制内容来自 `lib/common/layout.dart` 的窗口尺寸与红绿灯区域、`lib/manager/window_manager.dart` 的 `WindowHeaderContainer`、`WindowHeaderLayout`、`WindowHeaderBar`、`WindowHeader`、`lib/manager/theme_manager.dart` 的 `_AppMediaQuery` 与 `AnnotatedRegion<SystemUiOverlayStyle>`、`lib/manager/app_manager.dart` 的侧栏安全区去重、`lib/ui/scaffold/`（`scaffold.dart`、`scaffold_actions.dart`、`scaffold_search.dart`）、`lib/ui/sidebar.dart`、`lib/ui/icons/app_glyphs.dart`、`lib/ui/icons/caption_icon.dart`、`lib/ui/list_item.dart`、`lib/ui/setting_text_card.dart`、`lib/common/system_fonts.dart`、`lib/pages/home.dart` 的 `PageView` 过渡与 `_FadeTabPage`、`lib/widgets/palette.dart`、`lib/views/font_family.dart`、`lib/features/form/selection_sheet.dart`、`lib/views/theme_preview.dart`、`lib/views/theme.dart`、`android/app/src/main/res/values-v27/styles.xml`、`android/app/src/main/res/values-night-v27/styles.xml` 与 `windows/packaging/exe/` 的 `inno_setup.iss`、`ChineseSimplified.isl`。
+复制内容来自 `lib/common/layout.dart` 的窗口尺寸与红绿灯区域、`lib/manager/window_manager.dart` 的 `WindowHeaderContainer`、`WindowHeaderLayout`、`WindowHeaderBar`、`WindowHeader`、`lib/manager/theme_manager.dart` 的 `_AppMediaQuery` 与 `AnnotatedRegion<SystemUiOverlayStyle>`、`lib/manager/app_manager.dart` 的侧栏安全区去重、`lib/ui/scaffold/`（`scaffold.dart`、`scaffold_actions.dart`、`scaffold_search.dart`）、`lib/ui/sidebar.dart`、`lib/ui/icons/app_glyphs.dart`、`lib/ui/icons/caption_icon.dart`、`lib/ui/list_item.dart`、`lib/ui/setting_text_card.dart`、`lib/common/dialog.dart` 与 `lib/providers/actions/common.dart` 的新版本提示弹窗布局与更新日志富文本样式、`lib/common/system_fonts.dart`、`lib/pages/home.dart` 的 `PageView` 过渡与 `_FadeTabPage`、`lib/widgets/palette.dart`、`lib/views/font_family.dart`、`lib/features/form/selection_sheet.dart`、`lib/views/theme_preview.dart`、`lib/views/theme.dart`、`android/app/src/main/res/values-v27/styles.xml`、`android/app/src/main/res/values-night-v27/styles.xml` 与 `windows/packaging/exe/` 的 `inno_setup.iss`、`ChineseSimplified.isl`。
 
 | 本仓库文件 | 原始文件 |
 | --- | --- |
@@ -28,6 +28,7 @@
 | `lib/widgets/compact_navigation_shell.dart` | `lib/pages/home.dart` |
 | `lib/widgets/app_navigation_sidebar.dart` | `lib/ui/sidebar.dart`、`lib/manager/app_manager.dart` |
 | `lib/widgets/app_glyphs.dart` | `lib/ui/icons/app_glyphs.dart` |
+| `lib/widgets/update_dialog.dart` | `lib/common/dialog.dart`、`lib/providers/actions/common.dart` |
 | `lib/widgets/caption_icon.dart` | `lib/ui/icons/caption_icon.dart` |
 | `lib/features/settings/widgets/list_item.dart` | `lib/ui/list_item.dart` |
 | `lib/features/settings/widgets/setting_text_card.dart` | `lib/ui/setting_text_card.dart` |
@@ -49,7 +50,7 @@ FlSpeak 通过 `pubspec.yaml` Pub 依赖与 [lib/widgets/prism.dart](../lib/widg
 | 本仓库接入位置 | 对应模块内容 |
 | --- | --- |
 | `pubspec.yaml` | 完整引入 `prism_ui`（按钮、按压表面、弹性缩放、表面层级、形状、开关、弹出菜单、分组列表、Liquid Glass 着色器、Goo 与主题过渡） |
-| `lib/widgets/prism.dart` | `PrismRootScope`、`PrismUiLocalizationsDelegate`、`SurfaceCard`、`ElevatedSurfaceTheme`、`AnimatedInkWell`、`OptionsValueButton`、`Slider`、`SegmentedControl`、`Glyphs`/`GlyphIcon`/`AnimatedGlyph`、`NavigationDock`/`NavigationBar`、`PrismScaffold`/`ScaffoldBar`/`FloatingHeader`/`BuildContextExtension`、`OpenContainer`、`showSheet`/`showExtend`、`SearchField`、`NullStatus`、seeded 取色/纯黑接口桥接与统一导出 |
+| `lib/widgets/prism.dart` | `PrismRootScope`、`PrismUiLocalizationsDelegate`、`SurfaceCard`、`ElevatedSurfaceTheme`、`AnimatedInkWell`、`OptionsValueButton`、`Slider`、`SegmentedControl`、`Glyphs`/`GlyphIcon`/`AnimatedGlyph`、`NavigationDock`/`NavigationBar`、`PrismScaffold`/`ScaffoldBar`/`FloatingHeader`/`BuildContextExtension`、`OpenContainer`、`AlertDialog`/`showFloatingDialog`、`showSheet`/`showExtend`、`SearchField`、`NullStatus`、seeded 取色/纯黑接口桥接与统一导出 |
 | `lib/widgets/app_navigation_sidebar.dart` | 使用 `prism_ui` 的 `GlyphIcon(Glyphs.sidebar(progress))` 绘制与 FlClash `NavigationSidebar` 一致的侧栏展开/收起图标及 `progress` 过渡动效 |
 | `lib/features/settings/settings_page.dart` | 沿用 FlClash 的设置多级导航与 `showExtend(forceFull: true)` 整页推入 |
 

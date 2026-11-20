@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart'
     show SynchronousFuture, defaultTargetPlatform;
 import 'package:flutter/material.dart'
     hide
+        AlertDialog,
         ButtonStyle,
         Card,
         Divider,
@@ -31,6 +32,7 @@ import '../theme/app_theme.dart';
 export 'package:prism_ui/prism_ui.dart'
     show
         ActivityIndicator,
+        AlertDialog,
         AnimatedVisibility,
         AppBarClearance,
         AppCorner,
@@ -166,6 +168,7 @@ export 'package:prism_ui/prism_ui.dart'
         sheetScrollController,
         sheetToolbarHeight,
         showExtend,
+        showFloatingDialog,
         showSheet,
         snapSheetDetents;
 

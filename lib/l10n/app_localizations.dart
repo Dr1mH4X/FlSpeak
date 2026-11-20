@@ -1526,11 +1526,41 @@ abstract class AppLocalizations {
   /// **'New version {version} available'**
   String updateAvailableBadge(String version);
 
-  /// No description provided for @updateAvailableAction.
+  /// No description provided for @updateCheck.
   ///
   /// In en, this message translates to:
-  /// **'Open the release page for version {version}'**
-  String updateAvailableAction(String version);
+  /// **'Check for updates'**
+  String get updateCheck;
+
+  /// No description provided for @updateDiscoverNewVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'New version available'**
+  String get updateDiscoverNewVersion;
+
+  /// No description provided for @updateUpToDate.
+  ///
+  /// In en, this message translates to:
+  /// **'You are already on the latest version'**
+  String get updateUpToDate;
+
+  /// No description provided for @updateGoDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Download'**
+  String get updateGoDownload;
+
+  /// No description provided for @updateNoLongerRemind.
+  ///
+  /// In en, this message translates to:
+  /// **'Don\'t remind again'**
+  String get updateNoLongerRemind;
+
+  /// No description provided for @updateCheckFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to check for updates. Try again later.'**
+  String get updateCheckFailed;
 
   /// No description provided for @aboutLicense.
   ///

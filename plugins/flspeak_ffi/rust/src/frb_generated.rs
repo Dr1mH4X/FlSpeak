@@ -40,7 +40,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1507097154;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1329522634;
 
 // Section: executor
 
@@ -3138,6 +3138,41 @@ fn wire__crate__api__session__fetch_image_impl(
         },
     )
 }
+fn wire__crate__api__update__force_check_for_updates_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "force_check_for_updates",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::api::session::CoreError>(
+                    (move || async move {
+                        let output_ok = crate::api::update::force_check_for_updates().await?;
+                        std::result::Result::Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 fn wire__crate__api__session__get_settings_json_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -4596,10 +4631,12 @@ impl SseDecode for crate::api::update::UpdateStateView {
         let mut var_available = <bool>::sse_decode(deserializer);
         let mut var_latestVersion = <Option<String>>::sse_decode(deserializer);
         let mut var_releaseUrl = <Option<String>>::sse_decode(deserializer);
+        let mut var_releaseNotes = <Option<String>>::sse_decode(deserializer);
         return crate::api::update::UpdateStateView {
             available: var_available,
             latest_version: var_latestVersion,
             release_url: var_releaseUrl,
+            release_notes: var_releaseNotes,
         };
     }
 }
@@ -4871,11 +4908,17 @@ fn pde_ffi_dispatcher_primary_impl(
             wire__crate__api__session__client_type_default_impl(port, ptr, rust_vec_len, data_len)
         }
         53 => wire__crate__api__session__fetch_image_impl(port, ptr, rust_vec_len, data_len),
-        55 => wire__crate__api__session__init_logging_impl(port, ptr, rust_vec_len, data_len),
-        58 => wire__crate__api__session__set_log_level_impl(port, ptr, rust_vec_len, data_len),
-        59 => wire__crate__api__session__shutdown_logging_impl(port, ptr, rust_vec_len, data_len),
-        62 => wire__crate__api__session__upload_image_impl(port, ptr, rust_vec_len, data_len),
-        63 => {
+        54 => wire__crate__api__update__force_check_for_updates_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        56 => wire__crate__api__session__init_logging_impl(port, ptr, rust_vec_len, data_len),
+        59 => wire__crate__api__session__set_log_level_impl(port, ptr, rust_vec_len, data_len),
+        60 => wire__crate__api__session__shutdown_logging_impl(port, ptr, rust_vec_len, data_len),
+        63 => wire__crate__api__session__upload_image_impl(port, ptr, rust_vec_len, data_len),
+        64 => {
             wire__crate__api__session__validate_image_host_impl(port, ptr, rust_vec_len, data_len)
         }
         _ => unreachable!(),
@@ -4892,13 +4935,13 @@ fn pde_ffi_dispatcher_sync_impl(
     match func_id {
         23 => wire__crate__api__session__CoreSession_new_impl(ptr, rust_vec_len, data_len),
         50 => wire__crate__api__update__app_version_impl(ptr, rust_vec_len, data_len),
-        54 => wire__crate__api__session__get_settings_json_impl(ptr, rust_vec_len, data_len),
-        56 => wire__crate__api__session__init_settings_impl(ptr, rust_vec_len, data_len),
-        57 => wire__crate__api__session__set_android_dns_servers_impl(ptr, rust_vec_len, data_len),
-        60 => {
+        55 => wire__crate__api__session__get_settings_json_impl(ptr, rust_vec_len, data_len),
+        57 => wire__crate__api__session__init_settings_impl(ptr, rust_vec_len, data_len),
+        58 => wire__crate__api__session__set_android_dns_servers_impl(ptr, rust_vec_len, data_len),
+        61 => {
             wire__crate__api__session__update_audio_settings_json_impl(ptr, rust_vec_len, data_len)
         }
-        61 => wire__crate__api__session__update_ui_settings_json_impl(ptr, rust_vec_len, data_len),
+        62 => wire__crate__api__session__update_ui_settings_json_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -5746,6 +5789,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::update::UpdateStateView {
             self.available.into_into_dart().into_dart(),
             self.latest_version.into_into_dart().into_dart(),
             self.release_url.into_into_dart().into_dart(),
+            self.release_notes.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -6660,6 +6704,7 @@ impl SseEncode for crate::api::update::UpdateStateView {
         <bool>::sse_encode(self.available, serializer);
         <Option<String>>::sse_encode(self.latest_version, serializer);
         <Option<String>>::sse_encode(self.release_url, serializer);
+        <Option<String>>::sse_encode(self.release_notes, serializer);
     }
 }
 

@@ -375,14 +375,12 @@
       }
     }
   },
-  "updateAvailableAction": "打开版本 {version} 的发布页面",
-  "@updateAvailableAction": {
-    "placeholders": {
-      "version": {
-        "type": "String"
-      }
-    }
-  },
+  "updateCheck": "检查更新",
+  "updateDiscoverNewVersion": "发现新版本",
+  "updateUpToDate": "当前应用已经是最新版了",
+  "updateGoDownload": "前往下载",
+  "updateNoLongerRemind": "不再提醒",
+  "updateCheckFailed": "检查更新失败，请稍后重试",
   "aboutLicense": "许可证",
   "aboutCopySuccess": "链接已复制到剪贴板",
   "streamSharing": "正在共享屏幕",

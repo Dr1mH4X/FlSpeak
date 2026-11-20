@@ -279,9 +279,10 @@ void main() {
   });
 
   testWidgets(
-    'checks updates on startup when enabled, shows notice once, and does not recheck on about page',
+    'checks updates on startup when enabled, shows dialog once, opens release url, and does not recheck on about page',
     (tester) async {
       var checkCalls = 0;
+      final opened = <String>[];
       final container = ProviderContainer(
         overrides: [
           coreSessionProvider.overrideWithValue(_PttCore()),
@@ -291,8 +292,87 @@ void main() {
           ),
           sessionViewProvider.overrideWith(_PttSession.new),
           startupUpdateCheckEnabledProvider.overrideWithValue(true),
-          updateCheckClientProvider.overrideWithValue(() async {
+          externalUrlOpenerProvider.overrideWithValue((url) async {
+            opened.add(url);
+            return true;
+          }),
+          updateCheckClientProvider.overrideWithValue(({
+            bool force = false,
+          }) async {
             checkCalls++;
+            return const UpdateStateView(
+              available: true,
+              latestVersion: '0.2.0',
+              releaseUrl:
+                  'https://github.com/Dr1mH4X/FlSpeak/releases/tag/v0.2.0',
+              releaseNotes: '# 0.2.0 (2026-11-20): Release\n\n## 新增\n- 弹窗更新提示',
+            );
+          }),
+          preferencesStoreProvider.overrideWithValue(
+            PreferencesStore.inMemory(
+              preferences: const SessionPreferences(
+                nickname: 'Test',
+                locale: 'zh',
+                autoCheckUpdate: true,
+              ),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const TsClientApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(checkCalls, 1);
+      expect(find.text('发现新版本'), findsOneWidget);
+      expect(find.textContaining('v0.2.0'), findsOneWidget);
+      expect(find.textContaining('弹窗更新提示'), findsOneWidget);
+      expect(find.text('不再提醒'), findsOneWidget);
+      expect(find.text('前往下载'), findsOneWidget);
+
+      await tester.tap(find.text('前往下载'));
+      await tester.pumpAndSettle();
+
+      expect(opened, [
+        'https://github.com/Dr1mH4X/FlSpeak/releases/tag/v0.2.0',
+      ]);
+      expect(find.text('发现新版本'), findsNothing);
+      expect(container.read(preferencesProvider).autoCheckUpdate, isTrue);
+
+      container.read(routerProvider).go(AppRoutes.settings);
+      await tester.pumpAndSettle();
+
+      final aboutCategory = find.text('关于');
+      await tester.ensureVisible(aboutCategory);
+      await tester.tap(aboutCategory);
+      await tester.pumpAndSettle();
+
+      expect(checkCalls, 1);
+      expect(find.byType(UpdateDot), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'disables autoCheckUpdate when clicking do not remind on startup update dialog',
+    (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_PttCore()),
+          appVersionProvider.overrideWithValue('0.1.0'),
+          storePathProvider.overrideWithValue(
+            '/tmp/flspeak-test/preferences.json',
+          ),
+          sessionViewProvider.overrideWith(_PttSession.new),
+          startupUpdateCheckEnabledProvider.overrideWithValue(true),
+          updateCheckClientProvider.overrideWithValue(({
+            bool force = false,
+          }) async {
             return const UpdateStateView(
               available: true,
               latestVersion: '0.2.0',
@@ -321,19 +401,12 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(checkCalls, 1);
-      expect(find.text('有新版本 0.2.0'), findsOneWidget);
-
-      container.read(routerProvider).go(AppRoutes.settings);
+      expect(find.text('发现新版本'), findsOneWidget);
+      await tester.tap(find.text('不再提醒'));
       await tester.pumpAndSettle();
 
-      final aboutCategory = find.text('关于');
-      await tester.ensureVisible(aboutCategory);
-      await tester.tap(aboutCategory);
-      await tester.pumpAndSettle();
-
-      expect(checkCalls, 1);
-      expect(find.byType(UpdateDot), findsOneWidget);
+      expect(find.text('发现新版本'), findsNothing);
+      expect(container.read(preferencesProvider).autoCheckUpdate, isFalse);
     },
   );
 
@@ -349,7 +422,9 @@ void main() {
         ),
         sessionViewProvider.overrideWith(_PttSession.new),
         startupUpdateCheckEnabledProvider.overrideWithValue(true),
-        updateCheckClientProvider.overrideWithValue(() async {
+        updateCheckClientProvider.overrideWithValue(({
+          bool force = false,
+        }) async {
           checkCalls++;
           return const UpdateStateView(available: true, latestVersion: '0.2.0');
         }),
@@ -375,7 +450,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(checkCalls, 0);
-    expect(find.text('有新版本 0.2.0'), findsNothing);
+    expect(find.text('发现新版本'), findsNothing);
   });
 
   testWidgets(

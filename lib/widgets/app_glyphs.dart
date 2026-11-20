@@ -1,5 +1,5 @@
 // 本文件包含的代码片段来源于 FlClash（https://github.com/chen08209/FlClash）项目，原始许可证为 GPL-3.0，来源提交 be84736605527034689c95bf27828ff27d912c5e。
-// dashboard、settings、reset、add、edit、palette、delete、layers、sun、pureBlack、paintbrush、eyedropper、motion、blur、liquidGlass、font、textSize、info、account、photos 沿用 FlClash 的 lib/ui/icons/app_glyphs.dart 矢量定义，其余为 FlSpeak 业务动作补充。
+// dashboard、settings、reset、sync、add、edit、palette、delete、layers、sun、pureBlack、paintbrush、eyedropper、motion、blur、liquidGlass、font、textSize、info、account、photos 沿用 FlClash 的 lib/ui/icons/app_glyphs.dart 矢量定义，其余为 FlSpeak 业务动作补充。
 
 import 'dart:math' as math;
 
@@ -256,6 +256,35 @@ abstract final class AppGlyphs {
       GlyphVertex(13.7, 10.5),
       GlyphVertex(9.9, 6.7, 0.4),
       GlyphVertex(13.7, 2.9),
+    ], role: GlyphRole.line),
+  ]);
+
+  static const sync = Glyph([
+    GlyphArc(
+      12,
+      12,
+      7.78,
+      math.pi * 1.144,
+      math.pi * 0.889,
+      role: GlyphRole.line,
+    ),
+    GlyphPolyline([
+      GlyphVertex(5, 5),
+      GlyphVertex(5, 8.6, 0.4),
+      GlyphVertex(8.6, 8.6),
+    ], role: GlyphRole.line),
+    GlyphArc(
+      12,
+      12,
+      7.78,
+      math.pi * 0.144,
+      math.pi * 0.889,
+      role: GlyphRole.line,
+    ),
+    GlyphPolyline([
+      GlyphVertex(19, 19),
+      GlyphVertex(19, 15.4, 0.4),
+      GlyphVertex(15.4, 15.4),
     ], role: GlyphRole.line),
   ]);
 

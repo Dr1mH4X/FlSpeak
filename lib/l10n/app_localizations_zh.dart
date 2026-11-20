@@ -771,9 +771,22 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String updateAvailableAction(String version) {
-    return '打开版本 $version 的发布页面';
-  }
+  String get updateCheck => '检查更新';
+
+  @override
+  String get updateDiscoverNewVersion => '发现新版本';
+
+  @override
+  String get updateUpToDate => '当前应用已经是最新版了';
+
+  @override
+  String get updateGoDownload => '前往下载';
+
+  @override
+  String get updateNoLongerRemind => '不再提醒';
+
+  @override
+  String get updateCheckFailed => '检查更新失败，请稍后重试';
 
   @override
   String get aboutLicense => '许可证';

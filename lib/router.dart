@@ -21,9 +21,15 @@ abstract final class AppRoutes {
   static const settings = '/settings';
 }
 
+final rootNavigatorKeyProvider = Provider<GlobalKey<NavigatorState>>((ref) {
+  return GlobalKey<NavigatorState>();
+});
+
 final routerProvider = Provider<GoRouter>((ref) {
+  final navigatorKey = ref.watch(rootNavigatorKeyProvider);
   late final GoRouter router;
   router = GoRouter(
+    navigatorKey: navigatorKey,
     initialLocation: AppRoutes.connect,
     routes: [
       GoRoute(

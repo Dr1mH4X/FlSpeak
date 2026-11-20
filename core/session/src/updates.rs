@@ -23,6 +23,7 @@ pub const CACHE_TTL: Duration = Duration::from_secs(6 * 60 * 60);
 
 const TIMEOUT: Duration = Duration::from_secs(8);
 const MAX_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
+const MAX_RELEASE_NOTES_BYTES: usize = 32 * 1024;
 const CACHE_FILE: &str = "update-cache.json";
 const RELEASES_URL: &str = "https://api.github.com/repos/Dr1mH4X/FlSpeak/releases?per_page=100";
 const RELEASE_PATH_PREFIX: &str = "/Dr1mH4X/FlSpeak/releases/";
@@ -33,6 +34,7 @@ pub struct UpdateState {
     pub available: bool,
     pub latest_version: Option<String>,
     pub release_url: Option<String>,
+    pub release_notes: Option<String>,
 }
 
 impl UpdateState {
@@ -41,20 +43,22 @@ impl UpdateState {
             available: false,
             latest_version: None,
             release_url: None,
+            release_notes: None,
         }
     }
 
-    fn available(version: String, release_url: String) -> Self {
+    fn available(version: String, release_url: String, release_notes: Option<String>) -> Self {
         Self {
             available: true,
             latest_version: Some(version),
             release_url: Some(release_url),
+            release_notes,
         }
     }
 }
 
 #[derive(Debug, Error)]
-enum UpdateError {
+pub enum UpdateError {
     #[error("更新缓存目录不可用: {0}")]
     Storage(String),
     #[error("请求 GitHub Releases 失败: {0}")]
@@ -77,6 +81,15 @@ pub async fn check_for_updates() -> UpdateState {
     let lock = CHECK_LOCK.get_or_init(|| Mutex::new(()));
     let _guard = lock.lock().await;
     check_locked().await
+}
+
+/// 绕过本地 6 小时 TTL 缓存强制检查更新（仍携带 ETag）。
+///
+/// 失败时返回 `Err`，保留磁盘已有缓存而不伪装成已是最新版本。
+pub async fn force_check_for_updates() -> Result<UpdateState, UpdateError> {
+    let lock = CHECK_LOCK.get_or_init(|| Mutex::new(()));
+    let _guard = lock.lock().await;
+    force_check_locked().await
 }
 
 async fn check_locked() -> UpdateState {
@@ -105,13 +118,25 @@ async fn check_locked() -> UpdateState {
     check_with_fallback(&source, &cache_path, &local, SystemTime::now()).await
 }
 
+async fn force_check_locked() -> Result<UpdateState, UpdateError> {
+    let local = Version::parse(env!("CARGO_PKG_VERSION"))
+        .map_err(|error| UpdateError::Parse(error.to_string()))?;
+    let cache_path = cache_path()?;
+    let source = HttpReleaseSource::new()?;
+    let result = check_with_source(&source, &cache_path, &local, SystemTime::now(), true).await;
+    if let Err(error) = &result {
+        crate::log_warn!(error = error.to_string(); "手动更新检查失败");
+    }
+    result
+}
+
 async fn check_with_fallback(
     source: &dyn ReleaseSource,
     cache_path: &Path,
     local: &Version,
     now: SystemTime,
 ) -> UpdateState {
-    match check_with_source(source, cache_path, local, now).await {
+    match check_with_source(source, cache_path, local, now, false).await {
         Ok(state) => state,
         Err(error) => {
             crate::log_warn!(error = error.to_string(); "更新检查失败");
@@ -125,11 +150,13 @@ async fn check_with_source(
     cache_path: &Path,
     local: &Version,
     now: SystemTime,
+    force: bool,
 ) -> Result<UpdateState, UpdateError> {
     let now_secs = unix_seconds(now);
     let cached = read_cache(cache_path);
 
-    if let Some(cache) = &cached
+    if !force
+        && let Some(cache) = &cached
         && cache.checked_at <= now_secs
         && now_secs - cache.checked_at < CACHE_TTL.as_secs()
         && let Some(state) = state_from_cache(cache, local)
@@ -169,10 +196,17 @@ async fn check_with_source(
         release_url: candidate
             .as_ref()
             .map(|candidate| candidate.release_url.clone()),
+        release_notes: candidate
+            .as_ref()
+            .and_then(|candidate| candidate.release_notes.clone()),
     };
     let state = match &candidate {
         Some(candidate) if candidate.version.cmp_precedence(local) == Ordering::Greater => {
-            UpdateState::available(candidate.version.to_string(), candidate.release_url.clone())
+            UpdateState::available(
+                candidate.version.to_string(),
+                candidate.release_url.clone(),
+                candidate.release_notes.clone(),
+            )
         }
         _ => UpdateState::unavailable(),
     };
@@ -203,7 +237,11 @@ fn state_from_cache(cache: &CachedRelease, local: &Version) -> Option<UpdateStat
             .as_deref()
             .filter(|url| is_trusted_release_url(url))?
             .to_string();
-        Some(UpdateState::available(version.to_string(), release_url))
+        Some(UpdateState::available(
+            version.to_string(),
+            release_url,
+            sanitize_release_notes(cache.release_notes.as_deref()),
+        ))
     } else {
         Some(UpdateState::unavailable())
     }
@@ -218,12 +256,15 @@ struct RawRelease {
     prerelease: bool,
     #[serde(default)]
     html_url: Option<String>,
+    #[serde(default)]
+    body: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 struct Candidate {
     version: Version,
     release_url: String,
+    release_notes: Option<String>,
 }
 
 fn select_candidate(body: &str, local: &Version) -> Result<Option<Candidate>, UpdateError> {
@@ -241,12 +282,30 @@ fn select_candidate(body: &str, local: &Version) -> Result<Option<Candidate>, Up
                 return None;
             }
             let release_url = release_url(release.html_url.as_deref(), &release.tag_name);
+            let release_notes = sanitize_release_notes(release.body.as_deref());
             Some(Candidate {
                 version,
                 release_url,
+                release_notes,
             })
         })
         .max_by(|left, right| left.version.cmp_precedence(&right.version)))
+}
+
+fn sanitize_release_notes(raw: Option<&str>) -> Option<String> {
+    let normalized = raw?.replace("\r\n", "\n");
+    let trimmed = normalized.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.len() <= MAX_RELEASE_NOTES_BYTES {
+        return Some(trimmed.to_string());
+    }
+    let mut end = MAX_RELEASE_NOTES_BYTES;
+    while !trimmed.is_char_boundary(end) {
+        end -= 1;
+    }
+    Some(trimmed[..end].trim_end().to_string())
 }
 
 fn parse_tag(tag: &str) -> Option<Version> {
@@ -294,6 +353,8 @@ struct CachedRelease {
     latest_version: Option<String>,
     #[serde(default)]
     release_url: Option<String>,
+    #[serde(default)]
+    release_notes: Option<String>,
 }
 
 fn read_cache(path: &Path) -> Option<CachedRelease> {
@@ -500,7 +561,16 @@ mod tests {
         local: &str,
     ) -> Result<UpdateState, UpdateError> {
         let local = Version::parse(local).expect("local version");
-        check_with_source(source, path, &local, now()).await
+        check_with_source(source, path, &local, now(), false).await
+    }
+
+    async fn force_check(
+        source: &FakeSource,
+        path: &Path,
+        local: &str,
+    ) -> Result<UpdateState, UpdateError> {
+        let local = Version::parse(local).expect("local version");
+        check_with_source(source, path, &local, now(), true).await
     }
 
     #[test]
@@ -687,12 +757,45 @@ mod tests {
                 etag: None,
                 latest_version: Some("0.2.0".into()),
                 release_url: Some("https://github.com/Dr1mH4X/FlSpeak/releases/tag/v0.2.0".into()),
+                release_notes: Some("## 新增\n\n- 新功能".into()),
             },
         );
         let source = FakeSource::new(Vec::new());
         let result = check(&source, &path, "0.1.0").await.expect("check");
         assert!(result.available);
+        assert_eq!(result.release_notes.as_deref(), Some("## 新增\n\n- 新功能"));
         assert_eq!(source.calls(), 0);
+        cleanup(&path);
+    }
+
+    #[tokio::test]
+    async fn force_check_bypasses_fresh_cache_and_keeps_etag() {
+        let path = cache_path();
+        write_cache(
+            &path,
+            &CachedRelease {
+                checked_at: unix_seconds(now()) - 1,
+                etag: Some("\"old-etag\"".into()),
+                latest_version: Some("0.1.0".into()),
+                release_url: Some("https://github.com/Dr1mH4X/FlSpeak/releases/tag/v0.1.0".into()),
+                release_notes: None,
+            },
+        );
+        let source = FakeSource::new(vec![Ok(payload(vec![json!({
+            "tag_name": "v0.2.0",
+            "draft": false,
+            "prerelease": false,
+            "html_url": "https://github.com/Dr1mH4X/FlSpeak/releases/tag/v0.2.0",
+            "body": "# 0.2.0 (2026-11-20): Release\r\n\r\n## 新增\r\n- 更新弹窗",
+        })]))]);
+        let result = force_check(&source, &path, "0.1.0").await.expect("force");
+        assert!(result.available);
+        assert_eq!(result.latest_version.as_deref(), Some("0.2.0"));
+        assert_eq!(
+            result.release_notes.as_deref(),
+            Some("# 0.2.0 (2026-11-20): Release\n\n## 新增\n- 更新弹窗")
+        );
+        assert_eq!(source.calls(), 1);
         cleanup(&path);
     }
 
@@ -706,6 +809,7 @@ mod tests {
                 etag: None,
                 latest_version: Some("0.1.0".into()),
                 release_url: Some("https://github.com/Dr1mH4X/FlSpeak/releases/tag/v0.1.0".into()),
+                release_notes: None,
             },
         );
         let source = FakeSource::new(Vec::new());
@@ -725,6 +829,7 @@ mod tests {
                 etag: Some("\"old\"".into()),
                 latest_version: Some("0.1.0".into()),
                 release_url: Some("https://github.com/Dr1mH4X/FlSpeak/releases/tag/v0.1.0".into()),
+                release_notes: None,
             },
         );
         let source = FakeSource::new(vec![Ok(payload(vec![release("v0.2.0", false)]))]);
@@ -748,6 +853,7 @@ mod tests {
                 etag: Some("\"etag-1\"".into()),
                 latest_version: Some("0.2.0".into()),
                 release_url: Some("https://github.com/Dr1mH4X/FlSpeak/releases/tag/v0.2.0".into()),
+                release_notes: None,
             },
         );
         let source = FakeSource::new(vec![Ok(FetchOutcome::NotModified)]);
@@ -767,6 +873,7 @@ mod tests {
             etag: Some("\"etag-1\"".into()),
             latest_version: Some("0.2.0".into()),
             release_url: Some("https://github.com/Dr1mH4X/FlSpeak/releases/tag/v0.2.0".into()),
+            release_notes: None,
         };
         write_cache(&path, &cached);
         let source = FakeSource::new(vec![Err(UpdateError::Http(403))]);
@@ -788,6 +895,7 @@ mod tests {
                 etag: Some("\"etag-1\"".into()),
                 latest_version: Some("0.2.0".into()),
                 release_url: Some("https://github.com/Dr1mH4X/FlSpeak/releases/tag/v0.2.0".into()),
+                release_notes: None,
             },
         );
         let local = Version::parse("0.1.0").expect("local version");
@@ -818,6 +926,7 @@ mod tests {
                 etag: None,
                 latest_version: Some("0.2.0".into()),
                 release_url: Some("https://github.com/Dr1mH4X/FlSpeak/releases/tag/v0.2.0".into()),
+                release_notes: None,
             },
         );
         let local = Version::parse("0.1.0").expect("local version");
@@ -842,6 +951,7 @@ mod tests {
                 release_url: Some(
                     "https://github.com/Dr1mH4X/FlSpeak/releases/tag/v0.2.0-beta.1".into(),
                 ),
+                release_notes: None,
             },
         );
         let source = FakeSource::new(vec![
@@ -853,5 +963,16 @@ mod tests {
         assert_eq!(result.latest_version.as_deref(), Some("0.2.0"));
         assert_eq!(source.calls(), 2);
         cleanup(&path);
+    }
+
+    #[test]
+    fn deserializes_legacy_cache_without_release_notes_and_truncates_long_bodies() {
+        let legacy = r#"{"checked_at":10,"etag":null,"latest_version":"0.2.0","release_url":"https://github.com/Dr1mH4X/FlSpeak/releases/tag/v0.2.0"}"#;
+        let parsed: CachedRelease = serde_json::from_str(legacy).expect("legacy cache");
+        assert_eq!(parsed.release_notes, None);
+
+        let oversized = "中".repeat(MAX_RELEASE_NOTES_BYTES);
+        let sanitized = sanitize_release_notes(Some(&oversized)).expect("sanitized");
+        assert!(sanitized.len() <= MAX_RELEASE_NOTES_BYTES);
     }
 }

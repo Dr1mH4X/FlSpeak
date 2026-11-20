@@ -791,9 +791,23 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String updateAvailableAction(String version) {
-    return 'Open the release page for version $version';
-  }
+  String get updateCheck => 'Check for updates';
+
+  @override
+  String get updateDiscoverNewVersion => 'New version available';
+
+  @override
+  String get updateUpToDate => 'You are already on the latest version';
+
+  @override
+  String get updateGoDownload => 'Download';
+
+  @override
+  String get updateNoLongerRemind => 'Don\'t remind again';
+
+  @override
+  String get updateCheckFailed =>
+      'Failed to check for updates. Try again later.';
 
   @override
   String get aboutLicense => 'License';

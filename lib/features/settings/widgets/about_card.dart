@@ -1,16 +1,28 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart'
+    hide
+        AlertDialog,
+        ButtonStyle,
+        Divider,
+        FilledButton,
+        IconButton,
+        OutlinedButton,
+        Switch,
+        TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:flspeak_ffi/flspeak_ffi.dart' show UpdateStateView;
 
+import '../../../core/notices.dart';
 import '../../../core/providers.dart';
 import '../../../core/update_check.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
-import '../../../widgets/prism.dart' hide Divider;
+import '../../../widgets/prism.dart';
+import '../../../widgets/update_dialog.dart';
 import '../../../widgets/update_dot.dart';
+
+export '../../../core/update_check.dart' show openExternalUrl;
 
 const String _websiteUrl = 'https://flspeak.dreamhax.cc';
 const String _repoUrl = 'https://github.com/Dr1mH4X/FlSpeak';
@@ -21,41 +33,73 @@ const String _tsclientUrl = 'https://github.com/Dr1mH4X/tsclient-rs';
 const String _openProtocolUrl =
     'https://github.com/Dr1mH4X/tsclient-rs/blob/master/docs/open-protocol.md';
 
-/// 在系统默认浏览器中打开外部链接。
-Future<bool> openExternalUrl(String url) async {
-  if (kIsWeb) {
-    return false;
-  }
-  final uri = Uri.tryParse(url);
-  if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
-    return false;
-  }
-  try {
-    return await launchUrl(uri, mode: LaunchMode.externalApplication);
-  } on Exception {
-    return false;
-  }
-}
-
 /// 关于页主信息卡片。
 class AboutCard extends ConsumerStatefulWidget {
-  const AboutCard({super.key, this.version, this.onOpenUrl = openExternalUrl});
+  const AboutCard({super.key, this.version, this.onOpenUrl});
 
   final String? version;
-  final Future<bool> Function(String url) onOpenUrl;
+  final Future<bool> Function(String url)? onOpenUrl;
 
   @override
   ConsumerState<AboutCard> createState() => _AboutCardState();
 }
 
 class _AboutCardState extends ConsumerState<AboutCard> {
+  bool _checkingUpdate = false;
+
+  Future<bool> _openUrl(String url) {
+    if (widget.onOpenUrl case final opener?) {
+      return opener(url);
+    }
+    return ref.read(externalUrlOpenerProvider)(url);
+  }
+
+  Future<void> _openUpdateDialog(UpdateStateView update) async {
+    final version = update.latestVersion;
+    if (version == null) return;
+    final confirmed = await showUpdateAvailableDialog(
+      context,
+      version: version,
+      releaseNotes: update.releaseNotes,
+      showDoNotRemind: false,
+    );
+    if (!mounted || confirmed != true) return;
+    final releaseUrl = update.releaseUrl;
+    if (releaseUrl != null) {
+      unawaited(_openUrl(releaseUrl));
+    }
+  }
+
+  Future<void> _checkForUpdates() async {
+    if (_checkingUpdate) return;
+    setState(() => _checkingUpdate = true);
+    final next = await ref.read(updateProvider.notifier).refresh(force: true);
+    if (!mounted) return;
+    setState(() => _checkingUpdate = false);
+
+    if (next == null) {
+      ref
+          .read(noticeCenterProvider.notifier)
+          .show(
+            AppLocalizations.of(context).updateCheckFailed,
+            tone: NoticeTone.error,
+          );
+      return;
+    }
+
+    if (next.available && next.latestVersion != null) {
+      await _openUpdateDialog(next);
+    } else {
+      await showUpToDateDialog(context);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
     final update = ref.watch(updateProvider);
     final latestVersion = update.latestVersion;
-    final releaseUrl = update.releaseUrl;
     final String displayVersion =
         widget.version ?? ref.watch(appVersionProvider);
 
@@ -99,12 +143,9 @@ class _AboutCardState extends ConsumerState<AboutCard> {
               child: _VersionPill(
                 version: displayVersion,
                 hasUpdate: update.available,
-                actionLabel: latestVersion == null
+                updateLabel: latestVersion == null
                     ? null
-                    : l10n.updateAvailableAction(latestVersion),
-                onTap: releaseUrl == null
-                    ? null
-                    : () => unawaited(widget.onOpenUrl(releaseUrl)),
+                    : l10n.updateAvailableBadge(latestVersion),
               ),
             ),
             const SizedBox(height: 12),
@@ -122,9 +163,20 @@ class _AboutCardState extends ConsumerState<AboutCard> {
                 ),
               ),
             ),
-            const SizedBox(height: 28),
+            const SizedBox(height: 16),
 
-            // 4. 联系与项目源码
+            // 5. 检查更新按钮
+            Center(
+              child: TonalButton(
+                size: TonalButtonSize.bar,
+                glyph: AppGlyphs.sync,
+                label: l10n.updateCheck,
+                onPressed: _checkingUpdate ? null : _checkForUpdates,
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // 6. 联系与项目源码
             _InfoSection(
               backgroundColor: sectionBg,
               icon: Icons.mail_outline_rounded,
@@ -136,28 +188,28 @@ class _AboutCardState extends ConsumerState<AboutCard> {
                     label: '${l10n.aboutWebsite}: ',
                     linkText: l10n.aboutWebsiteAction,
                     url: _websiteUrl,
-                    onTap: () => widget.onOpenUrl(_websiteUrl),
+                    onTap: () => _openUrl(_websiteUrl),
                   ),
                   const SizedBox(height: 8),
                   _BulletLinkRow(
                     label: '${l10n.aboutSourceCode}: ',
                     linkText: 'GitHub',
                     url: _repoUrl,
-                    onTap: () => widget.onOpenUrl(_repoUrl),
+                    onTap: () => _openUrl(_repoUrl),
                   ),
                   const SizedBox(height: 8),
                   _BulletLinkRow(
                     label: '${l10n.aboutIssueTracker}: ',
                     linkText: 'GitHub Issue',
                     url: _issuesUrl,
-                    onTap: () => widget.onOpenUrl(_issuesUrl),
+                    onTap: () => _openUrl(_issuesUrl),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 14),
 
-            // 5. 许可证卡片
+            // 7. 许可证卡片
             _InfoSection(
               backgroundColor: sectionBg,
               icon: Icons.description_outlined,
@@ -169,7 +221,7 @@ class _AboutCardState extends ConsumerState<AboutCard> {
                   label: 'GNU Affero General Public License v3.0 (AGPL-3.0)',
                   child: AnimatedInkWell(
                     customBorder: AppShape.sm,
-                    onTap: () => widget.onOpenUrl(_licenseUrl),
+                    onTap: () => _openUrl(_licenseUrl),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                         vertical: 4,
@@ -207,7 +259,7 @@ class _AboutCardState extends ConsumerState<AboutCard> {
             const SizedBox(height: 24),
 
             // 6. 分割线与底部 Powered by tsclient-rs · Supports OpenProtocol
-            Divider(color: dividerColorOf(context), height: 1),
+            const Divider(height: 1),
             const SizedBox(height: 16),
             Center(
               child: Wrap(
@@ -225,7 +277,7 @@ class _AboutCardState extends ConsumerState<AboutCard> {
                   _InteractiveLink(
                     text: 'tsclient-rs',
                     url: _tsclientUrl,
-                    onTap: () => widget.onOpenUrl(_tsclientUrl),
+                    onTap: () => _openUrl(_tsclientUrl),
                     textStyle: context.texts.bodySmall?.copyWith(
                       color: scheme.primary,
                       fontWeight: FontWeight.w600,
@@ -242,7 +294,7 @@ class _AboutCardState extends ConsumerState<AboutCard> {
                   _InteractiveLink(
                     text: 'OpenProtocol',
                     url: _openProtocolUrl,
-                    onTap: () => widget.onOpenUrl(_openProtocolUrl),
+                    onTap: () => _openUrl(_openProtocolUrl),
                     textStyle: context.texts.bodySmall?.copyWith(
                       color: scheme.primary,
                       fontWeight: FontWeight.w600,
@@ -418,14 +470,12 @@ class _VersionPill extends StatelessWidget {
   const _VersionPill({
     required this.version,
     required this.hasUpdate,
-    this.actionLabel,
-    this.onTap,
+    this.updateLabel,
   });
 
   final String version;
   final bool hasUpdate;
-  final String? actionLabel;
-  final VoidCallback? onTap;
+  final String? updateLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -447,7 +497,7 @@ class _VersionPill extends StatelessWidget {
       ),
     );
 
-    final content = Stack(
+    return Stack(
       clipBehavior: Clip.none,
       children: [
         pill,
@@ -456,36 +506,12 @@ class _VersionPill extends StatelessWidget {
             top: -2,
             right: -2,
             child: UpdateDot(
-              semanticLabel: actionLabel,
+              semanticLabel: updateLabel,
               size: 10,
               borderColor: context.cardColor,
             ),
           ),
       ],
-    );
-
-    final padded = ConstrainedBox(
-      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-      child: Center(child: content),
-    );
-
-    if (onTap == null) {
-      return padded;
-    }
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: Semantics(
-        link: true,
-        label: actionLabel,
-        onTap: onTap,
-        child: ExcludeSemantics(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: onTap,
-            child: padded,
-          ),
-        ),
-      ),
     );
   }
 }

@@ -5,6 +5,7 @@
 
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
+import 'session.dart';
 
 // These functions are ignored because they are not marked as `pub`: `resolve_display_version`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `fmt`, `from`
@@ -16,20 +17,29 @@ String appVersion() => RustLib.instance.api.crateApiUpdateAppVersion();
 Future<UpdateStateView> checkForUpdates() =>
     RustLib.instance.api.crateApiUpdateCheckForUpdates();
 
+/// 绕过本地 6 小时 TTL 缓存强制检查更新，失败时向上抛出 `CoreError`。
+Future<UpdateStateView> forceCheckForUpdates() =>
+    RustLib.instance.api.crateApiUpdateForceCheckForUpdates();
+
 class UpdateStateView {
   final bool available;
   final String? latestVersion;
   final String? releaseUrl;
+  final String? releaseNotes;
 
   const UpdateStateView({
     required this.available,
     this.latestVersion,
     this.releaseUrl,
+    this.releaseNotes,
   });
 
   @override
   int get hashCode =>
-      available.hashCode ^ latestVersion.hashCode ^ releaseUrl.hashCode;
+      available.hashCode ^
+      latestVersion.hashCode ^
+      releaseUrl.hashCode ^
+      releaseNotes.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -38,5 +48,6 @@ class UpdateStateView {
           runtimeType == other.runtimeType &&
           available == other.available &&
           latestVersion == other.latestVersion &&
-          releaseUrl == other.releaseUrl;
+          releaseUrl == other.releaseUrl &&
+          releaseNotes == other.releaseNotes;
 }
