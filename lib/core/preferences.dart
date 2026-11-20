@@ -502,7 +502,9 @@ class SessionPreferences {
     final rawNoiseSuppression =
         audio != null && audio.containsKey('noiseSuppression')
         ? audio['noiseSuppression']
-        : ui['noiseSuppression'];
+        : ui.containsKey('noiseSuppression')
+        ? ui['noiseSuppression']
+        : json['noiseSuppression'];
     final rawAutoCheckUpdate = ui['autoCheckUpdate'];
     return SessionPreferences(
       nickname: nickname.isEmpty || nickname == _legacyFallbackNickname
@@ -688,14 +690,13 @@ class PreferencesStore {
 
       final payload = Map<String, Object?>.from(existing);
       payload.addAll(normalizedPreferences.toJson());
-      if (payload['audio'] is Map) {
-        final audioPayload = Map<String, Object?>.from(
-          (payload['audio'] as Map).cast<String, Object?>(),
-        );
-        audioPayload['noiseSuppression'] =
-            normalizedPreferences.noiseSuppression;
-        payload['audio'] = audioPayload;
-      }
+      final audioPayload = payload['audio'] is Map
+          ? Map<String, Object?>.from(
+              (payload['audio'] as Map).cast<String, Object?>(),
+            )
+          : <String, Object?>{};
+      audioPayload['noiseSuppression'] = normalizedPreferences.noiseSuppression;
+      payload['audio'] = audioPayload;
 
       final temporary = File('$target.tmp');
       await temporary.writeAsString(jsonEncode(payload), flush: true);

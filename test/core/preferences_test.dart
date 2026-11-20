@@ -236,7 +236,37 @@ void main() {
       'audio': {'noiseSuppression': 'not-a-bool'},
     });
     expect(fallback.noiseSuppression, isTrue);
+
+    final topLevelFallback = SessionPreferences.fromJson(const {
+      'ui': {'nickname': 'TestUser'},
+      'noiseSuppression': false,
+    });
+    expect(topLevelFallback.noiseSuppression, isFalse);
   });
+
+  test(
+    'fallback save creates audio.noiseSuppression when audio map is absent',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'flspeak-noise-fallback-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final path = '${directory.path}/preferences.json';
+      final store = await PreferencesStore.load(path);
+
+      await store.save(
+        const SessionPreferences(nickname: 'TestUser', noiseSuppression: false),
+      );
+      final decoded =
+          jsonDecode(await File(path).readAsString()) as Map<String, Object?>;
+      expect(decoded['audio'], isA<Map>());
+      expect((decoded['audio'] as Map)['noiseSuppression'], isFalse);
+      expect(
+        (await PreferencesStore.load(path)).current.noiseSuppression,
+        isFalse,
+      );
+    },
+  );
 
   test('screen share preferences default to 720p, 30fps, h264, maintainFramerate and round-trip', () {
     const defaults = SessionPreferences(nickname: 'TestUser');
