@@ -367,6 +367,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsThemeDark => '深色';
 
   @override
+  String get settingsVoiceMicrophone => '麦克风';
+
+  @override
+  String get settingsVoiceDevices => '设备';
+
+  @override
   String get settingsPttMode => '按住说话';
 
   @override
@@ -386,6 +392,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsPttHotkeyClear => '清除';
+
+  @override
+  String get settingsNoiseSuppression => '降噪';
 
   @override
   String get settingsInputDevice => '麦克风';
@@ -428,9 +437,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get serverSearchLabel => '搜索服务器';
-
-  @override
-  String get serverSearchClear => '清空搜索';
 
   @override
   String get serverSearchEmpty => '没有匹配的服务器';

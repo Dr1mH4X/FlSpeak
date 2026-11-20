@@ -758,6 +758,18 @@ abstract class AppLocalizations {
   /// **'Dark'**
   String get settingsThemeDark;
 
+  /// No description provided for @settingsVoiceMicrophone.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone'**
+  String get settingsVoiceMicrophone;
+
+  /// No description provided for @settingsVoiceDevices.
+  ///
+  /// In en, this message translates to:
+  /// **'Devices'**
+  String get settingsVoiceDevices;
+
   /// No description provided for @settingsPttMode.
   ///
   /// In en, this message translates to:
@@ -799,6 +811,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Clear'**
   String get settingsPttHotkeyClear;
+
+  /// No description provided for @settingsNoiseSuppression.
+  ///
+  /// In en, this message translates to:
+  /// **'Noise suppression'**
+  String get settingsNoiseSuppression;
 
   /// No description provided for @settingsInputDevice.
   ///
@@ -883,12 +901,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Search servers'**
   String get serverSearchLabel;
-
-  /// No description provided for @serverSearchClear.
-  ///
-  /// In en, this message translates to:
-  /// **'Clear search'**
-  String get serverSearchClear;
 
   /// No description provided for @serverSearchEmpty.
   ///

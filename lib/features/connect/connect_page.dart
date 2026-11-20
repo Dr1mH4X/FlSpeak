@@ -1,3 +1,7 @@
+// 搜索按钮展开为搜索栏的弹簧动效与 SearchField 用法参考 FlClash（https://github.com/chen08209/FlClash），原始许可证为 GPL-3.0。
+// 来源提交：be84736605527034689c95bf27828ff27d912c5e。
+// 对应原文件：lib/ui/scaffold/scaffold_search.dart。
+
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' show lerpDouble;
@@ -16,6 +20,7 @@ import 'package:flutter/material.dart'
         Switch,
         TextButton,
         TextField;
+import 'package:flutter/physics.dart' show SpringDescription;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
@@ -25,7 +30,6 @@ import '../../core/notices.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../router.dart';
-import '../../theme/app_motion.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_navigation_sidebar.dart';
 import '../../widgets/compact_navigation_shell.dart';
@@ -606,6 +610,14 @@ class _ServerSearchControlState extends State<_ServerSearchControl>
     with SingleTickerProviderStateMixin {
   static final double _collapsedSize = TonalButtonSize.section.button;
   static const double _expandedMaxWidth = 260.0;
+  static final Curve _openCurve = SpringCurve(
+    SpringDescription.withDampingRatio(mass: 1, stiffness: 390, ratio: 0.75),
+    seconds: 0.45,
+  );
+  static final Curve _closeCurve = SpringCurve(
+    SpringDescription.withDampingRatio(mass: 1, stiffness: 600, ratio: 0.75),
+    seconds: 0.25,
+  );
 
   bool _expanded = false;
 
@@ -615,13 +627,13 @@ class _ServerSearchControlState extends State<_ServerSearchControl>
     ..addListener(_handleFocusChanged);
   late final AnimationController _expandController = AnimationController(
     vsync: this,
-    duration: Motion.spatialFast,
-    reverseDuration: Motion.effectsDefault,
+    duration: const Duration(milliseconds: 450),
+    reverseDuration: const Duration(milliseconds: 250),
   );
   late final Animation<double> _expandAnimation = CurvedAnimation(
     parent: _expandController,
-    curve: Motion.spatialCurve,
-    reverseCurve: Motion.effectsDefaultCurve,
+    curve: _openCurve,
+    reverseCurve: _closeCurve,
   );
 
   @override
@@ -669,10 +681,11 @@ class _ServerSearchControlState extends State<_ServerSearchControl>
     _focusNode.unfocus();
   }
 
-  void _handleClear() {
-    _controller.clear();
-    widget.onChanged('');
-    _focusNode.requestFocus();
+  void _handleChanged(String value) {
+    widget.onChanged(value);
+    if (value.isEmpty && _expanded && !_focusNode.hasFocus) {
+      _focusNode.requestFocus();
+    }
   }
 
   void _handleTextChanged() {
@@ -748,7 +761,6 @@ class _ServerSearchControlState extends State<_ServerSearchControl>
             expandedWidth,
             _expandAnimation.value,
           )!.clamp(collapsedWidth, availableWidth);
-          final empty = _controller.text.isEmpty;
 
           return ElasticPress(
             child: GooPane(
@@ -763,73 +775,15 @@ class _ServerSearchControlState extends State<_ServerSearchControl>
                       physics: const NeverScrollableScrollPhysics(),
                       child: SizedBox(
                         width: expandedWidth,
-                        child: TextField(
-                          controller: _controller,
-                          focusNode: _focusNode,
-                          maxLines: 1,
-                          textAlignVertical: TextAlignVertical.center,
-                          textInputAction: TextInputAction.search,
-                          onChanged: widget.onChanged,
+                        child: TapRegion(
                           onTapOutside: (_) => _focusNode.unfocus(),
-                          style: context.texts.bodyMedium,
-                          decoration: InputDecoration(
-                            filled: false,
-                            hoverColor: Colors.transparent,
-                            isDense: true,
-                            constraints: BoxConstraints(
-                              minHeight: _collapsedSize,
-                            ),
+                          child: SearchField(
+                            controller: _controller,
+                            focusNode: _focusNode,
+                            height: _collapsedSize,
+                            fill: Colors.transparent,
                             hintText: l10n.serverSearchLabel,
-                            contentPadding: EdgeInsetsDirectional.fromSTEB(
-                              0,
-                              6,
-                              empty ? 16 : 0,
-                              6,
-                            ),
-                            border: const NoInputBorder(),
-                            enabledBorder: const NoInputBorder(),
-                            focusedBorder: const NoInputBorder(),
-                            errorBorder: const NoInputBorder(),
-                            focusedErrorBorder: const NoInputBorder(),
-                            prefixIcon: GlyphIcon(
-                              Glyphs.search,
-                              size: TonalButtonSize.section.icon,
-                              color: scheme.onSurface,
-                            ),
-                            prefixIconConstraints: BoxConstraints.tightFor(
-                              width: _collapsedSize,
-                              height: _collapsedSize,
-                            ),
-                            suffixIcon: empty
-                                ? null
-                                : Padding(
-                                    padding: const EdgeInsetsDirectional.only(
-                                      end: 2,
-                                    ),
-                                    child: IconButton(
-                                      onPressed: _handleClear,
-                                      style: ButtonStyle.from(
-                                        foregroundColor:
-                                            scheme.onSurfaceVariant,
-                                        fixedSize: Size.square(
-                                          TonalButtonSize.compact.button,
-                                        ),
-                                        minimumSize: Size.square(
-                                          TonalButtonSize.compact.button,
-                                        ),
-                                        padding: EdgeInsets.zero,
-                                        iconSize: IconSizes.medium,
-                                        shape: AppShape.full,
-                                      ),
-                                      icon: Semantics(
-                                        label: l10n.serverSearchClear,
-                                        child: const GlyphIcon(Glyphs.close),
-                                      ),
-                                    ),
-                                  ),
-                            suffixIconConstraints: BoxConstraints(
-                              minHeight: _collapsedSize,
-                            ),
+                            onChanged: _handleChanged,
                           ),
                         ),
                       ),

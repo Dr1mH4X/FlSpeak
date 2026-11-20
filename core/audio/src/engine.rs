@@ -85,6 +85,8 @@ enum CaptureCommand {
     SetPttMode(bool),
     SetPttActive(bool),
     SetCodec(i32),
+    SetNoiseSuppression(bool),
+    GetNoiseSuppression(std::sync::mpsc::Sender<bool>),
     SetVad {
         threshold: f32,
         hangover_frames: usize,
@@ -247,6 +249,21 @@ impl VoiceEngine {
             .map_err(send_error)
     }
 
+    pub fn set_noise_suppression(&self, enabled: bool) -> Result<(), AudioError> {
+        self.capture
+            .try_send(CaptureCommand::SetNoiseSuppression(enabled))
+            .map_err(send_error)
+    }
+
+    pub fn noise_suppression(&self) -> Result<bool, AudioError> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.capture
+            .try_send(CaptureCommand::GetNoiseSuppression(tx))
+            .map_err(send_error)?;
+        rx.recv()
+            .map_err(|_| AudioError::Engine("音频线程已退出".into()))
+    }
+
     pub fn set_vad_config(&self, threshold: f32, hangover_frames: usize) -> Result<(), AudioError> {
         self.capture
             .try_send(CaptureCommand::SetVad {
@@ -298,6 +315,7 @@ fn send_error<T>(err: TrySendError<T>) -> AudioError {
 struct CaptureLoopState {
     pipeline: CapturePipeline,
     stream: Option<CaptureStream>,
+    raw: Vec<f32>,
     device: Option<String>,
     want_active: bool,
     recovery: RecoveryState,
@@ -310,6 +328,55 @@ struct CaptureLoopState {
 }
 
 impl CaptureLoopState {
+    fn drain_stream(&mut self) -> Option<StreamError> {
+        self.raw.clear();
+        let stream = self.stream.as_ref()?;
+        let max_drain = (stream.format.sample_rate_hz as usize)
+            .saturating_mul(stream.format.channels as usize)
+            / 2;
+        stream.drain_into(&mut self.raw, max_drain.max(48_000 * 2 / 5));
+        if !self.raw.is_empty() {
+            self.pipeline.push_capture(&self.raw, stream.format);
+        }
+        stream.take_error()
+    }
+
+    fn sync_self_speaking(&mut self) {
+        let now_speaking = self.pipeline.is_speaking();
+        if now_speaking != self.speaking {
+            self.speaking = now_speaking;
+            (self.sink)(AudioEvent::SelfSpeaking {
+                speaking: now_speaking,
+            });
+        }
+    }
+
+    fn flush_pending_packets(&mut self, now: Instant) {
+        while self.pipeline.has_pending_packets() {
+            match self.pipeline.take_packet() {
+                Ok(Some(packet)) => {
+                    (self.sink)(AudioEvent::Outbound {
+                        codec: packet.codec,
+                        data: packet.data,
+                        produced_at: now,
+                    });
+                }
+                Ok(None) => break,
+                Err(err) => {
+                    (self.sink)(AudioEvent::Error {
+                        stage: AudioStage::Codec,
+                        message: err.to_string(),
+                    });
+                    if !self.pipeline.has_pending_packets() {
+                        break;
+                    }
+                }
+            }
+        }
+        self.pacer.reset();
+        self.sync_self_speaking();
+    }
+
     fn handle_command(&mut self, command: CaptureCommand) -> bool {
         let now = Instant::now();
         match command {
@@ -333,8 +400,7 @@ impl CaptureLoopState {
                 self.recovery.reset();
                 drop(self.stream.take());
                 self.pipeline.end();
-                self.speaking = false;
-                self.pacer.reset();
+                self.flush_pending_packets(now);
                 (self.sink)(AudioEvent::CaptureState { ready: false });
             }
             CaptureCommand::SetDevice { device } => {
@@ -342,6 +408,8 @@ impl CaptureLoopState {
                 self.meter.clear_mic();
                 self.device = device;
                 if self.want_active {
+                    self.pipeline.end();
+                    self.flush_pending_packets(now);
                     self.recovery.reset();
                     self.open_stream(now);
                     self.speaking = false;
@@ -351,26 +419,32 @@ impl CaptureLoopState {
             CaptureCommand::SetMuted(next) => {
                 self.pipeline.set_muted(next);
                 if next {
-                    self.pacer.reset();
+                    self.flush_pending_packets(now);
                 }
             }
             CaptureCommand::SetDeafened(deafened) => {
                 self.pipeline.set_deafened(deafened);
                 if deafened {
-                    self.pacer.reset();
+                    self.flush_pending_packets(now);
                 }
             }
             CaptureCommand::SetPttMode(next) => {
                 self.pipeline.set_ptt_mode(next);
-                self.pacer.reset();
+                self.flush_pending_packets(now);
                 (self.sink)(AudioEvent::CaptureState {
                     ready: self.stream.is_some(),
                 });
             }
             CaptureCommand::SetPttActive(next) => {
+                if !next
+                    && self.pipeline.is_capturing()
+                    && let Some(error) = self.drain_stream()
+                {
+                    self.handle_stream_error(error, now);
+                }
                 self.pipeline.set_ptt_active(next);
                 if !next {
-                    self.pacer.reset();
+                    self.flush_pending_packets(now);
                 }
                 (self.sink)(AudioEvent::CaptureState {
                     ready: self.stream.is_some(),
@@ -378,18 +452,25 @@ impl CaptureLoopState {
             }
             CaptureCommand::SetCodec(codec) => match self.pipeline.set_codec(codec) {
                 Ok(()) => {
-                    self.pacer.reset();
+                    self.flush_pending_packets(now);
                 }
                 Err(err) => (self.sink)(AudioEvent::Error {
                     stage: AudioStage::Codec,
                     message: err.to_string(),
                 }),
             },
+            CaptureCommand::SetNoiseSuppression(enabled) => {
+                self.pipeline.set_noise_suppression(enabled);
+            }
+            CaptureCommand::GetNoiseSuppression(reply) => {
+                let _ = reply.send(self.pipeline.noise_suppression());
+            }
             CaptureCommand::SetVad {
                 threshold,
                 hangover_frames,
             } => {
                 self.pipeline.set_vad_config(threshold, hangover_frames);
+                self.flush_pending_packets(now);
             }
             CaptureCommand::GetVad(reply) => {
                 let _ = reply.send(self.pipeline.vad_config());
@@ -427,8 +508,7 @@ impl CaptureLoopState {
             ActiveErrorAction::FailPermanent(message) => {
                 drop(self.stream.take());
                 self.pipeline.end();
-                self.speaking = false;
-                self.pacer.reset();
+                self.flush_pending_packets(now);
                 self.recovery.on_open_failed(now, false);
                 (self.sink)(AudioEvent::CaptureState { ready: false });
                 (self.sink)(AudioEvent::Error {
@@ -439,8 +519,7 @@ impl CaptureLoopState {
             ActiveErrorAction::Rebuild => {
                 drop(self.stream.take());
                 self.pipeline.end();
-                self.speaking = false;
-                self.pacer.reset();
+                self.flush_pending_packets(now);
                 (self.sink)(AudioEvent::CaptureState { ready: false });
                 if self.want_active {
                     self.recovery.reset();
@@ -465,6 +544,7 @@ fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, meter: Arc<
     let mut state = CaptureLoopState {
         pipeline,
         stream: None,
+        raw: Vec::new(),
         device: None,
         want_active: false,
         recovery: RecoveryState::default(),
@@ -475,7 +555,6 @@ fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, meter: Arc<
         sink,
         meter,
     };
-    let mut raw = Vec::new();
     let idle_tick = Duration::from_millis(IO_TICK_MS);
     let poll_tick = Duration::from_millis(CAPTURE_POLL_MS);
     let catchup_spacing = Duration::from_millis(CATCHUP_PACING_MS);
@@ -486,7 +565,10 @@ fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, meter: Arc<
             deadline.saturating_duration_since(now).min(idle_tick)
         } else if state.stream.is_none() {
             idle_tick
-        } else if state.pipeline.has_ready_frame() && state.pipeline.is_transmitting() {
+        } else if state.pipeline.has_ready_frame()
+            && state.pipeline.is_transmitting()
+            && !state.pipeline.has_pending_eos()
+        {
             match state.pacer.next_due_at() {
                 Some(due) if due <= now => catchup_spacing,
                 Some(due) => due.saturating_duration_since(now).min(poll_tick),
@@ -515,25 +597,18 @@ fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, meter: Arc<
             state.open_stream(now);
         }
 
-        if let Some(stream) = &state.stream {
-            raw.clear();
-            let max_drain = (stream.format.sample_rate_hz as usize)
-                .saturating_mul(stream.format.channels as usize)
-                / 2;
-            stream.drain_into(&mut raw, max_drain.max(48_000 * 2 / 5));
-            if !raw.is_empty() {
-                state.pipeline.push_capture(&raw, stream.format);
-            }
-            if let Some(error) = stream.take_error() {
-                state.handle_stream_error(error, now);
-            }
+        state.raw.clear();
+        if state.stream.is_some()
+            && let Some(error) = state.drain_stream()
+        {
+            state.handle_stream_error(error, now);
         }
 
         let mic = if state.stream.is_some() && state.pipeline.is_capturing() {
-            if raw.is_empty() {
+            if state.raw.is_empty() {
                 state.mic_meter.level()
             } else {
-                state.mic_meter.update(rms(&raw))
+                state.mic_meter.update(rms(&state.raw))
             }
         } else {
             state.mic_meter.silence()
@@ -543,19 +618,31 @@ fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, meter: Arc<
 
         let now = Instant::now();
         while state.pipeline.has_ready_frame() {
-            if state.pipeline.is_transmitting() && !state.pacer.is_due(now) {
+            if state.pipeline.is_transmitting()
+                && !state.pipeline.has_pending_eos()
+                && !state.pacer.is_due(now)
+            {
                 break;
             }
             match state.pipeline.take_packet() {
                 Ok(Some(packet)) => {
-                    let _ = state.pacer.is_due(now);
+                    let is_eos = packet.data.is_empty();
+                    if !is_eos {
+                        let _ = state.pacer.is_due(now);
+                    }
                     (state.sink)(AudioEvent::Outbound {
                         codec: packet.codec,
                         data: packet.data,
                         produced_at: now,
                     });
-                    state.pacer.advance();
-                    break;
+                    if is_eos {
+                        state.pacer.reset();
+                    } else {
+                        state.pacer.advance();
+                        if !state.pipeline.has_pending_eos() {
+                            break;
+                        }
+                    }
                 }
                 Ok(None) => {
                     state.pacer.reset();
@@ -565,7 +652,9 @@ fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, meter: Arc<
                         stage: AudioStage::Codec,
                         message: err.to_string(),
                     });
-                    break;
+                    if !state.pipeline.has_pending_packets() {
+                        break;
+                    }
                 }
             }
         }
@@ -573,13 +662,7 @@ fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, meter: Arc<
             state.pacer.reset();
         }
 
-        let now_speaking = state.pipeline.is_speaking();
-        if now_speaking != state.speaking {
-            state.speaking = now_speaking;
-            (state.sink)(AudioEvent::SelfSpeaking {
-                speaking: now_speaking,
-            });
-        }
+        state.sync_self_speaking();
     }
 
     drop(state.stream.take());

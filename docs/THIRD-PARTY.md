@@ -15,7 +15,7 @@
 
 原始许可证为 GNU General Public License v3.0，见 FlClash 仓库根 `LICENSE`，原文见 https://www.gnu.org/licenses/gpl-3.0.txt 。复制片段的版权归 FlClash 作者所有。
 
-复制内容来自 `lib/common/layout.dart` 的窗口尺寸与红绿灯区域、`lib/manager/window_manager.dart` 的 `WindowHeaderContainer`、`WindowHeaderLayout`、`WindowHeaderBar`、`WindowHeader`、`lib/manager/theme_manager.dart` 的 `_AppMediaQuery` 与 `AnnotatedRegion<SystemUiOverlayStyle>`、`lib/manager/app_manager.dart` 的侧栏安全区去重、`lib/ui/scaffold/`（`scaffold.dart`、`scaffold_actions.dart`、`scaffold_search.dart`）、`lib/ui/sidebar.dart`、`lib/ui/icons/app_glyphs.dart`、`lib/ui/icons/caption_icon.dart`、`lib/ui/list_item.dart`、`lib/ui/setting_text_card.dart`、`lib/common/dialog.dart` 与 `lib/providers/actions/common.dart` 的新版本提示弹窗布局与更新日志富文本样式、`lib/common/system_fonts.dart`、`lib/pages/home.dart` 的 `PageView` 过渡与 `_FadeTabPage`、`lib/widgets/palette.dart`、`lib/views/font_family.dart`、`lib/features/form/selection_sheet.dart`、`lib/views/theme_preview.dart`、`lib/views/theme.dart`、`android/app/src/main/res/values-v27/styles.xml`、`android/app/src/main/res/values-night-v27/styles.xml` 与 `windows/packaging/exe/` 的 `inno_setup.iss`、`ChineseSimplified.isl`。
+复制内容来自 `lib/common/layout.dart` 的窗口尺寸与红绿灯区域、`lib/manager/window_manager.dart` 的 `WindowHeaderContainer`、`WindowHeaderLayout`、`WindowHeaderBar`、`WindowHeader`、`lib/manager/theme_manager.dart` 的 `_AppMediaQuery` 与 `AnnotatedRegion<SystemUiOverlayStyle>`、`lib/manager/app_manager.dart` 的侧栏安全区去重、`lib/ui/scaffold/`（`scaffold.dart`、`scaffold_actions.dart`、`scaffold_search.dart`）、`lib/ui/scaffold/scaffold_search.dart` 的搜索展开弹簧动效、`lib/ui/sidebar.dart`、`lib/ui/icons/app_glyphs.dart`、`lib/ui/icons/caption_icon.dart`、`lib/ui/list_item.dart`、`lib/ui/setting_text_card.dart`、`lib/common/dialog.dart` 与 `lib/providers/actions/common.dart` 的新版本提示弹窗布局与更新日志富文本样式、`lib/common/system_fonts.dart`、`lib/pages/home.dart` 的 `PageView` 过渡与 `_FadeTabPage`、`lib/widgets/palette.dart`、`lib/views/font_family.dart`、`lib/features/form/selection_sheet.dart`、`lib/views/theme_preview.dart`、`lib/views/theme.dart`、`android/app/src/main/res/values-v27/styles.xml`、`android/app/src/main/res/values-night-v27/styles.xml` 与 `windows/packaging/exe/` 的 `inno_setup.iss`、`ChineseSimplified.isl`。
 
 | 本仓库文件 | 原始文件 |
 | --- | --- |
@@ -25,6 +25,7 @@
 | `lib/core/window_chrome.dart` | `plugins/window/lib/src/desktop_window.dart`、`lib/common/window.dart` |
 | `lib/widgets/window_header.dart` | `lib/manager/window_manager.dart`、`lib/ui/scaffold.dart` |
 | `lib/widgets/scaffold/scaffold.dart`、`scaffold_actions.dart`、`scaffold_search.dart` | `lib/ui/scaffold/scaffold.dart`、`scaffold_actions.dart`、`scaffold_search.dart` |
+| `lib/features/connect/connect_page.dart`（搜索展开动效） | `lib/ui/scaffold/scaffold_search.dart` |
 | `lib/widgets/compact_navigation_shell.dart` | `lib/pages/home.dart` |
 | `lib/widgets/app_navigation_sidebar.dart` | `lib/ui/sidebar.dart`、`lib/manager/app_manager.dart` |
 | `lib/widgets/app_glyphs.dart` | `lib/ui/icons/app_glyphs.dart` |

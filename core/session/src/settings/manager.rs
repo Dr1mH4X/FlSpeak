@@ -212,6 +212,15 @@ impl SettingsManager {
             if let Some(map) = parsed.get("serverIcons") {
                 migrated.ui.server_icons = serde_json::from_value(map.clone()).unwrap_or_default();
             }
+            if let Some(audio) = parsed.get("audio")
+                && let Ok(audio_settings) = serde_json::from_value::<AudioSettings>(audio.clone())
+            {
+                migrated.audio = audio_settings;
+            } else if let Some(noise_suppression) =
+                parsed.get("noiseSuppression").and_then(|v| v.as_bool())
+            {
+                migrated.audio.noise_suppression = noise_suppression;
+            }
             migrated.schema_version = 4;
             migrated
         } else {
@@ -316,6 +325,16 @@ mod tests {
         assert!(value.get("ui").is_some());
         assert!(value.get("network").is_some());
         assert_eq!(value["ui"]["nickname"], "TestUser");
+
+        // 验证前端 fallback 写入的 audio.noiseSuppression = false 在迁移时不会丢失
+        let fallback_json = r#"{
+            "nickname": "FallbackUser",
+            "noiseSuppression": false,
+            "audio": { "noiseSuppression": false }
+        }"#;
+        std::fs::write(&path, fallback_json).unwrap();
+        let migrated = SettingsManager::load_and_migrate(&path).unwrap();
+        assert!(!migrated.audio.noise_suppression);
 
         let _ = std::fs::remove_dir_all(&dir);
     }

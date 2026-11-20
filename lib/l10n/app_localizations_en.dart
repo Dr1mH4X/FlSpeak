@@ -373,6 +373,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsThemeDark => 'Dark';
 
   @override
+  String get settingsVoiceMicrophone => 'Microphone';
+
+  @override
+  String get settingsVoiceDevices => 'Devices';
+
+  @override
   String get settingsPttMode => 'Push to talk';
 
   @override
@@ -393,6 +399,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsPttHotkeyClear => 'Clear';
+
+  @override
+  String get settingsNoiseSuppression => 'Noise suppression';
 
   @override
   String get settingsInputDevice => 'Microphone';
@@ -436,9 +445,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get serverSearchLabel => 'Search servers';
-
-  @override
-  String get serverSearchClear => 'Clear search';
 
   @override
   String get serverSearchEmpty => 'No matching servers';

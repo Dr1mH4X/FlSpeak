@@ -286,7 +286,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   generateSection(
-                    title: l10n.settingsPttMode,
+                    title: l10n.settingsVoiceMicrophone,
                     items: [
                       SettingsTile(
                         icon: Icons.record_voice_over_rounded,
@@ -313,10 +313,23 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                             : pttHotkeyDisplayName(pttHotkeyKey),
                         onTap: () => unawaited(_pickPttHotkey()),
                       ),
+                      SettingsTile(
+                        icon: Icons.settings_voice_rounded,
+                        title: l10n.settingsNoiseSuppression,
+                        trailing: Switch(
+                          value: preferences.noiseSuppression,
+                          onChanged: ref
+                              .read(preferencesProvider.notifier)
+                              .setNoiseSuppression,
+                        ),
+                        onTap: () => ref
+                            .read(preferencesProvider.notifier)
+                            .setNoiseSuppression(!preferences.noiseSuppression),
+                      ),
                     ],
                   ),
                   generateSection(
-                    title: l10n.settingsInputDevice,
+                    title: l10n.settingsVoiceDevices,
                     items: [
                       SettingsTile(
                         icon: Icons.mic_rounded,

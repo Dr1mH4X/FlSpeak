@@ -1254,4 +1254,158 @@ mod tests {
         assert_eq!(tick.samples.len(), MIX_SAMPLES);
         assert_eq!(MIX_SAMPLES_PER_CHANNEL, FRAME_SAMPLES_PER_CHANNEL / 2);
     }
+
+    #[test]
+    fn intermittent_short_talkspurts_from_capture_to_playback_trigger_no_plc_or_drops() {
+        use crate::capture::CapturePipeline;
+        use crate::format::OPUS_MONO;
+
+        let mut capture = CapturePipeline::new(VOICE_CODEC).unwrap();
+        capture.begin();
+        capture.set_vad_config(0.015, 2);
+
+        let mut playback = PlaybackPipeline::new();
+        let mut now = Instant::now();
+        let mut seq = 0u16;
+        let client_id = 42;
+
+        let speech: Vec<f32> = (0..FRAME_SAMPLES_PER_CHANNEL)
+            .map(|i| {
+                let t = i as f32 / 48_000.0;
+                ((2.0 * std::f32::consts::PI * 190.0 * t).sin()
+                    + 0.5 * (2.0 * std::f32::consts::PI * 380.0 * t).sin())
+                    * 0.35
+            })
+            .collect();
+        let quiet = vec![0.0f32; FRAME_SAMPLES_PER_CHANNEL];
+
+        fn push_capture_packets(
+            cap: &mut CapturePipeline,
+            playback: &mut PlaybackPipeline,
+            client_id: i32,
+            seq: &mut u16,
+            t: &mut Instant,
+            peak: &mut f32,
+        ) -> bool {
+            let mut saw_eos = false;
+            while let Some(pkt) = cap.take_packet().unwrap() {
+                let is_eos = pkt.data.is_empty();
+                saw_eos |= is_eos;
+                playback.push_incoming(
+                    VoiceFrame {
+                        client_id,
+                        codec: pkt.codec,
+                        seq: *seq,
+                        received_at: *t,
+                        is_end_of_stream: is_eos,
+                        data: pkt.data,
+                    },
+                    *t,
+                );
+                *seq = seq.wrapping_add(1);
+                let first_tick = playback.tick(*t, MIX_SAMPLES_PER_CHANNEL);
+                for sample in &first_tick.samples {
+                    *peak = peak.max(sample.abs());
+                }
+                if !first_tick.talkers.is_empty() {
+                    let second_tick = playback.tick(
+                        *t + Duration::from_millis(MIX_FRAME_MS),
+                        MIX_SAMPLES_PER_CHANNEL,
+                    );
+                    for sample in &second_tick.samples {
+                        *peak = peak.max(sample.abs());
+                    }
+                }
+                *t += Duration::from_millis(FRAME_MS);
+            }
+            saw_eos
+        }
+
+        // 第 1 段短促发言：3 帧语音 + 静音挂断至 EOS。
+        let mut peak_1 = 0.0f32;
+        for _ in 0..3 {
+            capture.push_capture(&speech, OPUS_MONO);
+            push_capture_packets(
+                &mut capture,
+                &mut playback,
+                client_id,
+                &mut seq,
+                &mut now,
+                &mut peak_1,
+            );
+        }
+        let mut eos_1 = false;
+        for _ in 0..6 {
+            capture.push_capture(&quiet, OPUS_MONO);
+            if push_capture_packets(
+                &mut capture,
+                &mut playback,
+                client_id,
+                &mut seq,
+                &mut now,
+                &mut peak_1,
+            ) {
+                eos_1 = true;
+                break;
+            }
+        }
+        assert!(eos_1, "第 1 段发言应发出 EOS 尾包");
+        assert!(peak_1 > 0.01, "第 1 段短话应正常解码出声");
+        if let Some(talker) = playback.talkers.get(&client_id) {
+            assert_eq!(talker.plc_generated, 0);
+            assert_eq!(talker.dropped, 0);
+        }
+
+        // 停顿 120ms（< 500ms）：在余量播完前后均不触发 PLC。
+        for _ in 0..12 {
+            playback.tick(now, MIX_SAMPLES_PER_CHANNEL);
+            if let Some(talker) = playback.talkers.get(&client_id) {
+                assert_eq!(talker.plc_generated, 0);
+                assert_eq!(talker.dropped, 0);
+            }
+            now += Duration::from_millis(MIX_FRAME_MS);
+        }
+
+        // 第 2 段短促发言：前部 seq 零丢弃且能正常解码出声。
+        let mut decoded_peak = 0.0f32;
+        for _ in 0..3 {
+            capture.push_capture(&speech, OPUS_MONO);
+            push_capture_packets(
+                &mut capture,
+                &mut playback,
+                client_id,
+                &mut seq,
+                &mut now,
+                &mut decoded_peak,
+            );
+        }
+        let mut eos_2 = false;
+        for _ in 0..6 {
+            capture.push_capture(&quiet, OPUS_MONO);
+            if push_capture_packets(
+                &mut capture,
+                &mut playback,
+                client_id,
+                &mut seq,
+                &mut now,
+                &mut decoded_peak,
+            ) {
+                eos_2 = true;
+                break;
+            }
+        }
+        assert!(eos_2, "第 2 段发言应发出 EOS 尾包");
+        for _ in 0..10 {
+            let tick = playback.tick(now, MIX_SAMPLES_PER_CHANNEL);
+            for sample in &tick.samples {
+                decoded_peak = decoded_peak.max(sample.abs());
+            }
+            if let Some(talker) = playback.talkers.get(&client_id) {
+                assert_eq!(talker.plc_generated, 0);
+                assert_eq!(talker.dropped, 0);
+            }
+            now += Duration::from_millis(MIX_FRAME_MS);
+        }
+        assert!(decoded_peak > 0.01, "第二段短话应正常解码出声");
+    }
 }

@@ -264,6 +264,7 @@ impl Actor {
             initial_audio.vad_threshold,
             initial_audio.vad_hangover_frames,
         );
+        let _ = voice.set_noise_suppression(initial_audio.noise_suppression);
         let audio_sync_tx = commands.clone();
         SettingsManager::subscribe_audio(move |audio| {
             audio_sync_tx
@@ -353,7 +354,7 @@ impl Actor {
                     _ = &mut stop_audio_rx => break,
                     event = audio_rx.recv() => match event {
                         Some(AudioEvent::Outbound { codec, data, produced_at }) => {
-                            audio_gate.borrow().dispatch_outbound(
+                            audio_gate.borrow_mut().dispatch_outbound(
                                 codec,
                                 data,
                                 produced_at,

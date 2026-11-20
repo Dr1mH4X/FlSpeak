@@ -4,7 +4,7 @@
 
 ```text
 麦克风 ──cpal──> ArrayQueue ──> capture 线程
-  设备格式 → 48k 目标声道 → VAD/PTT → 20ms Opus → VoicePacer → actor
+  设备格式 → 48k 目标声道 → RNNoise 降噪（Voice 默认开启）→ VAD/PTT（含 Pre-roll 与淡入淡出）→ 20ms Opus → VoicePacer → actor
 actor ──> Client::send_voice(data, codec)          （发送仍由 actor 独占）
 
 on_voice_data ──有界通道──> playback 线程
@@ -30,8 +30,8 @@ on_voice_data ──有界通道──> playback 线程
 ## 采集
 
 - 设备回调按设备原生格式写入环形队列；capture 线程每 10ms 排空一次，转成 48kHz 单声道或立体声，追加到采集缓冲。
-- 每 20ms 取一帧，能量 VAD（默认采用 `AudioSettings` 持久化配置：阈值 0.015、15 帧即 300ms 尾音）判断是否发送。PTT 模式绕过 VAD，按下才发。VAD 实现是可替换的 `Vad` trait，将来换 RNNoise 不动结构。
-- 一段语音开始时重置 Opus 编码状态（保留运行时丢包率配置）；mute/deafen 会清空采集缓冲并停发，解静音后不会补发旧音频。
+- 每 20ms 取一帧，在 codec 4（Opus Voice 单声道）且开启 `audio.noiseSuppression`（默认开启）时先经 `nnnoiseless`（RNNoise）降噪，codec 5（Opus Music 立体声）自动旁路；随后由能量 VAD（默认采用 `AudioSettings` 持久化配置：阈值 0.015、15 帧即 300ms 尾音；含 1 帧 Pre-roll、5ms 淡入、7.5ms 淡出与 0 字节 EOS 尾包）判断是否发送。PTT 模式绕过 VAD，按下才发。VAD 实现是可替换的 `Vad` trait。
+- 连续静默超过 2 秒（`SILENCE_RESET_FRAMES` = 100 帧）后再次开口时重置 Opus 编码状态（保留运行时丢包率配置）；mute/deafen 立即清空采集与待发音频缓冲并停发（仅在需要结束已开启发言段时补发单个 0 字节 EOS 尾包），解静音后不补发旧音频。
 - `VoicePacer`：空闲复位、稳态每 20ms 一帧、落后超过 200ms 重定位，禁止倾泻。
 - Opus 编码与 actor 发送检查共用 484 字节载荷预算（TS 单包上限 500 字节，扣除 tag/头/语音头）。编码器以此限制单帧输出，保留完整可解码的包；64kbps 人声、128kbps 音乐是 CVBR 的目标平均码率。
 - 编码包携带单调时钟时间；actor 丢弃等待超过 100ms 的包，并核对连接、频道、codec、采集状态与 mute/deafen/PTT。控制状态或频道变化会使此前排队的包失效。
@@ -72,7 +72,7 @@ on_voice_data ──有界通道──> playback 线程
 
 ## 依赖与构建
 
-`audio` feature 拉 `cpal`、`rusty-opus`（纯 Rust 实现）、`crossbeam-queue`；Windows 与 macOS 无需额外系统 Opus 库，Linux 仅需 ALSA 开发包与 pkg-config：
+`audio` feature 拉 `cpal`、`rusty-opus`（纯 Rust 实现）、`crossbeam-queue` 与 `nnnoiseless`（RNNoise 降噪）；Windows 与 macOS 无需额外系统 Opus 库，Linux 仅需 ALSA 开发包与 pkg-config：
 
 ```sh
 # Debian/Ubuntu
@@ -89,5 +89,5 @@ cargo test -p server -p proto
 ## 已知限制
 
 - 没有回声消除：外放会回授，当前建议耳机。将来做 AEC 时用 playback 回读 ring + 固定延迟，不在 cpal 回调里做。
-- 没有降噪、AGC、去混响；VAD 是能量阈值，机械键盘会误触发。
+- 没有 AGC、去混响；RNNoise 降噪仅作用于 codec 4 单声道语音上行（codec 5 立体声音乐自动旁路）；VAD 仍基于降噪后的能量阈值，强瞬态声仍可能触发。
 - 界面只收 50Hz 的聚合电平（本端麦克风、远端混音）；不传音频样本或逐帧波形。`Speaking` 只在活跃集合变化时发低频事件。

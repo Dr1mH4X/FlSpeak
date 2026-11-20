@@ -1710,6 +1710,13 @@ class PreferencesController extends Notifier<SessionPreferences> {
     _update(state.copyWith(autoCheckUpdate: enabled));
   }
 
+  void setNoiseSuppression(bool enabled) {
+    if (enabled == state.noiseSuppression) {
+      return;
+    }
+    _update(state.copyWith(noiseSuppression: enabled));
+  }
+
   void setLogLevel(AppLogLevel level) {
     if (level == state.logLevel) {
       return;

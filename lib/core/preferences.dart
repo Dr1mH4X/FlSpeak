@@ -288,6 +288,7 @@ class SessionPreferences {
     this.screenShareCodec = ScreenShareCodecPreference.h264,
     this.screenShareDegradation =
         ScreenShareDegradationPreference.maintainFramerate,
+    this.noiseSuppression = true,
     this.autoCheckUpdate = true,
     this.logLevel = AppLogLevel.defaultForBuild,
   });
@@ -334,6 +335,7 @@ class SessionPreferences {
   final ScreenShareFrameRatePreset screenShareFrameRate;
   final ScreenShareCodecPreference screenShareCodec;
   final ScreenShareDegradationPreference screenShareDegradation;
+  final bool noiseSuppression;
   final bool autoCheckUpdate;
   final AppLogLevel logLevel;
 
@@ -361,6 +363,7 @@ class SessionPreferences {
     ScreenShareFrameRatePreset? screenShareFrameRate,
     ScreenShareCodecPreference? screenShareCodec,
     ScreenShareDegradationPreference? screenShareDegradation,
+    bool? noiseSuppression,
     bool? autoCheckUpdate,
     AppLogLevel? logLevel,
   }) => SessionPreferences(
@@ -396,6 +399,7 @@ class SessionPreferences {
     screenShareCodec: screenShareCodec ?? this.screenShareCodec,
     screenShareDegradation:
         screenShareDegradation ?? this.screenShareDegradation,
+    noiseSuppression: noiseSuppression ?? this.noiseSuppression,
     autoCheckUpdate: autoCheckUpdate ?? this.autoCheckUpdate,
     logLevel: logLevel ?? this.logLevel,
   );
@@ -428,6 +432,7 @@ class SessionPreferences {
     'screenShareFrameRate': screenShareFrameRate.fps,
     'screenShareCodec': screenShareCodec.id,
     'screenShareDegradation': screenShareDegradation.id,
+    'noiseSuppression': noiseSuppression,
     'autoCheckUpdate': autoCheckUpdate,
     'logLevel': logLevel.id,
   };
@@ -491,6 +496,15 @@ class SessionPreferences {
     final rawPttHotkey = ui['pttHotkey'];
     final rawPanelWidth = ui['channelPanelWidth'];
     final rawStreamViewerHeight = ui['streamViewerHeight'];
+    final audio = json['audio'] is Map
+        ? (json['audio'] as Map).cast<String, Object?>()
+        : null;
+    final rawNoiseSuppression =
+        audio != null && audio.containsKey('noiseSuppression')
+        ? audio['noiseSuppression']
+        : ui.containsKey('noiseSuppression')
+        ? ui['noiseSuppression']
+        : json['noiseSuppression'];
     final rawAutoCheckUpdate = ui['autoCheckUpdate'];
     return SessionPreferences(
       nickname: nickname.isEmpty || nickname == _legacyFallbackNickname
@@ -539,6 +553,9 @@ class SessionPreferences {
       screenShareDegradation: ScreenShareDegradationPreference.fromId(
         ui['screenShareDegradation'],
       ),
+      noiseSuppression: rawNoiseSuppression is bool
+          ? rawNoiseSuppression
+          : true,
       autoCheckUpdate: rawAutoCheckUpdate is bool ? rawAutoCheckUpdate : true,
       logLevel: AppLogLevel.fromId(ui['logLevel']),
     );
@@ -628,6 +645,15 @@ class PreferencesStore {
       if (ffi.isRustLibInitialized) {
         try {
           ffi.updateUiSettingsJson(json: jsonEncode(preferences.toJson()));
+          final currentDecoded = jsonDecode(ffi.getSettingsJson());
+          final audioMap =
+              currentDecoded is Map && currentDecoded['audio'] is Map
+              ? Map<String, Object?>.from(
+                  (currentDecoded['audio'] as Map).cast<String, Object?>(),
+                )
+              : <String, Object?>{};
+          audioMap['noiseSuppression'] = preferences.noiseSuppression;
+          ffi.updateAudioSettingsJson(json: jsonEncode(audioMap));
           final jsonStr = ffi.getSettingsJson();
           final decoded = jsonDecode(jsonStr);
           if (decoded is Map) {
@@ -664,6 +690,13 @@ class PreferencesStore {
 
       final payload = Map<String, Object?>.from(existing);
       payload.addAll(normalizedPreferences.toJson());
+      final audioPayload = payload['audio'] is Map
+          ? Map<String, Object?>.from(
+              (payload['audio'] as Map).cast<String, Object?>(),
+            )
+          : <String, Object?>{};
+      audioPayload['noiseSuppression'] = normalizedPreferences.noiseSuppression;
+      payload['audio'] = audioPayload;
 
       final temporary = File('$target.tmp');
       await temporary.writeAsString(jsonEncode(payload), flush: true);

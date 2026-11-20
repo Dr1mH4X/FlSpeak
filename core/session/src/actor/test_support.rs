@@ -33,6 +33,7 @@ pub(super) fn audio_actor() -> Actor {
     };
     actor.self_channel_id = 5;
     actor.capture_active = true;
+    actor.sync_voice_gate();
     actor
 }
 

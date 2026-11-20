@@ -773,7 +773,11 @@ void main() {
     expect(find.byType(ServerRow), findsOneWidget);
 
     // 点击清空按钮清空内容并恢复焦点，保持展开。
-    await tester.tap(find.bySemanticsLabel('清空搜索'));
+    await tester.tap(
+      find.byWidgetPredicate(
+        (w) => w is GlyphIcon && w.glyph == Glyphs.clearField,
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.byType(ServerRow), findsNWidgets(2));
     expect(find.byType(TextField), findsOneWidget);
@@ -894,7 +898,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(ServerRow), findsOneWidget);
 
-    await tester.tap(find.bySemanticsLabel('清空搜索'));
+    await tester.tap(
+      find.byWidgetPredicate(
+        (w) => w is GlyphIcon && w.glyph == Glyphs.clearField,
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.byType(ServerRow), findsNWidgets(2));
 
