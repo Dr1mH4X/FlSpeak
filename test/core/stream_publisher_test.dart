@@ -1514,5 +1514,133 @@ void main() {
         ]);
       },
     );
+
+    test('rebuilds RTCPeerConnection cleanly when an accepted viewer reconnects with or without prior left event', () async {
+      final events = StreamController<CoreEvent>.broadcast();
+      final core = _FakeCoreSession(events);
+      final bindings = _FakePublisherWebRtcBindings();
+
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(core),
+          webRtcBindingsProvider.overrideWithValue(bindings),
+        ],
+      );
+      addTearDown(() async {
+        await events.close();
+        container.dispose();
+      });
+
+      container.read(sessionViewProvider);
+      events.add(
+        const CoreEvent.state(
+          state: CoreSessionState.connected(clientId: 1, channelId: 5),
+        ),
+      );
+      await _pumpEventQueue();
+
+      await container
+          .read(sessionViewProvider.notifier)
+          .startScreenShare(sourceId: 'screen:0', sourceName: 'Entire Screen');
+      events.add(
+        const CoreEvent.screenSharePublished(streamId: 'pub-stream-reconn'),
+      );
+      await _pumpEventQueue();
+
+      // 1. Initial join & complete negotiation for viewer 909.
+      events.add(
+        const CoreEvent.streamViewerJoinRequested(
+          streamId: 'pub-stream-reconn',
+          viewerClid: 909,
+        ),
+      );
+      await _pumpEventQueue();
+      events.add(
+        const CoreEvent.publisherSignalReceived(
+          streamId: 'pub-stream-reconn',
+          viewerClid: 909,
+          signal: PublisherSignal.answer(sdp: _sampleViewerAnswerSdp),
+        ),
+      );
+      await _pumpEventQueue();
+
+      expect(bindings.createdPeers, hasLength(1));
+      final peer1 = bindings.createdPeers[0];
+      peer1.onConnectionState?.call(
+        RTCPeerConnectionState.RTCPeerConnectionStateConnected,
+      );
+      await _pumpEventQueue();
+      expect(core.joinResponses, hasLength(1));
+
+      // 2. Reconnect path A: Actor emits StreamViewerLeft followed immediately by StreamViewerJoinRequested.
+      events.add(
+        const CoreEvent.streamViewerLeft(
+          streamId: 'pub-stream-reconn',
+          viewerClid: 909,
+        ),
+      );
+      events.add(
+        const CoreEvent.streamViewerJoinRequested(
+          streamId: 'pub-stream-reconn',
+          viewerClid: 909,
+        ),
+      );
+      await _pumpEventQueue();
+
+      expect(peer1.closed, isTrue);
+      expect(peer1.disposed, isTrue);
+      expect(bindings.createdPeers, hasLength(2));
+      final peer2 = bindings.createdPeers[1];
+      expect(peer2.closed, isFalse);
+      expect(core.joinResponses, hasLength(2));
+      expect(core.joinResponses.last.viewerClid, 909);
+      expect(core.joinResponses.last.accept, isTrue);
+      expect(container.read(streamPublisherProvider).viewerIds, {909});
+
+      // Complete negotiation on peer2.
+      events.add(
+        const CoreEvent.publisherSignalReceived(
+          streamId: 'pub-stream-reconn',
+          viewerClid: 909,
+          signal: PublisherSignal.answer(sdp: _sampleViewerAnswerSdp),
+        ),
+      );
+      events.add(
+        const CoreEvent.publisherSignalReceived(
+          streamId: 'pub-stream-reconn',
+          viewerClid: 909,
+          signal: PublisherSignal.iceCandidate(
+            sdp: 'candidate:reconn2 1 udp 1 198.51.100.30 50002 typ host',
+            mid: '0',
+            mLine: 0,
+          ),
+        ),
+      );
+      await _pumpEventQueue();
+      expect(peer2.remoteDescription?.sdp, _sampleViewerAnswerSdp);
+      expect(peer2.addedCandidates.map((c) => c.candidate), [
+        'candidate:reconn2 1 udp 1 198.51.100.30 50002 typ host',
+      ]);
+
+      // 3. Reconnect path B: Direct StreamViewerJoinRequested without prior StreamViewerLeft.
+      events.add(
+        const CoreEvent.streamViewerJoinRequested(
+          streamId: 'pub-stream-reconn',
+          viewerClid: 909,
+        ),
+      );
+      await _pumpEventQueue();
+
+      expect(peer2.closed, isTrue);
+      expect(peer2.disposed, isTrue);
+      expect(bindings.createdPeers, hasLength(3));
+      final peer3 = bindings.createdPeers[2];
+      expect(peer3.closed, isFalse);
+      expect(core.joinResponses, hasLength(3));
+      expect(container.read(streamPublisherProvider).viewerIds, {909});
+      expect(container.read(streamPublisherProvider.notifier).activePeers, {
+        909: peer3,
+      });
+    });
   });
 }

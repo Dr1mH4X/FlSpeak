@@ -62,6 +62,18 @@ pub(super) struct ConnectTarget {
 }
 
 #[derive(Debug)]
+pub(crate) struct StreamJoinResponse {
+    pub(super) epoch: u64,
+    pub(super) stream_epoch: u64,
+    pub(super) stream_id: String,
+    pub(super) viewer_clid: i32,
+    pub(super) request_token: u64,
+    pub(super) accept: bool,
+    pub(super) outcome: Result<Option<streams::ViewerPeerHandle>, tsclient_rs::stream::StreamError>,
+    pub(super) reply: oneshot::Sender<Result<(), SessionError>>,
+}
+
+#[derive(Debug)]
 pub(crate) enum SessionSignal {
     TextMessage {
         epoch: u64,
@@ -85,6 +97,7 @@ pub(crate) enum SessionSignal {
     ClientUpdated {
         epoch: u64,
         id: i32,
+        channel_id: u64,
         input_muted: Option<bool>,
         output_muted: Option<bool>,
         away: Option<bool>,
@@ -115,6 +128,7 @@ pub(crate) enum SessionSignal {
     /// `Streams::watch` 异步等待推流端应答完成。
     WatchResolved {
         epoch: u64,
+        stream_epoch: u64,
         watch_id: u64,
         stream_id: String,
         outcome: Result<tsclient_rs::stream::StreamView, tsclient_rs::stream::StreamError>,
@@ -122,6 +136,7 @@ pub(crate) enum SessionSignal {
     /// 观看端对端句柄（`tsclient_rs::stream::StreamView`）收到的信令或关闭事件。
     ViewerPeerEvent {
         epoch: u64,
+        stream_epoch: u64,
         watch_id: u64,
         stream_id: String,
         event: tsclient_rs::stream::PeerEvent,
@@ -129,22 +144,45 @@ pub(crate) enum SessionSignal {
     /// 本地发布流收到的观看请求或结束事件。
     PublishedStreamEvent {
         epoch: u64,
+        stream_epoch: u64,
         stream_id: String,
         event: tsclient_rs::stream::PublishedStreamEvent,
     },
     /// 远端观众撤回等待中的加入请求，或发布流因结束而关闭请求。
     JoinRequestClosed {
         epoch: u64,
+        stream_epoch: u64,
         stream_id: String,
         viewer_clid: i32,
+        token: u64,
         cause: tsclient_rs::stream::JoinRequestCloseCause,
     },
     /// 本地推流单个已接受观众的信令或关闭事件。
     PublisherPeerEvent {
         epoch: u64,
+        stream_epoch: u64,
         stream_id: String,
         viewer_clid: i32,
+        token: u64,
         event: tsclient_rs::stream::PeerEvent,
+    },
+    /// `Streams::publish` 异步开启推流完成。
+    StartScreenShareResolved {
+        epoch: u64,
+        stream_epoch: u64,
+        publish_token: u64,
+        outcome: Result<tsclient_rs::stream::PublishedStream, tsclient_rs::stream::StreamError>,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
+    /// `JoinRequest::accept` / `deny` 异步响应完成。
+    StreamJoinResponseResolved(StreamJoinResponse),
+    /// 屏幕共享控制/信令异步网络等待完成回投。
+    StreamCommandFinished {
+        epoch: u64,
+        stream_epoch: u64,
+        require_matching_epoch: bool,
+        outcome: Result<(), tsclient_rs::stream::StreamError>,
+        reply: oneshot::Sender<Result<(), SessionError>>,
     },
     /// `notifyconnectioninfo`：服务器返回自身连接的权威统计。
     ConnectionInfo {
@@ -247,9 +285,11 @@ pub(crate) struct Actor {
     connection_epoch: u64,
     epoch: Arc<AtomicU64>,
     stream_session: Option<ActiveStreamSession>,
+    stream_epoch: u64,
     client_channels: HashMap<i32, u64>,
     last_streams_state: (Vec<StreamView>, Option<String>),
     next_watch_id: u64,
+    next_stream_token: u64,
     network_monitor: Option<crate::network::NetworkMonitor>,
     last_network_sample_error: Option<Instant>,
     open_protocol: OpenProtocolEngine,
@@ -349,9 +389,11 @@ impl Actor {
             connection_epoch: 0,
             epoch: Arc::new(AtomicU64::new(0)),
             stream_session: None,
+            stream_epoch: 0,
             client_channels: HashMap::new(),
             last_streams_state: (Vec::new(), None),
             next_watch_id: 0,
+            next_stream_token: 0,
             network_monitor: None,
             last_network_sample_error: None,
             open_protocol: new_open_protocol_engine(),
@@ -796,10 +838,10 @@ impl Actor {
                 source_clid,
                 reply,
             } => {
-                let _ = reply.send(self.join_stream(stream_id, source_clid).await);
+                let _ = reply.send(self.join_stream(stream_id, source_clid));
             }
             SessionCommand::LeaveStream { stream_id, reply } => {
-                let _ = reply.send(self.leave_stream(stream_id).await);
+                self.leave_stream(stream_id, reply);
             }
             SessionCommand::SendStreamAnswer {
                 stream_id,
@@ -807,7 +849,7 @@ impl Actor {
                 sdp,
                 reply,
             } => {
-                let _ = reply.send(self.send_stream_answer(stream_id, target_clid, sdp).await);
+                self.send_stream_answer(stream_id, target_clid, sdp, reply);
             }
             SessionCommand::SendStreamIceCandidate {
                 stream_id,
@@ -817,10 +859,7 @@ impl Actor {
                 m_line,
                 reply,
             } => {
-                let _ = reply.send(
-                    self.send_stream_ice_candidate(stream_id, target_clid, sdp, mid, m_line)
-                        .await,
-                );
+                self.send_stream_ice_candidate(stream_id, target_clid, sdp, mid, m_line, reply);
             }
             SessionCommand::StartScreenShare {
                 name,
@@ -829,13 +868,10 @@ impl Actor {
                 viewer_limit,
                 reply,
             } => {
-                let _ = reply.send(
-                    self.start_screen_share(name, audio, bitrate, viewer_limit)
-                        .await,
-                );
+                self.start_screen_share(name, audio, bitrate, viewer_limit, reply);
             }
             SessionCommand::StopScreenShare { reply } => {
-                let _ = reply.send(self.stop_screen_share().await);
+                self.stop_screen_share(reply);
             }
             SessionCommand::RespondStreamJoinRequest {
                 viewer_clid,
@@ -843,10 +879,7 @@ impl Actor {
                 offer_sdp,
                 reply,
             } => {
-                let _ = reply.send(
-                    self.respond_stream_join_request(viewer_clid, accept, offer_sdp)
-                        .await,
-                );
+                self.respond_stream_join_request(viewer_clid, accept, offer_sdp, reply);
             }
             SessionCommand::SendPublisherIceCandidate {
                 viewer_clid,
@@ -855,13 +888,10 @@ impl Actor {
                 m_line,
                 reply,
             } => {
-                let _ = reply.send(
-                    self.send_publisher_ice_candidate(viewer_clid, sdp, mid, m_line)
-                        .await,
-                );
+                self.send_publisher_ice_candidate(viewer_clid, sdp, mid, m_line, reply);
             }
             SessionCommand::KickStreamViewer { viewer_clid, reply } => {
-                let _ = reply.send(self.kick_stream_viewer(viewer_clid).await);
+                self.kick_stream_viewer(viewer_clid, reply);
             }
             SessionCommand::QueryPeerIdentity { target_clid, reply } => {
                 let _ = reply.send(self.query_peer_identity(target_clid));
@@ -944,13 +974,16 @@ impl Actor {
             }
             SessionSignal::WatchResolved {
                 epoch,
+                stream_epoch,
                 watch_id,
                 stream_id,
                 outcome,
             } => {
-                if epoch == self.connection_epoch {
+                if epoch == self.connection_epoch && stream_epoch == self.stream_epoch {
                     self.handle_watch_resolved(watch_id, stream_id, outcome);
-                } else if let Ok(view) = outcome {
+                } else if let Ok(view) = outcome
+                    && !view.closed()
+                {
                     tokio::task::spawn_local(async move {
                         let _ = view.leave().await;
                     });
@@ -958,42 +991,81 @@ impl Actor {
             }
             SessionSignal::ViewerPeerEvent {
                 epoch,
+                stream_epoch,
                 watch_id,
                 stream_id,
                 event,
             } => {
-                if epoch == self.connection_epoch {
+                if epoch == self.connection_epoch && stream_epoch == self.stream_epoch {
                     self.handle_viewer_peer_event(watch_id, stream_id, event);
                 }
             }
             SessionSignal::PublishedStreamEvent {
                 epoch,
+                stream_epoch,
                 stream_id,
                 event,
             } => {
-                if epoch == self.connection_epoch {
+                if epoch == self.connection_epoch && stream_epoch == self.stream_epoch {
                     self.handle_published_stream_event(stream_id, event);
                 }
             }
             SessionSignal::JoinRequestClosed {
                 epoch,
+                stream_epoch,
                 stream_id,
                 viewer_clid,
+                token,
                 cause,
             } => {
-                if epoch == self.connection_epoch {
-                    self.handle_join_request_closed(stream_id, viewer_clid, cause);
+                if epoch == self.connection_epoch && stream_epoch == self.stream_epoch {
+                    self.handle_join_request_closed(stream_id, viewer_clid, token, cause);
                 }
             }
             SessionSignal::PublisherPeerEvent {
                 epoch,
+                stream_epoch,
                 stream_id,
                 viewer_clid,
+                token,
                 event,
             } => {
-                if epoch == self.connection_epoch {
-                    self.handle_publisher_peer_event(stream_id, viewer_clid, event);
+                if epoch == self.connection_epoch && stream_epoch == self.stream_epoch {
+                    self.handle_publisher_peer_event(stream_id, viewer_clid, token, event);
                 }
+            }
+            SessionSignal::StartScreenShareResolved {
+                epoch,
+                stream_epoch,
+                publish_token,
+                outcome,
+                reply,
+            } => {
+                self.handle_start_screen_share_resolved(
+                    epoch,
+                    stream_epoch,
+                    publish_token,
+                    outcome,
+                    reply,
+                );
+            }
+            SessionSignal::StreamJoinResponseResolved(response) => {
+                self.handle_stream_join_response_resolved(response);
+            }
+            SessionSignal::StreamCommandFinished {
+                epoch,
+                stream_epoch,
+                require_matching_epoch,
+                outcome,
+                reply,
+            } => {
+                self.handle_stream_command_finished(
+                    epoch,
+                    stream_epoch,
+                    require_matching_epoch,
+                    outcome,
+                    reply,
+                );
             }
             SessionSignal::ConnectionInfo { epoch, items } => {
                 if epoch != self.connection_epoch {
@@ -1026,6 +1098,7 @@ impl Actor {
             SessionSignal::ClientUpdated {
                 epoch,
                 id,
+                channel_id,
                 mut input_muted,
                 mut output_muted,
                 mut away,
@@ -1034,6 +1107,12 @@ impl Actor {
             } => {
                 if epoch != self.connection_epoch {
                     return;
+                }
+                if Some(id) != self.self_client_id
+                    && channel_id != 0
+                    && self.client_channels.get(&id).copied() != Some(channel_id)
+                {
+                    self.on_stream_peer_moved(id, channel_id);
                 }
                 if self.self_client_id == Some(id) {
                     self.sync_self_server_groups(&server_groups);

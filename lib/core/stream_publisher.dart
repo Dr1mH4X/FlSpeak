@@ -400,28 +400,49 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
     if (videoTracks.isEmpty) return;
 
     final coreSession = ref.read(coreSessionProvider);
+    final currentGeneration = _generation;
+
+    logInfo(
+      'Received join request for viewer $viewerClid (streamId=$streamId)',
+      target: 'stream',
+    );
 
     // If this viewer already had an existing session, clean it up before
     // re-negotiating so they don't consume two slots.
     if (_viewerSessions.containsKey(viewerClid)) {
       await _closeViewerSession(viewerClid);
+      if (!_isCurrentGeneration(currentGeneration) ||
+          !state.isActive ||
+          _localStream == null) {
+        return;
+      }
     }
     if (state.viewerFailure != null) {
       state = state.copyWith(clearViewerFailure: true);
     }
 
     if (_viewerSessions.length >= state.maxViewers) {
+      logWarn(
+        'Rejecting join request for viewer $viewerClid: '
+        'maxViewers=${state.maxViewers} reached',
+        target: 'stream',
+      );
       try {
         await coreSession.respondStreamJoinRequest(
           viewerClid: viewerClid,
           accept: false,
           offerSdp: '',
         );
-      } catch (_) {}
+      } catch (e) {
+        logWarn(
+          'Failed to reject join request for viewer $viewerClid',
+          target: 'stream',
+          error: e,
+        );
+      }
       return;
     }
 
-    final currentGeneration = _generation;
     final peerGeneration = ++_peerGenerationCounter;
     final viewerSession = _ViewerPeerSession(
       viewerClid: viewerClid,
@@ -654,14 +675,11 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
         return;
       }
 
-      logDebug(
-        'Sending respondStreamJoinRequest for viewer $viewerClid '
-        '(offer SDP: ${appliedSdp.length} chars, raw: ${rawSdp.length} chars)',
+      logInfo(
+        'Sending respondjoinstreamrequest for viewer $viewerClid '
+        '(offer_sdp_len=${appliedSdp.length}, raw_len=${rawSdp.length})',
         target: 'stream',
       );
-      if (kDebugMode) {
-        logDebug('offer for $viewerClid:\n$appliedSdp', target: 'stream');
-      }
 
       await coreSession.respondStreamJoinRequest(
         viewerClid: viewerClid,
@@ -752,12 +770,24 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
 
     switch (signal) {
       case PublisherSignal_Answer(:final sdp):
-        if (sdp.trim().isEmpty) return;
-        if (viewerSession.remoteDescriptionSet) return;
+        if (sdp.trim().isEmpty) {
+          logWarn(
+            'Ignoring empty Answer for viewer $viewerClid',
+            target: 'stream',
+          );
+          return;
+        }
+        if (viewerSession.remoteDescriptionSet) {
+          logWarn(
+            'Ignoring duplicate Answer for viewer $viewerClid',
+            target: 'stream',
+          );
+          return;
+        }
         final peer = viewerSession.peer;
         if (peer == null) return;
-        logDebug(
-          'viewer $viewerClid Answer: ${sdp.length} chars',
+        logInfo(
+          'Received Answer for viewer $viewerClid (sdp_len=${sdp.length})',
           target: 'stream',
         );
         try {
@@ -824,13 +854,11 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
         }
       case PublisherSignal_IceCandidate(:final sdp, :final mid, :final mLine):
         if (sdp.trim().isEmpty) return;
-        if (kDebugMode) {
-          logDebug(
-            'viewer $viewerClid ICE candidate '
-            'mid=${mid ?? '-'} mLine=${mLine ?? '-'}',
-            target: 'stream',
-          );
-        }
+        logInfo(
+          'Received iceCandidate for viewer $viewerClid '
+          '(mid=${mid ?? '-'}, mLine=${mLine ?? '-'})',
+          target: 'stream',
+        );
         final candidate = RTCIceCandidate(sdp, mid, mLine);
         final peer = viewerSession.peer;
         if (peer == null || !viewerSession.remoteDescriptionSet) {
@@ -839,8 +867,12 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
         }
         try {
           await peer.addCandidate(candidate);
-        } catch (_) {
-          // Ignore duplicate or obsolete ICE candidates.
+        } catch (e) {
+          logWarn(
+            'Failed to apply remote iceCandidate for viewer $viewerClid',
+            target: 'stream',
+            error: e,
+          );
         }
     }
   }
@@ -1028,6 +1060,11 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
     }
     final candidateSdp = candidate.candidate;
     if (candidateSdp == null || candidateSdp.isEmpty) return;
+    logInfo(
+      'Sending iceCandidate for viewer ${viewerSession.viewerClid} '
+      '(mid=${candidate.sdpMid ?? '-'}, mLine=${candidate.sdpMLineIndex ?? '-'})',
+      target: 'stream',
+    );
     try {
       await ref
           .read(coreSessionProvider)
@@ -1037,9 +1074,12 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
             mid: candidate.sdpMid,
             mLine: candidate.sdpMLineIndex,
           );
-    } catch (_) {
-      // Ignore late ICE candidate signaling errors when a viewer has already
-      // disconnected or left the stream.
+    } catch (e) {
+      logWarn(
+        'Failed to send iceCandidate for viewer ${viewerSession.viewerClid}',
+        target: 'stream',
+        error: e,
+      );
     }
   }
 
@@ -1088,7 +1128,13 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
       }
       try {
         await peer.addCandidate(candidate);
-      } catch (_) {}
+      } catch (e) {
+        logWarn(
+          'Failed to apply queued remote iceCandidate for viewer ${viewerSession.viewerClid}',
+          target: 'stream',
+          error: e,
+        );
+      }
     }
   }
 

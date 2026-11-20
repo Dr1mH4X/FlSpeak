@@ -3844,11 +3844,13 @@ impl SseDecode for crate::api::session::CoreEvent {
                 let mut var_nickname = <String>::sse_decode(deserializer);
                 let mut var_uid = <String>::sse_decode(deserializer);
                 let mut var_channelId = <u64>::sse_decode(deserializer);
+                let mut var_isStreaming = <bool>::sse_decode(deserializer);
                 return crate::api::session::CoreEvent::ClientJoined {
                     id: var_id,
                     nickname: var_nickname,
                     uid: var_uid,
                     channel_id: var_channelId,
+                    is_streaming: var_isStreaming,
                 };
             }
             10 => {
@@ -5259,12 +5261,14 @@ impl flutter_rust_bridge::IntoDart for crate::api::session::CoreEvent {
                 nickname,
                 uid,
                 channel_id,
+                is_streaming,
             } => [
                 9.into_dart(),
                 id.into_into_dart().into_dart(),
                 nickname.into_into_dart().into_dart(),
                 uid.into_into_dart().into_dart(),
                 channel_id.into_into_dart().into_dart(),
+                is_streaming.into_into_dart().into_dart(),
             ]
             .into_dart(),
             crate::api::session::CoreEvent::ClientLeft { id } => {
@@ -6055,12 +6059,14 @@ impl SseEncode for crate::api::session::CoreEvent {
                 nickname,
                 uid,
                 channel_id,
+                is_streaming,
             } => {
                 <i32>::sse_encode(9, serializer);
                 <i32>::sse_encode(id, serializer);
                 <String>::sse_encode(nickname, serializer);
                 <String>::sse_encode(uid, serializer);
                 <u64>::sse_encode(channel_id, serializer);
+                <bool>::sse_encode(is_streaming, serializer);
             }
             crate::api::session::CoreEvent::ClientLeft { id } => {
                 <i32>::sse_encode(10, serializer);

@@ -685,6 +685,7 @@ fn register_handlers(
             let _ = updated.send(SessionSignal::ClientUpdated {
                 epoch,
                 id: info.id,
+                channel_id: info.channel_id,
                 input_muted: info.input_muted,
                 output_muted: info.output_muted,
                 away: info.away,

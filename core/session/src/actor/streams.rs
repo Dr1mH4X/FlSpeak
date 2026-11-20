@@ -4,14 +4,19 @@
 //! `Streams` 以全服维度缓存流信息，Actor 只负责按当前所在频道投影 `SessionView.streams`
 //! 并将推拉流指令与信令经异步任务转发给 UI。
 
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::future::Future;
+use std::rc::Rc;
 
+use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tsclient_rs::AbortSignal;
 use tsclient_rs::stream::{
-    JoinRequest, JoinRequestCloseCause, JoinRequestEvent, PeerEvent, PublishedStream,
-    PublishedStreamEvent, StreamError, StreamInfo, StreamTransport, StreamView as TsStreamView,
-    Streams, StreamsEvent, StreamsOptions, ViewerPeer, WatchOptions,
+    IceCandidate, JoinRequest, JoinRequestCloseCause, JoinRequestEvent, JoinRequestState,
+    PeerEvent, PublishedStream, PublishedStreamEvent, StreamError, StreamInfo, StreamSubscription,
+    StreamTransport, StreamView as TsStreamView, Streams, StreamsEvent, StreamsOptions, ViewerPeer,
+    WatchOptions,
 };
 
 use super::*;
@@ -28,6 +33,234 @@ impl Drop for PumpGuard {
     }
 }
 
+enum EventStream<E> {
+    Live(StreamSubscription<E>),
+    #[cfg(test)]
+    Test(mpsc::UnboundedReceiver<E>),
+}
+
+impl<E> EventStream<E> {
+    async fn recv(&mut self) -> Option<E> {
+        match self {
+            Self::Live(sub) => sub.recv().await,
+            #[cfg(test)]
+            Self::Test(rx) => rx.recv().await,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+enum PublishedStreamHandle {
+    Live(PublishedStream),
+    #[cfg(test)]
+    Test {
+        id: String,
+    },
+}
+
+impl PublishedStreamHandle {
+    fn id(&self) -> &str {
+        match self {
+            Self::Live(stream) => stream.id(),
+            #[cfg(test)]
+            Self::Test { id } => id,
+        }
+    }
+
+    async fn stop(&self, reason: u32) -> Result<(), StreamError> {
+        match self {
+            Self::Live(stream) => stream.stop(reason).await,
+            #[cfg(test)]
+            Self::Test { .. } => Ok(()),
+        }
+    }
+}
+
+#[cfg(test)]
+#[derive(Clone, Debug)]
+pub(crate) struct TestViewerPeer {
+    stream_id: String,
+    closed: Arc<std::sync::atomic::AtomicBool>,
+    events_rx: Arc<std::sync::Mutex<Option<mpsc::UnboundedReceiver<PeerEvent>>>>,
+    sent_candidates: Arc<std::sync::Mutex<Vec<IceCandidate>>>,
+    send_candidate_error: Arc<std::sync::Mutex<Option<StreamError>>>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) enum ViewerPeerHandle {
+    Live(ViewerPeer),
+    #[cfg(test)]
+    Test(TestViewerPeer),
+}
+
+impl ViewerPeerHandle {
+    fn stream_id(&self) -> &str {
+        match self {
+            Self::Live(peer) => peer.stream_id(),
+            #[cfg(test)]
+            Self::Test(peer) => &peer.stream_id,
+        }
+    }
+
+    fn closed(&self) -> bool {
+        match self {
+            Self::Live(peer) => peer.closed(),
+            #[cfg(test)]
+            Self::Test(peer) => peer.closed.load(std::sync::atomic::Ordering::Acquire),
+        }
+    }
+
+    fn subscribe(&self) -> EventStream<PeerEvent> {
+        match self {
+            Self::Live(peer) => EventStream::Live(peer.subscribe()),
+            #[cfg(test)]
+            Self::Test(peer) => EventStream::Test(
+                peer.events_rx
+                    .lock()
+                    .unwrap()
+                    .take()
+                    .expect("test peer already subscribed"),
+            ),
+        }
+    }
+
+    async fn send_candidate(&self, candidate: &IceCandidate) -> Result<(), StreamError> {
+        match self {
+            Self::Live(peer) => peer.send_candidate(candidate).await,
+            #[cfg(test)]
+            Self::Test(peer) => {
+                if let Some(err) = peer.send_candidate_error.lock().unwrap().as_ref() {
+                    return Err(err.clone());
+                }
+                peer.sent_candidates.lock().unwrap().push(candidate.clone());
+                Ok(())
+            }
+        }
+    }
+
+    async fn close(&self) -> Result<(), StreamError> {
+        match self {
+            Self::Live(peer) => peer.close().await,
+            #[cfg(test)]
+            Self::Test(peer) => {
+                peer.closed
+                    .store(true, std::sync::atomic::Ordering::Release);
+                Ok(())
+            }
+        }
+    }
+
+    async fn kick(&self, reason: u16) -> Result<(), StreamError> {
+        match self {
+            Self::Live(peer) => peer.kick(reason).await,
+            #[cfg(test)]
+            Self::Test(peer) => {
+                peer.closed
+                    .store(true, std::sync::atomic::Ordering::Release);
+                Ok(())
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+#[derive(Clone, Debug)]
+struct TestJoinRequest {
+    viewer_clid: i32,
+    state: Arc<std::sync::Mutex<JoinRequestState>>,
+    events_rx: Arc<std::sync::Mutex<Option<mpsc::UnboundedReceiver<JoinRequestEvent>>>>,
+    accept_result: Arc<std::sync::Mutex<Option<Result<TestViewerPeer, StreamError>>>>,
+    deny_result: Arc<std::sync::Mutex<Option<Result<(), StreamError>>>>,
+    offers_seen: Arc<std::sync::Mutex<Vec<String>>>,
+}
+
+#[derive(Clone, Debug)]
+enum JoinRequestHandle {
+    Live(JoinRequest),
+    #[cfg(test)]
+    Test(TestJoinRequest),
+}
+
+impl JoinRequestHandle {
+    fn viewer_client_id(&self) -> i32 {
+        match self {
+            Self::Live(req) => req.viewer().client_id,
+            #[cfg(test)]
+            Self::Test(req) => req.viewer_clid,
+        }
+    }
+
+    fn state(&self) -> JoinRequestState {
+        match self {
+            Self::Live(req) => req.state(),
+            #[cfg(test)]
+            Self::Test(req) => *req.state.lock().unwrap(),
+        }
+    }
+
+    fn subscribe(&self) -> EventStream<JoinRequestEvent> {
+        match self {
+            Self::Live(req) => EventStream::Live(req.subscribe()),
+            #[cfg(test)]
+            Self::Test(req) => EventStream::Test(
+                req.events_rx
+                    .lock()
+                    .unwrap()
+                    .take()
+                    .expect("test request already subscribed"),
+            ),
+        }
+    }
+
+    async fn accept(&self, offer: &str, message: &str) -> Result<ViewerPeerHandle, StreamError> {
+        match self {
+            Self::Live(req) => req.accept(offer, message).await.map(ViewerPeerHandle::Live),
+            #[cfg(test)]
+            Self::Test(req) => {
+                req.offers_seen.lock().unwrap().push(offer.to_string());
+                let res = req
+                    .accept_result
+                    .lock()
+                    .unwrap()
+                    .take()
+                    .expect("missing test accept_result");
+                match res {
+                    Ok(peer) => {
+                        *req.state.lock().unwrap() = JoinRequestState::Accepted;
+                        Ok(ViewerPeerHandle::Test(peer))
+                    }
+                    Err(err) => {
+                        *req.state.lock().unwrap() = JoinRequestState::Failed;
+                        Err(err)
+                    }
+                }
+            }
+        }
+    }
+
+    async fn deny(&self, reason: &str) -> Result<(), StreamError> {
+        match self {
+            Self::Live(req) => req.deny(reason).await,
+            #[cfg(test)]
+            Self::Test(req) => {
+                let res = req.deny_result.lock().unwrap().take().unwrap_or(Ok(()));
+                if res.is_ok() {
+                    *req.state.lock().unwrap() = JoinRequestState::Denied;
+                }
+                res
+            }
+        }
+    }
+}
+
+fn candidate_summary(cand: &IceCandidate) -> String {
+    let mid = cand.sdp_mid.as_deref().unwrap_or("-");
+    let m_line = cand
+        .sdp_m_line_index
+        .map_or_else(|| "-".to_string(), |idx| idx.to_string());
+    format!("mid={mid}, m_line={m_line}")
+}
+
 struct ActiveWatch {
     id: u64,
     stream_id: String,
@@ -38,7 +271,8 @@ struct ActiveWatch {
 enum WatchPhase {
     Joining {
         abort: AbortSignal,
-        _task: PumpGuard,
+        done: watch::Receiver<bool>,
+        settled_view: Rc<RefCell<Option<TsStreamView>>>,
     },
     Active {
         view: TsStreamView,
@@ -46,32 +280,51 @@ enum WatchPhase {
     },
 }
 
+struct StartingPublish {
+    token: u64,
+    abort: AbortSignal,
+}
+
 struct PendingViewerRequest {
-    request: JoinRequest,
+    token: u64,
+    request: JoinRequestHandle,
+    responding: bool,
     _task: PumpGuard,
 }
 
 struct AcceptedViewer {
-    peer: ViewerPeer,
+    token: u64,
+    peer: ViewerPeerHandle,
     _task: PumpGuard,
 }
 
 struct ActivePublish {
-    stream: PublishedStream,
+    stream: PublishedStreamHandle,
     requests: HashMap<i32, PendingViewerRequest>,
     viewers: HashMap<i32, AcceptedViewer>,
     _task: PumpGuard,
 }
 
+#[cfg(test)]
+type TestWatchHook = Rc<
+    dyn Fn(String, AbortSignal) -> Pin<Box<dyn Future<Output = Result<TsStreamView, StreamError>>>>,
+>;
+
 /// 单次连接生命周期内的屏幕共享会话状态。
 pub(super) struct ActiveStreamSession {
     streams: Streams,
     watch: Option<ActiveWatch>,
+    starting_publish: Option<StartingPublish>,
     publish: Option<ActivePublish>,
+    pending_watch_cleanups: HashMap<String, watch::Receiver<bool>>,
     unsupported_logged: bool,
     _bus_task: PumpGuard,
     #[cfg(test)]
     test_infos: std::collections::BTreeMap<String, StreamInfo>,
+    #[cfg(test)]
+    test_refreshed_clids: RefCell<Vec<u16>>,
+    #[cfg(test)]
+    test_watch_hook: Option<TestWatchHook>,
 }
 
 impl ActiveStreamSession {
@@ -107,25 +360,56 @@ impl ActiveStreamSession {
                 .or_else(|| self.test_infos.get(id).cloned())
         }
     }
+
+    fn refresh_client(&self, clid: u16) {
+        #[cfg(test)]
+        self.test_refreshed_clids.borrow_mut().push(clid);
+        self.streams.refresh_client(clid);
+    }
+
+    fn record_watch_cleanup(&mut self, stream_id: &str, rx: watch::Receiver<bool>) {
+        self.pending_watch_cleanups
+            .retain(|_, done| !*done.borrow());
+        self.pending_watch_cleanups
+            .insert(stream_id.to_string(), rx);
+    }
 }
 
-fn spawn_best_effort_leave(view: TsStreamView, events: broadcast::Sender<SessionEvent>) {
+fn spawn_best_effort_leave_notifying(
+    view: TsStreamView,
+    events: broadcast::Sender<SessionEvent>,
+) -> watch::Receiver<bool> {
+    let (closed_tx, closed_rx) = watch::channel(false);
     tokio::task::spawn_local(async move {
-        if let Err(err) = view.leave().await
+        let stream_id = view.stream_id().to_string();
+        let mut fut = std::pin::pin!(view.leave());
+        // 先推进到首个 await（完成本地 on_closed 并从 Streams::watching 移除），再放行后续重看。
+        let first_res = std::future::poll_fn(|cx| match fut.as_mut().poll(cx) {
+            std::task::Poll::Ready(res) => std::task::Poll::Ready(Some(res)),
+            std::task::Poll::Pending => std::task::Poll::Ready(None),
+        })
+        .await;
+        let _ = closed_tx.send(true);
+        let res = match first_res {
+            Some(res) => res,
+            None => fut.await,
+        };
+        if let Err(err) = res
             && !err.is_not_connected()
         {
             emit(
                 &events,
                 SessionEvent::Log {
                     level: "warn".into(),
-                    message: format!("退出屏幕共享 {} 失败: {err}", view.stream_id()),
+                    message: format!("退出屏幕共享 {stream_id} 失败: {err}"),
                 },
             );
         }
     });
+    closed_rx
 }
 
-fn spawn_best_effort_stop(stream: PublishedStream, events: broadcast::Sender<SessionEvent>) {
+fn spawn_best_effort_stop(stream: PublishedStreamHandle, events: broadcast::Sender<SessionEvent>) {
     tokio::task::spawn_local(async move {
         if let Err(err) = stream.stop(0).await
             && !err.is_not_connected()
@@ -141,9 +425,31 @@ fn spawn_best_effort_stop(stream: PublishedStream, events: broadcast::Sender<Ses
     });
 }
 
+fn cancel_joining_watch(
+    abort: AbortSignal,
+    done: watch::Receiver<bool>,
+    settled_view: Rc<RefCell<Option<TsStreamView>>>,
+    events: broadcast::Sender<SessionEvent>,
+) -> watch::Receiver<bool> {
+    abort.abort();
+    if let Some(view) = settled_view.borrow_mut().take() {
+        return spawn_best_effort_leave_notifying(view, events);
+    }
+    done
+}
+
 impl Actor {
+    fn next_stream_token(&mut self) -> u64 {
+        self.next_stream_token = self.next_stream_token.wrapping_add(1);
+        if self.next_stream_token == 0 {
+            self.next_stream_token = 1;
+        }
+        self.next_stream_token
+    }
+
     /// 为新建立的 `Client` 挂接 `tsclient_rs::stream::Streams` 并开始转发流事件。
     pub(super) fn init_stream_session(&mut self, client: &Client) {
+        self.stream_epoch = self.stream_epoch.wrapping_add(1);
         let streams = Streams::new(
             client,
             StreamsOptions {
@@ -166,27 +472,42 @@ impl Actor {
         self.stream_session = Some(ActiveStreamSession {
             streams,
             watch: None,
+            starting_publish: None,
             publish: None,
+            pending_watch_cleanups: HashMap::new(),
             unsupported_logged: false,
             _bus_task: PumpGuard(bus_task),
             #[cfg(test)]
             test_infos: std::collections::BTreeMap::new(),
+            #[cfg(test)]
+            test_refreshed_clids: RefCell::new(Vec::new()),
+            #[cfg(test)]
+            test_watch_hook: None,
         });
         self.sync_streams_view();
     }
 
     /// 断线或重连前回收全部屏幕共享会话并清理缓存的成员频道。
     pub(super) fn reset_streams(&mut self, reason: StreamEndReason) {
+        self.stream_epoch = self.stream_epoch.wrapping_add(1);
         self.client_channels.clear();
         if let Some(mut session) = self.stream_session.take() {
             if let Some(watch) = session.watch.take() {
-                if let WatchPhase::Joining { abort, .. } = &watch.phase {
-                    abort.abort();
+                if let WatchPhase::Joining {
+                    abort,
+                    done,
+                    settled_view,
+                } = watch.phase
+                {
+                    let _ = cancel_joining_watch(abort, done, settled_view, self.events.clone());
                 }
                 self.emit(SessionEvent::StreamEnded {
                     stream_id: watch.stream_id,
                     reason,
                 });
+            }
+            if let Some(starting) = session.starting_publish.take() {
+                starting.abort.abort();
             }
             if session.publish.take().is_some() {
                 self.emit(SessionEvent::ScreenShareStopped);
@@ -273,17 +594,19 @@ impl Actor {
             self.record_client_channel(self_id, next_channel);
         }
         if prev_channel != 0 && prev_channel != next_channel {
+            self.stream_epoch = self.stream_epoch.wrapping_add(1);
             self.end_active_watch_best_effort(StreamEndReason::SelfMoved);
-            if let Some(publish) = self
-                .stream_session
-                .as_mut()
-                .and_then(|session| session.publish.take())
-            {
-                let events = self.events.clone();
-                let stream = publish.stream.clone();
-                drop(publish);
-                self.emit(SessionEvent::ScreenShareStopped);
-                spawn_best_effort_stop(stream, events);
+            if let Some(session) = self.stream_session.as_mut() {
+                if let Some(starting) = session.starting_publish.take() {
+                    starting.abort.abort();
+                }
+                if let Some(publish) = session.publish.take() {
+                    let events = self.events.clone();
+                    let stream = publish.stream.clone();
+                    drop(publish);
+                    self.emit(SessionEvent::ScreenShareStopped);
+                    spawn_best_effort_stop(stream, events);
+                }
             }
         }
         self.sync_streams_view();
@@ -299,6 +622,19 @@ impl Actor {
             && channel_id != self.self_channel_id;
         if watched_left_channel {
             self.end_active_watch_best_effort(StreamEndReason::SourceMoved);
+        }
+        if self.self_channel_id != 0
+            && channel_id == self.self_channel_id
+            && Some(peer_clid) != self.self_client_id
+            && let Ok(clid) = u16::try_from(peer_clid)
+            && clid != 0
+            && let Some(session) = self.stream_session.as_ref()
+            && !session
+                .infos()
+                .iter()
+                .any(|info| info.client_id == peer_clid)
+        {
+            session.refresh_client(clid);
         }
         self.sync_streams_view();
     }
@@ -338,20 +674,24 @@ impl Actor {
             return;
         };
         let stream_id = watch.stream_id;
-        match watch.phase {
-            WatchPhase::Joining { abort, _task } => {
-                drop(_task);
-                abort.abort();
-            }
+        let cleanup = match watch.phase {
+            WatchPhase::Joining {
+                abort,
+                done,
+                settled_view,
+            } => cancel_joining_watch(abort, done, settled_view, self.events.clone()),
             WatchPhase::Active { view, _task } => {
                 drop(_task);
-                spawn_best_effort_leave(view, self.events.clone());
+                spawn_best_effort_leave_notifying(view, self.events.clone())
             }
+        };
+        if let Some(session) = self.stream_session.as_mut() {
+            session.record_watch_cleanup(&stream_id, cleanup);
         }
         self.emit(SessionEvent::StreamEnded { stream_id, reason });
     }
 
-    pub(super) async fn join_stream(
+    pub(super) fn join_stream(
         &mut self,
         stream_id: String,
         source_clid: i32,
@@ -386,34 +726,7 @@ impl Actor {
             return Ok(());
         }
 
-        let streams = session.streams.clone();
-        let previous = self
-            .stream_session
-            .as_mut()
-            .and_then(|session| session.watch.take());
-        if let Some(prev) = previous {
-            self.emit(SessionEvent::StreamEnded {
-                stream_id: prev.stream_id.clone(),
-                reason: StreamEndReason::Left,
-            });
-            match prev.phase {
-                WatchPhase::Joining { abort, _task } => {
-                    drop(_task);
-                    abort.abort();
-                }
-                WatchPhase::Active { view, _task } => {
-                    drop(_task);
-                    if let Err(err) = view.leave().await
-                        && !err.is_not_connected()
-                    {
-                        self.emit(SessionEvent::Log {
-                            level: "warn".into(),
-                            message: format!("退出屏幕共享 {} 失败: {err}", prev.stream_id),
-                        });
-                    }
-                }
-            }
-        }
+        self.end_active_watch_best_effort(StreamEndReason::Left);
 
         self.next_watch_id = self.next_watch_id.wrapping_add(1);
         let watch_id = self.next_watch_id;
@@ -421,69 +734,211 @@ impl Actor {
         let task_abort = abort.clone();
         let signals = self.signals.clone();
         let epoch = self.connection_epoch;
+        let stream_epoch = self.stream_epoch;
         let target_stream_id = stream_id.clone();
-        let join_task = tokio::task::spawn_local(async move {
+        let (done_tx, done_rx) = watch::channel(false);
+        let settled_view: Rc<RefCell<Option<TsStreamView>>> = Rc::new(RefCell::new(None));
+        let task_settled = Rc::clone(&settled_view);
+        let events_for_leave = self.events.clone();
+
+        let Some(session) = self.stream_session.as_mut() else {
+            return Err(SessionError::NotConnected);
+        };
+        let streams = session.streams.clone();
+        let prev_cleanup = session.pending_watch_cleanups.remove(&stream_id);
+        #[cfg(test)]
+        let test_hook = session.test_watch_hook.clone();
+
+        tokio::task::spawn_local(async move {
+            if let Some(mut prev_done) = prev_cleanup {
+                let _ = prev_done.wait_for(|&finished| finished).await;
+            }
+            if task_abort.is_aborted() {
+                let _ = done_tx.send(true);
+                let _ = signals.send(SessionSignal::WatchResolved {
+                    epoch,
+                    stream_epoch,
+                    watch_id,
+                    stream_id: target_stream_id,
+                    outcome: Err(StreamError::Aborted),
+                });
+                return;
+            }
+            #[cfg(not(test))]
             let outcome = streams
                 .watch(
                     &target_stream_id,
                     WatchOptions {
                         message: String::new(),
                         timeout_ms: None,
-                        abort: Some(task_abort),
+                        abort: Some(task_abort.clone()),
                     },
                 )
                 .await;
+            #[cfg(test)]
+            let outcome = match test_hook {
+                Some(hook) => hook(target_stream_id.clone(), task_abort.clone()).await,
+                None => {
+                    streams
+                        .watch(
+                            &target_stream_id,
+                            WatchOptions {
+                                message: String::new(),
+                                timeout_ms: None,
+                                abort: Some(task_abort.clone()),
+                            },
+                        )
+                        .await
+                }
+            };
+            if task_abort.is_aborted() {
+                if let Ok(view) = outcome {
+                    let mut closed_rx = spawn_best_effort_leave_notifying(view, events_for_leave);
+                    let _ = closed_rx.wait_for(|&closed| closed).await;
+                }
+                let _ = done_tx.send(true);
+                let _ = signals.send(SessionSignal::WatchResolved {
+                    epoch,
+                    stream_epoch,
+                    watch_id,
+                    stream_id: target_stream_id,
+                    outcome: Err(StreamError::Aborted),
+                });
+                return;
+            }
+            if let Ok(ref view) = outcome {
+                *task_settled.borrow_mut() = Some(view.clone());
+            }
+            let _ = done_tx.send(true);
             let _ = signals.send(SessionSignal::WatchResolved {
                 epoch,
+                stream_epoch,
                 watch_id,
                 stream_id: target_stream_id,
                 outcome,
             });
         });
 
-        let Some(session) = self.stream_session.as_mut() else {
-            return Err(SessionError::NotConnected);
-        };
         session.watch = Some(ActiveWatch {
             id: watch_id,
             stream_id,
             source_clid,
             phase: WatchPhase::Joining {
                 abort,
-                _task: PumpGuard(join_task),
+                done: done_rx,
+                settled_view,
             },
         });
         self.sync_streams_view();
         Ok(())
     }
 
-    /// 先清理本地观看状态再通知服务端退出，命令失败也不会残留悬空观看。
-    pub(super) async fn leave_stream(&mut self, stream_id: String) -> Result<(), SessionError> {
+    /// 先清理本地观看状态再在后台任务通知服务端退出，命令失败也不会残留悬空观看或阻塞 Actor。
+    pub(super) fn leave_stream(
+        &mut self,
+        stream_id: String,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    ) {
         let Some(session) = self.stream_session.as_mut() else {
-            return Err(SessionError::Stream("没有在观看这路屏幕共享".into()));
+            let _ = reply.send(Err(SessionError::Stream("没有在观看这路屏幕共享".into())));
+            return;
         };
         if session
             .watch
             .as_ref()
             .is_none_or(|watch| watch.stream_id != stream_id)
         {
-            return Err(SessionError::Stream("没有在观看这路屏幕共享".into()));
+            let _ = reply.send(Err(SessionError::Stream("没有在观看这路屏幕共享".into())));
+            return;
         }
         let watch = session.watch.take().unwrap();
-        self.sync_streams_view();
-        self.emit(SessionEvent::StreamEnded {
-            stream_id: watch.stream_id,
-            reason: StreamEndReason::Left,
-        });
+        let signals = self.signals.clone();
+        let epoch = self.connection_epoch;
+        let stream_epoch = self.stream_epoch;
         match watch.phase {
-            WatchPhase::Joining { abort, _task } => {
-                drop(_task);
+            WatchPhase::Joining {
+                abort,
+                done,
+                settled_view,
+            } => {
                 abort.abort();
-                Ok(())
+                if let Some(view) = settled_view.borrow_mut().take() {
+                    let (closed_tx, closed_rx) = watch::channel(false);
+                    session.record_watch_cleanup(&watch.stream_id, closed_rx);
+                    self.sync_streams_view();
+                    self.emit(SessionEvent::StreamEnded {
+                        stream_id: watch.stream_id,
+                        reason: StreamEndReason::Left,
+                    });
+                    tokio::task::spawn_local(async move {
+                        let mut fut = std::pin::pin!(view.leave());
+                        let first_res = std::future::poll_fn(|cx| match fut.as_mut().poll(cx) {
+                            std::task::Poll::Ready(res) => std::task::Poll::Ready(Some(res)),
+                            std::task::Poll::Pending => std::task::Poll::Ready(None),
+                        })
+                        .await;
+                        let _ = closed_tx.send(true);
+                        let outcome = match first_res {
+                            Some(res) => res,
+                            None => fut.await,
+                        };
+                        let _ = signals.send(SessionSignal::StreamCommandFinished {
+                            epoch,
+                            stream_epoch,
+                            require_matching_epoch: false,
+                            outcome,
+                            reply,
+                        });
+                    });
+                    return;
+                }
+                let mut wait_done = done.clone();
+                session.record_watch_cleanup(&watch.stream_id, done);
+                self.sync_streams_view();
+                self.emit(SessionEvent::StreamEnded {
+                    stream_id: watch.stream_id,
+                    reason: StreamEndReason::Left,
+                });
+                tokio::task::spawn_local(async move {
+                    let _ = wait_done.wait_for(|&finished| finished).await;
+                    let _ = signals.send(SessionSignal::StreamCommandFinished {
+                        epoch,
+                        stream_epoch,
+                        require_matching_epoch: false,
+                        outcome: Ok(()),
+                        reply,
+                    });
+                });
             }
             WatchPhase::Active { view, _task } => {
                 drop(_task);
-                view.leave().await.map_err(stream_error)
+                let (closed_tx, closed_rx) = watch::channel(false);
+                session.record_watch_cleanup(&watch.stream_id, closed_rx);
+                self.sync_streams_view();
+                self.emit(SessionEvent::StreamEnded {
+                    stream_id: watch.stream_id,
+                    reason: StreamEndReason::Left,
+                });
+                tokio::task::spawn_local(async move {
+                    let mut fut = std::pin::pin!(view.leave());
+                    let first_res = std::future::poll_fn(|cx| match fut.as_mut().poll(cx) {
+                        std::task::Poll::Ready(res) => std::task::Poll::Ready(Some(res)),
+                        std::task::Poll::Pending => std::task::Poll::Ready(None),
+                    })
+                    .await;
+                    let _ = closed_tx.send(true);
+                    let outcome = match first_res {
+                        Some(res) => res,
+                        None => fut.await,
+                    };
+                    let _ = signals.send(SessionSignal::StreamCommandFinished {
+                        epoch,
+                        stream_epoch,
+                        require_matching_epoch: false,
+                        outcome,
+                        reply,
+                    });
+                });
             }
         }
     }
@@ -510,232 +965,723 @@ impl Actor {
         }
     }
 
-    pub(super) async fn send_stream_answer(
+    pub(super) fn send_stream_answer(
         &self,
         stream_id: String,
         target_clid: i32,
         sdp: String,
-    ) -> Result<(), SessionError> {
-        self.connected()?;
-        let view = self.watched_active_view(&stream_id, target_clid)?;
-        view.answer(&sdp).await.map_err(stream_error)
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    ) {
+        if let Err(err) = self.connected() {
+            self.emit(SessionEvent::Log {
+                level: "warn".into(),
+                message: format!(
+                    "发送 Answer 失败: stream_id={stream_id}, target_clid={target_clid}, error={err}"
+                ),
+            });
+            let _ = reply.send(Err(err));
+            return;
+        }
+        let view = match self.watched_active_view(&stream_id, target_clid) {
+            Ok(view) => view,
+            Err(err) => {
+                self.emit(SessionEvent::Log {
+                    level: "warn".into(),
+                    message: format!(
+                        "发送 Answer 失败: stream_id={stream_id}, target_clid={target_clid}, error={err}"
+                    ),
+                });
+                let _ = reply.send(Err(err));
+                return;
+            }
+        };
+        let signals = self.signals.clone();
+        let events = self.events.clone();
+        let epoch = self.connection_epoch;
+        let stream_epoch = self.stream_epoch;
+        tokio::task::spawn_local(async move {
+            let outcome = view.answer(&sdp).await;
+            if let Err(ref err) = outcome {
+                emit(
+                    &events,
+                    SessionEvent::Log {
+                        level: "warn".into(),
+                        message: format!(
+                            "发送 Answer 失败: stream_id={stream_id}, target_clid={target_clid}, error={err}"
+                        ),
+                    },
+                );
+            }
+            let _ = signals.send(SessionSignal::StreamCommandFinished {
+                epoch,
+                stream_epoch,
+                require_matching_epoch: true,
+                outcome,
+                reply,
+            });
+        });
     }
 
-    pub(super) async fn send_stream_ice_candidate(
+    pub(super) fn send_stream_ice_candidate(
         &self,
         stream_id: String,
         target_clid: i32,
         sdp: String,
         mid: Option<String>,
         m_line: Option<i32>,
-    ) -> Result<(), SessionError> {
-        self.connected()?;
-        let view = self.watched_active_view(&stream_id, target_clid)?;
-        let cand = ice_candidate(sdp, mid, m_line)?;
-        view.send_candidate(&cand).await.map_err(stream_error)
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    ) {
+        if let Err(err) = self.connected() {
+            self.emit(SessionEvent::Log {
+                level: "warn".into(),
+                message: format!(
+                    "发送 iceCandidate 失败: stream_id={stream_id}, target_clid={target_clid}, error={err}"
+                ),
+            });
+            let _ = reply.send(Err(err));
+            return;
+        }
+        let view = match self.watched_active_view(&stream_id, target_clid) {
+            Ok(view) => view,
+            Err(err) => {
+                self.emit(SessionEvent::Log {
+                    level: "warn".into(),
+                    message: format!(
+                        "发送 iceCandidate 失败: stream_id={stream_id}, target_clid={target_clid}, error={err}"
+                    ),
+                });
+                let _ = reply.send(Err(err));
+                return;
+            }
+        };
+        let cand = match ice_candidate(sdp, mid, m_line) {
+            Ok(cand) => cand,
+            Err(err) => {
+                self.emit(SessionEvent::Log {
+                    level: "warn".into(),
+                    message: format!(
+                        "发送 iceCandidate 失败: stream_id={stream_id}, target_clid={target_clid}, error={err}"
+                    ),
+                });
+                let _ = reply.send(Err(err));
+                return;
+            }
+        };
+        let signals = self.signals.clone();
+        let events = self.events.clone();
+        let epoch = self.connection_epoch;
+        let stream_epoch = self.stream_epoch;
+        tokio::task::spawn_local(async move {
+            let outcome = view.send_candidate(&cand).await;
+            if let Err(ref err) = outcome {
+                emit(
+                    &events,
+                    SessionEvent::Log {
+                        level: "warn".into(),
+                        message: format!(
+                            "发送 iceCandidate 失败: stream_id={stream_id}, target_clid={target_clid}, error={err}"
+                        ),
+                    },
+                );
+            }
+            let _ = signals.send(SessionSignal::StreamCommandFinished {
+                epoch,
+                stream_epoch,
+                require_matching_epoch: true,
+                outcome,
+                reply,
+            });
+        });
     }
 
-    pub(super) async fn start_screen_share(
+    pub(super) fn start_screen_share(
         &mut self,
         name: String,
         audio: bool,
         bitrate: u32,
         viewer_limit: u32,
-    ) -> Result<(), SessionError> {
-        self.connected()?;
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    ) {
+        if let Err(err) = self.connected() {
+            let _ = reply.send(Err(err));
+            return;
+        }
         if self.self_channel_id == 0 {
-            return Err(SessionError::NotInChannel);
+            let _ = reply.send(Err(SessionError::NotInChannel));
+            return;
         }
-        let session = self
-            .stream_session
-            .as_ref()
-            .ok_or(SessionError::NotConnected)?;
-        if session.publish.is_some() {
-            return Err(SessionError::Stream("当前已在推流或正在启动推流".into()));
-        }
-        let options = publish_options(&name, audio, bitrate, viewer_limit)?;
-        let streams = session.streams.clone();
-        let published = streams.publish(options).await.map_err(stream_error)?;
-
-        let stream_id = published.id().to_string();
-        let Some(session) = self.stream_session.as_mut() else {
-            let _ = published.stop(0).await;
-            return Err(SessionError::NotConnected);
+        let mut options = match publish_options(&name, audio, bitrate, viewer_limit) {
+            Ok(options) => options,
+            Err(err) => {
+                let _ = reply.send(Err(err));
+                return;
+            }
         };
-        if session.publish.is_some() {
-            let _ = published.stop(0).await;
-            return Err(SessionError::Stream("当前已在推流或正在启动推流".into()));
+        let Some(session) = self.stream_session.as_ref() else {
+            let _ = reply.send(Err(SessionError::NotConnected));
+            return;
+        };
+        if session.publish.is_some() || session.starting_publish.is_some() {
+            let _ = reply.send(Err(SessionError::Stream(
+                "当前已在推流或正在启动推流".into(),
+            )));
+            return;
         }
-
-        let mut sub = published.subscribe();
+        let publish_token = self.next_stream_token();
+        let abort = AbortSignal::new();
+        options.abort = Some(abort.clone());
+        let session = self.stream_session.as_mut().expect("checked above");
+        session.starting_publish = Some(StartingPublish {
+            token: publish_token,
+            abort,
+        });
+        let streams = session.streams.clone();
         let signals = self.signals.clone();
         let epoch = self.connection_epoch;
-        let pub_stream_id = stream_id.clone();
-        let pub_task = tokio::task::spawn_local(async move {
-            while let Some(event) = sub.recv().await {
-                if signals
-                    .send(SessionSignal::PublishedStreamEvent {
-                        epoch,
-                        stream_id: pub_stream_id.clone(),
-                        event,
-                    })
-                    .is_err()
-                {
-                    break;
-                }
-            }
+        let stream_epoch = self.stream_epoch;
+        tokio::task::spawn_local(async move {
+            let outcome = streams.publish(options).await;
+            let _ = signals.send(SessionSignal::StartScreenShareResolved {
+                epoch,
+                stream_epoch,
+                publish_token,
+                outcome,
+                reply,
+            });
         });
-        session.publish = Some(ActivePublish {
-            stream: published,
-            requests: HashMap::new(),
-            viewers: HashMap::new(),
-            _task: PumpGuard(pub_task),
-        });
-        self.emit(SessionEvent::ScreenSharePublished { stream_id });
-        Ok(())
     }
 
-    pub(super) async fn stop_screen_share(&mut self) -> Result<(), SessionError> {
-        let Some(publish) = self
-            .stream_session
-            .as_mut()
-            .and_then(|session| session.publish.take())
-        else {
-            return Ok(());
+    pub(super) fn handle_start_screen_share_resolved(
+        &mut self,
+        epoch: u64,
+        stream_epoch: u64,
+        publish_token: u64,
+        outcome: Result<PublishedStream, StreamError>,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    ) {
+        if epoch != self.connection_epoch || stream_epoch != self.stream_epoch {
+            if let Ok(published) = outcome {
+                spawn_best_effort_stop(PublishedStreamHandle::Live(published), self.events.clone());
+            }
+            let _ = reply.send(Err(if epoch != self.connection_epoch {
+                SessionError::NotConnected
+            } else {
+                SessionError::Stream("屏幕共享启动已取消".into())
+            }));
+            return;
+        }
+        let Some(session) = self.stream_session.as_mut() else {
+            if let Ok(published) = outcome {
+                spawn_best_effort_stop(PublishedStreamHandle::Live(published), self.events.clone());
+            }
+            let _ = reply.send(Err(SessionError::NotConnected));
+            return;
+        };
+        let is_current = session
+            .starting_publish
+            .as_ref()
+            .is_some_and(|starting| starting.token == publish_token);
+        if !is_current || session.publish.is_some() {
+            if let Ok(published) = outcome {
+                spawn_best_effort_stop(PublishedStreamHandle::Live(published), self.events.clone());
+            }
+            let _ = reply.send(Err(SessionError::Stream("屏幕共享启动已取消".into())));
+            return;
+        }
+        session.starting_publish = None;
+        match outcome {
+            Ok(published) => {
+                let stream_id = published.id().to_string();
+                let mut sub = published.subscribe();
+                let signals = self.signals.clone();
+                let pub_stream_id = stream_id.clone();
+                let pub_task = tokio::task::spawn_local(async move {
+                    while let Some(event) = sub.recv().await {
+                        if signals
+                            .send(SessionSignal::PublishedStreamEvent {
+                                epoch,
+                                stream_epoch,
+                                stream_id: pub_stream_id.clone(),
+                                event,
+                            })
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                });
+                session.publish = Some(ActivePublish {
+                    stream: PublishedStreamHandle::Live(published),
+                    requests: HashMap::new(),
+                    viewers: HashMap::new(),
+                    _task: PumpGuard(pub_task),
+                });
+                self.emit(SessionEvent::ScreenSharePublished { stream_id });
+                let _ = reply.send(Ok(()));
+            }
+            Err(err) => {
+                let _ = reply.send(Err(stream_error(err)));
+            }
+        }
+    }
+
+    pub(super) fn stop_screen_share(&mut self, reply: oneshot::Sender<Result<(), SessionError>>) {
+        let Some(session) = self.stream_session.as_mut() else {
+            let _ = reply.send(Ok(()));
+            return;
+        };
+        if let Some(starting) = session.starting_publish.take() {
+            starting.abort.abort();
+        }
+        let Some(publish) = session.publish.take() else {
+            let _ = reply.send(Ok(()));
+            return;
         };
         let stream = publish.stream.clone();
         drop(publish);
         self.emit(SessionEvent::ScreenShareStopped);
-        if self.client.is_some() {
-            stream.stop(0).await.map_err(stream_error)?;
+        if self.client.is_none() {
+            let _ = reply.send(Ok(()));
+            return;
         }
-        Ok(())
+        let signals = self.signals.clone();
+        let epoch = self.connection_epoch;
+        let stream_epoch = self.stream_epoch;
+        tokio::task::spawn_local(async move {
+            let outcome = stream.stop(0).await;
+            let _ = signals.send(SessionSignal::StreamCommandFinished {
+                epoch,
+                stream_epoch,
+                require_matching_epoch: false,
+                outcome,
+                reply,
+            });
+        });
     }
 
-    pub(super) async fn respond_stream_join_request(
+    pub(super) fn respond_stream_join_request(
         &mut self,
         viewer_clid: i32,
         accept: bool,
         offer_sdp: String,
-    ) -> Result<(), SessionError> {
-        self.connected()?;
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    ) {
+        if let Err(err) = self.connected() {
+            self.emit(SessionEvent::Log {
+                level: "warn".into(),
+                message: format!(
+                    "发送 respondjoinstreamrequest 失败: viewer_clid={viewer_clid}, accept={accept}, error={err}"
+                ),
+            });
+            let _ = reply.send(Err(err));
+            return;
+        }
         if accept && offer_sdp.trim().is_empty() {
-            return Err(SessionError::Stream(
-                "接受观看请求必须提供 SDP Offer".into(),
-            ));
+            let err = SessionError::Stream("接受观看请求必须提供 SDP Offer".into());
+            self.emit(SessionEvent::Log {
+                level: "warn".into(),
+                message: format!(
+                    "发送 respondjoinstreamrequest 失败: viewer_clid={viewer_clid}, accept={accept}, error={err}"
+                ),
+            });
+            let _ = reply.send(Err(err));
+            return;
         }
-        let pending = {
-            let publish = self
-                .stream_session
-                .as_mut()
-                .and_then(|session| session.publish.as_mut())
-                .ok_or_else(|| SessionError::Stream("当前没有活动的屏幕共享推流".into()))?;
-            publish
-                .requests
-                .remove(&viewer_clid)
-                .ok_or_else(|| SessionError::Stream("该客户端未请求观看屏幕共享".into()))?
-        };
-        drop(pending._task);
-        self.emit(SessionEvent::Log {
-            level: "debug".into(),
-            message: format!(
-                "发送 respondjoinstreamrequest: 观众={viewer_clid}, accept={accept}, offer_sdp_len={}",
-                offer_sdp.len()
-            ),
-        });
-        if !accept {
-            return pending.request.deny("").await.map_err(stream_error);
-        }
-
-        let peer = pending
-            .request
-            .accept(&offer_sdp, "")
-            .await
-            .map_err(stream_error)?;
         let Some(publish) = self
             .stream_session
             .as_mut()
             .and_then(|session| session.publish.as_mut())
-            .filter(|publish| publish.stream.id() == peer.stream_id())
         else {
-            let _ = peer.close().await;
-            return Ok(());
+            let err = SessionError::Stream("当前没有活动的屏幕共享推流".into());
+            self.emit(SessionEvent::Log {
+                level: "warn".into(),
+                message: format!(
+                    "发送 respondjoinstreamrequest 失败: viewer_clid={viewer_clid}, accept={accept}, error={err}"
+                ),
+            });
+            let _ = reply.send(Err(err));
+            return;
         };
-        let mut sub = peer.subscribe();
+        let stream_id = publish.stream.id().to_string();
+        let Some(pending) = publish.requests.get_mut(&viewer_clid) else {
+            let err = SessionError::Stream("该客户端未请求观看屏幕共享".into());
+            self.emit(SessionEvent::Log {
+                level: "warn".into(),
+                message: format!(
+                    "发送 respondjoinstreamrequest 失败: stream_id={stream_id}, viewer_clid={viewer_clid}, accept={accept}, error={err}"
+                ),
+            });
+            let _ = reply.send(Err(err));
+            return;
+        };
+        if pending.responding {
+            let err = SessionError::Stream("正在响应这名观众的加入请求".into());
+            self.emit(SessionEvent::Log {
+                level: "warn".into(),
+                message: format!(
+                    "发送 respondjoinstreamrequest 失败: stream_id={stream_id}, viewer_clid={viewer_clid}, accept={accept}, error={err}"
+                ),
+            });
+            let _ = reply.send(Err(err));
+            return;
+        }
+        pending.responding = true;
+        let request = pending.request.clone();
+        let request_token = pending.token;
+        self.emit(SessionEvent::Log {
+            level: "info".into(),
+            message: format!(
+                "发送 respondjoinstreamrequest: stream_id={stream_id}, viewer_clid={viewer_clid}, accept={accept}, offer_sdp_len={}",
+                offer_sdp.len()
+            ),
+        });
         let signals = self.signals.clone();
         let epoch = self.connection_epoch;
-        let stream_id = peer.stream_id().to_string();
-        let peer_task = tokio::task::spawn_local(async move {
-            while let Some(event) = sub.recv().await {
-                if signals
-                    .send(SessionSignal::PublisherPeerEvent {
-                        epoch,
-                        stream_id: stream_id.clone(),
-                        viewer_clid,
-                        event,
-                    })
-                    .is_err()
-                {
-                    break;
-                }
-            }
+        let stream_epoch = self.stream_epoch;
+        tokio::task::spawn_local(async move {
+            let outcome = if accept {
+                request.accept(&offer_sdp, "").await.map(Some)
+            } else {
+                request.deny("").await.map(|()| None)
+            };
+            let _ = signals.send(SessionSignal::StreamJoinResponseResolved(
+                StreamJoinResponse {
+                    epoch,
+                    stream_epoch,
+                    stream_id,
+                    viewer_clid,
+                    request_token,
+                    accept,
+                    outcome,
+                    reply,
+                },
+            ));
         });
-        publish.viewers.insert(
-            viewer_clid,
-            AcceptedViewer {
-                peer,
-                _task: PumpGuard(peer_task),
-            },
-        );
-        Ok(())
     }
 
-    pub(super) async fn send_publisher_ice_candidate(
+    pub(super) fn handle_stream_join_response_resolved(&mut self, response: StreamJoinResponse) {
+        let StreamJoinResponse {
+            epoch,
+            stream_epoch,
+            stream_id,
+            viewer_clid,
+            request_token,
+            accept,
+            outcome,
+            reply,
+        } = response;
+        if let Err(ref err) = outcome {
+            self.emit(SessionEvent::Log {
+                level: "warn".into(),
+                message: format!(
+                    "发送 respondjoinstreamrequest 失败: stream_id={stream_id}, viewer_clid={viewer_clid}, accept={accept}, error={err}"
+                ),
+            });
+        }
+        if epoch != self.connection_epoch || stream_epoch != self.stream_epoch {
+            if let Ok(Some(peer)) = outcome {
+                tokio::task::spawn_local(async move {
+                    let _ = peer.close().await;
+                });
+            }
+            let _ = reply.send(Err(if epoch != self.connection_epoch {
+                SessionError::NotConnected
+            } else {
+                SessionError::Stream("屏幕共享会话已结束".into())
+            }));
+            return;
+        }
+        let has_matching_publish = self
+            .stream_session
+            .as_ref()
+            .and_then(|session| session.publish.as_ref())
+            .is_some_and(|publish| publish.stream.id() == stream_id);
+        if !has_matching_publish {
+            if let Ok(Some(peer)) = outcome {
+                tokio::task::spawn_local(async move {
+                    let _ = peer.close().await;
+                });
+            }
+            let _ = reply.send(Err(SessionError::Stream(
+                "当前没有活动的屏幕共享推流".into(),
+            )));
+            return;
+        }
+
+        let still_pending = self
+            .stream_session
+            .as_ref()
+            .and_then(|session| session.publish.as_ref())
+            .and_then(|publish| publish.requests.get(&viewer_clid))
+            .is_some_and(|pending| pending.token == request_token);
+        if !still_pending {
+            let result = match outcome {
+                Ok(Some(peer)) => {
+                    tokio::task::spawn_local(async move {
+                        let _ = peer.kick(1).await;
+                    });
+                    Err(SessionError::Stream("观看请求已取消".into()))
+                }
+                Ok(None) => {
+                    if accept {
+                        Err(SessionError::Stream("观看请求已取消".into()))
+                    } else {
+                        Ok(())
+                    }
+                }
+                Err(err) => {
+                    if accept {
+                        Err(SessionError::Stream("观看请求已取消".into()))
+                    } else {
+                        Err(stream_error(err))
+                    }
+                }
+            };
+            let _ = reply.send(result);
+            return;
+        }
+
+        match outcome {
+            Ok(Some(peer)) => {
+                if peer.closed() {
+                    if let Some(publish) = self
+                        .stream_session
+                        .as_mut()
+                        .and_then(|session| session.publish.as_mut())
+                    {
+                        publish.requests.remove(&viewer_clid);
+                    }
+                    self.emit(SessionEvent::Log {
+                        level: "warn".into(),
+                        message: format!(
+                            "发送 respondjoinstreamrequest 后观众已关闭: stream_id={stream_id}, viewer_clid={viewer_clid}"
+                        ),
+                    });
+                    self.emit(SessionEvent::StreamViewerLeft {
+                        stream_id,
+                        viewer_clid,
+                    });
+                    let _ = reply.send(Err(SessionError::Stream("观众已离开屏幕共享".into())));
+                    return;
+                }
+                let peer_token = self.next_stream_token();
+                let mut sub = peer.subscribe();
+                let signals = self.signals.clone();
+                let peer_stream_id = peer.stream_id().to_string();
+                let peer_task = tokio::task::spawn_local(async move {
+                    while let Some(event) = sub.recv().await {
+                        if signals
+                            .send(SessionSignal::PublisherPeerEvent {
+                                epoch,
+                                stream_epoch,
+                                stream_id: peer_stream_id.clone(),
+                                viewer_clid,
+                                token: peer_token,
+                                event,
+                            })
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                });
+                if let Some(publish) = self
+                    .stream_session
+                    .as_mut()
+                    .and_then(|session| session.publish.as_mut())
+                    .filter(|publish| publish.stream.id() == stream_id)
+                {
+                    publish.requests.remove(&viewer_clid);
+                    publish.viewers.insert(
+                        viewer_clid,
+                        AcceptedViewer {
+                            token: peer_token,
+                            peer,
+                            _task: PumpGuard(peer_task),
+                        },
+                    );
+                }
+                let _ = reply.send(Ok(()));
+            }
+            Ok(None) => {
+                if let Some(publish) = self
+                    .stream_session
+                    .as_mut()
+                    .and_then(|session| session.publish.as_mut())
+                {
+                    publish.requests.remove(&viewer_clid);
+                }
+                let _ = reply.send(Ok(()));
+            }
+            Err(err) => {
+                let mut removed_terminal = false;
+                if let Some(publish) = self
+                    .stream_session
+                    .as_mut()
+                    .and_then(|session| session.publish.as_mut())
+                    && let Some(pending) = publish.requests.get_mut(&viewer_clid)
+                    && pending.token == request_token
+                {
+                    if pending.request.state() == JoinRequestState::Pending {
+                        pending.responding = false;
+                    } else {
+                        publish.requests.remove(&viewer_clid);
+                        removed_terminal = true;
+                    }
+                }
+                if removed_terminal {
+                    self.emit(SessionEvent::StreamViewerLeft {
+                        stream_id,
+                        viewer_clid,
+                    });
+                }
+                let _ = reply.send(Err(stream_error(err)));
+            }
+        }
+    }
+
+    pub(super) fn send_publisher_ice_candidate(
         &self,
         viewer_clid: i32,
         sdp: String,
         mid: Option<String>,
         m_line: Option<i32>,
-    ) -> Result<(), SessionError> {
-        self.connected()?;
-        let publish = self
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    ) {
+        if let Err(err) = self.connected() {
+            self.emit(SessionEvent::Log {
+                level: "warn".into(),
+                message: format!("发送 iceCandidate 失败: viewer_clid={viewer_clid}, error={err}"),
+            });
+            let _ = reply.send(Err(err));
+            return;
+        }
+        let Some(publish) = self
             .stream_session
             .as_ref()
             .and_then(|session| session.publish.as_ref())
-            .ok_or_else(|| SessionError::Stream("当前没有活动的屏幕共享推流".into()))?;
+        else {
+            let err = SessionError::Stream("当前没有活动的屏幕共享推流".into());
+            self.emit(SessionEvent::Log {
+                level: "warn".into(),
+                message: format!("发送 iceCandidate 失败: viewer_clid={viewer_clid}, error={err}"),
+            });
+            let _ = reply.send(Err(err));
+            return;
+        };
+        let stream_id = publish.stream.id().to_string();
         let peer = match publish.viewers.get(&viewer_clid) {
             Some(accepted) => accepted.peer.clone(),
             None if publish.requests.contains_key(&viewer_clid) => {
-                return Err(SessionError::Stream(
-                    "观众尚未完成加入应答，不能发送信令".into(),
-                ));
+                let err = SessionError::Stream("观众尚未完成加入应答，不能发送信令".into());
+                self.emit(SessionEvent::Log {
+                    level: "warn".into(),
+                    message: format!(
+                        "发送 iceCandidate 失败: stream_id={stream_id}, viewer_clid={viewer_clid}, error={err}"
+                    ),
+                });
+                let _ = reply.send(Err(err));
+                return;
             }
             None => {
-                return Err(SessionError::Stream("信令目标不是当前推流的观众".into()));
+                let err = SessionError::Stream("信令目标不是当前推流的观众".into());
+                self.emit(SessionEvent::Log {
+                    level: "warn".into(),
+                    message: format!(
+                        "发送 iceCandidate 失败: stream_id={stream_id}, viewer_clid={viewer_clid}, error={err}"
+                    ),
+                });
+                let _ = reply.send(Err(err));
+                return;
             }
         };
-        let cand = ice_candidate(sdp, mid, m_line)?;
-        peer.send_candidate(&cand).await.map_err(stream_error)
+        let cand = match ice_candidate(sdp, mid, m_line) {
+            Ok(cand) => cand,
+            Err(err) => {
+                self.emit(SessionEvent::Log {
+                    level: "warn".into(),
+                    message: format!(
+                        "发送 iceCandidate 失败: stream_id={stream_id}, viewer_clid={viewer_clid}, error={err}"
+                    ),
+                });
+                let _ = reply.send(Err(err));
+                return;
+            }
+        };
+        self.emit(SessionEvent::Log {
+            level: "info".into(),
+            message: format!(
+                "发送 iceCandidate: stream_id={stream_id}, viewer_clid={viewer_clid}, {}",
+                candidate_summary(&cand)
+            ),
+        });
+        let signals = self.signals.clone();
+        let events = self.events.clone();
+        let epoch = self.connection_epoch;
+        let stream_epoch = self.stream_epoch;
+        tokio::task::spawn_local(async move {
+            let outcome = peer.send_candidate(&cand).await;
+            if let Err(ref err) = outcome {
+                emit(
+                    &events,
+                    SessionEvent::Log {
+                        level: "warn".into(),
+                        message: format!(
+                            "发送 iceCandidate 失败: stream_id={stream_id}, viewer_clid={viewer_clid}, error={err}"
+                        ),
+                    },
+                );
+            }
+            let _ = signals.send(SessionSignal::StreamCommandFinished {
+                epoch,
+                stream_epoch,
+                require_matching_epoch: true,
+                outcome,
+                reply,
+            });
+        });
     }
 
-    pub(super) async fn kick_stream_viewer(
+    pub(super) fn kick_stream_viewer(
         &mut self,
         viewer_clid: i32,
-    ) -> Result<(), SessionError> {
-        self.connected()?;
-        let publish = self
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    ) {
+        if let Err(err) = self.connected() {
+            let _ = reply.send(Err(err));
+            return;
+        }
+        let Some(publish) = self
             .stream_session
             .as_mut()
             .and_then(|session| session.publish.as_mut())
-            .ok_or_else(|| SessionError::Stream("当前没有活动的屏幕共享推流".into()))?;
+        else {
+            let _ = reply.send(Err(SessionError::Stream(
+                "当前没有活动的屏幕共享推流".into(),
+            )));
+            return;
+        };
         let stream_id = publish.stream.id().to_string();
+        let signals = self.signals.clone();
+        let epoch = self.connection_epoch;
+        let stream_epoch = self.stream_epoch;
         if let Some(accepted) = publish.viewers.remove(&viewer_clid) {
             drop(accepted._task);
             self.emit(SessionEvent::StreamViewerLeft {
                 stream_id,
                 viewer_clid,
             });
-            return accepted.peer.close().await.map_err(stream_error);
+            tokio::task::spawn_local(async move {
+                let outcome = accepted.peer.kick(1).await;
+                let _ = signals.send(SessionSignal::StreamCommandFinished {
+                    epoch,
+                    stream_epoch,
+                    require_matching_epoch: false,
+                    outcome,
+                    reply,
+                });
+            });
+            return;
         }
         if let Some(pending) = publish.requests.remove(&viewer_clid) {
             drop(pending._task);
@@ -743,9 +1689,47 @@ impl Actor {
                 stream_id,
                 viewer_clid,
             });
-            return pending.request.deny("").await.map_err(stream_error);
+            if pending.responding {
+                let _ = reply.send(Ok(()));
+                return;
+            }
+            tokio::task::spawn_local(async move {
+                let outcome = pending.request.deny("").await;
+                let _ = signals.send(SessionSignal::StreamCommandFinished {
+                    epoch,
+                    stream_epoch,
+                    require_matching_epoch: false,
+                    outcome,
+                    reply,
+                });
+            });
+            return;
         }
-        Err(SessionError::Stream("目标客户端不是当前推流的观众".into()))
+        let _ = reply.send(Err(SessionError::Stream(
+            "目标客户端不是当前推流的观众".into(),
+        )));
+    }
+
+    pub(super) fn handle_stream_command_finished(
+        &self,
+        epoch: u64,
+        stream_epoch: u64,
+        require_matching_epoch: bool,
+        outcome: Result<(), StreamError>,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    ) {
+        if epoch != self.connection_epoch {
+            let _ = reply.send(Err(SessionError::NotConnected));
+            return;
+        }
+        if require_matching_epoch && stream_epoch != self.stream_epoch {
+            let _ = reply.send(Err(match outcome {
+                Err(err) => stream_error(err),
+                Ok(()) => SessionError::Stream("屏幕共享会话已结束".into()),
+            }));
+            return;
+        }
+        let _ = reply.send(outcome.map_err(stream_error));
     }
 
     pub(super) fn handle_streams_bus_event(&mut self, event: StreamsEvent) {
@@ -787,8 +1771,26 @@ impl Actor {
                     && let Some(publish) = session.publish.as_mut()
                     && publish.stream.id() == ev.info.id
                 {
-                    let removed = publish.requests.remove(&ev.client_id).is_some()
-                        | publish.viewers.remove(&ev.client_id).is_some();
+                    // 仅清理已进入终态/已关闭的旧会话，防止迟到的总线事件误删重连后的新观众。
+                    let mut removed = false;
+                    if publish.requests.get(&ev.client_id).is_some_and(|pending| {
+                        !pending.responding
+                            && matches!(
+                                pending.request.state(),
+                                JoinRequestState::Withdrawn | JoinRequestState::Ended
+                            )
+                    }) {
+                        publish.requests.remove(&ev.client_id);
+                        removed = true;
+                    }
+                    if publish
+                        .viewers
+                        .get(&ev.client_id)
+                        .is_some_and(|accepted| accepted.peer.closed())
+                    {
+                        publish.viewers.remove(&ev.client_id);
+                        removed = true;
+                    }
                     if removed {
                         self.emit(SessionEvent::StreamViewerLeft {
                             stream_id: ev.info.id,
@@ -840,8 +1842,10 @@ impl Actor {
             .and_then(|session| session.watch.as_ref())
             .is_some_and(|watch| watch.id == watch_id);
         if !is_current {
-            if let Ok(view) = outcome {
-                spawn_best_effort_leave(view, self.events.clone());
+            if let Ok(view) = outcome
+                && !view.closed()
+            {
+                let _ = spawn_best_effort_leave_notifying(view, self.events.clone());
             }
             return;
         }
@@ -851,6 +1855,7 @@ impl Actor {
                 let mut sub = view.subscribe();
                 let signals = self.signals.clone();
                 let epoch = self.connection_epoch;
+                let stream_epoch = self.stream_epoch;
                 let view_stream_id = view.stream_id().to_string();
                 let source_client_id = view.client_id();
                 let sdp = view.offer().to_string();
@@ -859,6 +1864,7 @@ impl Actor {
                         if signals
                             .send(SessionSignal::ViewerPeerEvent {
                                 epoch,
+                                stream_epoch,
                                 watch_id,
                                 stream_id: view_stream_id.clone(),
                                 event,
@@ -955,50 +1961,19 @@ impl Actor {
         stream_id: String,
         event: PublishedStreamEvent,
     ) {
-        let is_current = self
-            .stream_session
-            .as_ref()
-            .and_then(|session| session.publish.as_ref())
-            .is_some_and(|publish| publish.stream.id() == stream_id);
-        if !is_current {
-            return;
-        }
-
         match event {
             PublishedStreamEvent::Request(request) => {
-                let viewer_clid = request.viewer().client_id;
-                let mut sub = request.subscribe();
-                let signals = self.signals.clone();
-                let epoch = self.connection_epoch;
-                let req_stream_id = stream_id.clone();
-                let req_task = tokio::task::spawn_local(async move {
-                    if let Some(JoinRequestEvent::Closed { cause }) = sub.recv().await {
-                        let _ = signals.send(SessionSignal::JoinRequestClosed {
-                            epoch,
-                            stream_id: req_stream_id,
-                            viewer_clid,
-                            cause,
-                        });
-                    }
-                });
-                if let Some(session) = self.stream_session.as_mut()
-                    && let Some(publish) = session.publish.as_mut()
-                    && publish.stream.id() == stream_id
-                {
-                    publish.requests.insert(
-                        viewer_clid,
-                        PendingViewerRequest {
-                            request,
-                            _task: PumpGuard(req_task),
-                        },
-                    );
-                    self.emit(SessionEvent::StreamViewerJoinRequested {
-                        stream_id,
-                        viewer_clid,
-                    });
-                }
+                self.handle_published_stream_request(stream_id, JoinRequestHandle::Live(request));
             }
             PublishedStreamEvent::Ended(_) => {
+                let is_current = self
+                    .stream_session
+                    .as_ref()
+                    .and_then(|session| session.publish.as_ref())
+                    .is_some_and(|publish| publish.stream.id() == stream_id);
+                if !is_current {
+                    return;
+                }
                 if let Some(session) = self.stream_session.as_mut() {
                     session.publish = None;
                 }
@@ -1007,10 +1982,84 @@ impl Actor {
         }
     }
 
+    fn handle_published_stream_request(&mut self, stream_id: String, request: JoinRequestHandle) {
+        let viewer_clid = request.viewer_client_id();
+        // 同一个 viewer_clid 重新发起请求时，旧 PeerEvent::Closed 可能还留在信号队列中；
+        // 先清理旧会话并通知前端关闭，再注册新请求，避免迟到的 Closed 误删新会话。
+        let (replaced_viewer, replaced_request) = {
+            let Some(publish) = self
+                .stream_session
+                .as_mut()
+                .and_then(|session| session.publish.as_mut())
+                .filter(|publish| publish.stream.id() == stream_id)
+            else {
+                return;
+            };
+            (
+                publish.viewers.remove(&viewer_clid),
+                publish.requests.remove(&viewer_clid),
+            )
+        };
+        let replaced = replaced_viewer.is_some() || replaced_request.is_some();
+        drop(replaced_viewer);
+        drop(replaced_request);
+
+        self.emit(SessionEvent::Log {
+            level: "info".into(),
+            message: format!(
+                "收到 notifyjoinstreamrequest: stream_id={stream_id}, viewer_clid={viewer_clid}, replaced={replaced}"
+            ),
+        });
+        if replaced {
+            self.emit(SessionEvent::StreamViewerLeft {
+                stream_id: stream_id.clone(),
+                viewer_clid,
+            });
+        }
+
+        let token = self.next_stream_token();
+        let mut sub = request.subscribe();
+        let signals = self.signals.clone();
+        let epoch = self.connection_epoch;
+        let stream_epoch = self.stream_epoch;
+        let req_stream_id = stream_id.clone();
+        let req_task = tokio::task::spawn_local(async move {
+            if let Some(JoinRequestEvent::Closed { cause }) = sub.recv().await {
+                let _ = signals.send(SessionSignal::JoinRequestClosed {
+                    epoch,
+                    stream_epoch,
+                    stream_id: req_stream_id,
+                    viewer_clid,
+                    token,
+                    cause,
+                });
+            }
+        });
+        if let Some(session) = self.stream_session.as_mut()
+            && let Some(publish) = session.publish.as_mut()
+            && publish.stream.id() == stream_id
+        {
+            publish.requests.insert(
+                viewer_clid,
+                PendingViewerRequest {
+                    token,
+                    request,
+                    responding: false,
+                    _task: PumpGuard(req_task),
+                },
+            );
+            self.emit(SessionEvent::StreamViewerJoinRequested {
+                stream_id,
+                viewer_clid,
+            });
+        }
+    }
+
     pub(super) fn handle_join_request_closed(
         &mut self,
         stream_id: String,
         viewer_clid: i32,
+        token: u64,
         _cause: JoinRequestCloseCause,
     ) {
         let Some(publish) = self
@@ -1021,7 +2070,12 @@ impl Actor {
         else {
             return;
         };
-        if publish.requests.remove(&viewer_clid).is_some() {
+        if publish
+            .requests
+            .get(&viewer_clid)
+            .is_some_and(|pending| pending.token == token)
+        {
+            publish.requests.remove(&viewer_clid);
             self.emit(SessionEvent::StreamViewerLeft {
                 stream_id,
                 viewer_clid,
@@ -1033,6 +2087,7 @@ impl Actor {
         &mut self,
         stream_id: String,
         viewer_clid: i32,
+        token: u64,
         event: PeerEvent,
     ) {
         let Some(publish) = self
@@ -1043,11 +2098,22 @@ impl Actor {
         else {
             return;
         };
-        if !publish.viewers.contains_key(&viewer_clid) {
+        if !publish
+            .viewers
+            .get(&viewer_clid)
+            .is_some_and(|viewer| viewer.token == token)
+        {
             return;
         }
         match event {
             PeerEvent::Answer(sdp) => {
+                self.emit(SessionEvent::Log {
+                    level: "info".into(),
+                    message: format!(
+                        "收到推流观众信令: stream_id={stream_id}, viewer_clid={viewer_clid}, type=Answer, sdp_len={}",
+                        sdp.len()
+                    ),
+                });
                 self.emit(SessionEvent::PublisherSignalReceived {
                     stream_id,
                     viewer_clid,
@@ -1055,6 +2121,13 @@ impl Actor {
                 });
             }
             PeerEvent::Candidate(cand) => {
+                self.emit(SessionEvent::Log {
+                    level: "info".into(),
+                    message: format!(
+                        "收到推流观众信令: stream_id={stream_id}, viewer_clid={viewer_clid}, type=iceCandidate, {}",
+                        candidate_summary(&cand)
+                    ),
+                });
                 self.emit(SessionEvent::PublisherSignalReceived {
                     stream_id,
                     viewer_clid,
@@ -1065,8 +2138,15 @@ impl Actor {
                     },
                 });
             }
-            PeerEvent::Closed(_) => {
+            PeerEvent::Closed(closed) => {
                 if publish.viewers.remove(&viewer_clid).is_some() {
+                    self.emit(SessionEvent::Log {
+                        level: "info".into(),
+                        message: format!(
+                            "推流观众会话关闭: stream_id={stream_id}, viewer_clid={viewer_clid}, cause={:?}",
+                            closed.cause
+                        ),
+                    });
                     self.emit(SessionEvent::StreamViewerLeft {
                         stream_id,
                         viewer_clid,
@@ -1173,7 +2253,7 @@ mod tests {
                 clients: vec![
                     client_info(1, 0, "Self"),
                     ClientInfo {
-                        is_streaming: true,
+                        is_streaming: Some(true),
                         ..client_info(2, 5, "Streamer")
                     },
                 ],
@@ -1231,7 +2311,7 @@ mod tests {
                 clients: vec![
                     client_info(1, 0, "Self"),
                     ClientInfo {
-                        is_streaming: true,
+                        is_streaming: Some(true),
                         ..client_info(2, 5, "Streamer")
                     },
                 ],
@@ -1269,11 +2349,11 @@ mod tests {
                 clients: vec![
                     client_info(1, 0, "Self"),
                     ClientInfo {
-                        is_streaming: true,
+                        is_streaming: Some(true),
                         ..client_info(9, 8, "Ch8Streamer")
                     },
                     ClientInfo {
-                        is_streaming: true,
+                        is_streaming: Some(true),
                         ..client_info(12, 9, "Ch9Streamer")
                     },
                 ],
@@ -1287,13 +2367,15 @@ mod tests {
 
             // 在频道 5 注册一个正在等待中的观看以验证切频道时会发 SelfMoved。
             if let Some(session) = &mut actor.stream_session {
+                let (_tx, done) = watch::channel(false);
                 session.watch = Some(ActiveWatch {
                     id: 77,
                     stream_id: "s-ch5".into(),
                     source_clid: 50,
                     phase: WatchPhase::Joining {
                         abort: AbortSignal::new(),
-                        _task: PumpGuard(tokio::task::spawn_local(async {})),
+                        done,
+                        settled_view: Rc::new(RefCell::new(None)),
                     },
                 });
             }
@@ -1371,7 +2453,7 @@ mod tests {
                 .handle_signal(SessionSignal::ClientJoined {
                     epoch: actor.connection_epoch,
                     client: ClientView::from(ClientInfo {
-                        is_streaming: true,
+                        is_streaming: Some(true),
                         ..client_info(9, 8, "Peer9")
                     }),
                 })
@@ -1405,7 +2487,7 @@ mod tests {
                 .handle_signal(SessionSignal::ClientJoined {
                     epoch: actor.connection_epoch,
                     client: ClientView::from(ClientInfo {
-                        is_streaming: true,
+                        is_streaming: Some(true),
                         ..client_info(10, 8, "Peer10")
                     }),
                 })
@@ -1438,7 +2520,6 @@ mod tests {
             // 真实 Client 未携带 STREAM_P2P 时，join_stream 应直接拒绝。
             let err = actor
                 .join_stream("missing".into(), 2)
-                .await
                 .expect_err("unsupported server should reject join_stream");
             assert!(matches!(err, SessionError::Stream(_)));
 
@@ -1447,7 +2528,7 @@ mod tests {
                 clients: vec![
                     client_info(1, 0, "Self"),
                     ClientInfo {
-                        is_streaming: true,
+                        is_streaming: Some(true),
                         ..client_info(2, 5, "Streamer")
                     },
                 ],
@@ -1483,19 +2564,22 @@ mod tests {
 
             // 验证 WatchResolved(JoinDenied) 会映射为 StreamEndReason::Rejected。
             if let Some(session) = &mut actor.stream_session {
+                let (_tx, done) = watch::channel(false);
                 session.watch = Some(ActiveWatch {
                     id: 88,
                     stream_id: "s-denied".into(),
                     source_clid: 2,
                     phase: WatchPhase::Joining {
                         abort: AbortSignal::new(),
-                        _task: PumpGuard(tokio::task::spawn_local(async {})),
+                        done,
+                        settled_view: Rc::new(RefCell::new(None)),
                     },
                 });
             }
             actor
                 .handle_signal(SessionSignal::WatchResolved {
                     epoch: actor.connection_epoch,
+                    stream_epoch: actor.stream_epoch,
                     watch_id: 88,
                     stream_id: "s-denied".into(),
                     outcome: Err(StreamError::JoinDenied(
@@ -1518,6 +2602,819 @@ mod tests {
             actor.reset_streams(StreamEndReason::Disconnected);
             assert!(actor.stream_session.is_none());
             assert!(actor.client_channels.is_empty());
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn joining_cancel_awaits_graceful_cleanup_and_allows_immediate_rewatch() {
+        run_local(async {
+            let mut actor = audio_actor();
+            let client = make_client();
+            client.mark_connected();
+            actor.client = Some(Arc::clone(&client));
+            actor.self_client_id = Some(1);
+            actor.self_channel_id = 5;
+            actor.init_stream_session(&client);
+            actor.handle_directory_snapshot(DirectorySnapshot {
+                channels: Vec::new(),
+                clients: vec![
+                    client_info(1, 5, "Self"),
+                    ClientInfo {
+                        is_streaming: Some(true),
+                        ..client_info(2, 5, "Streamer")
+                    },
+                ],
+                truncated: false,
+            });
+            if let Some(session) = &mut actor.stream_session {
+                session
+                    .test_infos
+                    .insert("s1".into(), stream_info("s1", 2, "Screen"));
+            }
+
+            let attempts = Rc::new(std::cell::Cell::new(0usize));
+            let first_abort_observed = Rc::new(std::cell::Cell::new(false));
+            let first_cleanup_finished = Rc::new(std::cell::Cell::new(false));
+            let second_abort_observed = Rc::new(std::cell::Cell::new(false));
+            let dropped_unexpectedly = Rc::new(std::cell::Cell::new(false));
+            let (release_tx, release_rx) = oneshot::channel::<()>();
+            let release_rx = Rc::new(RefCell::new(Some(release_rx)));
+
+            struct CancelDropGuard(Rc<std::cell::Cell<bool>>, bool);
+            impl Drop for CancelDropGuard {
+                fn drop(&mut self) {
+                    if !self.1 {
+                        self.0.set(true);
+                    }
+                }
+            }
+
+            if let Some(session) = &mut actor.stream_session {
+                let attempts = Rc::clone(&attempts);
+                let first_abort_observed = Rc::clone(&first_abort_observed);
+                let first_cleanup_finished = Rc::clone(&first_cleanup_finished);
+                let second_abort_observed = Rc::clone(&second_abort_observed);
+                let dropped_unexpectedly = Rc::clone(&dropped_unexpectedly);
+                let release_rx = Rc::clone(&release_rx);
+                session.test_watch_hook = Some(Rc::new(move |_stream_id, abort| {
+                    let attempt = attempts.get() + 1;
+                    attempts.set(attempt);
+                    let first_abort_observed = Rc::clone(&first_abort_observed);
+                    let first_cleanup_finished = Rc::clone(&first_cleanup_finished);
+                    let second_abort_observed = Rc::clone(&second_abort_observed);
+                    let dropped_unexpectedly = Rc::clone(&dropped_unexpectedly);
+                    let release_rx = Rc::clone(&release_rx);
+                    Box::pin(async move {
+                        let mut guard = CancelDropGuard(dropped_unexpectedly, false);
+                        abort.wait_for_abort().await;
+                        if attempt == 1 {
+                            first_abort_observed.set(true);
+                            let rx = release_rx.borrow_mut().take();
+                            if let Some(rx) = rx {
+                                let _ = rx.await;
+                            }
+                            first_cleanup_finished.set(true);
+                        } else {
+                            second_abort_observed.set(true);
+                        }
+                        guard.1 = true;
+                        Err(StreamError::Aborted)
+                    })
+                }));
+            }
+
+            // 第一次发起 watch 进入 Joining 阶段。
+            actor.join_stream("s1".into(), 2).expect("first join");
+            tokio::task::yield_now().await;
+            assert_eq!(attempts.get(), 1);
+
+            // 通过 LeaveStream 取消 Joining：Actor 立即返回不阻塞，且只触发 abort.abort() 而不强杀 Future。
+            let (leave_tx, mut leave_rx) = oneshot::channel();
+            actor
+                .handle(SessionCommand::LeaveStream {
+                    stream_id: "s1".into(),
+                    reply: leave_tx,
+                })
+                .await;
+            assert!(
+                actor
+                    .stream_session
+                    .as_ref()
+                    .is_some_and(|session| session.watch.is_none())
+            );
+            tokio::task::yield_now().await;
+            assert!(first_abort_observed.get());
+            assert!(!first_cleanup_finished.get());
+            assert!(!dropped_unexpectedly.get());
+            assert!(leave_rx.try_recv().is_err());
+
+            // 前一次 watch 仍在收尾时立即重看同一流：能立刻受理并排队等待前次清理完成。
+            actor
+                .join_stream("s1".into(), 2)
+                .expect("immediate rewatch should not hit already-watching");
+            tokio::task::yield_now().await;
+            assert_eq!(attempts.get(), 1);
+
+            // 放行第一次 watch 的 is_remove=1 清理收尾后，第二次 watch 自动继续执行且 LeaveStream 回执完成。
+            let _ = release_tx.send(());
+            for _ in 0..6 {
+                tokio::task::yield_now().await;
+            }
+            while let Ok(sig) = actor.signal_rx.try_recv() {
+                actor.handle_signal(sig).await;
+            }
+            assert!(leave_rx.await.expect("leave reply").is_ok());
+            assert!(first_cleanup_finished.get());
+            assert_eq!(attempts.get(), 2);
+
+            // 切频道触发 end_active_watch_best_effort 时同样优雅取消 Joining。
+            actor.on_stream_self_channel_changed(5, 9);
+            for _ in 0..4 {
+                tokio::task::yield_now().await;
+            }
+            assert!(second_abort_observed.get());
+            assert!(!dropped_unexpectedly.get());
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn peer_moved_and_client_updated_refresh_missing_streams() {
+        run_local(async {
+            let mut actor = audio_actor();
+            let client = make_client();
+            client.mark_connected();
+            actor.client = Some(Arc::clone(&client));
+            actor.self_client_id = Some(1);
+            actor.self_channel_id = 5;
+            actor.init_stream_session(&client);
+            if let Some(session) = &mut actor.stream_session {
+                session
+                    .test_infos
+                    .insert("s3".into(), stream_info("s3", 3, "Existing"));
+            }
+            let mut events = actor.events.subscribe();
+            let epoch = actor.connection_epoch;
+
+            // 客户端 2 移入当前频道且 Streams 尚无其流信息时，补查 requeststreaminfo。
+            actor
+                .handle_signal(SessionSignal::ClientMoved {
+                    epoch,
+                    id: 2,
+                    channel_id: 5,
+                })
+                .await;
+            // 客户端 3 已有缓存流 "s3"，切入当前频道不应重复补查，且投影到当前频道流列表。
+            actor
+                .handle_signal(SessionSignal::ClientMoved {
+                    epoch,
+                    id: 3,
+                    channel_id: 5,
+                })
+                .await;
+            // 客户端 2 移入其他频道不应补查。
+            actor
+                .handle_signal(SessionSignal::ClientMoved {
+                    epoch,
+                    id: 2,
+                    channel_id: 9,
+                })
+                .await;
+
+            assert_eq!(
+                actor
+                    .stream_session
+                    .as_ref()
+                    .unwrap()
+                    .test_refreshed_clids
+                    .borrow()
+                    .as_slice(),
+                &[2]
+            );
+            assert_eq!(actor.last_streams_state.0.len(), 1);
+            assert_eq!(actor.last_streams_state.0[0].id, "s3");
+
+            // ClientUpdated 携带频道变更时应同步 client_channels、补查并刷新流视图。
+            actor
+                .handle_signal(SessionSignal::ClientUpdated {
+                    epoch,
+                    id: 2,
+                    channel_id: 5,
+                    input_muted: None,
+                    output_muted: None,
+                    away: None,
+                    away_message: None,
+                    server_groups: Vec::new(),
+                })
+                .await;
+            assert_eq!(actor.client_channels.get(&2), Some(&5));
+            assert_eq!(
+                actor
+                    .stream_session
+                    .as_ref()
+                    .unwrap()
+                    .test_refreshed_clids
+                    .borrow()
+                    .as_slice(),
+                &[2, 2]
+            );
+
+            actor
+                .handle_signal(SessionSignal::ClientUpdated {
+                    epoch,
+                    id: 3,
+                    channel_id: 8,
+                    input_muted: None,
+                    output_muted: None,
+                    away: None,
+                    away_message: None,
+                    server_groups: Vec::new(),
+                })
+                .await;
+            assert_eq!(actor.client_channels.get(&3), Some(&8));
+            assert!(actor.last_streams_state.0.is_empty());
+            assert!(drain_stream_events(&mut events).len() >= 2);
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn stream_commands_do_not_block_actor_and_reject_stale_epochs() {
+        run_local(async {
+            let mut actor = audio_actor();
+            let client = make_client();
+            client.mark_connected();
+            actor.client = Some(Arc::clone(&client));
+            actor.self_client_id = Some(1);
+            actor.self_channel_id = 5;
+            actor.init_stream_session(&client);
+
+            // StartScreenShare 同步返回，不阻塞 Actor 处理后续命令与事件。
+            let (share_tx, share_rx) = oneshot::channel();
+            actor
+                .handle(SessionCommand::StartScreenShare {
+                    name: "Screen".into(),
+                    audio: true,
+                    bitrate: 2_500_000,
+                    viewer_limit: 0,
+                    reply: share_tx,
+                })
+                .await;
+            assert!(
+                actor
+                    .stream_session
+                    .as_ref()
+                    .is_some_and(|s| s.starting_publish.is_some())
+            );
+
+            let old_stream_epoch = actor.stream_epoch;
+            let epoch = actor.connection_epoch;
+
+            // 在开播结果回投前切频道：应立即推进 stream_epoch 并取消 starting_publish。
+            actor.on_stream_self_channel_changed(5, 9);
+            assert!(actor.stream_epoch != old_stream_epoch);
+            assert!(
+                actor
+                    .stream_session
+                    .as_ref()
+                    .is_some_and(|s| s.starting_publish.is_none())
+            );
+
+            // 即使在异步命令等待期间，其他控制命令也可即时执行。
+            let (mute_tx, mute_rx) = oneshot::channel();
+            actor
+                .handle(SessionCommand::SetMuted {
+                    muted: true,
+                    reply: mute_tx,
+                })
+                .await;
+            assert!(mute_rx.await.expect("mute reply").is_ok());
+
+            // 过期 stream_epoch 的异步回投不得污染新会话，并给调用方返回错误。
+            let (cmd_tx, cmd_rx) = oneshot::channel();
+            actor
+                .handle_signal(SessionSignal::StreamCommandFinished {
+                    epoch,
+                    stream_epoch: old_stream_epoch,
+                    require_matching_epoch: true,
+                    outcome: Ok(()),
+                    reply: cmd_tx,
+                })
+                .await;
+            assert!(cmd_rx.await.expect("cmd reply").is_err());
+
+            let (resp_tx, resp_rx) = oneshot::channel();
+            actor
+                .handle_signal(SessionSignal::StreamJoinResponseResolved(
+                    StreamJoinResponse {
+                        epoch,
+                        stream_epoch: old_stream_epoch,
+                        stream_id: "s1".into(),
+                        viewer_clid: 2,
+                        request_token: 1,
+                        accept: true,
+                        outcome: Ok(None),
+                        reply: resp_tx,
+                    },
+                ))
+                .await;
+            assert!(resp_rx.await.expect("join response reply").is_err());
+
+            // `require_matching_epoch: false` 的尽力收尾命令在同连接 epoch 下正常返回 Ok。
+            let (leave_fin_tx, leave_fin_rx) = oneshot::channel();
+            actor
+                .handle_signal(SessionSignal::StreamCommandFinished {
+                    epoch,
+                    stream_epoch: old_stream_epoch,
+                    require_matching_epoch: false,
+                    outcome: Ok(()),
+                    reply: leave_fin_tx,
+                })
+                .await;
+            assert!(leave_fin_rx.await.expect("leave finish reply").is_ok());
+
+            // 消化 StartScreenShareResolved 信号后，原调用应收到明确失败而非永久挂起。
+            for _ in 0..4 {
+                tokio::task::yield_now().await;
+            }
+            while let Ok(sig) = actor.signal_rx.try_recv() {
+                if let SessionSignal::StartScreenShareResolved { .. } = sig {
+                    actor.handle_signal(sig).await;
+                }
+            }
+            assert!(share_rx.await.expect("share reply").is_err());
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn client_joined_preserves_is_streaming() {
+        run_local(async {
+            let mut actor = audio_actor();
+            let client = make_client();
+            client.mark_connected();
+            actor.client = Some(Arc::clone(&client));
+            actor.self_client_id = Some(1);
+            actor.self_channel_id = 5;
+            actor.init_stream_session(&client);
+
+            let mut events = actor.events.subscribe();
+            let mut joined = ClientView::from(client_info(7, 5, "Streamer"));
+            joined.is_streaming = true;
+            actor
+                .handle_signal(SessionSignal::ClientJoined {
+                    epoch: actor.connection_epoch,
+                    client: joined,
+                })
+                .await;
+
+            assert_eq!(actor.client_channels.get(&7), Some(&5));
+            let emitted = std::iter::from_fn(|| events.try_recv().ok())
+                .find_map(|event| match event {
+                    SessionEvent::ClientJoined(view) => Some(view),
+                    _ => None,
+                })
+                .expect("expected ClientJoined event");
+            assert_eq!(emitted.id, 7);
+            assert!(emitted.is_streaming);
+        })
+        .await;
+    }
+
+    fn make_test_peer(stream_id: &str) -> (TestViewerPeer, mpsc::UnboundedSender<PeerEvent>) {
+        let (tx, rx) = mpsc::unbounded_channel();
+        let peer = TestViewerPeer {
+            stream_id: stream_id.to_string(),
+            closed: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            events_rx: Arc::new(std::sync::Mutex::new(Some(rx))),
+            sent_candidates: Arc::new(std::sync::Mutex::new(Vec::new())),
+            send_candidate_error: Arc::new(std::sync::Mutex::new(None)),
+        };
+        (peer, tx)
+    }
+
+    fn make_test_request(
+        viewer_clid: i32,
+        accept_result: Result<TestViewerPeer, StreamError>,
+    ) -> (JoinRequestHandle, TestJoinRequest) {
+        let (_tx, rx) = mpsc::unbounded_channel();
+        let req = TestJoinRequest {
+            viewer_clid,
+            state: Arc::new(std::sync::Mutex::new(JoinRequestState::Pending)),
+            events_rx: Arc::new(std::sync::Mutex::new(Some(rx))),
+            accept_result: Arc::new(std::sync::Mutex::new(Some(accept_result))),
+            deny_result: Arc::new(std::sync::Mutex::new(Some(Ok(())))),
+            offers_seen: Arc::new(std::sync::Mutex::new(Vec::new())),
+        };
+        (JoinRequestHandle::Test(req.clone()), req)
+    }
+
+    async fn pump_actor_signals(actor: &mut Actor) {
+        for _ in 0..6 {
+            tokio::task::yield_now().await;
+            while let Ok(sig) = actor.signal_rx.try_recv() {
+                actor.handle_signal(sig).await;
+            }
+        }
+    }
+
+    fn drain_all_events(rx: &mut broadcast::Receiver<SessionEvent>) -> Vec<SessionEvent> {
+        std::iter::from_fn(|| rx.try_recv().ok()).collect()
+    }
+
+    #[tokio::test]
+    async fn rejoining_accepted_viewer_without_left_cleans_old_viewer_and_ignores_late_closed() {
+        run_local(async {
+            let mut actor = audio_actor();
+            let client = make_client();
+            client.mark_connected();
+            actor.client = Some(Arc::clone(&client));
+            actor.self_client_id = Some(1);
+            actor.self_channel_id = 5;
+            actor.init_stream_session(&client);
+
+            let (_pub_tx, pub_rx) = mpsc::unbounded_channel::<PublishedStreamEvent>();
+            let pub_task = tokio::task::spawn_local(async move {
+                let mut rx = pub_rx;
+                let _ = rx.recv().await;
+            });
+            actor.stream_session.as_mut().unwrap().publish = Some(ActivePublish {
+                stream: PublishedStreamHandle::Test {
+                    id: "pub-reconn".into(),
+                },
+                requests: HashMap::new(),
+                viewers: HashMap::new(),
+                _task: PumpGuard(pub_task),
+            });
+
+            // 1. 观众 42 首次请求并被接受，成为已接受观众（进入 publish.viewers）。
+            let (peer1, peer1_tx) = make_test_peer("pub-reconn");
+            let (req1, _req1_handle) = make_test_request(42, Ok(peer1.clone()));
+            actor.handle_published_stream_request("pub-reconn".into(), req1);
+
+            let (reply_tx1, reply_rx1) = oneshot::channel();
+            actor.respond_stream_join_request(
+                42,
+                true,
+                "v=0\r\nm=video 9\r\na=ice-ufrag:offer1".into(),
+                reply_tx1,
+            );
+            pump_actor_signals(&mut actor).await;
+            assert!(reply_rx1.await.unwrap().is_ok());
+
+            let old_peer_token = actor
+                .stream_session
+                .as_ref()
+                .and_then(|s| s.publish.as_ref())
+                .and_then(|p| p.viewers.get(&42))
+                .expect("accepted viewer 1")
+                .token;
+
+            let mut events = actor.events.subscribe();
+
+            // 2. 模拟旧 PeerEvent::Closed 还在队列里尚未处理时，同 viewer_clid 直接重新发起 JoinRequest。
+            let (peer2, peer2_tx) = make_test_peer("pub-reconn");
+            let (req2, req2_handle) = make_test_request(42, Ok(peer2.clone()));
+            actor.handle_published_stream_request("pub-reconn".into(), req2);
+
+            // 旧 AcceptedViewer 必须已被移除，新请求已注册。
+            {
+                let publish = actor
+                    .stream_session
+                    .as_ref()
+                    .and_then(|s| s.publish.as_ref())
+                    .unwrap();
+                assert!(!publish.viewers.contains_key(&42));
+                assert!(publish.requests.contains_key(&42));
+            }
+
+            // 验证事件顺序：先 StreamViewerLeft 清理旧会话，再 StreamViewerJoinRequested 重建新连接。
+            let immediate_events = drain_all_events(&mut events);
+            let left_pos = immediate_events
+                .iter()
+                .position(|ev| {
+                    matches!(
+                        ev,
+                        SessionEvent::StreamViewerLeft { stream_id, viewer_clid: 42 }
+                            if stream_id == "pub-reconn"
+                    )
+                })
+                .expect("expected StreamViewerLeft before StreamViewerJoinRequested");
+            let req_pos = immediate_events
+                .iter()
+                .position(|ev| {
+                    matches!(
+                        ev,
+                        SessionEvent::StreamViewerJoinRequested { stream_id, viewer_clid: 42 }
+                            if stream_id == "pub-reconn"
+                    )
+                })
+                .expect("expected StreamViewerJoinRequested");
+            assert!(left_pos < req_pos);
+            assert!(immediate_events.iter().any(|ev| {
+                matches!(
+                    ev,
+                    SessionEvent::Log { level, message }
+                        if level == "info"
+                            && message.contains("notifyjoinstreamrequest")
+                            && message.contains("viewer_clid=42")
+                )
+            }));
+
+            // 3. 随后旧 PeerEvent::Closed（无论来自通道还是直接进入队列）到达：不得误删新请求。
+            let _ = peer1_tx.send(PeerEvent::Closed(tsclient_rs::stream::PeerClosed {
+                cause: tsclient_rs::stream::PeerCloseCause::Left,
+                reason: None,
+            }));
+            actor
+                .handle_signal(SessionSignal::PublisherPeerEvent {
+                    epoch: actor.connection_epoch,
+                    stream_epoch: actor.stream_epoch,
+                    stream_id: "pub-reconn".into(),
+                    viewer_clid: 42,
+                    token: old_peer_token,
+                    event: PeerEvent::Closed(tsclient_rs::stream::PeerClosed {
+                        cause: tsclient_rs::stream::PeerCloseCause::Left,
+                        reason: None,
+                    }),
+                })
+                .await;
+            pump_actor_signals(&mut actor).await;
+
+            assert!(
+                actor
+                    .stream_session
+                    .as_ref()
+                    .and_then(|s| s.publish.as_ref())
+                    .is_some_and(|p| p.requests.contains_key(&42))
+            );
+            assert!(
+                !drain_all_events(&mut events)
+                    .iter()
+                    .any(|ev| matches!(ev, SessionEvent::StreamViewerLeft { .. }))
+            );
+
+            // 4. 接受新请求，生成新的 AcceptedViewer。
+            let (reply_tx2, reply_rx2) = oneshot::channel();
+            actor.respond_stream_join_request(
+                42,
+                true,
+                "v=0\r\nm=video 9\r\na=ice-ufrag:offer2".into(),
+                reply_tx2,
+            );
+            pump_actor_signals(&mut actor).await;
+            assert!(reply_rx2.await.unwrap().is_ok());
+            assert_eq!(
+                req2_handle.offers_seen.lock().unwrap().as_slice(),
+                &["v=0\r\nm=video 9\r\na=ice-ufrag:offer2"]
+            );
+
+            let new_peer_token = actor
+                .stream_session
+                .as_ref()
+                .and_then(|s| s.publish.as_ref())
+                .and_then(|p| p.viewers.get(&42))
+                .expect("accepted viewer 2")
+                .token;
+            assert_ne!(new_peer_token, old_peer_token);
+
+            // 5. 迟到的旧 PeerEvent::Closed 与迟到的总线 ViewerLeft 不得误删新 AcceptedViewer。
+            actor
+                .handle_signal(SessionSignal::PublisherPeerEvent {
+                    epoch: actor.connection_epoch,
+                    stream_epoch: actor.stream_epoch,
+                    stream_id: "pub-reconn".into(),
+                    viewer_clid: 42,
+                    token: old_peer_token,
+                    event: PeerEvent::Closed(tsclient_rs::stream::PeerClosed {
+                        cause: tsclient_rs::stream::PeerCloseCause::Left,
+                        reason: None,
+                    }),
+                })
+                .await;
+            actor.handle_streams_bus_event(StreamsEvent::ViewerLeft(
+                tsclient_rs::stream::StreamViewerEvent {
+                    info: stream_info("pub-reconn", 1, "Screen"),
+                    client_id: 42,
+                },
+            ));
+            let late_events = drain_all_events(&mut events);
+            assert!(
+                !late_events
+                    .iter()
+                    .any(|ev| matches!(ev, SessionEvent::StreamViewerLeft { .. }))
+            );
+            assert!(
+                actor
+                    .stream_session
+                    .as_ref()
+                    .and_then(|s| s.publish.as_ref())
+                    .is_some_and(|p| p.viewers.contains_key(&42))
+            );
+
+            // 6. 新会话的 Answer / ICE 双向信令正常流转到新 Peer。
+            peer2_tx
+                .send(PeerEvent::Answer(
+                    "v=0\r\nm=video 9\r\na=ice-ufrag:answer2".into(),
+                ))
+                .unwrap();
+            peer2_tx
+                .send(PeerEvent::Candidate(IceCandidate {
+                    candidate: "candidate:1 1 udp 2122260223 192.0.2.2 50000 typ host".into(),
+                    sdp_mid: Some("0".into()),
+                    sdp_m_line_index: Some(0),
+                }))
+                .unwrap();
+            pump_actor_signals(&mut actor).await;
+
+            let (ice_tx, ice_rx) = oneshot::channel();
+            actor.send_publisher_ice_candidate(
+                42,
+                "candidate:2 1 udp 2122260223 198.51.100.3 50001 typ srflx".into(),
+                Some("0".into()),
+                Some(0),
+                ice_tx,
+            );
+            pump_actor_signals(&mut actor).await;
+            assert!(ice_rx.await.unwrap().is_ok());
+
+            let signal_events = drain_all_events(&mut events);
+            assert!(signal_events.iter().any(|ev| {
+                matches!(
+                    ev,
+                    SessionEvent::PublisherSignalReceived {
+                        viewer_clid: 42,
+                        signal: PublisherSignal::Answer { .. },
+                        ..
+                    }
+                )
+            }));
+            assert!(signal_events.iter().any(|ev| {
+                matches!(
+                    ev,
+                    SessionEvent::PublisherSignalReceived {
+                        viewer_clid: 42,
+                        signal: PublisherSignal::IceCandidate { .. },
+                        ..
+                    }
+                )
+            }));
+            assert!(peer1.sent_candidates.lock().unwrap().is_empty());
+            assert_eq!(peer2.sent_candidates.lock().unwrap().len(), 1);
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn publisher_signaling_logs_info_and_warn_without_full_sdp() {
+        run_local(async {
+            let mut actor = audio_actor();
+            let client = make_client();
+            client.mark_connected();
+            actor.client = Some(Arc::clone(&client));
+            actor.self_client_id = Some(1);
+            actor.self_channel_id = 5;
+            actor.init_stream_session(&client);
+
+            let (_pub_tx, pub_rx) = mpsc::unbounded_channel::<PublishedStreamEvent>();
+            let pub_task = tokio::task::spawn_local(async move {
+                let mut rx = pub_rx;
+                let _ = rx.recv().await;
+            });
+            actor.stream_session.as_mut().unwrap().publish = Some(ActivePublish {
+                stream: PublishedStreamHandle::Test {
+                    id: "pub-logs".into(),
+                },
+                requests: HashMap::new(),
+                viewers: HashMap::new(),
+                _task: PumpGuard(pub_task),
+            });
+
+            let mut events = actor.events.subscribe();
+            let mut logs: Vec<(String, String)> = Vec::new();
+            let collect_logs = |events: &mut broadcast::Receiver<SessionEvent>,
+                                logs: &mut Vec<(String, String)>| {
+                while let Ok(ev) = events.try_recv() {
+                    if let SessionEvent::Log { level, message } = ev {
+                        logs.push((level, message));
+                    }
+                }
+            };
+
+            // 1. notifyjoinstreamrequest + respondjoinstreamrequest 成功路径
+            let (peer_ok, peer_ok_tx) = make_test_peer("pub-logs");
+            let (req_ok, _req_ok_handle) = make_test_request(77, Ok(peer_ok.clone()));
+            actor.handle_published_stream_request("pub-logs".into(), req_ok);
+            collect_logs(&mut events, &mut logs);
+
+            let offer_sdp = "v=0\r\nm=video 9\r\na=ice-ufrag:secret-offer-ufrag";
+            let (resp_tx, resp_rx) = oneshot::channel();
+            actor.respond_stream_join_request(77, true, offer_sdp.into(), resp_tx);
+            pump_actor_signals(&mut actor).await;
+            assert!(resp_rx.await.unwrap().is_ok());
+            collect_logs(&mut events, &mut logs);
+
+            // 2. 收到 Answer 与 iceCandidate + 发送 iceCandidate 成功与失败
+            let answer_sdp = "v=0\r\nm=video 9\r\na=ice-ufrag:secret-answer-ufrag";
+            peer_ok_tx
+                .send(PeerEvent::Answer(answer_sdp.into()))
+                .unwrap();
+            peer_ok_tx
+                .send(PeerEvent::Candidate(IceCandidate {
+                    candidate: "candidate:recv 1 udp 1 192.0.2.1 5000 typ host".into(),
+                    sdp_mid: Some("0".into()),
+                    sdp_m_line_index: Some(0),
+                }))
+                .unwrap();
+            pump_actor_signals(&mut actor).await;
+            collect_logs(&mut events, &mut logs);
+
+            let (ice_ok_tx, ice_ok_rx) = oneshot::channel();
+            actor.send_publisher_ice_candidate(
+                77,
+                "candidate:send-ok 1 udp 1 192.0.2.2 5001 typ host".into(),
+                Some("0".into()),
+                Some(0),
+                ice_ok_tx,
+            );
+            pump_actor_signals(&mut actor).await;
+            assert!(ice_ok_rx.await.unwrap().is_ok());
+            collect_logs(&mut events, &mut logs);
+
+            *peer_ok.send_candidate_error.lock().unwrap() = Some(StreamError::NotConnected);
+            let (ice_err_tx, ice_err_rx) = oneshot::channel();
+            actor.send_publisher_ice_candidate(
+                77,
+                "candidate:send-err 1 udp 1 192.0.2.3 5002 typ host".into(),
+                Some("0".into()),
+                Some(0),
+                ice_err_tx,
+            );
+            pump_actor_signals(&mut actor).await;
+            assert!(ice_err_rx.await.unwrap().is_err());
+            collect_logs(&mut events, &mut logs);
+
+            // 3. respondjoinstreamrequest 失败路径（预校验失败 + 异步命令失败）
+            let (missing_tx, missing_rx) = oneshot::channel();
+            actor.respond_stream_join_request(99, true, "v=0\r\n".into(), missing_tx);
+            assert!(missing_rx.await.unwrap().is_err());
+            collect_logs(&mut events, &mut logs);
+
+            let (req_fail, _) = make_test_request(88, Err(StreamError::NotConnected));
+            actor.handle_published_stream_request("pub-logs".into(), req_fail);
+            let (fail_tx, fail_rx) = oneshot::channel();
+            actor.respond_stream_join_request(88, true, offer_sdp.into(), fail_tx);
+            pump_actor_signals(&mut actor).await;
+            assert!(fail_rx.await.unwrap().is_err());
+            collect_logs(&mut events, &mut logs);
+
+            // 4. 观看端 Answer 发送失败也记录 warn 日志且不打印完整 SDP
+            let (view_ans_tx, view_ans_rx) = oneshot::channel();
+            actor.send_stream_answer("missing-stream".into(), 55, answer_sdp.into(), view_ans_tx);
+            assert!(view_ans_rx.await.unwrap().is_err());
+            collect_logs(&mut events, &mut logs);
+
+            // 任何日志都不得打印完整 SDP
+            for (_, msg) in &logs {
+                assert!(
+                    !msg.contains("secret-offer-ufrag") && !msg.contains("secret-answer-ufrag"),
+                    "log leaked full SDP: {msg}"
+                );
+            }
+
+            assert!(logs.iter().any(|(lvl, msg)| {
+                lvl == "info"
+                    && msg.contains("notifyjoinstreamrequest")
+                    && msg.contains("viewer_clid=77")
+            }));
+            assert!(logs.iter().any(|(lvl, msg)| {
+                lvl == "info"
+                    && msg.contains("respondjoinstreamrequest")
+                    && msg.contains("viewer_clid=77")
+            }));
+            assert!(logs.iter().any(|(lvl, msg)| {
+                lvl == "info" && msg.contains("Answer") && msg.contains("viewer_clid=77")
+            }));
+            assert!(logs.iter().any(|(lvl, msg)| {
+                lvl == "info" && msg.contains("iceCandidate") && msg.contains("viewer_clid=77")
+            }));
+            assert!(logs.iter().any(|(lvl, msg)| {
+                lvl == "warn" && msg.contains("iceCandidate") && msg.contains("viewer_clid=77")
+            }));
+            assert!(logs.iter().any(|(lvl, msg)| {
+                lvl == "warn"
+                    && msg.contains("respondjoinstreamrequest")
+                    && msg.contains("viewer_clid=99")
+            }));
+            assert!(logs.iter().any(|(lvl, msg)| {
+                lvl == "warn"
+                    && msg.contains("respondjoinstreamrequest")
+                    && msg.contains("viewer_clid=88")
+            }));
+            assert!(logs.iter().any(|(lvl, msg)| {
+                lvl == "warn" && msg.contains("Answer") && msg.contains("target_clid=55")
+            }));
         })
         .await;
     }

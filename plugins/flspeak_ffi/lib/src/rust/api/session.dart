@@ -591,6 +591,7 @@ sealed class CoreEvent with _$CoreEvent {
     required String nickname,
     required String uid,
     required int channelId,
+    required bool isStreaming,
   }) = CoreEvent_ClientJoined;
   const factory CoreEvent.clientLeft({required int id}) = CoreEvent_ClientLeft;
   const factory CoreEvent.clientMoved({

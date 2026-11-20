@@ -3089,6 +3089,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           nickname: dco_decode_String(raw[2]),
           uid: dco_decode_String(raw[3]),
           channelId: dco_decode_CastedPrimitive_u_64(raw[4]),
+          isStreaming: dco_decode_bool(raw[5]),
         );
       case 10:
         return CoreEvent_ClientLeft(id: dco_decode_i_32(raw[1]));
@@ -3937,11 +3938,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         var var_nickname = sse_decode_String(deserializer);
         var var_uid = sse_decode_String(deserializer);
         var var_channelId = sse_decode_CastedPrimitive_u_64(deserializer);
+        var var_isStreaming = sse_decode_bool(deserializer);
         return CoreEvent_ClientJoined(
           id: var_id,
           nickname: var_nickname,
           uid: var_uid,
           channelId: var_channelId,
+          isStreaming: var_isStreaming,
         );
       case 10:
         var var_id = sse_decode_i_32(deserializer);
@@ -4954,12 +4957,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         nickname: final nickname,
         uid: final uid,
         channelId: final channelId,
+        isStreaming: final isStreaming,
       ):
         sse_encode_i_32(9, serializer);
         sse_encode_i_32(id, serializer);
         sse_encode_String(nickname, serializer);
         sse_encode_String(uid, serializer);
         sse_encode_CastedPrimitive_u_64(channelId, serializer);
+        sse_encode_bool(isStreaming, serializer);
       case CoreEvent_ClientLeft(id: final id):
         sse_encode_i_32(10, serializer);
         sse_encode_i_32(id, serializer);

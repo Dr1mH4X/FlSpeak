@@ -1161,13 +1161,16 @@ class SessionController extends Notifier<SessionView> {
         :final nickname,
         :final uid,
         :final channelId,
+        :final isStreaming,
       ):
-        final existing = current.clients
-            .where(
-              (client) =>
-                  client.id == id || (uid.isNotEmpty && client.uid == uid),
-            )
+        final sameIdExisting = current.clients
+            .where((client) => client.id == id)
             .firstOrNull;
+        final existing =
+            sameIdExisting ??
+            current.clients
+                .where((client) => uid.isNotEmpty && client.uid == uid)
+                .firstOrNull;
         final others = current.clients.where((client) => client.id != id);
         final isSelf = id == current.selfClientId;
         state = current.copyWith(
@@ -1181,6 +1184,8 @@ class SessionController extends Notifier<SessionView> {
               inputMuted: isSelf ? (current.muted || current.deafened) : null,
               outputMuted: isSelf ? current.deafened : null,
               away: isSelf ? current.away : null,
+              isStreaming:
+                  isStreaming || (sameIdExisting?.isStreaming ?? false),
               clientType: existing?.clientType ?? ClientType.standard,
               appName: existing?.appName,
               appVersion: existing?.appVersion,

@@ -826,6 +826,7 @@ void main() {
           nickname: 'Other',
           uid: 'other',
           channelId: 9,
+          isStreaming: false,
         ),
       );
       expect(
@@ -916,6 +917,7 @@ void main() {
         nickname: 'Other',
         uid: 'other',
         channelId: 7,
+        isStreaming: false,
       ),
     );
     expect(await controller.sendMessage('must not reach Other'), isFalse);
@@ -928,6 +930,7 @@ void main() {
         nickname: 'Peer',
         uid: 'peer',
         channelId: 7,
+        isStreaming: false,
       ),
     );
     expect(await controller.sendMessage('new client id'), isTrue);
@@ -1650,6 +1653,98 @@ void main() {
     expect(current.inputName, 'Mic 1');
     expect(current.outputId, isNull);
     expect(current.outputName, isNull);
+  });
+
+  test('clientJoined sets isStreaming and preserves same-id streaming state until left', () async {
+    final events = StreamController<CoreEvent>.broadcast(sync: true);
+    final core = _Core(events);
+    final container = ProviderContainer(
+      overrides: [coreSessionProvider.overrideWithValue(core)],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await events.close();
+    });
+
+    container.read(sessionViewProvider);
+    events.add(
+      const CoreEvent.state(
+        state: CoreSessionState.connected(clientId: 1, channelId: 5),
+      ),
+    );
+
+    events.add(
+      const CoreEvent.clientJoined(
+        id: 9,
+        nickname: 'Streamer',
+        uid: 'uid-9',
+        channelId: 5,
+        isStreaming: true,
+      ),
+    );
+    expect(
+      container
+          .read(sessionViewProvider)
+          .clients
+          .singleWhere((c) => c.id == 9)
+          .isStreaming,
+      isTrue,
+    );
+
+    events.add(
+      const CoreEvent.clientJoined(
+        id: 9,
+        nickname: 'Streamer',
+        uid: 'uid-9',
+        channelId: 5,
+        isStreaming: false,
+      ),
+    );
+    expect(
+      container
+          .read(sessionViewProvider)
+          .clients
+          .singleWhere((c) => c.id == 9)
+          .isStreaming,
+      isTrue,
+    );
+
+    events.add(
+      const CoreEvent.clientJoined(
+        id: 10,
+        nickname: 'Clone',
+        uid: 'uid-9',
+        channelId: 5,
+        isStreaming: false,
+      ),
+    );
+    expect(
+      container
+          .read(sessionViewProvider)
+          .clients
+          .singleWhere((c) => c.id == 10)
+          .isStreaming,
+      isFalse,
+    );
+
+    events.add(const CoreEvent.clientLeft(id: 9));
+    events.add(
+      const CoreEvent.clientJoined(
+        id: 9,
+        nickname: 'Streamer',
+        uid: 'uid-9',
+        channelId: 5,
+        isStreaming: false,
+      ),
+    );
+    expect(
+      container
+          .read(sessionViewProvider)
+          .clients
+          .singleWhere((c) => c.id == 9)
+          .isStreaming,
+      isFalse,
+    );
   });
 }
 

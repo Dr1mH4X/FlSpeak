@@ -233,6 +233,7 @@ pub enum CoreEvent {
         nickname: String,
         uid: String,
         channel_id: u64,
+        is_streaming: bool,
     },
     ClientLeft {
         id: i32,
@@ -1117,6 +1118,7 @@ impl From<SessionEvent> for CoreEvent {
                 nickname: client.nickname,
                 uid: client.uid,
                 channel_id: client.channel_id,
+                is_streaming: client.is_streaming,
             },
             SessionEvent::ClientLeft { id } => CoreEvent::ClientLeft { id },
             SessionEvent::ClientMoved { id, channel_id } => {
@@ -1339,4 +1341,39 @@ pub fn update_audio_settings_json(json: String) -> Result<(), CoreError> {
 #[frb(sync)]
 pub fn set_android_dns_servers(servers: Vec<String>) {
     proto::set_android_dns_servers(&servers);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn client_joined_mapping_preserves_is_streaming() {
+        let joined = SessionEvent::ClientJoined(session::ClientView {
+            id: 7,
+            nickname: "Streamer".into(),
+            uid: "uid-7".into(),
+            channel_id: 5,
+            is_streaming: true,
+            input_muted: None,
+            output_muted: None,
+            away: None,
+            away_message: None,
+            client_type: session::ClientType::Standard,
+            app_name: None,
+            app_version: None,
+            capabilities: Vec::new(),
+            bot_commands: None,
+            bot_command_prefix: None,
+        });
+        assert!(matches!(
+            CoreEvent::from(joined),
+            CoreEvent::ClientJoined {
+                id: 7,
+                channel_id: 5,
+                is_streaming: true,
+                ..
+            }
+        ));
+    }
 }

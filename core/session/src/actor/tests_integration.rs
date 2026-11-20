@@ -179,6 +179,7 @@ async fn dynamic_reset_triggers_clear_permission_flags() {
         .handle_signal(SessionSignal::ClientUpdated {
             epoch: actor.connection_epoch,
             id: 7,
+            channel_id: 0,
             input_muted: None,
             output_muted: None,
             away: None,
@@ -192,6 +193,7 @@ async fn dynamic_reset_triggers_clear_permission_flags() {
         .handle_signal(SessionSignal::ClientUpdated {
             epoch: actor.connection_epoch,
             id: 7,
+            channel_id: 0,
             input_muted: None,
             output_muted: None,
             away: None,
