@@ -1,8 +1,10 @@
-// 顶栏搜索（AppBarSearchState）的接入方式参考 FlClash（https://github.com/chen08209/FlClash），原始许可证为 GPL-3.0。
+// 搜索按钮展开为搜索栏的弹簧动效与 SearchField 用法参考 FlClash（https://github.com/chen08209/FlClash），原始许可证为 GPL-3.0。
 // 来源提交：be84736605527034689c95bf27828ff27d912c5e。
-// 对应原文件：lib/views/connection/requests.dart。
+// 对应原文件：lib/ui/scaffold/scaffold_search.dart。
 
 import 'dart:async';
+import 'dart:math' as math;
+import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, kIsWeb;
@@ -18,6 +20,7 @@ import 'package:flutter/material.dart'
         Switch,
         TextButton,
         TextField;
+import 'package:flutter/physics.dart' show SpringDescription;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
@@ -244,6 +247,7 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
     final section = _ServerSection(
       servers: filtered,
       hasServers: orderedServers.isNotEmpty,
+      onSearch: (value) => setState(() => _query = value),
       lastConnected: lastConnected,
       connectedId: connectedId,
       connectingId: connectingId,
@@ -329,9 +333,6 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
       level: SurfaceLevel.page,
       child: Scaffold(
         backgroundColor: context.pageColor,
-        searchState: AppBarSearchState(
-          onSearch: (value) => setState(() => _query = value),
-        ),
         title: desktop ? l10n.serversTitle : l10n.appName,
         actions: [
           if (connected && (desktop || !inCompactTabs))
@@ -473,6 +474,7 @@ class _ServerSection extends StatelessWidget {
   const _ServerSection({
     required this.servers,
     required this.hasServers,
+    required this.onSearch,
     required this.lastConnected,
     required this.connectedId,
     required this.connectingId,
@@ -484,6 +486,7 @@ class _ServerSection extends StatelessWidget {
 
   final List<ServerProfileView> servers;
   final bool hasServers;
+  final ValueChanged<String> onSearch;
   final Map<String, DateTime> lastConnected;
   final String? connectedId;
   final String? connectingId;
@@ -502,11 +505,24 @@ class _ServerSection extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: Text(
-                l10n.serversTitle,
-                style: context.texts.titleLarge,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              child: LayoutBuilder(
+                builder: (context, constraints) => Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        l10n.serversTitle,
+                        style: context.texts.titleLarge,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    _ServerSearchControl(
+                      maxRowWidth: constraints.maxWidth,
+                      onChanged: onSearch,
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(width: 12),
@@ -573,6 +589,212 @@ class _ServerSection extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+class _ServerSearchControl extends StatefulWidget {
+  const _ServerSearchControl({
+    required this.maxRowWidth,
+    required this.onChanged,
+  });
+
+  final double maxRowWidth;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_ServerSearchControl> createState() => _ServerSearchControlState();
+}
+
+class _ServerSearchControlState extends State<_ServerSearchControl>
+    with SingleTickerProviderStateMixin {
+  static final double _collapsedSize = TonalButtonSize.section.button;
+  static const double _expandedMaxWidth = 260.0;
+  static final Curve _openCurve = SpringCurve(
+    SpringDescription.withDampingRatio(mass: 1, stiffness: 390, ratio: 0.75),
+    seconds: 0.45,
+  );
+  static final Curve _closeCurve = SpringCurve(
+    SpringDescription.withDampingRatio(mass: 1, stiffness: 600, ratio: 0.75),
+    seconds: 0.25,
+  );
+
+  bool _expanded = false;
+
+  late final TextEditingController _controller = TextEditingController()
+    ..addListener(_handleTextChanged);
+  late final FocusNode _focusNode = FocusNode(onKeyEvent: _handleKeyEvent)
+    ..addListener(_handleFocusChanged);
+  late final AnimationController _expandController = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 450),
+    reverseDuration: const Duration(milliseconds: 250),
+  );
+  late final Animation<double> _expandAnimation = CurvedAnimation(
+    parent: _expandController,
+    curve: _openCurve,
+    reverseCurve: _closeCurve,
+  );
+
+  @override
+  void dispose() {
+    _expandController.dispose();
+    _focusNode.removeListener(_handleFocusChanged);
+    _focusNode.dispose();
+    _controller.removeListener(_handleTextChanged);
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _animateExpand(bool expand) {
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    if (reduceMotion) {
+      _expandController.value = expand ? 1.0 : 0.0;
+    } else if (expand) {
+      _expandController.forward();
+    } else {
+      _expandController.reverse();
+    }
+  }
+
+  void _open() {
+    if (!_expanded) {
+      setState(() => _expanded = true);
+    }
+    _animateExpand(true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _expanded) {
+        _focusNode.requestFocus();
+      }
+    });
+  }
+
+  void _collapseAndClear() {
+    if (_controller.text.isNotEmpty) {
+      _controller.clear();
+      widget.onChanged('');
+    }
+    if (_expanded) {
+      setState(() => _expanded = false);
+    }
+    _animateExpand(false);
+    _focusNode.unfocus();
+  }
+
+  void _handleChanged(String value) {
+    widget.onChanged(value);
+    if (value.isEmpty && _expanded && !_focusNode.hasFocus) {
+      _focusNode.requestFocus();
+    }
+  }
+
+  void _handleTextChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _handleFocusChanged() {
+    if (!_focusNode.hasFocus && _expanded && _controller.text.isEmpty) {
+      setState(() => _expanded = false);
+      _animateExpand(false);
+    }
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.escape &&
+        _expanded) {
+      _collapseAndClear();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final scheme = context.scheme;
+    final surfaceFill = context.raisedSurfaceColor;
+    final availableWidth = math.max(0.0, widget.maxRowWidth - 12);
+    final collapsedWidth = math.min(_collapsedSize, availableWidth);
+    final expandedWidth = math.min(
+      _expandedMaxWidth,
+      math.max(collapsedWidth, availableWidth * 0.65),
+    );
+
+    return GooSurface(
+      color: surfaceFill,
+      child: AnimatedBuilder(
+        animation: _expandController,
+        builder: (context, _) {
+          if (!_expanded && _expandController.isDismissed) {
+            return TonalButtonTheme(
+              size: TonalButtonSize.section,
+              child: ElasticPress(
+                child: SizedBox(
+                  width: collapsedWidth,
+                  height: _collapsedSize,
+                  child: IconButton(
+                    onPressed: _open,
+                    style: ButtonStyle.from(
+                      backgroundColor: Colors.transparent,
+                      foregroundColor: scheme.onSurface,
+                      fixedSize: Size.square(collapsedWidth),
+                      minimumSize: Size.square(collapsedWidth),
+                      padding: EdgeInsets.zero,
+                      iconSize: TonalButtonSize.section.icon,
+                      shape: AppShape.full,
+                    ),
+                    icon: Semantics(
+                      label: l10n.serverSearchLabel,
+                      child: const GlyphIcon(Glyphs.search),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }
+
+          final currentWidth = lerpDouble(
+            collapsedWidth,
+            expandedWidth,
+            _expandAnimation.value,
+          )!.clamp(collapsedWidth, availableWidth);
+
+          return ElasticPress(
+            child: GooPane(
+              child: FocusRing(
+                shape: AppShape.full,
+                child: ClipRSuperellipse(
+                  borderRadius: AppRadius.full,
+                  child: SizedBox(
+                    width: currentWidth,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const NeverScrollableScrollPhysics(),
+                      child: SizedBox(
+                        width: expandedWidth,
+                        child: TapRegion(
+                          onTapOutside: (_) => _focusNode.unfocus(),
+                          child: SearchField(
+                            controller: _controller,
+                            focusNode: _focusNode,
+                            height: _collapsedSize,
+                            fill: Colors.transparent,
+                            hintText: l10n.serverSearchLabel,
+                            onChanged: _handleChanged,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }

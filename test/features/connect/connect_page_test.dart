@@ -667,7 +667,64 @@ void main() {
     },
   );
 
-  testWidgets('顶栏搜索按钮展开为搜索框并筛选服务器', (tester) async {
+  testWidgets('服务器空列表时仍显示圆形搜索按钮，同行左对齐于「服务器」右侧', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_FakeCore()),
+          sessionViewProvider.overrideWith(_EmptySessionController.new),
+        ],
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            ...AppLocalizations.localizationsDelegates,
+            PrismUiLocalizationsDelegate(),
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
+          home: const ConnectPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TextField), findsNothing);
+    final titleFinder = find.descendant(
+      of: find.byType(SingleChildScrollView),
+      matching: find.text('服务器'),
+    );
+    final searchFinder = find.bySemanticsLabel('搜索服务器');
+    final addFinder = find.descendant(
+      of: find.byType(SingleChildScrollView),
+      matching: find.text('添加服务器'),
+    );
+    expect(titleFinder, findsOneWidget);
+    expect(searchFinder, findsOneWidget);
+    expect(addFinder, findsOneWidget);
+
+    final titleRect = tester.getRect(titleFinder);
+    final searchRect = tester.getRect(searchFinder);
+    final addRect = tester.getRect(addFinder);
+
+    expect(searchRect.size, const Size(36, 36));
+    expect(searchRect.center.dy, closeTo(titleRect.center.dy, 4.0));
+    expect(searchRect.center.dy, closeTo(addRect.center.dy, 4.0));
+    expect(searchRect.left, greaterThan(titleRect.right));
+    expect(searchRect.right, lessThan(addRect.left));
+    expect(
+      searchRect.left - titleRect.right,
+      lessThan(addRect.left - searchRect.right),
+    );
+  });
+
+  testWidgets('搜索按钮点击展开、筛选、清空保持焦点、空失焦收起与 Esc 清空收起', (tester) async {
     tester.view.physicalSize = const Size(1280, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -698,17 +755,170 @@ void main() {
     expect(find.byType(ServerRow), findsNWidgets(2));
     expect(find.byType(TextField), findsNothing);
 
-    await tester.tap(find.byWidgetPredicate(_isSearchGlyph));
+    await tester.tap(find.bySemanticsLabel('搜索服务器'));
     await tester.pumpAndSettle();
-    expect(find.byType(TextField), findsOneWidget);
 
-    await tester.enterText(find.byType(TextField), 'b.example');
+    final fieldFinder = find.byType(TextField);
+    expect(fieldFinder, findsOneWidget);
+    expect(tester.getSize(fieldFinder).width, lessThanOrEqualTo(260));
+
+    await tester.enterText(fieldFinder, 'b.example');
     await tester.pumpAndSettle();
     expect(find.byType(ServerRow), findsOneWidget);
 
+    // 失焦但内容非空时保持展开，不丢失筛选输入。
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.byType(ServerRow), findsOneWidget);
+
+    // 点击清空按钮清空内容并恢复焦点，保持展开。
+    await tester.tap(
+      find.byWidgetPredicate(
+        (w) => w is GlyphIcon && w.glyph == Glyphs.clearField,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(ServerRow), findsNWidgets(2));
+    expect(find.byType(TextField), findsOneWidget);
+    expect(tester.widget<TextField>(fieldFinder).focusNode?.hasFocus, isTrue);
+
+    // 内容为空且失焦时自动收起为圆形按钮。
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsNothing);
+    expect(find.bySemanticsLabel('搜索服务器'), findsOneWidget);
+
+    // 再次展开并输入文本，按 Esc 立即清空并收起。
+    await tester.tap(find.bySemanticsLabel('搜索服务器'));
+    await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'nomatch');
     await tester.pumpAndSettle();
     expect(find.text('没有匹配的服务器'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsNothing);
+    expect(find.byType(ServerRow), findsNWidgets(2));
+  });
+
+  testWidgets('窄屏与 2 倍字号下展开搜索框不发生溢出', (tester) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_FakeCore()),
+          sessionViewProvider.overrideWith(_TwoServersSessionController.new),
+        ],
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('en'),
+          localizationsDelegates: const [
+            ...AppLocalizations.localizationsDelegates,
+            PrismUiLocalizationsDelegate(),
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: const TextScaler.linear(2.0)),
+            child: PrismRootScope(brightness: Brightness.light, child: child!),
+          ),
+          home: const ConnectPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.bySemanticsLabel('Search servers'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel('Search servers'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.text('Servers'), findsOneWidget);
+    expect(find.bySemanticsLabel('Add server'), findsOneWidget);
+  });
+
+  testWidgets('正文搜索框在开启 LiquidGlass 时仍保持无玻璃无阴影表面，并维持展开清空行为与 36dp 节头高度', (
+    tester,
+  ) async {
+    Future<void> mount(LiquidGlassQuality? quality) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          key: ValueKey(quality),
+          overrides: [
+            coreSessionProvider.overrideWithValue(_FakeCore()),
+            sessionViewProvider.overrideWith(_TwoServersSessionController.new),
+          ],
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            locale: const Locale('zh'),
+            localizationsDelegates: const [
+              ...AppLocalizations.localizationsDelegates,
+              PrismUiLocalizationsDelegate(),
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) => PrismRootScope(
+              brightness: Brightness.light,
+              liquidGlass: quality,
+              child: child!,
+            ),
+            home: const ConnectPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await mount(null);
+    final initialSurface = tester.widget<GooSurface>(find.byType(GooSurface));
+    expect(initialSurface.glass, isNull);
+    expect(initialSurface.shadows, isEmpty);
+    expect(
+      tester.getSize(find.byType(GooSurface)).height,
+      TonalButtonSize.section.button,
+    );
+    expect(
+      tester.getSize(find.widgetWithText(TonalButton, '添加服务器')).height,
+      TonalButtonSize.section.button,
+    );
+
+    await tester.tap(find.bySemanticsLabel('搜索服务器'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.byType(GooPane), findsOneWidget);
+    expect(tester.widget<GooSurface>(find.byType(GooSurface)).glass, isNull);
+
+    await tester.enterText(find.byType(TextField), 'B');
+    await tester.pumpAndSettle();
+    expect(find.byType(ServerRow), findsOneWidget);
+
+    await tester.tap(
+      find.byWidgetPredicate(
+        (w) => w is GlyphIcon && w.glyph == Glyphs.clearField,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(ServerRow), findsNWidgets(2));
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsNothing);
+
+    await mount(LiquidGlassQuality.standard);
+    final glassSurface = tester.widget<GooSurface>(find.byType(GooSurface));
+    expect(glassSurface.glass, isNull);
+    expect(glassSurface.shadows, isEmpty);
+
+    await tester.tap(find.bySemanticsLabel('搜索服务器'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsOneWidget);
+    expect(tester.widget<GooSurface>(find.byType(GooSurface)).glass, isNull);
   });
 
   testWidgets('连接页在窄屏与宽屏均让顶栏与内容退避状态栏', (tester) async {
@@ -785,5 +995,8 @@ class _TwoServersSessionController extends SessionController {
   );
 }
 
-bool _isSearchGlyph(Widget widget) =>
-    widget is GlyphIcon && widget.glyph == Glyphs.search;
+class _EmptySessionController extends SessionController {
+  @override
+  SessionView build() =>
+      const SessionView(state: CoreSessionState.disconnected(), servers: []);
+}

@@ -427,6 +427,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get serverEmptyBody => '添加服务器地址，和伙伴在同一个频道相聚。';
 
   @override
+  String get serverSearchLabel => '搜索服务器';
+
+  @override
   String get serverSearchEmpty => '没有匹配的服务器';
 
   @override
