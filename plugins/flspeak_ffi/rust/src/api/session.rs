@@ -80,6 +80,8 @@ pub struct ClientView {
     pub away: Option<bool>,
     /// 离开时留下的说明文字。
     pub away_message: Option<String>,
+    #[frb(default = "false")]
+    pub is_streaming: bool,
     #[frb(default = "ClientType.standard")]
     pub client_type: ClientType,
     pub app_name: Option<String>,
@@ -939,6 +941,7 @@ impl From<CoreClientView> for ClientView {
             output_muted: view.output_muted,
             away: view.away,
             away_message: view.away_message,
+            is_streaming: view.is_streaming,
             client_type: view.client_type.into(),
             app_name: view.app_name,
             app_version: view.app_version,

@@ -39,12 +39,13 @@ use tsclient_rs::{
 };
 
 use crate::store::{self, identity_path};
-use crate::streams::{StreamCoordinator, StreamEndReason};
+use crate::streams::{StreamEndReason, StreamView};
 use crate::{
     AudioDeviceView, AudioDevicesView, AudioSettings, BotCommandView, ChannelView, ClientType,
     ClientView, ServerIconView, SessionCommand, SessionError, SessionEvent, SessionState,
     SettingsManager, TextMessageView, TransferDirection, VoiceStateView,
 };
+use streams::ActiveStreamSession;
 
 use connect::*;
 use open_protocol::*;
@@ -106,15 +107,44 @@ pub(crate) enum SessionSignal {
         epoch: u64,
         event: PluginCommandEvent,
     },
-    /// TS6 屏幕共享相关的原始通知，一条通知可能带多行。
-    StreamNotification {
+    /// `tsclient_rs::stream::Streams` 总线事件（流启动、更新、结束、观众变更、告警或错误）。
+    StreamsBusEvent {
         epoch: u64,
-        name: String,
-        items: Vec<HashMap<String, String>>,
+        event: tsclient_rs::stream::StreamsEvent,
     },
-    /// 原始通知队列溢出过，流目录可能漏了更新，需要重新发现。
-    StreamResync {
+    /// `Streams::watch` 异步等待推流端应答完成。
+    WatchResolved {
         epoch: u64,
+        watch_id: u64,
+        stream_id: String,
+        outcome: Result<tsclient_rs::stream::StreamView, tsclient_rs::stream::StreamError>,
+    },
+    /// 观看端对端句柄（`tsclient_rs::stream::StreamView`）收到的信令或关闭事件。
+    ViewerPeerEvent {
+        epoch: u64,
+        watch_id: u64,
+        stream_id: String,
+        event: tsclient_rs::stream::PeerEvent,
+    },
+    /// 本地发布流收到的观看请求或结束事件。
+    PublishedStreamEvent {
+        epoch: u64,
+        stream_id: String,
+        event: tsclient_rs::stream::PublishedStreamEvent,
+    },
+    /// 远端观众撤回等待中的加入请求，或发布流因结束而关闭请求。
+    JoinRequestClosed {
+        epoch: u64,
+        stream_id: String,
+        viewer_clid: i32,
+        cause: tsclient_rs::stream::JoinRequestCloseCause,
+    },
+    /// 本地推流单个已接受观众的信令或关闭事件。
+    PublisherPeerEvent {
+        epoch: u64,
+        stream_id: String,
+        viewer_clid: i32,
+        event: tsclient_rs::stream::PeerEvent,
     },
     /// `notifyconnectioninfo`：服务器返回自身连接的权威统计。
     ConnectionInfo {
@@ -216,9 +246,10 @@ pub(crate) struct Actor {
     next_transfer_id: u64,
     connection_epoch: u64,
     epoch: Arc<AtomicU64>,
-    streams: StreamCoordinator,
-    /// 当前连接的服务器是否认识 TS6 流命令；首次探测返回 command not found 后关闭。
-    streams_supported: bool,
+    stream_session: Option<ActiveStreamSession>,
+    client_channels: HashMap<i32, u64>,
+    last_streams_state: (Vec<StreamView>, Option<String>),
+    next_watch_id: u64,
     network_monitor: Option<crate::network::NetworkMonitor>,
     last_network_sample_error: Option<Instant>,
     open_protocol: OpenProtocolEngine,
@@ -317,8 +348,10 @@ impl Actor {
             next_transfer_id: 1,
             connection_epoch: 0,
             epoch: Arc::new(AtomicU64::new(0)),
-            streams: StreamCoordinator::default(),
-            streams_supported: true,
+            stream_session: None,
+            client_channels: HashMap::new(),
+            last_streams_state: (Vec::new(), None),
+            next_watch_id: 0,
             network_monitor: None,
             last_network_sample_error: None,
             open_protocol: new_open_protocol_engine(),
@@ -774,18 +807,7 @@ impl Actor {
                 sdp,
                 reply,
             } => {
-                let result = match self.streams.check_signal_target(&stream_id, target_clid) {
-                    Ok(()) => {
-                        self.stream_signaling(
-                            &stream_id,
-                            target_clid,
-                            crate::streams::answer_payload(&sdp),
-                        )
-                        .await
-                    }
-                    Err(err) => Err(err),
-                };
-                let _ = reply.send(result);
+                let _ = reply.send(self.send_stream_answer(stream_id, target_clid, sdp).await);
             }
             SessionCommand::SendStreamIceCandidate {
                 stream_id,
@@ -795,15 +817,10 @@ impl Actor {
                 m_line,
                 reply,
             } => {
-                let result = match self.streams.check_signal_target(&stream_id, target_clid) {
-                    Ok(()) => {
-                        let payload = crate::streams::ice_payload(&sdp, mid.as_deref(), m_line);
-                        self.stream_signaling(&stream_id, target_clid, payload)
-                            .await
-                    }
-                    Err(err) => Err(err),
-                };
-                let _ = reply.send(result);
+                let _ = reply.send(
+                    self.send_stream_ice_candidate(stream_id, target_clid, sdp, mid, m_line)
+                        .await,
+                );
             }
             SessionCommand::StartScreenShare {
                 name,
@@ -886,9 +903,13 @@ impl Actor {
                 if epoch != self.connection_epoch {
                     return;
                 }
+                let client_id = client.id;
+                let client_channel_id = client.channel_id;
                 self.open_protocol_peer_joined(client.id, &client.uid);
                 self.enrich_client(&mut client);
                 self.emit(SessionEvent::ClientJoined(client));
+                self.record_client_channel(client_id, client_channel_id);
+                self.sync_streams_view();
             }
             SessionSignal::ClientMoved {
                 epoch,
@@ -900,21 +921,14 @@ impl Actor {
                 }
                 if self.self_client_id == Some(id) {
                     self.on_self_moved(channel_id).await;
-                    self.sync_stream_channel().await;
                 } else {
-                    let events = self.streams.client_moved(id, channel_id);
-                    self.emit_all(events);
-                    // 已在共享的人进了本频道：问一次他的流。
-                    if channel_id != 0 && channel_id == self.streams.channel() {
-                        self.query_stream_info(id).await;
-                    }
+                    self.on_stream_peer_moved(id, channel_id);
                 }
             }
             SessionSignal::ClientLeft { epoch, id } => {
                 if epoch == self.connection_epoch {
                     self.open_protocol_peer_left(id);
-                    let events = self.streams.client_left(id);
-                    self.emit_all(events);
+                    self.on_stream_peer_left(id);
                 }
             }
             SessionSignal::PluginCommand { epoch, event } => {
@@ -923,44 +937,62 @@ impl Actor {
                 }
                 self.handle_open_protocol_command(event);
             }
-            SessionSignal::StreamNotification { epoch, name, items } => {
-                if epoch != self.connection_epoch {
-                    return;
-                }
-                let client = self.client.as_ref();
-                let last_snapshot = self.last_snapshot.as_ref();
-                let mut out = Vec::new();
-                for params in &items {
-                    if name == "notifystreamsignaling" {
-                        self.emit(SessionEvent::Log {
-                            level: "debug".into(),
-                            message: format!(
-                                "收到 notifystreamsignaling: id={}, clid={}, json={}",
-                                params.get("id").map(String::as_str).unwrap_or("-"),
-                                params.get("clid").map(String::as_str).unwrap_or("-"),
-                                params
-                                    .get("json")
-                                    .or_else(|| params.get("data"))
-                                    .map(|raw| truncate_log(raw, 160))
-                                    .unwrap_or_else(|| "-".into()),
-                            ),
-                        });
-                    }
-                    let events =
-                        self.streams
-                            .notification(&name, params, self.self_client_id, |clid| {
-                                client_channel(client, last_snapshot, clid)
-                            });
-                    out.extend(events);
-                }
-                self.emit_all(out);
-                for stream_id in self.streams.take_orphan_streams() {
-                    self.stop_stream_best_effort(&stream_id).await;
+            SessionSignal::StreamsBusEvent { epoch, event } => {
+                if epoch == self.connection_epoch {
+                    self.handle_streams_bus_event(event);
                 }
             }
-            SessionSignal::StreamResync { epoch } => {
+            SessionSignal::WatchResolved {
+                epoch,
+                watch_id,
+                stream_id,
+                outcome,
+            } => {
                 if epoch == self.connection_epoch {
-                    self.discover_streams().await;
+                    self.handle_watch_resolved(watch_id, stream_id, outcome);
+                } else if let Ok(view) = outcome {
+                    tokio::task::spawn_local(async move {
+                        let _ = view.leave().await;
+                    });
+                }
+            }
+            SessionSignal::ViewerPeerEvent {
+                epoch,
+                watch_id,
+                stream_id,
+                event,
+            } => {
+                if epoch == self.connection_epoch {
+                    self.handle_viewer_peer_event(watch_id, stream_id, event);
+                }
+            }
+            SessionSignal::PublishedStreamEvent {
+                epoch,
+                stream_id,
+                event,
+            } => {
+                if epoch == self.connection_epoch {
+                    self.handle_published_stream_event(stream_id, event);
+                }
+            }
+            SessionSignal::JoinRequestClosed {
+                epoch,
+                stream_id,
+                viewer_clid,
+                cause,
+            } => {
+                if epoch == self.connection_epoch {
+                    self.handle_join_request_closed(stream_id, viewer_clid, cause);
+                }
+            }
+            SessionSignal::PublisherPeerEvent {
+                epoch,
+                stream_id,
+                viewer_clid,
+                event,
+            } => {
+                if epoch == self.connection_epoch {
+                    self.handle_publisher_peer_event(stream_id, viewer_clid, event);
                 }
             }
             SessionSignal::ConnectionInfo { epoch, items } => {
@@ -1203,12 +1235,6 @@ impl Actor {
     pub(super) fn emit(&self, event: SessionEvent) {
         emit(&self.events, event);
     }
-
-    pub(super) fn emit_all(&self, events: Vec<SessionEvent>) {
-        for event in events {
-            self.emit(event);
-        }
-    }
 }
 pub(super) fn protocol_error(err: tsclient_rs::Error) -> SessionError {
     crate::channel_tools::protocol_error(err)
@@ -1238,40 +1264,6 @@ pub(super) fn emit(events: &broadcast::Sender<SessionEvent>, event: SessionEvent
     let _ = events.send(event);
 }
 
-/// 日志里只保留前 `max_chars` 个字符，避免整段 JSON 刷屏。
-pub(super) fn truncate_log(raw: &str, max_chars: usize) -> String {
-    let mut chars = raw.chars();
-    let head: String = chars.by_ref().take(max_chars).collect();
-    if chars.next().is_some() {
-        format!("{head}…")
-    } else {
-        head
-    }
-}
-
-pub(super) fn client_channel(
-    client: Option<&Arc<Client>>,
-    last_snapshot: Option<&(Vec<ChannelView>, Vec<ClientView>)>,
-    clid: i32,
-) -> Option<u64> {
-    client
-        .and_then(|client| client.directory_snapshot())
-        .and_then(|snapshot| {
-            snapshot
-                .clients
-                .iter()
-                .find(|row| row.id == clid && row.channel_id != 0)
-                .map(|row| row.channel_id)
-        })
-        .or_else(|| {
-            last_snapshot.and_then(|(_, clients)| {
-                clients
-                    .iter()
-                    .find(|row| row.id == clid && row.channel_id != 0)
-                    .map(|row| row.channel_id)
-            })
-        })
-}
 pub(super) struct EventLogger {
     pub(super) events: broadcast::Sender<SessionEvent>,
 }

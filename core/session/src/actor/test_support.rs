@@ -50,5 +50,6 @@ pub(super) fn client_info(id: i32, channel_id: u64, nickname: &str) -> ClientInf
         input_muted: None,
         output_muted: None,
         channel_commander: None,
+        is_streaming: false,
     }
 }

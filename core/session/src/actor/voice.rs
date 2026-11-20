@@ -602,8 +602,10 @@ impl Actor {
     pub(super) fn apply_self_channel(&mut self, channel_id: u64, codec: Option<i32>) {
         if self.self_channel_id == channel_id {
             self.apply_channel_codec(codec);
+            self.sync_streams_view();
             return;
         }
+        let prev_channel = self.self_channel_id;
         self.self_channel_id = channel_id;
         self.audio_since = Instant::now();
         if let SessionState::Connected { client_id, .. } = self.state.clone() {
@@ -618,9 +620,11 @@ impl Actor {
                 self.capture_active = false;
             }
             self.sync_voice_gate();
+            self.on_stream_self_channel_changed(prev_channel, channel_id);
             return;
         }
         self.apply_channel_codec(codec);
+        self.on_stream_self_channel_changed(prev_channel, channel_id);
     }
 
     pub(super) fn apply_channel_codec(&mut self, codec: Option<i32>) {

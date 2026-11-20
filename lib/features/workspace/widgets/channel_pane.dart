@@ -743,9 +743,7 @@ class _MemberTile extends ConsumerWidget {
       ),
     );
     final sharingScreen = ref.watch(
-      sessionViewProvider.select(
-        (view) => view.streamForClient(client.id) != null,
-      ),
+      sessionViewProvider.select((view) => view.isClientSharingScreen(client)),
     );
     final foreground = selected
         ? scheme.onPrimaryContainer

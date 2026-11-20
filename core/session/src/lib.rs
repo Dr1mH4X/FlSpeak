@@ -24,9 +24,7 @@ mod streams;
 mod updates;
 
 pub use settings::{AppSettings, AudioSettings, NetworkSettings, SettingsManager, UiSettings};
-pub use streams::{
-    LocalPublishState, PublisherSignal, StreamEndReason, StreamView, ViewerPeerState,
-};
+pub use streams::{PublisherSignal, StreamEndReason, StreamView};
 
 mod channel_tools;
 pub mod text_format;
@@ -131,6 +129,8 @@ pub struct ClientView {
     pub away: Option<bool>,
     /// 离开时留下的说明文字。
     pub away_message: Option<String>,
+    /// 该成员当前是否在开播屏幕共享（服务端 `client_is_streaming`）。
+    pub is_streaming: bool,
     pub client_type: ClientType,
     pub app_name: Option<String>,
     pub app_version: Option<String>,

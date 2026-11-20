@@ -193,17 +193,25 @@ pub(super) fn merged_clients(
     listed: Vec<ClientInfo>,
     directory: Vec<ClientInfo>,
 ) -> Vec<ClientView> {
-    let mut directory_channels: HashMap<i32, u64> = directory
-        .iter()
-        .filter(|info| info.channel_id != 0)
-        .map(|info| (info.id, info.channel_id))
-        .collect();
+    let mut directory_channels: HashMap<i32, u64> = HashMap::new();
+    let mut directory_streaming: HashSet<i32> = HashSet::new();
+    for info in &directory {
+        if info.channel_id != 0 {
+            directory_channels.insert(info.id, info.channel_id);
+        }
+        if info.is_streaming {
+            directory_streaming.insert(info.id);
+        }
+    }
     let mut rows: Vec<ClientView> = listed.into_iter().map(ClientView::from).collect();
     for row in &mut rows {
         if row.channel_id == 0
             && let Some(channel_id) = directory_channels.remove(&row.id)
         {
             row.channel_id = channel_id;
+        }
+        if directory_streaming.contains(&row.id) {
+            row.is_streaming = true;
         }
     }
     let mut seen: HashSet<i32> = rows.iter().map(|row| row.id).collect();
@@ -250,6 +258,7 @@ impl From<ClientInfo> for ClientView {
             output_muted: info.output_muted,
             away: info.away,
             away_message: info.away_message,
+            is_streaming: info.is_streaming,
             client_type: ClientType::Standard,
             app_name: None,
             app_version: None,
@@ -283,6 +292,18 @@ mod tests {
         let rows = merged_clients(Vec::new(), directory);
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].channel_id, 770);
+    }
+
+    #[test]
+    fn merged_clients_propagates_directory_is_streaming() {
+        let listed = vec![client_info(55, 5, "Streamer")];
+        let directory = vec![ClientInfo {
+            is_streaming: true,
+            ..client_info(55, 5, "Streamer")
+        }];
+        let rows = merged_clients(listed, directory);
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].is_streaming);
     }
 
     #[test]

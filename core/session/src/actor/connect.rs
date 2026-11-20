@@ -1,5 +1,4 @@
 use super::*;
-use crate::streams;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(8);
 const DISCONNECT_TIMEOUT: Duration = Duration::from_secs(5);
@@ -207,6 +206,7 @@ impl Actor {
         self.reset_directory_permissions();
         self.subscribed_all_channels = false;
         self.self_server_groups.clear();
+        self.reset_streams(StreamEndReason::Disconnected);
         self.connection_epoch = self.connection_epoch.wrapping_add(1);
         self.epoch.store(self.connection_epoch, Ordering::SeqCst);
         let _ = self.disconnect_tx.send(self.connection_epoch);
@@ -218,6 +218,7 @@ impl Actor {
             self.connection_epoch,
             Arc::clone(&self.epoch),
         );
+        self.init_stream_session(&client);
         if !reconnecting {
             self.set_state(SessionState::Connecting);
         }
@@ -257,7 +258,6 @@ impl Actor {
                 self.ever_connected = true;
                 self.last_snapshot = None;
                 self.channel_codecs.clear();
-                self.streams_supported = true;
                 self.set_state(SessionState::Connected {
                     client_id,
                     channel_id,
@@ -374,7 +374,6 @@ impl Actor {
         self.invalidate_handlers();
         self.channel_codecs.clear();
         self.current_codec = VOICE_CODEC;
-        self.reset_streams(StreamEndReason::Disconnected);
         let Some(client) = self.client.take() else {
             self.active_server_id = None;
             self.self_client_id = None;
@@ -409,7 +408,6 @@ impl Actor {
         self.self_channel_id = 0;
         self.channel_codecs.clear();
         self.current_codec = VOICE_CODEC;
-        self.reset_streams(StreamEndReason::Disconnected);
         self.stop_voice();
         let will_reconnect = allow_reconnect
             && self.auto_reconnect
@@ -529,7 +527,6 @@ impl Actor {
         self.stop_voice();
         self.channel_codecs.clear();
         self.current_codec = VOICE_CODEC;
-        self.reset_streams(StreamEndReason::Disconnected);
         self.set_state(SessionState::Disconnected);
     }
     pub(super) fn invalidate_handlers(&mut self) {
@@ -555,6 +552,7 @@ impl Actor {
         self.reset_directory_permissions();
         self.subscribed_all_channels = false;
         self.self_server_groups.clear();
+        self.reset_streams(StreamEndReason::Disconnected);
         self.connection_epoch = self.connection_epoch.wrapping_add(1);
         self.epoch.store(self.connection_epoch, Ordering::SeqCst);
         let _ = self.disconnect_tx.send(self.connection_epoch);
@@ -778,18 +776,10 @@ fn register_handlers(
         if live.load(Ordering::Relaxed) != epoch {
             return;
         }
-        match event {
-            ProtocolEvent::RawNotification { name, items } => {
-                if streams::is_stream_notification(&name) {
-                    let _ = channel.send(SessionSignal::StreamNotification { epoch, name, items });
-                } else if name == "notifyconnectioninfo" {
-                    let _ = channel.send(SessionSignal::ConnectionInfo { epoch, items });
-                }
-            }
-            ProtocolEvent::NotificationOverflow { .. } => {
-                let _ = channel.send(SessionSignal::StreamResync { epoch });
-            }
-            _ => {}
+        if let ProtocolEvent::RawNotification { name, items } = event
+            && name == "notifyconnectioninfo"
+        {
+            let _ = channel.send(SessionSignal::ConnectionInfo { epoch, items });
         }
     }));
 

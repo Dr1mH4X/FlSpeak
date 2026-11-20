@@ -623,9 +623,7 @@ class _CompactMemberChip extends ConsumerWidget {
       ),
     );
     final sharingScreen = ref.watch(
-      sessionViewProvider.select(
-        (view) => view.streamForClient(member.id) != null,
-      ),
+      sessionViewProvider.select((view) => view.isClientSharingScreen(member)),
     );
     return Surface(
       color: context.cardColor,

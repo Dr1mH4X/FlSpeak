@@ -20,7 +20,7 @@ rand.workspace = true
 sha1.workspace = true
 base64.workspace = true
 server.workspace = true
-tsclient-rs = { workspace = true, features = ["open-protocol"] }
+tsclient-rs = { workspace = true, features = ["open-protocol", "stream"] }
 pulldown-cmark.workspace = true
 tracing.workspace = true
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json", "chrono"] }

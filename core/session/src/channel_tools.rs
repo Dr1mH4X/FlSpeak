@@ -429,6 +429,7 @@ mod tests {
             input_muted: None,
             output_muted: None,
             channel_commander: None,
+            is_streaming: false,
         };
         let mut clients = vec![peer(2, "same"), peer(3, "same")];
         assert_eq!(kick_target(&clients, "same", 3).unwrap().id, 3);

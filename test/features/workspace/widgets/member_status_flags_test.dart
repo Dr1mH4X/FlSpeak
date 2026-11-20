@@ -190,4 +190,53 @@ void main() {
       expect(tester.getTopRight(membersFlags).dx, beforeMembersRight);
     },
   );
+
+  test('isClientSharingScreen distinguishes current and other channels', () {
+    const selfClient = ClientView(
+      id: 1,
+      nickname: 'Me',
+      uid: 'u1',
+      channelId: 5,
+      isStreaming: true,
+    );
+    const sameChannelStreaming = ClientView(
+      id: 2,
+      nickname: 'Bob',
+      uid: 'u2',
+      channelId: 5,
+      isStreaming: true,
+    );
+    const otherChannelStreaming = ClientView(
+      id: 3,
+      nickname: 'Carol',
+      uid: 'u3',
+      channelId: 9,
+      isStreaming: true,
+    );
+    const view = SessionView(
+      state: CoreSessionState.connected(clientId: 1, channelId: 5),
+      clients: [selfClient, sameChannelStreaming, otherChannelStreaming],
+      streams: [
+        StreamView(id: 's-2', clientId: 2, name: 'Bob Screen', hasAudio: false),
+      ],
+    );
+
+    expect(view.isClientSharingScreen(selfClient), isFalse);
+    expect(view.isClientSharingScreen(sameChannelStreaming), isTrue);
+    expect(view.isClientSharingScreen(otherChannelStreaming), isTrue);
+
+    const stoppedInCurrentChannel = SessionView(
+      state: CoreSessionState.connected(clientId: 1, channelId: 5),
+      clients: [selfClient, sameChannelStreaming, otherChannelStreaming],
+      streams: [],
+    );
+    expect(
+      stoppedInCurrentChannel.isClientSharingScreen(sameChannelStreaming),
+      isFalse,
+    );
+    expect(
+      stoppedInCurrentChannel.isClientSharingScreen(otherChannelStreaming),
+      isTrue,
+    );
+  });
 }

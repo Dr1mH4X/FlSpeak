@@ -317,6 +317,17 @@ class SessionView {
     return null;
   }
 
+  /// 该成员当前是否应在界面上展示屏幕共享徽标：本频道以可观看流清单为准，
+  /// 其他频道在尚未切换前以服务端回显的 `isStreaming` 补齐。
+  bool isClientSharingScreen(ClientView client) {
+    if (streamForClient(client.id) != null) {
+      return true;
+    }
+    return client.id != selfClientId &&
+        client.channelId != selfChannelId &&
+        client.isStreaming;
+  }
+
   /// 当前范围下要显示的消息。默认看自己所在的频道。
   ///
   /// 一个范围只显示一类消息；别处收到的消息由输入框范围按钮的红点提示。

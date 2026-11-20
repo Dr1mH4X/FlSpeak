@@ -3689,6 +3689,7 @@ impl SseDecode for crate::api::session::ClientView {
         let mut var_outputMuted = <Option<bool>>::sse_decode(deserializer);
         let mut var_away = <Option<bool>>::sse_decode(deserializer);
         let mut var_awayMessage = <Option<String>>::sse_decode(deserializer);
+        let mut var_isStreaming = <bool>::sse_decode(deserializer);
         let mut var_clientType = <crate::api::session::ClientType>::sse_decode(deserializer);
         let mut var_appName = <Option<String>>::sse_decode(deserializer);
         let mut var_appVersion = <Option<String>>::sse_decode(deserializer);
@@ -3705,6 +3706,7 @@ impl SseDecode for crate::api::session::ClientView {
             output_muted: var_outputMuted,
             away: var_away,
             away_message: var_awayMessage,
+            is_streaming: var_isStreaming,
             client_type: var_clientType,
             app_name: var_appName,
             app_version: var_appVersion,
@@ -5138,6 +5140,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::session::ClientView {
             self.output_muted.into_into_dart().into_dart(),
             self.away.into_into_dart().into_dart(),
             self.away_message.into_into_dart().into_dart(),
+            self.is_streaming.into_into_dart().into_dart(),
             self.client_type.into_into_dart().into_dart(),
             self.app_name.into_into_dart().into_dart(),
             self.app_version.into_into_dart().into_dart(),
@@ -5945,6 +5948,7 @@ impl SseEncode for crate::api::session::ClientView {
         <Option<bool>>::sse_encode(self.output_muted, serializer);
         <Option<bool>>::sse_encode(self.away, serializer);
         <Option<String>>::sse_encode(self.away_message, serializer);
+        <bool>::sse_encode(self.is_streaming, serializer);
         <crate::api::session::ClientType>::sse_encode(self.client_type, serializer);
         <Option<String>>::sse_encode(self.app_name, serializer);
         <Option<String>>::sse_encode(self.app_version, serializer);

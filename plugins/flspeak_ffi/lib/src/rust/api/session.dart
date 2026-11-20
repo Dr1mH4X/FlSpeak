@@ -460,6 +460,7 @@ class ClientView {
 
   /// 离开时留下的说明文字。
   final String? awayMessage;
+  final bool isStreaming;
   final ClientType clientType;
   final String? appName;
   final String? appVersion;
@@ -476,6 +477,7 @@ class ClientView {
     this.outputMuted,
     this.away,
     this.awayMessage,
+    this.isStreaming = false,
     this.clientType = ClientType.standard,
     this.appName,
     this.appVersion,
@@ -494,6 +496,7 @@ class ClientView {
       outputMuted.hashCode ^
       away.hashCode ^
       awayMessage.hashCode ^
+      isStreaming.hashCode ^
       clientType.hashCode ^
       appName.hashCode ^
       appVersion.hashCode ^
@@ -514,6 +517,7 @@ class ClientView {
           outputMuted == other.outputMuted &&
           away == other.away &&
           awayMessage == other.awayMessage &&
+          isStreaming == other.isStreaming &&
           clientType == other.clientType &&
           appName == other.appName &&
           appVersion == other.appVersion &&

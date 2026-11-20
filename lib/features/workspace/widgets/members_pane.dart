@@ -130,10 +130,10 @@ class _MemberPaneRow extends ConsumerWidget {
             ),
           );
     final sharingScreen = view != null
-        ? view.streamForClient(member.id) != null
+        ? view.isClientSharingScreen(member)
         : ref.watch(
             sessionViewProvider.select(
-              (state) => state.streamForClient(member.id) != null,
+              (state) => state.isClientSharingScreen(member),
             ),
           );
     final foreground = isSelected ? scheme.onPrimaryContainer : null;

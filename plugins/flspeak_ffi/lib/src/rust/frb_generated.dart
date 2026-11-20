@@ -2993,8 +2993,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ClientView dco_decode_client_view(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 14)
-      throw Exception('unexpected arr length: expect 14 but see ${arr.length}');
+    if (arr.length != 15)
+      throw Exception('unexpected arr length: expect 15 but see ${arr.length}');
     return ClientView(
       id: dco_decode_i_32(arr[0]),
       nickname: dco_decode_String(arr[1]),
@@ -3004,12 +3004,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       outputMuted: dco_decode_opt_box_autoadd_bool(arr[5]),
       away: dco_decode_opt_box_autoadd_bool(arr[6]),
       awayMessage: dco_decode_opt_String(arr[7]),
-      clientType: dco_decode_client_type(arr[8]),
-      appName: dco_decode_opt_String(arr[9]),
-      appVersion: dco_decode_opt_String(arr[10]),
-      capabilities: dco_decode_list_String(arr[11]),
-      botCommands: dco_decode_opt_list_bot_command_view(arr[12]),
-      botCommandPrefix: dco_decode_opt_String(arr[13]),
+      isStreaming: dco_decode_bool(arr[8]),
+      clientType: dco_decode_client_type(arr[9]),
+      appName: dco_decode_opt_String(arr[10]),
+      appVersion: dco_decode_opt_String(arr[11]),
+      capabilities: dco_decode_list_String(arr[12]),
+      botCommands: dco_decode_opt_list_bot_command_view(arr[13]),
+      botCommandPrefix: dco_decode_opt_String(arr[14]),
     );
   }
 
@@ -3823,6 +3824,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_outputMuted = sse_decode_opt_box_autoadd_bool(deserializer);
     var var_away = sse_decode_opt_box_autoadd_bool(deserializer);
     var var_awayMessage = sse_decode_opt_String(deserializer);
+    var var_isStreaming = sse_decode_bool(deserializer);
     var var_clientType = sse_decode_client_type(deserializer);
     var var_appName = sse_decode_opt_String(deserializer);
     var var_appVersion = sse_decode_opt_String(deserializer);
@@ -3838,6 +3840,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       outputMuted: var_outputMuted,
       away: var_away,
       awayMessage: var_awayMessage,
+      isStreaming: var_isStreaming,
       clientType: var_clientType,
       appName: var_appName,
       appVersion: var_appVersion,
@@ -4863,6 +4866,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_box_autoadd_bool(self.outputMuted, serializer);
     sse_encode_opt_box_autoadd_bool(self.away, serializer);
     sse_encode_opt_String(self.awayMessage, serializer);
+    sse_encode_bool(self.isStreaming, serializer);
     sse_encode_client_type(self.clientType, serializer);
     sse_encode_opt_String(self.appName, serializer);
     sse_encode_opt_String(self.appVersion, serializer);

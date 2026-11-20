@@ -136,6 +136,9 @@ impl Actor {
                 .get("client_away_message")
                 .filter(|value| !value.is_empty())
                 .map(|value| unescape_text(value)),
+            is_streaming: info
+                .get("client_is_streaming")
+                .is_some_and(|value| value == "1"),
             client_type: ClientType::FlSpeak,
             app_name: Some("FlSpeak".into()),
             app_version: Some(env!("CARGO_PKG_VERSION").into()),
@@ -185,6 +188,7 @@ impl Actor {
                 output_muted: Some(local.output_muted),
                 away: Some(local.away),
                 away_message: None,
+                is_streaming: false,
                 client_type: ClientType::FlSpeak,
                 app_name: Some("FlSpeak".into()),
                 app_version: Some(env!("CARGO_PKG_VERSION").into()),
@@ -268,7 +272,6 @@ impl Actor {
         }
 
         self.commit_snapshot(channels, clients, force);
-        self.sync_stream_channel().await;
         Ok(())
     }
 
@@ -453,10 +456,14 @@ impl Actor {
     }
 
     pub(super) fn handle_directory_snapshot(&mut self, snapshot: tsclient_rs::DirectorySnapshot) {
+        let mut snapshot_self_channel = None;
         if let Some(self_id) = self.self_client_id
             && let Some(me) = snapshot.clients.iter().find(|c| c.id == self_id)
         {
             self.sync_self_server_groups(&me.server_groups);
+            if me.channel_id != 0 {
+                snapshot_self_channel = Some(me.channel_id);
+            }
         }
         let incoming_codecs: HashMap<u64, i32> = snapshot
             .channels
@@ -474,7 +481,12 @@ impl Actor {
             Some((incoming_channels, incoming_codecs)),
             Some((incoming_clients, true)),
         );
-        if self.self_channel_id != 0
+        if self.self_channel_id == 0
+            && let Some(channel_id) = snapshot_self_channel
+        {
+            let codec = self.channel_codecs.get(&channel_id).copied();
+            self.apply_self_channel(channel_id, codec);
+        } else if self.self_channel_id != 0
             && let Some(codec) = self.channel_codecs.get(&self.self_channel_id).copied()
             && codec != self.current_codec
         {
@@ -536,6 +548,7 @@ impl Actor {
         force: bool,
     ) {
         self.open_protocol_sync_peers(&clients);
+        self.sync_client_channels_from_snapshot(&clients);
         let changed = force
             || self
                 .last_snapshot
@@ -547,6 +560,7 @@ impl Actor {
             self.last_snapshot = Some((channels.clone(), clients.clone()));
             self.emit(SessionEvent::Snapshot { channels, clients });
         }
+        self.sync_streams_view();
     }
 }
 
@@ -660,6 +674,7 @@ mod tests {
                     output_muted: None,
                     away: None,
                     away_message: None,
+                    is_streaming: false,
                     client_type: ClientType::FlSpeak,
                     app_name: Some("FlSpeak".into()),
                     app_version: Some(env!("CARGO_PKG_VERSION").into()),
@@ -676,6 +691,7 @@ mod tests {
                     output_muted: Some(false),
                     away: Some(false),
                     away_message: None,
+                    is_streaming: false,
                     client_type: ClientType::FlSpeak,
                     app_name: Some("FlSpeak".into()),
                     app_version: Some("0.1.12".into()),
