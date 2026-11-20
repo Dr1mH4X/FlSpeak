@@ -1,5 +1,5 @@
 // 本文件包含的代码片段来源于 FlClash（https://github.com/chen08209/FlClash）项目，原始许可证为 GPL-3.0，来源提交 be84736605527034689c95bf27828ff27d912c5e。
-// dashboard、settings、reset、sync、add、edit、palette、delete、layers、sun、pureBlack、paintbrush、eyedropper、motion、blur、liquidGlass、font、textSize、info、account、photos 沿用 FlClash 的 lib/ui/icons/app_glyphs.dart 矢量定义，其余为 FlSpeak 业务动作补充。
+// dashboard、settings、reset、sync、add、addCircle、edit、palette、delete、layers、sun、pureBlack、paintbrush、eyedropper、motion、blur、liquidGlass、font、textSize、info、account、photos 沿用 FlClash 的 lib/ui/icons/app_glyphs.dart 矢量定义，其余为 FlSpeak 业务动作补充。
 
 import 'dart:math' as math;
 
@@ -296,6 +296,18 @@ abstract final class AppGlyphs {
     GlyphPolyline([
       GlyphVertex(5, 12),
       GlyphVertex(19, 12),
+    ], role: GlyphRole.line),
+  ]);
+
+  static const addCircle = Glyph([
+    GlyphCircle(12, 12, 8.8, role: GlyphRole.line),
+    GlyphPolyline([
+      GlyphVertex(12, 7.8),
+      GlyphVertex(12, 16.2),
+    ], role: GlyphRole.line),
+    GlyphPolyline([
+      GlyphVertex(7.8, 12),
+      GlyphVertex(16.2, 12),
     ], role: GlyphRole.line),
   ]);
 

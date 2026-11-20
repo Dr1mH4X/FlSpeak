@@ -531,7 +531,7 @@ class _ServerSection extends StatelessWidget {
                   child: ElasticPress(
                     child: IconButton(
                       onPressed: onAdd,
-                      icon: const GlyphIcon(AppGlyphs.add),
+                      icon: const GlyphIcon(AppGlyphs.addCircle),
                     ),
                   ),
                 ),
@@ -539,7 +539,7 @@ class _ServerSection extends StatelessWidget {
             else
               TonalButton(
                 size: TonalButtonSize.section,
-                glyph: AppGlyphs.add,
+                glyph: AppGlyphs.addCircle,
                 label: l10n.serverAdd,
                 onPressed: onAdd,
               ),
@@ -604,7 +604,7 @@ class _ServerSearchControl extends StatefulWidget {
 
 class _ServerSearchControlState extends State<_ServerSearchControl>
     with SingleTickerProviderStateMixin {
-  static const double _collapsedSize = 40.0;
+  static final double _collapsedSize = TonalButtonSize.section.button;
   static const double _expandedMaxWidth = 260.0;
 
   bool _expanded = false;
@@ -702,7 +702,6 @@ class _ServerSearchControlState extends State<_ServerSearchControl>
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
-    final glass = LiquidGlassScope.of(context);
     final surfaceFill = context.raisedSurfaceColor;
     final availableWidth = math.max(0.0, widget.maxRowWidth - 12);
     final collapsedWidth = math.min(_collapsedSize, availableWidth);
@@ -712,32 +711,32 @@ class _ServerSearchControlState extends State<_ServerSearchControl>
     );
 
     return GooSurface(
-      glass: glass ? glassPillStyleOf(context) : null,
       color: surfaceFill,
-      shadows: glass ? const [] : dockShadowsOf(context),
       child: AnimatedBuilder(
         animation: _expandController,
         builder: (context, _) {
           if (!_expanded && _expandController.isDismissed) {
             return TonalButtonTheme(
-              glass: glass,
-              child: SizedBox(
-                width: collapsedWidth,
-                height: _collapsedSize,
-                child: IconButton(
-                  onPressed: _open,
-                  style: ButtonStyle.from(
-                    backgroundColor: Colors.transparent,
-                    foregroundColor: scheme.onSurface,
-                    fixedSize: Size.square(collapsedWidth),
-                    minimumSize: Size.square(collapsedWidth),
-                    padding: EdgeInsets.zero,
-                    iconSize: IconSizes.toolbar,
-                    shape: AppShape.full,
-                  ),
-                  icon: Semantics(
-                    label: l10n.serverSearchLabel,
-                    child: const GlyphIcon(Glyphs.search),
+              size: TonalButtonSize.section,
+              child: ElasticPress(
+                child: SizedBox(
+                  width: collapsedWidth,
+                  height: _collapsedSize,
+                  child: IconButton(
+                    onPressed: _open,
+                    style: ButtonStyle.from(
+                      backgroundColor: Colors.transparent,
+                      foregroundColor: scheme.onSurface,
+                      fixedSize: Size.square(collapsedWidth),
+                      minimumSize: Size.square(collapsedWidth),
+                      padding: EdgeInsets.zero,
+                      iconSize: TonalButtonSize.section.icon,
+                      shape: AppShape.full,
+                    ),
+                    icon: Semantics(
+                      label: l10n.serverSearchLabel,
+                      child: const GlyphIcon(Glyphs.search),
+                    ),
                   ),
                 ),
               ),
@@ -777,15 +776,15 @@ class _ServerSearchControlState extends State<_ServerSearchControl>
                             filled: false,
                             hoverColor: Colors.transparent,
                             isDense: true,
-                            constraints: const BoxConstraints(
+                            constraints: BoxConstraints(
                               minHeight: _collapsedSize,
                             ),
                             hintText: l10n.serverSearchLabel,
                             contentPadding: EdgeInsetsDirectional.fromSTEB(
                               0,
-                              8,
+                              6,
                               empty ? 16 : 0,
-                              8,
+                              6,
                             ),
                             border: const NoInputBorder(),
                             enabledBorder: const NoInputBorder(),
@@ -794,27 +793,30 @@ class _ServerSearchControlState extends State<_ServerSearchControl>
                             focusedErrorBorder: const NoInputBorder(),
                             prefixIcon: GlyphIcon(
                               Glyphs.search,
-                              size: IconSizes.toolbar,
+                              size: TonalButtonSize.section.icon,
                               color: scheme.onSurface,
                             ),
-                            prefixIconConstraints:
-                                const BoxConstraints.tightFor(
-                                  width: _collapsedSize,
-                                  height: _collapsedSize,
-                                ),
+                            prefixIconConstraints: BoxConstraints.tightFor(
+                              width: _collapsedSize,
+                              height: _collapsedSize,
+                            ),
                             suffixIcon: empty
                                 ? null
                                 : Padding(
                                     padding: const EdgeInsetsDirectional.only(
-                                      end: 4,
+                                      end: 2,
                                     ),
                                     child: IconButton(
                                       onPressed: _handleClear,
                                       style: ButtonStyle.from(
                                         foregroundColor:
                                             scheme.onSurfaceVariant,
-                                        fixedSize: const Size.square(32),
-                                        minimumSize: const Size.square(32),
+                                        fixedSize: Size.square(
+                                          TonalButtonSize.compact.button,
+                                        ),
+                                        minimumSize: Size.square(
+                                          TonalButtonSize.compact.button,
+                                        ),
                                         padding: EdgeInsets.zero,
                                         iconSize: IconSizes.medium,
                                         shape: AppShape.full,
@@ -825,7 +827,7 @@ class _ServerSearchControlState extends State<_ServerSearchControl>
                                       ),
                                     ),
                                   ),
-                            suffixIconConstraints: const BoxConstraints(
+                            suffixIconConstraints: BoxConstraints(
                               minHeight: _collapsedSize,
                             ),
                           ),
@@ -884,16 +886,11 @@ class _EmptyServers extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 28),
-            ElasticButton(
-              child: FilledButton.icon(
-                onPressed: onAdd,
-                style: ButtonStyle.from(
-                  backgroundColor: scheme.secondaryContainer,
-                  foregroundColor: scheme.onSecondaryContainer,
-                ),
-                icon: const GlyphIcon(AppGlyphs.add, size: IconSizes.toolbar),
-                label: Text(l10n.serverEmptyAction),
-              ),
+            TonalButton(
+              size: TonalButtonSize.bar,
+              glyph: AppGlyphs.addCircle,
+              label: l10n.serverEmptyAction,
+              onPressed: onAdd,
             ),
           ],
         ),

@@ -843,7 +843,7 @@ void main() {
     expect(find.bySemanticsLabel('Add server'), findsOneWidget);
   });
 
-  testWidgets('搜索框按 LiquidGlassScope 切换 GooSurface 玻璃与实色降级，并保持展开清空行为', (
+  testWidgets('正文搜索框在开启 LiquidGlass 时仍保持无玻璃无阴影表面，并维持展开清空行为与 36dp 节头高度', (
     tester,
   ) async {
     Future<void> mount(LiquidGlassQuality? quality) async {
@@ -875,9 +875,19 @@ void main() {
     }
 
     await mount(null);
-    expect(tester.widget<GooSurface>(find.byType(GooSurface)).glass, isNull);
+    final initialSurface = tester.widget<GooSurface>(find.byType(GooSurface));
+    expect(initialSurface.glass, isNull);
+    expect(initialSurface.shadows, isEmpty);
+    expect(
+      tester.getSize(find.byType(GooSurface)).height,
+      TonalButtonSize.section.button,
+    );
+    expect(
+      tester.getSize(find.widgetWithText(TonalButton, '添加服务器')).height,
+      TonalButtonSize.section.button,
+    );
 
-    await tester.tap(find.byIcon(Icons.search_rounded));
+    await tester.tap(find.bySemanticsLabel('搜索服务器'));
     await tester.pumpAndSettle();
     expect(find.byType(TextField), findsOneWidget);
     expect(find.byType(GooPane), findsOneWidget);
@@ -887,7 +897,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(ServerRow), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.close_rounded));
+    await tester.tap(find.bySemanticsLabel('清空搜索'));
     await tester.pumpAndSettle();
     expect(find.byType(ServerRow), findsNWidgets(2));
 
@@ -896,12 +906,14 @@ void main() {
     expect(find.byType(TextField), findsNothing);
 
     await mount(LiquidGlassQuality.standard);
-    expect(tester.widget<GooSurface>(find.byType(GooSurface)).glass, isNotNull);
+    final glassSurface = tester.widget<GooSurface>(find.byType(GooSurface));
+    expect(glassSurface.glass, isNull);
+    expect(glassSurface.shadows, isEmpty);
 
-    await tester.tap(find.byIcon(Icons.search_rounded));
+    await tester.tap(find.bySemanticsLabel('搜索服务器'));
     await tester.pumpAndSettle();
     expect(find.byType(TextField), findsOneWidget);
-    expect(tester.widget<GooSurface>(find.byType(GooSurface)).glass, isNotNull);
+    expect(tester.widget<GooSurface>(find.byType(GooSurface)).glass, isNull);
   });
 
   testWidgets('连接页在窄屏与宽屏均让顶栏与内容退避状态栏', (tester) async {
