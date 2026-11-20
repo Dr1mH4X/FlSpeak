@@ -13,6 +13,10 @@ pub const DEFAULT_HANGOVER_MS: u64 = 250;
 pub trait Vad {
     /// 判断这一帧是否包含语音。
     fn is_speech(&mut self, frame: &[f32]) -> bool;
+    /// 当前帧是否为 VAD 挂断保留期（hangover）的最后一帧。
+    fn is_last_hangover_frame(&self) -> bool {
+        false
+    }
     fn reset(&mut self);
 }
 
@@ -20,6 +24,7 @@ pub struct EnergyVad {
     threshold: f32,
     hangover_frames: u32,
     remaining: u32,
+    last_hangover_frame: bool,
 }
 
 impl EnergyVad {
@@ -32,6 +37,7 @@ impl EnergyVad {
             threshold: threshold.max(0.0),
             hangover_frames: u32::try_from(hangover_frames).unwrap_or(u32::MAX),
             remaining: 0,
+            last_hangover_frame: false,
         }
     }
 
@@ -53,22 +59,31 @@ impl Default for EnergyVad {
 impl Vad for EnergyVad {
     fn is_speech(&mut self, frame: &[f32]) -> bool {
         if frame.is_empty() {
+            self.last_hangover_frame = false;
             return false;
         }
         let energy = frame.iter().map(|sample| sample.abs()).sum::<f32>() / frame.len() as f32;
         if energy >= self.threshold {
             self.remaining = self.hangover_frames;
+            self.last_hangover_frame = false;
             true
         } else if self.remaining > 0 {
             self.remaining -= 1;
+            self.last_hangover_frame = self.remaining == 0;
             true
         } else {
+            self.last_hangover_frame = false;
             false
         }
     }
 
+    fn is_last_hangover_frame(&self) -> bool {
+        self.last_hangover_frame
+    }
+
     fn reset(&mut self) {
         self.remaining = 0;
+        self.last_hangover_frame = false;
     }
 }
 
@@ -88,9 +103,13 @@ mod tests {
     fn detects_loud_frames_and_hangs_over() {
         let mut vad = EnergyVad::new(0.01, 40); // 2 帧尾音
         assert!(vad.is_speech(&loud()));
+        assert!(!vad.is_last_hangover_frame());
         assert!(vad.is_speech(&quiet()));
+        assert!(!vad.is_last_hangover_frame());
         assert!(vad.is_speech(&quiet()));
+        assert!(vad.is_last_hangover_frame());
         assert!(!vad.is_speech(&quiet()));
+        assert!(!vad.is_last_hangover_frame());
     }
 
     #[test]

@@ -554,11 +554,24 @@ impl Actor {
             return Ok(());
         }
         let active = active && !self.voice_state.muted && !self.voice_state.deafened;
-        if self.audio_enabled {
-            self.voice.set_ptt_active(active)?;
-        }
+        let prev_active = self.voice_state.ptt_active;
+        let prev_audio_since = self.audio_since;
+
         self.voice_state.ptt_active = active;
-        self.audio_since = Instant::now();
+        if active {
+            self.audio_since = Instant::now();
+        }
+        self.sync_voice_gate();
+
+        if self.audio_enabled
+            && let Err(err) = self.voice.set_ptt_active(active)
+        {
+            self.voice_state.ptt_active = prev_active;
+            self.audio_since = prev_audio_since;
+            self.sync_voice_gate();
+            return Err(err.into());
+        }
+
         if !active {
             self.emit(SessionEvent::SelfSpeaking { speaking: false });
         }
@@ -678,7 +691,8 @@ impl Actor {
                 data,
                 produced_at,
             } => {
-                self.voice_tx_snapshot().dispatch_outbound(
+                self.sync_voice_gate();
+                self.voice_tx_gate.borrow_mut().dispatch_outbound(
                     codec,
                     data,
                     produced_at,
@@ -750,11 +764,17 @@ impl Actor {
             ptt_active: self.voice_state.ptt_active,
             current_codec: self.current_codec,
             audio_since: self.audio_since,
+            eos_pending: false,
+            closing_tail_frames: 0,
+            tail_audio_since: self.audio_since,
+            tail_codec: self.current_codec,
         }
     }
 
     pub(super) fn sync_voice_gate(&self) {
-        *self.voice_tx_gate.borrow_mut() = self.voice_tx_snapshot();
+        self.voice_tx_gate
+            .borrow_mut()
+            .update_from(self.voice_tx_snapshot());
     }
 
     fn voice_gate_open(&self) -> bool {
@@ -771,6 +791,7 @@ impl Actor {
         let _ = self
             .voice
             .set_vad_config(audio.vad_threshold, audio.vad_hangover_frames);
+        let _ = self.voice.set_noise_suppression(audio.noise_suppression);
     }
 
     pub(super) fn sync_persisted_vad(&mut self) {
@@ -815,10 +836,15 @@ pub(super) struct VoiceTxGate {
     pub ptt_active: bool,
     pub current_codec: i32,
     pub audio_since: Instant,
+    pub eos_pending: bool,
+    pub closing_tail_frames: u8,
+    pub tail_audio_since: Instant,
+    pub tail_codec: i32,
 }
 
 impl Default for VoiceTxGate {
     fn default() -> Self {
+        let now = Instant::now();
         Self {
             client: None,
             connected: false,
@@ -829,12 +855,58 @@ impl Default for VoiceTxGate {
             ptt_mode: false,
             ptt_active: false,
             current_codec: VOICE_CODEC,
-            audio_since: Instant::now(),
+            audio_since: now,
+            eos_pending: false,
+            closing_tail_frames: 0,
+            tail_audio_since: now,
+            tail_codec: VOICE_CODEC,
         }
     }
 }
 
 impl VoiceTxGate {
+    pub(super) fn update_from(&mut self, snapshot: VoiceTxGate) {
+        let was_open = self.voice_gate_open();
+        let prev_since = self.audio_since;
+        let prev_codec = self.current_codec;
+        let prev_channel = self.self_channel_id;
+
+        self.client = snapshot.client;
+        self.connected = snapshot.connected;
+        self.self_channel_id = snapshot.self_channel_id;
+        self.capture_active = snapshot.capture_active;
+        self.muted = snapshot.muted;
+        self.deafened = snapshot.deafened;
+        self.ptt_mode = snapshot.ptt_mode;
+        self.ptt_active = snapshot.ptt_active;
+        self.current_codec = snapshot.current_codec;
+        self.audio_since = snapshot.audio_since;
+
+        let now_open = self.voice_gate_open();
+        if !self.connected || self.self_channel_id == 0 {
+            self.eos_pending = false;
+            self.closing_tail_frames = 0;
+        } else if now_open {
+            if prev_channel == self.self_channel_id && was_open && prev_codec != self.current_codec
+            {
+                self.eos_pending = true;
+                self.closing_tail_frames = 0;
+                self.tail_audio_since = prev_since;
+                self.tail_codec = prev_codec;
+            } else {
+                self.eos_pending = true;
+                self.closing_tail_frames = 0;
+                self.tail_audio_since = self.audio_since;
+                self.tail_codec = self.current_codec;
+            }
+        } else if was_open {
+            self.eos_pending = true;
+            self.closing_tail_frames = 2;
+            self.tail_audio_since = prev_since;
+            self.tail_codec = prev_codec;
+        }
+    }
+
     pub(super) fn voice_gate_open(&self) -> bool {
         self.connected
             && self.self_channel_id != 0
@@ -852,14 +924,31 @@ impl VoiceTxGate {
     }
 
     pub(super) fn dispatch_outbound(
-        &self,
+        &mut self,
         codec: i32,
         data: Vec<u8>,
         produced_at: Instant,
         now: Instant,
-    ) {
-        if !self.can_send_voice(codec, produced_at, now) {
-            return;
+    ) -> bool {
+        if !self.connected
+            || self.self_channel_id == 0
+            || now.saturating_duration_since(produced_at) > MAX_VOICE_QUEUE_DELAY
+        {
+            return false;
+        }
+        if data.is_empty() {
+            let allow_eos = self.eos_pending
+                && ((self.voice_gate_open() && codec == self.current_codec)
+                    || codec == self.tail_codec);
+            if !allow_eos {
+                return false;
+            }
+            self.eos_pending = false;
+            self.closing_tail_frames = 0;
+            if let Some(client) = &self.client {
+                client.send_voice(data, codec);
+            }
+            return true;
         }
         if data.len() > MAX_PACKET_BYTES {
             crate::log_error!(
@@ -867,11 +956,24 @@ impl VoiceTxGate {
                 max = MAX_PACKET_BYTES;
                 "encoding layer constraint violated: packet exceeds budget"
             );
-            return;
+            return false;
+        }
+        if self.can_send_voice(codec, produced_at, now) {
+            self.eos_pending = true;
+            self.tail_audio_since = self.audio_since;
+            self.tail_codec = self.current_codec;
+        } else if self.closing_tail_frames > 0
+            && codec == self.tail_codec
+            && produced_at >= self.tail_audio_since
+        {
+            self.closing_tail_frames -= 1;
+        } else {
+            return false;
         }
         if let Some(client) = &self.client {
             client.send_voice(data, codec);
         }
+        true
     }
 }
 
@@ -1406,12 +1508,14 @@ mod tests {
         tokio::task::LocalSet::new()
             .run_until(async {
                 let mut actor = audio_actor();
-                // 默认取 AudioSettings::default()（0.015, 15）。
+                // 默认取 AudioSettings::default()（0.015, 15, noise_suppression=true）。
                 assert_eq!(actor.voice.vad_config().unwrap(), (0.015, 15));
+                assert!(actor.voice.noise_suppression().unwrap());
 
                 let custom = AudioSettings {
                     vad_threshold: 0.045,
                     vad_hangover_frames: 6,
+                    noise_suppression: false,
                     ..AudioSettings::default()
                 };
                 assert!(
@@ -1420,7 +1524,115 @@ mod tests {
                         .await
                 );
                 assert_eq!(actor.voice.vad_config().unwrap(), (0.045, 6));
+                assert!(!actor.voice.noise_suppression().unwrap());
             })
             .await;
+    }
+
+    #[test]
+    fn voice_tx_gate_allows_closing_tail_and_single_eos_after_ptt_release_and_mute() {
+        // 1. PTT 松开后仍放行收尾淡出帧与 1 个 0 字节 EOS 尾包，随后彻底关闭门控。
+        let mut actor = audio_actor();
+        actor.set_ptt_mode(true).unwrap();
+        actor.set_ptt_active(true).unwrap();
+        let start_ts = actor.audio_since;
+        assert!(actor.voice_tx_gate.borrow_mut().dispatch_outbound(
+            VOICE_CODEC,
+            vec![1, 2],
+            start_ts,
+            Instant::now(),
+        ));
+
+        actor.set_ptt_active(false).unwrap();
+        assert!(actor.voice_tx_gate.borrow_mut().dispatch_outbound(
+            VOICE_CODEC,
+            vec![3, 4],
+            start_ts,
+            Instant::now(),
+        ));
+        assert!(actor.voice_tx_gate.borrow_mut().dispatch_outbound(
+            VOICE_CODEC,
+            vec![5, 6],
+            start_ts,
+            Instant::now(),
+        ));
+        assert!(!actor.voice_tx_gate.borrow_mut().dispatch_outbound(
+            VOICE_CODEC,
+            vec![7, 8],
+            start_ts,
+            Instant::now(),
+        ));
+        assert!(actor.voice_tx_gate.borrow_mut().dispatch_outbound(
+            VOICE_CODEC,
+            vec![],
+            Instant::now(),
+            Instant::now(),
+        ));
+        assert!(!actor.voice_tx_gate.borrow_mut().dispatch_outbound(
+            VOICE_CODEC,
+            vec![],
+            Instant::now(),
+            Instant::now(),
+        ));
+
+        // 2. 静音切换后同样放行收尾帧与 1 个 EOS 包，不放行重复 EOS 或后续语音。
+        let mut mute_actor = audio_actor();
+        let mute_start = mute_actor.audio_since;
+        assert!(mute_actor.voice_tx_gate.borrow_mut().dispatch_outbound(
+            VOICE_CODEC,
+            vec![1, 2],
+            mute_start,
+            Instant::now(),
+        ));
+        mute_actor.apply_muted(true).unwrap();
+        assert!(mute_actor.voice_tx_gate.borrow_mut().dispatch_outbound(
+            VOICE_CODEC,
+            vec![3, 4],
+            mute_start,
+            Instant::now(),
+        ));
+        assert!(mute_actor.voice_tx_gate.borrow_mut().dispatch_outbound(
+            VOICE_CODEC,
+            vec![],
+            Instant::now(),
+            Instant::now(),
+        ));
+        assert!(!mute_actor.voice_tx_gate.borrow_mut().dispatch_outbound(
+            VOICE_CODEC,
+            vec![],
+            Instant::now(),
+            Instant::now(),
+        ));
+        assert!(!mute_actor.voice_tx_gate.borrow_mut().dispatch_outbound(
+            VOICE_CODEC,
+            vec![5, 6],
+            Instant::now(),
+            Instant::now(),
+        ));
+    }
+
+    #[test]
+    fn set_ptt_active_updates_audio_since_and_gate_before_capture_command() {
+        let mut actor = audio_actor();
+        actor.audio_enabled = true;
+        actor.set_ptt_mode(true).unwrap();
+        let stale_ts = actor.audio_since - Duration::from_millis(5);
+
+        actor.set_ptt_active(true).unwrap();
+        assert!(actor.voice_state.ptt_active);
+        assert!(actor.voice_tx_gate.borrow().ptt_active);
+        assert_eq!(actor.voice_tx_gate.borrow().audio_since, actor.audio_since);
+        assert!(!actor.voice_tx_gate.borrow_mut().dispatch_outbound(
+            VOICE_CODEC,
+            vec![1, 2],
+            stale_ts,
+            Instant::now(),
+        ));
+        assert!(actor.voice_tx_gate.borrow_mut().dispatch_outbound(
+            VOICE_CODEC,
+            vec![1, 2],
+            actor.audio_since,
+            Instant::now(),
+        ));
     }
 }

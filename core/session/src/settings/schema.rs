@@ -45,6 +45,10 @@ pub struct NetworkSettings {
     pub servers: Vec<ServerProfile>,
 }
 
+fn default_true() -> bool {
+    true
+}
+
 /// 音频参数设置。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -55,6 +59,9 @@ pub struct AudioSettings {
     pub vad_hangover_frames: usize,
     /// 是否开启按住说话模式。
     pub ptt_mode: bool,
+    /// 是否启用 RNNoise 语音降噪（仅对 Opus Voice 单声道生效）。
+    #[serde(default = "default_true")]
+    pub noise_suppression: bool,
     /// 用户选择的音频输入设备 ID（None 表示系统默认）。
     pub input_device_id: Option<String>,
     /// 用户选择的音频输出设备 ID（None 表示系统默认）。
@@ -67,6 +74,7 @@ impl Default for AudioSettings {
             vad_threshold: 0.015,
             vad_hangover_frames: 15,
             ptt_mode: false,
+            noise_suppression: true,
             input_device_id: None,
             output_device_id: None,
         }
@@ -223,7 +231,22 @@ impl Default for UiSettings {
 
 #[cfg(test)]
 mod tests {
-    use super::UiSettings;
+    use super::{AudioSettings, UiSettings};
+
+    #[test]
+    fn audio_settings_noise_suppression_defaults_to_true_and_backfills_legacy_json() {
+        assert!(AudioSettings::default().noise_suppression);
+        let legacy: AudioSettings =
+            serde_json::from_str(r#"{"vadThreshold":0.02,"vadHangoverFrames":10,"pttMode":true}"#)
+                .unwrap();
+        assert!(legacy.noise_suppression);
+        assert_eq!(legacy.vad_threshold, 0.02);
+        assert!(legacy.ptt_mode);
+
+        let disabled: AudioSettings =
+            serde_json::from_str(r#"{"noiseSuppression":false}"#).unwrap();
+        assert!(!disabled.noise_suppression);
+    }
 
     #[test]
     fn ui_settings_screen_share_defaults_match_spec() {

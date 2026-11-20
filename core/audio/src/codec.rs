@@ -25,6 +25,7 @@ pub struct OpusEncoder {
     channels: u16,
     codec: i32,
     packet_loss_perc: u8,
+    reset_count: u64,
 }
 
 impl OpusEncoder {
@@ -41,6 +42,7 @@ impl OpusEncoder {
             channels,
             codec,
             packet_loss_perc,
+            reset_count: 0,
         })
     }
 
@@ -56,6 +58,10 @@ impl OpusEncoder {
         self.packet_loss_perc
     }
 
+    pub fn reset_count(&self) -> u64 {
+        self.reset_count
+    }
+
     /// 运行时更新编码器预期丢包率（0..=100），用于结合网络遥测在 10..=25 间微调 FEC 强度。
     pub fn set_packet_loss_perc(&mut self, perc: u8) {
         let clamped = perc.min(100);
@@ -66,6 +72,7 @@ impl OpusEncoder {
     /// 语音段开始时重置编码器状态，避免上一段的尾音污染新段，同时保留当前丢包率配置。
     pub fn reset(&mut self) -> Result<(), AudioError> {
         self.inner = build_raw_encoder(self.codec, self.channels, self.packet_loss_perc)?;
+        self.reset_count += 1;
         Ok(())
     }
 

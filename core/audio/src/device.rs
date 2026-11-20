@@ -78,24 +78,34 @@ pub struct CaptureStream {
     pub format: AudioFormat,
     samples: Arc<ArrayQueue<f32>>,
     errors: ErrorSlot,
-    _stream: cpal::Stream,
+    _stream: Option<cpal::Stream>,
 }
 
 impl CaptureStream {
+    #[cfg(test)]
+    pub(crate) fn new_for_test(format: AudioFormat) -> (Self, Arc<ArrayQueue<f32>>) {
+        let samples = Arc::new(ArrayQueue::new(CAPTURE_QUEUE_CAPACITY));
+        let stream = Self {
+            format,
+            samples: Arc::clone(&samples),
+            errors: ErrorSlot::default(),
+            _stream: None,
+        };
+        (stream, samples)
+    }
+
     /// 把环形队列里已有的样本按完整源帧取到 `output`，最多 `max` 个。
     pub fn drain_into(&self, output: &mut Vec<f32>, max: usize) {
         output.clear();
         let channels = (self.format.channels as usize).max(1);
-        let limit = max - (max % channels);
-        for _ in 0..limit {
-            match self.samples.pop() {
-                Some(sample) => output.push(sample),
-                None => break,
-            }
-        }
-        let remainder = output.len() % channels;
-        if remainder != 0 {
-            output.truncate(output.len() - remainder);
+        let frames = (self.samples.len() / channels).min(max / channels);
+        let count = frames * channels;
+        output.reserve(count);
+        for _ in 0..count {
+            let Some(sample) = self.samples.pop() else {
+                break;
+            };
+            output.push(sample);
         }
     }
 
@@ -172,7 +182,7 @@ pub fn start_capture(device_id: Option<&str>) -> Result<CaptureStream, AudioErro
         format,
         samples,
         errors,
-        _stream: stream,
+        _stream: Some(stream),
     })
 }
 
@@ -533,5 +543,38 @@ mod tests {
             ],
             [Some(1.0), Some(-1.0), Some(2.0), Some(-2.0)]
         );
+    }
+
+    #[test]
+    fn capture_drain_into_consumes_only_complete_frames_without_channel_shift() {
+        let format = AudioFormat {
+            sample_rate_hz: 48_000,
+            channels: 2,
+        };
+        let (stream, queue) = CaptureStream::new_for_test(format);
+        // 写入 2 个完整立体声帧 + 1 个半帧左声道样本。
+        for sample in [1.0, -1.0, 2.0, -2.0, 3.0] {
+            queue.push(sample).unwrap();
+        }
+        let mut out = Vec::new();
+        stream.drain_into(&mut out, 100);
+        assert_eq!(out, vec![1.0, -1.0, 2.0, -2.0]);
+        assert_eq!(stream.buffered_samples(), 1);
+
+        // 补齐右声道及下一帧后，必须保持 [L, R] 声道严格对齐。
+        for sample in [-3.0, 4.0, -4.0] {
+            queue.push(sample).unwrap();
+        }
+        stream.drain_into(&mut out, 100);
+        assert_eq!(out, vec![3.0, -3.0, 4.0, -4.0]);
+        assert_eq!(stream.buffered_samples(), 0);
+
+        // 受 max 上限限制时同样只消费整帧。
+        for sample in [5.0, -5.0, 6.0, -6.0, 7.0, -7.0] {
+            queue.push(sample).unwrap();
+        }
+        stream.drain_into(&mut out, 5);
+        assert_eq!(out, vec![5.0, -5.0, 6.0, -6.0]);
+        assert_eq!(stream.buffered_samples(), 2);
     }
 }
