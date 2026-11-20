@@ -215,11 +215,8 @@ void main() {
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
           expect(
-            find.byWidgetPredicate(
-              (widget) =>
-                  widget is Icon &&
-                  widget.semanticLabel ==
-                      lookupAppLocalizations(Locale(locale)).workspaceReturn,
+            find.bySemanticsLabel(
+              lookupAppLocalizations(Locale(locale)).workspaceReturn,
             ),
             findsOneWidget,
           );
@@ -716,7 +713,7 @@ void main() {
     final searchRect = tester.getRect(searchFinder);
     final addRect = tester.getRect(addFinder);
 
-    expect(searchRect.size, const Size(40, 40));
+    expect(searchRect.size, const Size(36, 36));
     expect(searchRect.center.dy, closeTo(titleRect.center.dy, 4.0));
     expect(searchRect.center.dy, closeTo(addRect.center.dy, 4.0));
     expect(searchRect.left, greaterThan(titleRect.right));

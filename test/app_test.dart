@@ -686,7 +686,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byIcon(Icons.search_rounded));
+      await tester.tap(find.bySemanticsLabel('搜索服务器'));
       await tester.pumpAndSettle();
 
       final fieldFinder = find.byType(TextField);
