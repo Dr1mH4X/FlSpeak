@@ -878,18 +878,6 @@ abstract class AppLocalizations {
   /// **'Add a server address to join your people in a channel.'**
   String get serverEmptyBody;
 
-  /// No description provided for @serverSearchLabel.
-  ///
-  /// In en, this message translates to:
-  /// **'Search servers'**
-  String get serverSearchLabel;
-
-  /// No description provided for @serverSearchClear.
-  ///
-  /// In en, this message translates to:
-  /// **'Clear search'**
-  String get serverSearchClear;
-
   /// No description provided for @serverSearchEmpty.
   ///
   /// In en, this message translates to:

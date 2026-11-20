@@ -435,12 +435,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Add a server address to join your people in a channel.';
 
   @override
-  String get serverSearchLabel => 'Search servers';
-
-  @override
-  String get serverSearchClear => 'Clear search';
-
-  @override
   String get serverSearchEmpty => 'No matching servers';
 
   @override

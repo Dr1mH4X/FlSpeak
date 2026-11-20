@@ -26,6 +26,8 @@ import 'package:flspeak/widgets/app_navigation_sidebar.dart';
 import 'package:flspeak/widgets/prism.dart'
     show
         BannerHost,
+        GlyphIcon,
+        Glyphs,
         InputDecorationTheme,
         LiquidGlassQuality,
         LiquidGlassScope,
@@ -686,7 +688,11 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.bySemanticsLabel('搜索服务器'));
+      await tester.tap(
+        find.byWidgetPredicate(
+          (w) => w is GlyphIcon && w.glyph == Glyphs.search,
+        ),
+      );
       await tester.pumpAndSettle();
 
       final fieldFinder = find.byType(TextField);

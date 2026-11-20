@@ -1,6 +1,8 @@
+// 顶栏搜索（AppBarSearchState）的接入方式参考 FlClash（https://github.com/chen08209/FlClash），原始许可证为 GPL-3.0。
+// 来源提交：be84736605527034689c95bf27828ff27d912c5e。
+// 对应原文件：lib/views/connection/requests.dart。
+
 import 'dart:async';
-import 'dart:math' as math;
-import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, kIsWeb;
@@ -25,7 +27,6 @@ import '../../core/notices.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../router.dart';
-import '../../theme/app_motion.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_navigation_sidebar.dart';
 import '../../widgets/compact_navigation_shell.dart';
@@ -243,7 +244,6 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
     final section = _ServerSection(
       servers: filtered,
       hasServers: orderedServers.isNotEmpty,
-      onSearch: (value) => setState(() => _query = value),
       lastConnected: lastConnected,
       connectedId: connectedId,
       connectingId: connectingId,
@@ -329,6 +329,9 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
       level: SurfaceLevel.page,
       child: Scaffold(
         backgroundColor: context.pageColor,
+        searchState: AppBarSearchState(
+          onSearch: (value) => setState(() => _query = value),
+        ),
         title: desktop ? l10n.serversTitle : l10n.appName,
         actions: [
           if (connected && (desktop || !inCompactTabs))
@@ -470,7 +473,6 @@ class _ServerSection extends StatelessWidget {
   const _ServerSection({
     required this.servers,
     required this.hasServers,
-    required this.onSearch,
     required this.lastConnected,
     required this.connectedId,
     required this.connectingId,
@@ -482,7 +484,6 @@ class _ServerSection extends StatelessWidget {
 
   final List<ServerProfileView> servers;
   final bool hasServers;
-  final ValueChanged<String> onSearch;
   final Map<String, DateTime> lastConnected;
   final String? connectedId;
   final String? connectingId;
@@ -501,24 +502,11 @@ class _ServerSection extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) => Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        l10n.serversTitle,
-                        style: context.texts.titleLarge,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    _ServerSearchControl(
-                      maxRowWidth: constraints.maxWidth,
-                      onChanged: onSearch,
-                    ),
-                  ],
-                ),
+              child: Text(
+                l10n.serversTitle,
+                style: context.texts.titleLarge,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             const SizedBox(width: 12),
@@ -585,262 +573,6 @@ class _ServerSection extends StatelessWidget {
             ),
           ),
       ],
-    );
-  }
-}
-
-class _ServerSearchControl extends StatefulWidget {
-  const _ServerSearchControl({
-    required this.maxRowWidth,
-    required this.onChanged,
-  });
-
-  final double maxRowWidth;
-  final ValueChanged<String> onChanged;
-
-  @override
-  State<_ServerSearchControl> createState() => _ServerSearchControlState();
-}
-
-class _ServerSearchControlState extends State<_ServerSearchControl>
-    with SingleTickerProviderStateMixin {
-  static final double _collapsedSize = TonalButtonSize.section.button;
-  static const double _expandedMaxWidth = 260.0;
-
-  bool _expanded = false;
-
-  late final TextEditingController _controller = TextEditingController()
-    ..addListener(_handleTextChanged);
-  late final FocusNode _focusNode = FocusNode(onKeyEvent: _handleKeyEvent)
-    ..addListener(_handleFocusChanged);
-  late final AnimationController _expandController = AnimationController(
-    vsync: this,
-    duration: Motion.spatialFast,
-    reverseDuration: Motion.effectsDefault,
-  );
-  late final Animation<double> _expandAnimation = CurvedAnimation(
-    parent: _expandController,
-    curve: Motion.spatialCurve,
-    reverseCurve: Motion.effectsDefaultCurve,
-  );
-
-  @override
-  void dispose() {
-    _expandController.dispose();
-    _focusNode.removeListener(_handleFocusChanged);
-    _focusNode.dispose();
-    _controller.removeListener(_handleTextChanged);
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _animateExpand(bool expand) {
-    final reduceMotion = MediaQuery.disableAnimationsOf(context);
-    if (reduceMotion) {
-      _expandController.value = expand ? 1.0 : 0.0;
-    } else if (expand) {
-      _expandController.forward();
-    } else {
-      _expandController.reverse();
-    }
-  }
-
-  void _open() {
-    if (!_expanded) {
-      setState(() => _expanded = true);
-    }
-    _animateExpand(true);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _expanded) {
-        _focusNode.requestFocus();
-      }
-    });
-  }
-
-  void _collapseAndClear() {
-    if (_controller.text.isNotEmpty) {
-      _controller.clear();
-      widget.onChanged('');
-    }
-    if (_expanded) {
-      setState(() => _expanded = false);
-    }
-    _animateExpand(false);
-    _focusNode.unfocus();
-  }
-
-  void _handleClear() {
-    _controller.clear();
-    widget.onChanged('');
-    _focusNode.requestFocus();
-  }
-
-  void _handleTextChanged() {
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
-  void _handleFocusChanged() {
-    if (!_focusNode.hasFocus && _expanded && _controller.text.isEmpty) {
-      setState(() => _expanded = false);
-      _animateExpand(false);
-    }
-  }
-
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is KeyDownEvent &&
-        event.logicalKey == LogicalKeyboardKey.escape &&
-        _expanded) {
-      _collapseAndClear();
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final scheme = context.scheme;
-    final surfaceFill = context.raisedSurfaceColor;
-    final availableWidth = math.max(0.0, widget.maxRowWidth - 12);
-    final collapsedWidth = math.min(_collapsedSize, availableWidth);
-    final expandedWidth = math.min(
-      _expandedMaxWidth,
-      math.max(collapsedWidth, availableWidth * 0.65),
-    );
-
-    return GooSurface(
-      color: surfaceFill,
-      child: AnimatedBuilder(
-        animation: _expandController,
-        builder: (context, _) {
-          if (!_expanded && _expandController.isDismissed) {
-            return TonalButtonTheme(
-              size: TonalButtonSize.section,
-              child: ElasticPress(
-                child: SizedBox(
-                  width: collapsedWidth,
-                  height: _collapsedSize,
-                  child: IconButton(
-                    onPressed: _open,
-                    style: ButtonStyle.from(
-                      backgroundColor: Colors.transparent,
-                      foregroundColor: scheme.onSurface,
-                      fixedSize: Size.square(collapsedWidth),
-                      minimumSize: Size.square(collapsedWidth),
-                      padding: EdgeInsets.zero,
-                      iconSize: TonalButtonSize.section.icon,
-                      shape: AppShape.full,
-                    ),
-                    icon: Semantics(
-                      label: l10n.serverSearchLabel,
-                      child: const GlyphIcon(Glyphs.search),
-                    ),
-                  ),
-                ),
-              ),
-            );
-          }
-
-          final currentWidth = lerpDouble(
-            collapsedWidth,
-            expandedWidth,
-            _expandAnimation.value,
-          )!.clamp(collapsedWidth, availableWidth);
-          final empty = _controller.text.isEmpty;
-
-          return ElasticPress(
-            child: GooPane(
-              child: FocusRing(
-                shape: AppShape.full,
-                child: ClipRSuperellipse(
-                  borderRadius: AppRadius.full,
-                  child: SizedBox(
-                    width: currentWidth,
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      physics: const NeverScrollableScrollPhysics(),
-                      child: SizedBox(
-                        width: expandedWidth,
-                        child: TextField(
-                          controller: _controller,
-                          focusNode: _focusNode,
-                          maxLines: 1,
-                          textAlignVertical: TextAlignVertical.center,
-                          textInputAction: TextInputAction.search,
-                          onChanged: widget.onChanged,
-                          onTapOutside: (_) => _focusNode.unfocus(),
-                          style: context.texts.bodyMedium,
-                          decoration: InputDecoration(
-                            filled: false,
-                            hoverColor: Colors.transparent,
-                            isDense: true,
-                            constraints: BoxConstraints(
-                              minHeight: _collapsedSize,
-                            ),
-                            hintText: l10n.serverSearchLabel,
-                            contentPadding: EdgeInsetsDirectional.fromSTEB(
-                              0,
-                              6,
-                              empty ? 16 : 0,
-                              6,
-                            ),
-                            border: const NoInputBorder(),
-                            enabledBorder: const NoInputBorder(),
-                            focusedBorder: const NoInputBorder(),
-                            errorBorder: const NoInputBorder(),
-                            focusedErrorBorder: const NoInputBorder(),
-                            prefixIcon: GlyphIcon(
-                              Glyphs.search,
-                              size: TonalButtonSize.section.icon,
-                              color: scheme.onSurface,
-                            ),
-                            prefixIconConstraints: BoxConstraints.tightFor(
-                              width: _collapsedSize,
-                              height: _collapsedSize,
-                            ),
-                            suffixIcon: empty
-                                ? null
-                                : Padding(
-                                    padding: const EdgeInsetsDirectional.only(
-                                      end: 2,
-                                    ),
-                                    child: IconButton(
-                                      onPressed: _handleClear,
-                                      style: ButtonStyle.from(
-                                        foregroundColor:
-                                            scheme.onSurfaceVariant,
-                                        fixedSize: Size.square(
-                                          TonalButtonSize.compact.button,
-                                        ),
-                                        minimumSize: Size.square(
-                                          TonalButtonSize.compact.button,
-                                        ),
-                                        padding: EdgeInsets.zero,
-                                        iconSize: IconSizes.medium,
-                                        shape: AppShape.full,
-                                      ),
-                                      icon: Semantics(
-                                        label: l10n.serverSearchClear,
-                                        child: const GlyphIcon(Glyphs.close),
-                                      ),
-                                    ),
-                                  ),
-                            suffixIconConstraints: BoxConstraints(
-                              minHeight: _collapsedSize,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
-      ),
     );
   }
 }
