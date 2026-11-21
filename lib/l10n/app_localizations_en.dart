@@ -777,7 +777,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get noticePttHotkeyPortalPermissionDenied =>
-      'Global shortcut not authorized (in-app only); if no prompt appears, reset it in System Settings under App Permissions or Global Shortcuts';
+      'Global shortcut unauthorized; reset in System Settings';
 
   @override
   String get noticeConnectionLost => 'Connection lost.';

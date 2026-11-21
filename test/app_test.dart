@@ -818,7 +818,7 @@ void main() {
         pttHotkey: LogicalKeyboardKey.keyA.keyId,
       );
       expect(registerCalls, 1);
-      const portalNotice = '全局快捷键未授权，当前仅应用内生效；若系统不再弹窗，请在系统设置的“应用权限 / 全局快捷键”中重置';
+      const portalNotice = '全局快捷键未授权，在系统设置中重置';
       expect(find.text(portalNotice), findsOneWidget);
       final initialNoticeId = container.read(noticeCenterProvider).single.id;
 
