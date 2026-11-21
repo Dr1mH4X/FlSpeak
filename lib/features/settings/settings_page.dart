@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart'
     hide IconButton, Scaffold, Switch, TextButton;
 import 'package:flutter/services.dart';
@@ -66,6 +68,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     super.initState();
     _activeCategory = widget.initialCategory;
     _activeGeneralSubcategory = widget.initialGeneralSubcategory;
+    ref.read(pttHotkeyStatusProvider.notifier).requestRetry();
   }
 
   void _openDetail(SettingsPage page) {
@@ -153,6 +156,22 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     await pickPttHotkey(context, ref);
   }
 
+  Future<void> _authorizePttHotkey() async {
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      const hotkey = GlobalHotkey();
+      final granted = await hotkey.requestPermission();
+      if (granted) {
+        if (mounted) {
+          ref.read(pttHotkeyStatusProvider.notifier).requestRetry(manual: true);
+        }
+        return;
+      }
+      await hotkey.openPermissionSettings();
+      return;
+    }
+    ref.read(pttHotkeyStatusProvider.notifier).requestRetry(manual: true);
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -166,6 +185,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final pttHotkeyKey = preferences.pttHotkey == null
         ? null
         : LogicalKeyboardKey.findKeyByKeyId(preferences.pttHotkey!);
+    final pttHotkeyStatus = ref.watch(pttHotkeyStatusProvider);
 
     final isSubPage =
         _activeCategory != null || _activeGeneralSubcategory != null;
@@ -310,9 +330,22 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       SettingsTile(
                         icon: Icons.keyboard_rounded,
                         title: l10n.settingsPttHotkey,
-                        subtitle: pttHotkeyKey == null
-                            ? l10n.settingsPttHotkeyNone
-                            : pttHotkeyDisplayName(pttHotkeyKey),
+                        subtitle: _pttHotkeySubtitle(
+                          l10n,
+                          pttHotkeyKey,
+                          pttHotkeyStatus,
+                        ),
+                        trailing:
+                            pttHotkeyKey != null &&
+                                pttHotkeyStatus.state ==
+                                    PttHotkeyState.permissionDenied
+                            ? TonalButton(
+                                size: TonalButtonSize.compact,
+                                label: l10n.settingsPttHotkeyGrantPermission,
+                                onPressed: () =>
+                                    unawaited(_authorizePttHotkey()),
+                              )
+                            : null,
                         onTap: () => unawaited(_pickPttHotkey()),
                       ),
                       SettingsTile(
@@ -631,6 +664,24 @@ class _AudioDevicePicker extends ConsumerWidget {
       },
     );
   }
+}
+
+String _pttHotkeySubtitle(
+  AppLocalizations l10n,
+  LogicalKeyboardKey? key,
+  PttHotkeyStatus status,
+) {
+  if (key == null) return l10n.settingsPttHotkeyNone;
+  final keyName = pttHotkeyDisplayName(key);
+  return switch (status.state) {
+    PttHotkeyState.permissionDenied =>
+      '$keyName · ${defaultTargetPlatform == TargetPlatform.macOS ? l10n.settingsPttHotkeyPermissionRequired : l10n.settingsPttHotkeyPortalPermissionRequired}',
+    PttHotkeyState.unsupportedPlatform ||
+    PttHotkeyState.unsupportedKey ||
+    PttHotkeyState.conflict ||
+    PttHotkeyState.failed => '$keyName · ${l10n.settingsPttHotkeyInAppOnly}',
+    PttHotkeyState.inactive || PttHotkeyState.registered => keyName,
+  };
 }
 
 String _localeLabel(AppLocalizations l10n, String? locale) => switch (locale) {

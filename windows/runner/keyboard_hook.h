@@ -6,6 +6,11 @@
 
 namespace flspeak {
 
+struct HookStartResult {
+  bool ok = false;
+  uint32_t error_code = 0;
+};
+
 // 全局「按住说话」键盘钩子。
 //
 // 低级钩子（WH_KEYBOARD_LL）只观察不吞键：按住说话的键在其他程序里照常
@@ -21,8 +26,8 @@ class KeyboardHook {
   KeyboardHook(const KeyboardHook&) = delete;
   KeyboardHook& operator=(const KeyboardHook&) = delete;
 
-  // 监听给定的虚拟键码；重复调用会先卸载旧钩子。返回是否安装成功。
-  bool Start(uint32_t virtual_key, KeyEventCallback callback);
+  // 监听给定的虚拟键码；重复调用会先卸载旧钩子。返回安装结果与系统错误码。
+  HookStartResult Start(uint32_t virtual_key, KeyEventCallback callback);
 
   // 卸载钩子。没安装时是空操作。
   void Stop();

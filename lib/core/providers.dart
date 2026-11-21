@@ -23,7 +23,7 @@ import 'stream_publisher.dart';
 import 'stream_viewer.dart';
 import 'voice_levels.dart';
 
-final _localizationsProvider = Provider<AppLocalizations>((ref) {
+final appLocalizationsProvider = Provider<AppLocalizations>((ref) {
   final code =
       ref.watch(preferencesProvider).locale ??
       PlatformDispatcher.instance.locale.languageCode;
@@ -77,6 +77,8 @@ final voiceLevelsProvider = StreamProvider.autoDispose<VoiceLevels>((ref) {
 
 final activePttHotkeyProvider = Provider<int?>((ref) {
   if (ref.watch(pttHotkeyRecordingProvider)) return null;
+  final pttMode = ref.watch(sessionViewProvider.select((v) => v.pttMode));
+  if (!pttMode) return null;
   return ref.watch(preferencesProvider.select((value) => value.pttHotkey));
 });
 
@@ -251,7 +253,7 @@ class SessionController extends Notifier<SessionView> {
           await session.setMuted(muted: true);
           if (ref.mounted) {
             _notify(
-              ref.read(_localizationsProvider).voiceMicPermissionDenied,
+              ref.read(appLocalizationsProvider).voiceMicPermissionDenied,
               tone: NoticeTone.info,
             );
           }
@@ -392,7 +394,7 @@ class SessionController extends Notifier<SessionView> {
         )
         .toList();
     final peer = matches.length == 1 ? matches.first : null;
-    final l10n = ref.read(_localizationsProvider);
+    final l10n = ref.read(appLocalizationsProvider);
     if (peer == null) {
       _notify(l10n.chatRecipientUnavailable);
       return false;
@@ -423,7 +425,7 @@ class SessionController extends Notifier<SessionView> {
               client.id != state.selfClientId,
         )
         .firstOrNull;
-    final l10n = ref.read(_localizationsProvider);
+    final l10n = ref.read(appLocalizationsProvider);
     if (peer == null ||
         (target == KickTarget.channel &&
             peer.channelId != recipient.channelId)) {
@@ -461,13 +463,13 @@ class SessionController extends Notifier<SessionView> {
             await session.setMicrophonePermission(granted: true);
           case MicrophonePermissionStatus.denied:
             _notify(
-              ref.read(_localizationsProvider).voiceMicPermissionDenied,
+              ref.read(appLocalizationsProvider).voiceMicPermissionDenied,
               tone: NoticeTone.info,
             );
             return;
           case MicrophonePermissionStatus.permanentlyDenied:
             _notify(
-              ref.read(_localizationsProvider).voiceMicPermissionSettings,
+              ref.read(appLocalizationsProvider).voiceMicPermissionSettings,
               tone: NoticeTone.info,
             );
             await permission.openSettings();
@@ -505,7 +507,7 @@ class SessionController extends Notifier<SessionView> {
   }
 
   Future<void> setPttActive(bool active) async {
-    if (!ref.mounted || !state.pttMode) {
+    if (!ref.mounted || (active && (!state.connected || !state.pttMode))) {
       return;
     }
     try {
@@ -605,7 +607,7 @@ class SessionController extends Notifier<SessionView> {
       return false;
     } on Object {
       if (ref.mounted) {
-        _notify(ref.read(_localizationsProvider).streamPublishFailed);
+        _notify(ref.read(appLocalizationsProvider).streamPublishFailed);
       }
       return false;
     }
@@ -622,7 +624,7 @@ class SessionController extends Notifier<SessionView> {
     return (text) {
       if (!ref.mounted) return Future.value(false);
       if (target != _messageDestination) {
-        _notify(ref.read(_localizationsProvider).chatDestinationChanged);
+        _notify(ref.read(appLocalizationsProvider).chatDestinationChanged);
         return Future.value(false);
       }
       return sendMessage(text);
@@ -641,7 +643,7 @@ class SessionController extends Notifier<SessionView> {
   );
 
   Future<String?> uploadChatImage(Uint8List bytes) async {
-    final l10n = ref.read(_localizationsProvider);
+    final l10n = ref.read(appLocalizationsProvider);
     try {
       final config = await ref.read(imageHostProvider.future);
       if (!ref.mounted) return null;
@@ -667,7 +669,7 @@ class SessionController extends Notifier<SessionView> {
   }
 
   Future<PickedChatImage?> pickChatImage({required bool paste}) async {
-    final l10n = ref.read(_localizationsProvider);
+    final l10n = ref.read(appLocalizationsProvider);
     try {
       final input = ref.read(imageInputProvider);
       return paste ? await input.paste() : await input.pick();
@@ -697,7 +699,7 @@ class SessionController extends Notifier<SessionView> {
         )
         .toList();
     if (matches.length != 1) {
-      _notify(ref.read(_localizationsProvider).kickTargetUnavailable);
+      _notify(ref.read(appLocalizationsProvider).kickTargetUnavailable);
       return false;
     }
     final target = (clientId: matches.single.id, uid: uid);
@@ -726,7 +728,7 @@ class SessionController extends Notifier<SessionView> {
     String? password,
     ValueChanged<int>? onStarted,
   }) async {
-    final l10n = ref.read(_localizationsProvider);
+    final l10n = ref.read(appLocalizationsProvider);
     final key = (state.connectionEpoch, channelId);
     if (state.activeFileDownloads.containsKey(key)) return false;
     final target = (state.activeServerId, state.connectionEpoch);
@@ -811,7 +813,7 @@ class SessionController extends Notifier<SessionView> {
         ? transfer!.error == null
         : await _transferReplies.putIfAbsent(id, Completer<bool>.new).future;
     if (!success && ref.mounted) {
-      _notify(ref.read(_localizationsProvider).fileDownloadFailed);
+      _notify(ref.read(appLocalizationsProvider).fileDownloadFailed);
     }
     return success;
   }
@@ -832,7 +834,7 @@ class SessionController extends Notifier<SessionView> {
       ChatScope.direct => state.directRecipient?.id,
     };
     if (targetId == null) {
-      final l10n = ref.read(_localizationsProvider);
+      final l10n = ref.read(appLocalizationsProvider);
       _notify(
         scope == ChatScope.direct
             ? l10n.chatRecipientUnavailable
@@ -904,7 +906,7 @@ class SessionController extends Notifier<SessionView> {
 
   void _notifyCoreError(CoreError error) {
     if (ref.mounted) {
-      _notify(describeCoreError(error, ref.read(_localizationsProvider)));
+      _notify(describeCoreError(error, ref.read(appLocalizationsProvider)));
     }
   }
 
@@ -936,7 +938,7 @@ class SessionController extends Notifier<SessionView> {
       if (ref.mounted) {
         if (recordFailure) {
           _notifyFailure(
-            describeCoreError(error, ref.read(_localizationsProvider)),
+            describeCoreError(error, ref.read(appLocalizationsProvider)),
           );
         } else {
           _notifyCoreError(error);
@@ -1116,7 +1118,7 @@ class SessionController extends Notifier<SessionView> {
         );
       case CoreEvent_Poked(:final from, :final message):
         _notify(
-          ref.read(_localizationsProvider).pokeReceived(from, message),
+          ref.read(appLocalizationsProvider).pokeReceived(from, message),
           tone: NoticeTone.info,
         );
       case CoreEvent_ClientJoined(
@@ -1263,7 +1265,7 @@ class SessionController extends Notifier<SessionView> {
         } else if (message != _lastVoiceNotice) {
           _lastVoiceNotice = message;
           _notify(
-            describeBackendNotice(message, ref.read(_localizationsProvider)),
+            describeBackendNotice(message, ref.read(appLocalizationsProvider)),
           );
         }
       case CoreEvent_AudioDevicesReset(:final input, :final output):
@@ -1282,13 +1284,13 @@ class SessionController extends Notifier<SessionView> {
       case CoreEvent_IdentityUpgrade(:final to):
         state = current.copyWith(identityUpgradeTarget: to);
         _notify(
-          ref.read(_localizationsProvider).identityUpgrading(to),
+          ref.read(appLocalizationsProvider).identityUpgrading(to),
           tone: NoticeTone.info,
         );
       case CoreEvent_IdentityUpgraded(:final level):
         state = current.copyWith(identityUpgradeTarget: null);
         _notify(
-          ref.read(_localizationsProvider).identityUpgraded(level),
+          ref.read(appLocalizationsProvider).identityUpgraded(level),
           tone: NoticeTone.info,
         );
       case CoreEvent_TransferStarted(
@@ -1390,7 +1392,7 @@ class SessionController extends Notifier<SessionView> {
               .read(streamViewerProvider.notifier)
               .handleStreamEnded(streamId: streamId, reason: reason),
         );
-        final l10n = ref.read(_localizationsProvider);
+        final l10n = ref.read(appLocalizationsProvider);
         switch (reason) {
           case StreamEndReason.sourceStopped:
             _notify(l10n.streamEndedStopped, tone: NoticeTone.info);
@@ -1451,12 +1453,12 @@ class SessionController extends Notifier<SessionView> {
         break;
       case CoreEvent_Denied(:final message):
         _notifyFailure(
-          describeBackendNotice(message, ref.read(_localizationsProvider)),
+          describeBackendNotice(message, ref.read(appLocalizationsProvider)),
         );
       case CoreEvent_Failed(:final message):
         final text = describeBackendNotice(
           message,
-          ref.read(_localizationsProvider),
+          ref.read(appLocalizationsProvider),
         );
         if (current.connected) {
           _notify(text);

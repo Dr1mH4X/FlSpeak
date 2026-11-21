@@ -400,6 +400,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsPttHotkeyClear => '清除';
 
   @override
+  String get settingsPttHotkeyInAppOnly => '仅应用内';
+
+  @override
+  String get settingsPttHotkeyPermissionRequired => '需要输入监控权限';
+
+  @override
+  String get settingsPttHotkeyPortalPermissionRequired => '全局快捷键未授权';
+
+  @override
+  String get settingsPttHotkeyGrantPermission => '去授权';
+
+  @override
   String get settingsNoiseSuppression => '降噪';
 
   @override
@@ -735,6 +747,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get noticeVoiceSyncFailed => '语音状态同步失败，将自动重试。';
+
+  @override
+  String get noticePttHotkeyInAppOnly => '全局快捷键不可用，当前仅应用内生效';
+
+  @override
+  String get noticePttHotkeyPermissionDenied => '全局快捷键需要输入监控权限，当前仅应用内生效';
+
+  @override
+  String get noticePttHotkeyPortalPermissionDenied => '全局快捷键未授权，在系统设置中重置';
 
   @override
   String get noticeConnectionLost => '连接已断开。';

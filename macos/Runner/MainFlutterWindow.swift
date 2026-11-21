@@ -5,19 +5,16 @@
 // plugins/window/macos/window/Sources/window/WindowStyle.swift 的 .hidden 分支，
 // 以及同目录 WindowController.swift 的 startDragging / maximize / setFullScreen。
 
-import Carbon.HIToolbox
 import Cocoa
 import FlutterMacOS
 
-// 两个热键事件常量在新 SDK 里类型不一致（UInt32 / Int），统一成 UInt32。
-private let hotkeyPressed = UInt32(kEventHotKeyPressed)
-private let hotkeyReleased = UInt32(kEventHotKeyReleased)
-
 class MainFlutterWindow: NSWindow {
-  /// 全局按住说话热键：Carbon RegisterEventHotKey 不需要任何系统权限，
-  /// 代价是注册期间该按键被本应用独占，不再转发给其他应用。
-  private var hotkeyRef: EventHotKeyRef?
-  private var hotkeyEventHandler: EventHandlerRef?
+  /// 全局按住说话热键：通过 Listen-Only CGEventTap 观察物理按键事件，
+  /// 只观察不吞键，依赖系统「输入监控」（Input Monitoring）运行时权限。
+  private var eventTap: CFMachPort?
+  private var eventTapRunLoopSource: CFRunLoopSource?
+  private var targetKeyCode: CGKeyCode?
+  private var isTargetKeyDown = false
   private var hotkeyChannel: FlutterMethodChannel?
 
   /// Flutter 主题的 surface 色。窗口底色与标题栏跟随主题，
@@ -54,12 +51,7 @@ class MainFlutterWindow: NSWindow {
   }
 
   deinit {
-    if let hotkeyRef = hotkeyRef {
-      UnregisterEventHotKey(hotkeyRef)
-    }
-    if let hotkeyEventHandler = hotkeyEventHandler {
-      RemoveEventHandler(hotkeyEventHandler)
-    }
+    unregisterHotkey()
     NotificationCenter.default.removeObserver(self)
   }
 
@@ -119,66 +111,164 @@ class MainFlutterWindow: NSWindow {
       name: "flspeak/global_hotkey",
       binaryMessenger: controller.engine.binaryMessenger)
 
-    let handler: EventHandlerUPP = { _, event, userData in
-      guard let event = event, let userData = userData else { return noErr }
-      let window = unsafeBitCast(userData, to: MainFlutterWindow.self)
-      switch UInt32(GetEventKind(event)) {
-      case hotkeyPressed:
-        window.hotkeyChannel?.invokeMethod("onKeyDown", arguments: nil)
-      case hotkeyReleased:
-        window.hotkeyChannel?.invokeMethod("onKeyUp", arguments: nil)
-      default:
-        break
-      }
-      return noErr
-    }
-    var specs = [
-      EventTypeSpec(
-        eventClass: OSType(kEventClassKeyboard),
-        eventKind: hotkeyPressed),
-      EventTypeSpec(
-        eventClass: OSType(kEventClassKeyboard),
-        eventKind: hotkeyReleased),
-    ]
-    InstallEventHandler(
-      GetApplicationEventTarget(),
-      handler,
-      specs.count,
-      &specs,
-      UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque()),
-      &hotkeyEventHandler)
-
     hotkeyChannel?.setMethodCallHandler { [weak self] call, result in
       switch call.method {
       case "register":
-        guard let self = self, let keyCode = call.arguments as? Int else {
-          result(false)
+        guard let self = self,
+          let rawCode = call.arguments as? Int,
+          let keyCode = CGKeyCode(exactly: rawCode)
+        else {
+          result([
+            "ok": false,
+            "reason": "unsupportedKey",
+            "code": nil,
+          ] as [String: Any?])
           return
         }
-        result(self.registerHotkey(UInt32(keyCode)))
+        result(self.registerHotkey(keyCode))
       case "unregister":
         self?.unregisterHotkey()
         result(true)
+      case "requestPermission":
+        result(CGRequestListenEventAccess())
+      case "openPermissionSettings":
+        guard
+          let url = URL(
+            string:
+              "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"
+          )
+        else {
+          result(false)
+          return
+        }
+        result(NSWorkspace.shared.open(url))
       default:
         result(FlutterMethodNotImplemented)
       }
     }
   }
 
-  private func registerHotkey(_ keyCode: UInt32) -> Bool {
+  private func registerHotkey(_ keyCode: CGKeyCode) -> [String: Any?] {
     unregisterHotkey()
-    // signature 取一个应用内唯一的四字符码即可，id 区分同应用内的多个热键。
-    let hotKeyID = EventHotKeyID(signature: OSType(0x46_53_50_4B), id: 1)
-    return RegisterEventHotKey(
-      keyCode, 0, hotKeyID, GetApplicationEventTarget(), 0, &hotkeyRef
-    ) == noErr
+    let eventMask: CGEventMask =
+      (1 << CGEventType.keyDown.rawValue)
+      | (1 << CGEventType.keyUp.rawValue)
+      | (1 << CGEventType.flagsChanged.rawValue)
+    let callback: CGEventTapCallBack = { _, type, event, userInfo in
+      guard let userInfo = userInfo else {
+        return Unmanaged.passUnretained(event)
+      }
+      let window = Unmanaged<MainFlutterWindow>.fromOpaque(userInfo).takeUnretainedValue()
+      return window.handleEventTap(type: type, event: event)
+    }
+    // 直接试探 CGEvent.tapCreate，不以 CGPreflightListenEventAccess() 短路；
+    // 后者在进程内缓存旧结果，无法反映运行时在系统设置新授予的权限。
+    guard
+      let tap = CGEvent.tapCreate(
+        tap: .cgSessionEventTap,
+        place: .headInsertEventTap,
+        options: .listenOnly,
+        eventsOfInterest: eventMask,
+        callback: callback,
+        userInfo: UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque()))
+    else {
+      let granted = CGPreflightListenEventAccess()
+      return [
+        "ok": false,
+        "reason": granted ? "failed" : "permissionDenied",
+        "code": nil,
+      ]
+    }
+    guard let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else {
+      CFMachPortInvalidate(tap)
+      return ["ok": false, "reason": "failed", "code": nil]
+    }
+    targetKeyCode = keyCode
+    eventTap = tap
+    eventTapRunLoopSource = source
+    isTargetKeyDown = false
+    CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+    CGEvent.tapEnable(tap: tap, enable: true)
+    return ["ok": true, "reason": "registered", "code": nil]
+  }
+
+  private func handleEventTap(
+    type: CGEventType,
+    event: CGEvent
+  ) -> Unmanaged<CGEvent>? {
+    if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+      if let tap = eventTap {
+        CGEvent.tapEnable(tap: tap, enable: true)
+      }
+      if isTargetKeyDown {
+        isTargetKeyDown = false
+        hotkeyChannel?.invokeMethod("onKeyUp", arguments: nil)
+      }
+      return Unmanaged.passUnretained(event)
+    }
+    guard let target = targetKeyCode else {
+      return Unmanaged.passUnretained(event)
+    }
+    let keyCode = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
+    guard keyCode == target else {
+      return Unmanaged.passUnretained(event)
+    }
+    switch type {
+    case .keyDown:
+      if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 {
+        break
+      }
+      if !isTargetKeyDown {
+        isTargetKeyDown = true
+        hotkeyChannel?.invokeMethod("onKeyDown", arguments: nil)
+      }
+    case .keyUp:
+      if isTargetKeyDown {
+        isTargetKeyDown = false
+        hotkeyChannel?.invokeMethod("onKeyUp", arguments: nil)
+      }
+    case .flagsChanged:
+      guard let mask = Self.modifierFlag(for: target) else { break }
+      let down = event.flags.contains(mask)
+      if down && !isTargetKeyDown {
+        isTargetKeyDown = true
+        hotkeyChannel?.invokeMethod("onKeyDown", arguments: nil)
+      } else if !down && isTargetKeyDown {
+        isTargetKeyDown = false
+        hotkeyChannel?.invokeMethod("onKeyUp", arguments: nil)
+      }
+    default:
+      break
+    }
+    return Unmanaged.passUnretained(event)
+  }
+
+  private static func modifierFlag(for keyCode: CGKeyCode) -> CGEventFlags? {
+    switch keyCode {
+    case 0x39: return .maskAlphaShift
+    case 0x38, 0x3C: return .maskShift
+    case 0x3B, 0x3E: return .maskControl
+    case 0x3A, 0x3D: return .maskAlternate
+    case 0x37, 0x36: return .maskCommand
+    case 0x3F: return .maskSecondaryFn
+    default: return nil
+    }
   }
 
   private func unregisterHotkey() {
-    if let ref = hotkeyRef {
-      UnregisterEventHotKey(ref)
-      hotkeyRef = nil
+    if let tap = eventTap {
+      CGEvent.tapEnable(tap: tap, enable: false)
     }
+    if let source = eventTapRunLoopSource {
+      CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
+      eventTapRunLoopSource = nil
+    }
+    if let tap = eventTap {
+      CFMachPortInvalidate(tap)
+      eventTap = nil
+    }
+    targetKeyCode = nil
+    isTargetKeyDown = false
   }
 }
 

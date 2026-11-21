@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart' show UpdateStateView;
 
 import 'core/global_hotkey.dart';
+import 'core/hotkey_codes.dart';
 import 'core/logging/logger.dart';
 import 'core/notices.dart';
 import 'core/preferences.dart';
@@ -45,7 +46,12 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
   /// 不收尾会一直卡在发送状态。
   bool _nativeRegistered = false;
   int _registrationRevision = 0;
+  bool _startupRegistrationDone = false;
+  bool _lastPttMode = false;
+  bool _pendingPermissionPrompt = false;
   SessionController? _pttOwner;
+  PttHotkeyStatusController? _hotkeyStatusController;
+  (int, GlobalHotkeyReason)? _lastNotifiedHotkeyFailure;
   String? _notifiedUpdateVersion;
 
   @override
@@ -53,6 +59,8 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     HardwareKeyboard.instance.addHandler(_handleInAppKey);
+    _hotkeyStatusController = ref.read(pttHotkeyStatusProvider.notifier);
+    _hotkeyStatusController!.attachRetryHandler(_retryRegistrationIfNeeded);
     _hotkey.setHandler(
       onKeyDown: () => _setPtt(true),
       onKeyUp: () => _setPtt(false),
@@ -61,6 +69,26 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
       activePttHotkeyProvider,
       (previous, keyId) => unawaited(_syncRegistration(keyId)),
       fireImmediately: true,
+    );
+    ref.listenManual<bool>(pttHotkeyRecordingProvider, (previous, recording) {
+      if (recording) {
+        _setPtt(false);
+      }
+    });
+    ref.listenManual<(bool, bool)>(
+      sessionViewProvider.select((v) => (v.connected, v.pttMode)),
+      (previous, next) {
+        if (!next.$1 || !next.$2) {
+          _setPtt(false);
+        }
+        if (!next.$2) {
+          _lastPttMode = false;
+          _pendingPermissionPrompt = false;
+          _lastNotifiedHotkeyFailure = null;
+        } else if (previous != null && !previous.$2) {
+          _pendingPermissionPrompt = true;
+        }
+      },
     );
     if (ref.read(startupUpdateCheckEnabledProvider) &&
         ref.read(preferencesProvider).autoCheckUpdate) {
@@ -116,6 +144,8 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
   @override
   void dispose() {
     _registrationRevision++;
+    _hotkeyStatusController?.detachRetryHandler(_retryRegistrationIfNeeded);
+    _hotkeyStatusController = null;
     _setPtt(false);
     unawaited(_hotkey.unregister());
     HardwareKeyboard.instance.removeHandler(_handleInAppKey);
@@ -133,7 +163,12 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.detached) {
+      _setPtt(false);
       unawaited(shutdownLoggingPipeline());
+      return;
+    }
+    if (state == AppLifecycleState.resumed) {
+      _retryRegistrationIfNeeded();
       return;
     }
     if (_nativeRegistered) {
@@ -171,33 +206,146 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
       if (owner != null) unawaited(owner.setPttActive(false));
       return;
     }
-    if (_pttDown == active) {
+    if (_pttDown) {
       return;
     }
     if (ref.read(pttHotkeyRecordingProvider)) return;
-    _pttDown = active;
     final view = ref.read(sessionViewProvider);
     // 未连接或没开按住说话时不发命令，避免弹出无关的错误提示条。
     if (!view.connected || !view.pttMode) {
       return;
     }
+    _pttDown = true;
     final owner = ref.read(sessionViewProvider.notifier);
     _pttOwner = owner;
     unawaited(owner.setPttActive(true));
   }
 
+  void _retryRegistrationIfNeeded({bool manual = false}) {
+    if (!mounted) return;
+    final keyId = ref.read(activePttHotkeyProvider);
+    if (keyId == null) return;
+    final status = ref.read(pttHotkeyStatusProvider);
+    final allow = manual
+        ? status.shouldRetry
+        : status.shouldAutoRetry(defaultTargetPlatform);
+    if (!allow) return;
+    if (manual) {
+      _lastNotifiedHotkeyFailure = null;
+    }
+    unawaited(_syncRegistration(keyId));
+  }
+
   Future<void> _syncRegistration(int? keyId) async {
     _setPtt(false);
     _nativeRegistered = false;
+    final isStartup = !_startupRegistrationDone;
+    _startupRegistrationDone = true;
+    final currentPttMode = ref.read(sessionViewProvider).pttMode;
+    if (!isStartup && currentPttMode && !_lastPttMode) {
+      _pendingPermissionPrompt = true;
+    }
+    _lastPttMode = currentPttMode;
     final revision = ++_registrationRevision;
-    final registered = await _hotkey.registerByKeyId(keyId);
+    if (keyId == null) {
+      await _hotkey.unregister();
+      if (!mounted || revision != _registrationRevision) return;
+      final configuredKeyId = ref.read(preferencesProvider).pttHotkey;
+      ref
+          .read(pttHotkeyStatusProvider.notifier)
+          .setStatus(PttHotkeyStatus.inactive(keyId: configuredKeyId));
+      return;
+    }
+    final shouldPromptPermission = _pendingPermissionPrompt;
+    _pendingPermissionPrompt = false;
+    final key = LogicalKeyboardKey.findKeyByKeyId(keyId);
+    final nativeCode = key == null ? null : nativePttKeyCode(key);
+    final result = await _hotkey.registerByKeyId(keyId);
     if (!mounted || revision != _registrationRevision) return;
-    _nativeRegistered = registered;
-    if (keyId != null && !_nativeRegistered) {
-      logWarn(
-        'global hotkey registration failed; push-to-talk falls back to the in-app key',
-        target: 'hotkey',
-      );
+    _nativeRegistered = result.ok;
+    ref
+        .read(pttHotkeyStatusProvider.notifier)
+        .setStatus(
+          PttHotkeyStatus.fromResult(
+            result,
+            keyId: keyId,
+            nativeCode: nativeCode,
+          ),
+        );
+    if (result.ok) {
+      _lastNotifiedHotkeyFailure = null;
+      return;
+    }
+    if (result.reason == GlobalHotkeyReason.permissionDenied &&
+        shouldPromptPermission) {
+      unawaited(_hotkey.requestPermission());
+    }
+    _logRegistrationFailure(
+      keyId: keyId,
+      nativeCode: nativeCode,
+      result: result,
+    );
+    _notifyRegistrationFailure(keyId: keyId, result: result);
+  }
+
+  void _logRegistrationFailure({
+    required int keyId,
+    required int? nativeCode,
+    required GlobalHotkeyResult result,
+  }) {
+    final fields = <String, dynamic>{
+      'keyId': keyId,
+      'nativeCode': nativeCode,
+      'platform': defaultTargetPlatform.name,
+      'reason': result.reason.name,
+      'code': result.code,
+    };
+    switch (result.reason) {
+      case GlobalHotkeyReason.conflict:
+      case GlobalHotkeyReason.permissionDenied:
+      case GlobalHotkeyReason.failed:
+        logWarn(
+          'global hotkey registration failed; push-to-talk falls back to the in-app key',
+          target: 'hotkey',
+          fields: fields,
+        );
+      case GlobalHotkeyReason.unsupportedPlatform:
+      case GlobalHotkeyReason.unsupportedKey:
+        logInfo(
+          'global hotkey unsupported on current platform or key; using in-app push-to-talk',
+          target: 'hotkey',
+          fields: fields,
+        );
+      case GlobalHotkeyReason.registered:
+        break;
+    }
+  }
+
+  void _notifyRegistrationFailure({
+    required int keyId,
+    required GlobalHotkeyResult result,
+  }) {
+    final failure = (keyId, result.reason);
+    if (_lastNotifiedHotkeyFailure == failure) {
+      return;
+    }
+    _lastNotifiedHotkeyFailure = failure;
+    final l10n = ref.read(appLocalizationsProvider);
+    final message = switch (result.reason) {
+      GlobalHotkeyReason.permissionDenied =>
+        defaultTargetPlatform == TargetPlatform.macOS
+            ? l10n.noticePttHotkeyPermissionDenied
+            : l10n.noticePttHotkeyPortalPermissionDenied,
+      GlobalHotkeyReason.conflict ||
+      GlobalHotkeyReason.failed ||
+      GlobalHotkeyReason.unsupportedPlatform ||
+      GlobalHotkeyReason.unsupportedKey => l10n.noticePttHotkeyInAppOnly,
+      GlobalHotkeyReason.registered => null,
+    };
+    if (message != null) {
+      ref
+          .read(noticeCenterProvider.notifier)
+          .show(message, tone: NoticeTone.info);
     }
   }
 
