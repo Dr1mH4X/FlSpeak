@@ -409,10 +409,6 @@ static void portal_op_data_free(gpointer ptr) {
   g_free(data);
 }
 
-static void portal_op_data_destroy_notify(gpointer ptr, GClosure*) {
-  portal_op_data_free(ptr);
-}
-
 static void unsubscribe_portal_signals(MyApplication* self) {
   if (self->portal_bus != nullptr) {
     if (self->portal_response_sub_id != 0) {
@@ -619,7 +615,7 @@ static void portal_bind_shortcuts_reply_cb(GObject* source_object,
           self->portal_bus, kPortalBusName, kPortalRequestIface, "Response",
           actual_path, nullptr, G_DBUS_SIGNAL_FLAGS_NO_MATCH_RULE,
           portal_bind_shortcuts_response_cb, sig_op,
-          portal_op_data_destroy_notify);
+          portal_op_data_free);
     }
   }
   portal_op_data_free(op);
@@ -648,7 +644,7 @@ static void portal_send_bind_shortcuts(MyApplication* self, guint generation,
       self->portal_bus, kPortalBusName, kPortalRequestIface, "Response",
       expected_path, nullptr, G_DBUS_SIGNAL_FLAGS_NO_MATCH_RULE,
       portal_bind_shortcuts_response_cb, sig_op,
-      portal_op_data_destroy_notify);
+      portal_op_data_free);
 
   GVariantBuilder shortcut_opts;
   g_variant_builder_init(&shortcut_opts, G_VARIANT_TYPE_VARDICT);
@@ -764,7 +760,7 @@ static void portal_create_session_reply_cb(GObject* source_object,
           self->portal_bus, kPortalBusName, kPortalRequestIface, "Response",
           actual_path, nullptr, G_DBUS_SIGNAL_FLAGS_NO_MATCH_RULE,
           portal_create_session_response_cb, sig_op,
-          portal_op_data_destroy_notify);
+          portal_op_data_free);
     }
   }
   portal_op_data_free(op);
@@ -822,7 +818,7 @@ static void portal_probe_done_cb(GObject* source_object, GAsyncResult* res,
       self->portal_bus, kPortalBusName, kPortalRequestIface, "Response",
       expected_path, nullptr, G_DBUS_SIGNAL_FLAGS_NO_MATCH_RULE,
       portal_create_session_response_cb, sig_op,
-      portal_op_data_destroy_notify);
+      portal_op_data_free);
 
   GVariantBuilder options;
   g_variant_builder_init(&options, G_VARIANT_TYPE_VARDICT);
