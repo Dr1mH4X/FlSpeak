@@ -162,9 +162,7 @@ void main() {
       print('LIVE round $round viewers=${publisherState().viewerIds}');
       try {
         await _waitFor(
-          () =>
-              publisherState().viewerIds.isEmpty ||
-              publisherState().viewerFailure != null,
+          () => publisherState().viewerIds.isEmpty,
           const Duration(seconds: 40),
           'viewer answer/connection result',
         );
@@ -172,10 +170,7 @@ void main() {
         // The viewer stayed connected: that is the success case.
       }
       // ignore: avoid_print
-      print(
-        'LIVE round $round result viewers=${publisherState().viewerIds} '
-        'failure=${publisherState().viewerFailure?.reason.name}',
-      );
+      print('LIVE round $round result viewers=${publisherState().viewerIds}');
       await Future<void>.delayed(const Duration(seconds: 2));
     }
   }, timeout: const Timeout(Duration(minutes: 35)));

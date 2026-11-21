@@ -1742,6 +1742,12 @@ abstract class AppLocalizations {
   /// **'Refresh sources'**
   String get streamPickerRefresh;
 
+  /// No description provided for @streamPickerLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load screens and windows. Check screen recording permissions and try again.'**
+  String get streamPickerLoadFailed;
+
   /// No description provided for @streamPickerEmpty.
   ///
   /// In en, this message translates to:

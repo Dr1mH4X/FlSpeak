@@ -881,6 +881,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get streamPickerRefresh => '刷新列表';
 
   @override
+  String get streamPickerLoadFailed => '无法读取屏幕和窗口列表，请检查屏幕录制权限后重试';
+
+  @override
   String get streamPickerEmpty => '未检测到可共享的屏幕或窗口';
 
   @override

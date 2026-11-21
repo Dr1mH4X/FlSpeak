@@ -14,6 +14,7 @@ import 'package:flutter/material.dart'
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
+import '../../../core/notices.dart';
 import '../../../core/preferences.dart';
 import '../../../core/providers.dart';
 import '../../../core/stream_publisher.dart';
@@ -128,6 +129,9 @@ class _ScreenSharePickerSheetState
         _selectedSourceId = null;
         _loading = false;
       });
+      ref
+          .read(noticeCenterProvider.notifier)
+          .show(AppLocalizations.of(context).streamPickerLoadFailed);
     }
   }
 

@@ -18,6 +18,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import 'package:flspeak/core/models.dart';
+import 'package:flspeak/core/notices.dart';
 import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/core/stream_publisher.dart';
 import 'package:flspeak/core/stream_viewer.dart';
@@ -235,18 +236,24 @@ class _FakeWidgetMediaStream extends Fake implements MediaStream {
 class _FakeWidgetWebRtcBindings extends WebRtcBindings {
   final renderers = <_FakeWidgetRenderer>[];
   final peers = <_FakeWidgetPeer>[];
+  bool failDesktopSources = false;
 
   @override
   Future<List<DesktopCapturerSource>> getDesktopSources({
     List<SourceType> types = const [SourceType.Screen, SourceType.Window],
     ThumbnailSize? thumbnailSize,
-  }) async => [
-    DesktopSourceEntry(
-      id: 'screen:1',
-      name: 'Display 1',
-      type: SourceType.Screen,
-    ),
-  ];
+  }) async {
+    if (failDesktopSources) {
+      throw StateError('desktop source enumeration failed');
+    }
+    return [
+      DesktopSourceEntry(
+        id: 'screen:1',
+        name: 'Display 1',
+        type: SourceType.Screen,
+      ),
+    ];
+  }
 
   @override
   Future<MediaStream> getDisplayMedia(
@@ -350,6 +357,44 @@ Future<ProviderContainer> _mount(
         builder: (context, child) =>
             PrismRootScope(brightness: Brightness.light, child: child!),
         home: const Scaffold(body: WorkspacePage()),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+  return container;
+}
+
+Future<ProviderContainer> _mountChannelPanel(
+  WidgetTester tester, {
+  required _Core core,
+  required _FakeWidgetWebRtcBindings bindings,
+}) async {
+  tester.view.physicalSize = const Size(1000, 800);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  final container = ProviderContainer(
+    overrides: [
+      coreSessionProvider.overrideWithValue(core),
+      webRtcBindingsProvider.overrideWithValue(bindings),
+      sessionViewProvider.overrideWith(_Session.new),
+    ],
+  );
+  addTearDown(container.dispose);
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        theme: buildAppTheme(Brightness.light),
+        locale: const Locale('zh'),
+        localizationsDelegates: const [
+          ...AppLocalizations.localizationsDelegates,
+          PrismUiLocalizationsDelegate(),
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: (context, child) =>
+            PrismRootScope(brightness: Brightness.light, child: child!),
+        home: const Scaffold(body: SizedBox(width: 288, child: ChannelPanel())),
       ),
     ),
   );
@@ -532,6 +577,44 @@ void main() {
     expect(bindings.peers.single.disposed, isTrue);
   });
 
+  testWidgets('观看端协商超时通过 NoticeCenter 提示', (tester) async {
+    final core = _Core();
+    final bindings = _FakeWidgetWebRtcBindings();
+    final container = await _mount(tester, core: core, bindings: bindings);
+
+    const stream = StreamView(
+      id: 'stream-1',
+      clientId: 2,
+      name: 'Alice Screen',
+      hasAudio: true,
+    );
+    (container.read(sessionViewProvider.notifier) as _Session).publishStreams([
+      stream,
+    ]);
+    await tester.pump();
+
+    await tester.tap(find.byKey(const ValueKey('stream-watch-stream-1')));
+    await tester.pump();
+
+    await container
+        .read(streamViewerProvider.notifier)
+        .handleOffer(
+          streamId: 'stream-1',
+          sourceClientId: 2,
+          sdp: 'v=0\r\nm=video 9 UDP/TLS/RTP/SAVPF 96\r\na=mid:0\r\na=rtpmap:96 VP8/90000\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=mid:1\r\na=rtpmap:111 opus/48000/2\r\n',
+        );
+    await tester.pump(
+      defaultStreamNegotiationTimeout + const Duration(seconds: 1),
+    );
+
+    final notices = container.read(noticeCenterProvider);
+    expect(notices, hasLength(1));
+    expect(notices.single.message, '屏幕共享直连失败，请重试');
+    expect(notices.single.tone, NoticeTone.error);
+    expect(container.read(streamViewerProvider).endNotice, isNull);
+    expect(core.left, ['stream-1']);
+  });
+
   testWidgets('多人同时屏幕共享时复用同一横幅组件且支持在多个屏幕共享间平滑切换', (tester) async {
     final core = _Core();
     final bindings = _FakeWidgetWebRtcBindings();
@@ -704,40 +787,11 @@ void main() {
   testWidgets('语音控制栏屏幕共享按钮呼出桌面源选择弹窗并可选择分辨率与帧率开播', (tester) async {
     final core = _Core();
     final bindings = _FakeWidgetWebRtcBindings();
-    tester.view.physicalSize = const Size(1000, 800);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    final container = ProviderContainer(
-      overrides: [
-        coreSessionProvider.overrideWithValue(core),
-        webRtcBindingsProvider.overrideWithValue(bindings),
-        sessionViewProvider.overrideWith(_Session.new),
-      ],
+    final container = await _mountChannelPanel(
+      tester,
+      core: core,
+      bindings: bindings,
     );
-    addTearDown(container.dispose);
-
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: MaterialApp(
-          theme: buildAppTheme(Brightness.light),
-          locale: const Locale('zh'),
-          localizationsDelegates: const [
-            ...AppLocalizations.localizationsDelegates,
-            PrismUiLocalizationsDelegate(),
-          ],
-          supportedLocales: AppLocalizations.supportedLocales,
-          builder: (context, child) =>
-              PrismRootScope(brightness: Brightness.light, child: child!),
-          home: const Scaffold(
-            body: SizedBox(width: 288, child: ChannelPanel()),
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
 
     // Tap "Share screen" toggle in voice footer -> opens picker modal.
     final shareBtn = find.byKey(const ValueKey('voice-screen-share-toggle'));
@@ -776,6 +830,26 @@ void main() {
     await tester.pumpAndSettle();
     expect(core.stoppedShares, 1);
     expect(container.read(streamPublisherProvider).isActive, isFalse);
+  });
+
+  testWidgets('屏幕源枚举失败通过 NoticeCenter 提示并保留空态', (tester) async {
+    final core = _Core();
+    final bindings = _FakeWidgetWebRtcBindings()..failDesktopSources = true;
+    final container = await _mountChannelPanel(
+      tester,
+      core: core,
+      bindings: bindings,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('voice-screen-share-toggle')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('选择共享内容'), findsOneWidget);
+    expect(find.text('未检测到可共享的屏幕或窗口'), findsOneWidget);
+    final notices = container.read(noticeCenterProvider);
+    expect(notices, hasLength(1));
+    expect(notices.single.message, '无法读取屏幕和窗口列表，请检查屏幕录制权限后重试');
+    expect(notices.single.tone, NoticeTone.error);
   });
 
   testWidgets('初始进入服务器聊天展示带 ServerBadge 的欢迎消息，点击频道后切到频道聊天', (tester) async {

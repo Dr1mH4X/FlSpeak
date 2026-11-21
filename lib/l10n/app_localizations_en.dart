@@ -911,6 +911,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get streamPickerRefresh => 'Refresh sources';
 
   @override
+  String get streamPickerLoadFailed =>
+      'Could not load screens and windows. Check screen recording permissions and try again.';
+
+  @override
   String get streamPickerEmpty => 'No shareable screens or windows found';
 
   @override

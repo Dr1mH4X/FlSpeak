@@ -48,7 +48,7 @@ class DesktopSourceEntry extends DesktopCapturerSource {
 }
 
 /// Why a viewer's screen-share negotiation ended without a connected peer.
-enum StreamViewerFailureReason {
+enum _ViewerFailureReason {
   /// No Answer (or no usable Answer) arrived before `defaultStreamNegotiationTimeout`.
   answerTimeout,
 
@@ -57,16 +57,6 @@ enum StreamViewerFailureReason {
 
   /// The peer connection reported `failed`/`closed` before media flowed.
   connectionFailed,
-}
-
-/// Explicit failure of one viewer session, surfaced in the publisher banner so a
-/// stopped negotiation never looks like a silently working (but black) stream.
-@immutable
-class StreamViewerFailure {
-  const StreamViewerFailure({required this.viewerClid, required this.reason});
-
-  final int viewerClid;
-  final StreamViewerFailureReason reason;
 }
 
 /// Immutable state for the screen-share publisher (`StreamPublisherController`).
@@ -85,7 +75,6 @@ class StreamPublisherState {
     this.viewerIds = const <int>{},
     this.maxViewers = defaultMaxStreamViewers,
     this.renderer,
-    this.viewerFailure,
   });
 
   final String? streamId;
@@ -100,10 +89,6 @@ class StreamPublisherState {
   final Set<int> viewerIds;
   final int maxViewers;
   final RTCVideoRenderer? renderer;
-
-  /// Set when a viewer session ends without a connected peer; cleared on the next
-  /// join request or when sharing stops.
-  final StreamViewerFailure? viewerFailure;
 
   bool get isActive => isSharing || isStarting;
 
@@ -126,8 +111,6 @@ class StreamPublisherState {
     int? maxViewers,
     RTCVideoRenderer? renderer,
     bool clearRenderer = false,
-    StreamViewerFailure? viewerFailure,
-    bool clearViewerFailure = false,
   }) {
     return StreamPublisherState(
       streamId: clearStreamId ? null : (streamId ?? this.streamId),
@@ -142,9 +125,6 @@ class StreamPublisherState {
       viewerIds: viewerIds ?? this.viewerIds,
       maxViewers: maxViewers ?? this.maxViewers,
       renderer: clearRenderer ? null : (renderer ?? this.renderer),
-      viewerFailure: clearViewerFailure
-          ? null
-          : (viewerFailure ?? this.viewerFailure),
     );
   }
 }
@@ -417,10 +397,6 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
         return;
       }
     }
-    if (state.viewerFailure != null) {
-      state = state.copyWith(clearViewerFailure: true);
-    }
-
     if (_viewerSessions.length >= state.maxViewers) {
       logWarn(
         'Rejecting join request for viewer $viewerClid: '
@@ -579,9 +555,6 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
         if (connectionState ==
             RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
           _clearViewerNegotiationTimer(viewerSession);
-          if (ref.mounted && state.viewerFailure != null) {
-            state = state.copyWith(clearViewerFailure: true);
-          }
         } else if (connectionState ==
                 RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
             connectionState ==
@@ -589,7 +562,7 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
           unawaited(
             _failViewerSession(
               viewerClid,
-              reason: StreamViewerFailureReason.connectionFailed,
+              reason: _ViewerFailureReason.connectionFailed,
             ),
           );
         }
@@ -615,7 +588,7 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
           unawaited(
             _failViewerSession(
               viewerClid,
-              reason: StreamViewerFailureReason.connectionFailed,
+              reason: _ViewerFailureReason.connectionFailed,
             ),
           );
         }
@@ -707,7 +680,7 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
       )) {
         await _failViewerSession(
           viewerClid,
-          reason: StreamViewerFailureReason.answerRejected,
+          reason: _ViewerFailureReason.answerRejected,
         );
       }
     }
@@ -848,7 +821,7 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
           )) {
             await _failViewerSession(
               viewerClid,
-              reason: StreamViewerFailureReason.answerRejected,
+              reason: _ViewerFailureReason.answerRejected,
             );
           }
         }
@@ -1154,18 +1127,18 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
       unawaited(
         _failViewerSession(
           viewerSession.viewerClid,
-          reason: StreamViewerFailureReason.answerTimeout,
+          reason: _ViewerFailureReason.answerTimeout,
         ),
       );
     });
   }
 
-  /// Ends a viewer session that never reached `connected`, records an explicit
-  /// failure for the banner, and releases the viewer on the server so the official
-  /// client stops waiting on a stream that will not arrive.
+  /// Ends a viewer session that never reached `connected`, logs the reason, and
+  /// releases the viewer on the server so the official client stops waiting on a
+  /// stream that will not arrive.
   Future<void> _failViewerSession(
     int viewerClid, {
-    required StreamViewerFailureReason reason,
+    required _ViewerFailureReason reason,
   }) async {
     final session = _viewerSessions[viewerClid];
     if (session == null || session.failureReported) return;
@@ -1174,14 +1147,6 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
       'viewer $viewerClid negotiation failed: ${reason.name}',
       target: 'stream',
     );
-    if (ref.mounted && state.isActive) {
-      state = state.copyWith(
-        viewerFailure: StreamViewerFailure(
-          viewerClid: viewerClid,
-          reason: reason,
-        ),
-      );
-    }
     await _closeViewerSession(viewerClid);
     try {
       await ref

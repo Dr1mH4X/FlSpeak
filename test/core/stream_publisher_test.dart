@@ -1079,7 +1079,7 @@ void main() {
       expect(peer202.localDescription?.sdp, core.joinResponses.single.offerSdp);
     });
 
-    test('applies the Answer before adding ICE candidates, keeps their order, and clears a stale failure on connect', () async {
+    test('applies Answer before ICE candidates in order', () async {
       final events = StreamController<CoreEvent>.broadcast();
       final core = _FakeCoreSession(events);
       final bindings = _FakePublisherWebRtcBindings();
@@ -1174,7 +1174,6 @@ void main() {
       await _pumpEventQueue();
 
       final state = container.read(streamPublisherProvider);
-      expect(state.viewerFailure, isNull);
       expect(state.viewerIds, contains(404));
     });
 
@@ -1235,11 +1234,6 @@ void main() {
         pump();
 
         final state = container.read(streamPublisherProvider);
-        expect(state.viewerFailure?.viewerClid, 505);
-        expect(
-          state.viewerFailure?.reason,
-          StreamViewerFailureReason.answerTimeout,
-        );
         expect(state.viewerIds, isEmpty);
         expect(bindings.createdPeers.single.closed, isTrue);
         expect(bindings.createdPeers.single.disposed, isTrue);

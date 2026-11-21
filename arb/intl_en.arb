@@ -418,6 +418,7 @@
   "streamPickerScreens": "Screens",
   "streamPickerWindows": "Windows",
   "streamPickerRefresh": "Refresh sources",
+  "streamPickerLoadFailed": "Could not load screens and windows. Check screen recording permissions and try again.",
   "streamPickerEmpty": "No shareable screens or windows found",
   "streamPickerResolution": "Resolution",
   "streamPickerFrameRate": "Frame rate",

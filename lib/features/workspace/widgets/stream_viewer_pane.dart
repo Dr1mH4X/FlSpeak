@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../../../core/models.dart';
+import '../../../core/notices.dart';
 import '../../../core/providers.dart';
 import '../../../core/stream_publisher.dart';
 import '../../../core/stream_viewer.dart';
@@ -32,6 +33,19 @@ class StreamViewerSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // 观看端协商超时是一次瞬时失败；被拒、停止与移除由会话事件统一提示。
+    ref.listen<StreamEndNotice?>(
+      streamViewerProvider.select((state) => state.endNotice),
+      (previous, next) {
+        if (next != StreamEndNotice.negotiationFailed) {
+          return;
+        }
+        ref
+            .read(noticeCenterProvider.notifier)
+            .show(AppLocalizations.of(context).streamNegotiationFailed);
+        ref.read(streamViewerProvider.notifier).clearEndNotice();
+      },
+    );
     if (!view.connected) {
       return const SizedBox.shrink();
     }
@@ -208,7 +222,6 @@ class _StreamBanner extends StatelessWidget {
     required this.title,
     this.badge,
     required this.actions,
-    this.error,
     this.content,
     this.contentHeight,
   });
@@ -217,7 +230,6 @@ class _StreamBanner extends StatelessWidget {
   final String title;
   final Widget? badge;
   final List<Widget> actions;
-  final Widget? error;
   final Widget? content;
   final double? contentHeight;
 
@@ -270,7 +282,6 @@ class _StreamBanner extends StatelessWidget {
                 ],
               ),
             ),
-            ?error,
             if (content != null)
               Padding(
                 padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
@@ -332,32 +343,6 @@ class _StreamPublisherBanner extends ConsumerWidget {
             ),
           ),
       ],
-      error: publisher.viewerFailure != null
-          ? Padding(
-              padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
-              child: Row(
-                key: const ValueKey('stream-publisher-viewer-failure'),
-                children: [
-                  Icon(
-                    Icons.error_outline_rounded,
-                    size: IconSizes.state,
-                    color: scheme.error,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      l10n.streamNegotiationFailed,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: context.texts.bodySmall?.copyWith(
-                        color: scheme.error,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            )
-          : null,
       contentHeight: previewHeight,
       content: publisher.isPreviewExpanded && renderer != null
           ? DecoratedBox(
