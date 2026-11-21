@@ -32,7 +32,9 @@ final _localizationsProvider = Provider<AppLocalizations>((ref) {
 
 /// 在 `main()` 里用真实句柄覆盖；测试里用假的实现覆盖。
 final coreSessionProvider = Provider<CoreSession>(
-  (ref) => throw StateError('coreSessionProvider 必须在 ProviderScope 里覆盖'),
+  (ref) => throw StateError(
+    'coreSessionProvider must be overridden in ProviderScope',
+  ),
 );
 
 final microphonePermissionProvider = Provider<MicrophonePermissionGateway>(
@@ -47,7 +49,8 @@ final clockProvider = Provider<DateTime Function()>((ref) => DateTime.now);
 
 /// `preferences.json` 的绝对路径，设置页展示与复制用。同样在 `main()` 里覆盖。
 final storePathProvider = Provider<String>(
-  (ref) => throw StateError('storePathProvider 必须在 ProviderScope 里覆盖'),
+  (ref) =>
+      throw StateError('storePathProvider must be overridden in ProviderScope'),
 );
 
 /// 日志初始化失败的原因；null 表示文件日志可用。启动后提示一次。
@@ -808,10 +811,7 @@ class SessionController extends Notifier<SessionView> {
         ? transfer!.error == null
         : await _transferReplies.putIfAbsent(id, Completer<bool>.new).future;
     if (!success && ref.mounted) {
-      _notify(
-        state.transfers[id]?.error ??
-            ref.read(_localizationsProvider).fileDownloadFailed,
-      );
+      _notify(ref.read(_localizationsProvider).fileDownloadFailed);
     }
     return success;
   }
@@ -1262,7 +1262,9 @@ class SessionController extends Notifier<SessionView> {
           _lastVoiceNotice = null;
         } else if (message != _lastVoiceNotice) {
           _lastVoiceNotice = message;
-          _notify(message);
+          _notify(
+            describeBackendNotice(message, ref.read(_localizationsProvider)),
+          );
         }
       case CoreEvent_AudioDevicesReset(:final input, :final output):
         ref
@@ -1448,13 +1450,19 @@ class SessionController extends Notifier<SessionView> {
         }
         break;
       case CoreEvent_Denied(:final message):
-        _notifyFailure(message);
+        _notifyFailure(
+          describeBackendNotice(message, ref.read(_localizationsProvider)),
+        );
       case CoreEvent_Failed(:final message):
+        final text = describeBackendNotice(
+          message,
+          ref.read(_localizationsProvider),
+        );
         if (current.connected) {
-          _notify(message);
+          _notify(text);
         } else {
           state = current.copyWith(identityUpgradeTarget: null);
-          _notifyFailure(message);
+          _notifyFailure(text);
         }
     }
   }
@@ -1723,7 +1731,7 @@ class PreferencesController extends Notifier<SessionPreferences> {
       final normalized = await ref.read(preferencesStoreProvider).save(next);
       state = state.copyWith(nickname: normalized.nickname);
     } on Object catch (error) {
-      logError('保存 preferences 失败', error: error);
+      logError('failed to save preferences', error: error);
     }
   }
 }

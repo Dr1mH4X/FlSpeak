@@ -401,7 +401,7 @@ fn spawn_best_effort_leave_notifying(
                 &events,
                 SessionEvent::Log {
                     level: "warn".into(),
-                    message: format!("退出屏幕共享 {stream_id} 失败: {err}"),
+                    message: format!("failed to leave screen share {stream_id}: {err}"),
                 },
             );
         }
@@ -418,7 +418,7 @@ fn spawn_best_effort_stop(stream: PublishedStreamHandle, events: broadcast::Send
                 &events,
                 SessionEvent::Log {
                     level: "warn".into(),
-                    message: format!("停止屏幕共享 {} 失败: {err}", stream.id()),
+                    message: format!("failed to stop screen share {}: {err}", stream.id()),
                 },
             );
         }
@@ -704,19 +704,27 @@ impl Actor {
             .ok_or(SessionError::NotConnected)?;
         let Some(info) = session.get_info(&stream_id) else {
             if !session.streams.supported() {
-                return Err(SessionError::Stream("服务器不支持 TS6 屏幕共享".into()));
+                return Err(SessionError::Stream(
+                    "server does not support TS6 screen sharing".into(),
+                ));
             }
-            return Err(SessionError::Stream("当前频道没有这路屏幕共享".into()));
+            return Err(SessionError::Stream(
+                "this screen share is not in the current channel".into(),
+            ));
         };
         if info.client_id != source_clid {
-            return Err(SessionError::Stream("推流者与屏幕共享不匹配".into()));
+            return Err(SessionError::Stream(
+                "publisher does not match this screen share".into(),
+            ));
         }
         if self.self_channel_id == 0 || source_channel != Some(self.self_channel_id) {
-            return Err(SessionError::Stream("当前频道没有这路屏幕共享".into()));
+            return Err(SessionError::Stream(
+                "this screen share is not in the current channel".into(),
+            ));
         }
         if let Some(StreamTransport::Unknown(mode)) = info.transport {
             return Err(SessionError::Stream(format!(
-                "屏幕共享传输模式不受支持: mode={mode}"
+                "unsupported screen share transport mode: mode={mode}"
             )));
         }
         if let Some(existing) = &session.watch
@@ -840,7 +848,9 @@ impl Actor {
         reply: oneshot::Sender<Result<(), SessionError>>,
     ) {
         let Some(session) = self.stream_session.as_mut() else {
-            let _ = reply.send(Err(SessionError::Stream("没有在观看这路屏幕共享".into())));
+            let _ = reply.send(Err(SessionError::Stream(
+                "not watching this screen share".into(),
+            )));
             return;
         };
         if session
@@ -848,7 +858,9 @@ impl Actor {
             .as_ref()
             .is_none_or(|watch| watch.stream_id != stream_id)
         {
-            let _ = reply.send(Err(SessionError::Stream("没有在观看这路屏幕共享".into())));
+            let _ = reply.send(Err(SessionError::Stream(
+                "not watching this screen share".into(),
+            )));
             return;
         }
         let watch = session.watch.take().unwrap();
@@ -953,15 +965,17 @@ impl Actor {
             .as_ref()
             .and_then(|session| session.watch.as_ref())
             .filter(|watch| watch.stream_id == stream_id)
-            .ok_or_else(|| SessionError::Stream("没有在观看这路屏幕共享".into()))?;
+            .ok_or_else(|| SessionError::Stream("not watching this screen share".into()))?;
         if watch.source_clid != target_clid {
-            return Err(SessionError::Stream("信令目标不是这路共享的推流者".into()));
+            return Err(SessionError::Stream(
+                "signaling target is not the publisher of this share".into(),
+            ));
         }
         match &watch.phase {
             WatchPhase::Active { view, .. } => Ok(view.clone()),
-            WatchPhase::Joining { .. } => {
-                Err(SessionError::Stream("观看会话尚未收到推流者应答".into()))
-            }
+            WatchPhase::Joining { .. } => Err(SessionError::Stream(
+                "the viewer session has not received the publisher's answer".into(),
+            )),
         }
     }
 
@@ -976,7 +990,7 @@ impl Actor {
             self.emit(SessionEvent::Log {
                 level: "warn".into(),
                 message: format!(
-                    "发送 Answer 失败: stream_id={stream_id}, target_clid={target_clid}, error={err}"
+                    "failed to send Answer: stream_id={stream_id}, target_clid={target_clid}, error={err}"
                 ),
             });
             let _ = reply.send(Err(err));
@@ -988,7 +1002,7 @@ impl Actor {
                 self.emit(SessionEvent::Log {
                     level: "warn".into(),
                     message: format!(
-                        "发送 Answer 失败: stream_id={stream_id}, target_clid={target_clid}, error={err}"
+                        "failed to send Answer: stream_id={stream_id}, target_clid={target_clid}, error={err}"
                     ),
                 });
                 let _ = reply.send(Err(err));
@@ -1007,7 +1021,7 @@ impl Actor {
                     SessionEvent::Log {
                         level: "warn".into(),
                         message: format!(
-                            "发送 Answer 失败: stream_id={stream_id}, target_clid={target_clid}, error={err}"
+                            "failed to send Answer: stream_id={stream_id}, target_clid={target_clid}, error={err}"
                         ),
                     },
                 );
@@ -1035,7 +1049,7 @@ impl Actor {
             self.emit(SessionEvent::Log {
                 level: "warn".into(),
                 message: format!(
-                    "发送 iceCandidate 失败: stream_id={stream_id}, target_clid={target_clid}, error={err}"
+                    "failed to send iceCandidate: stream_id={stream_id}, target_clid={target_clid}, error={err}"
                 ),
             });
             let _ = reply.send(Err(err));
@@ -1047,7 +1061,7 @@ impl Actor {
                 self.emit(SessionEvent::Log {
                     level: "warn".into(),
                     message: format!(
-                        "发送 iceCandidate 失败: stream_id={stream_id}, target_clid={target_clid}, error={err}"
+                        "failed to send iceCandidate: stream_id={stream_id}, target_clid={target_clid}, error={err}"
                     ),
                 });
                 let _ = reply.send(Err(err));
@@ -1060,7 +1074,7 @@ impl Actor {
                 self.emit(SessionEvent::Log {
                     level: "warn".into(),
                     message: format!(
-                        "发送 iceCandidate 失败: stream_id={stream_id}, target_clid={target_clid}, error={err}"
+                        "failed to send iceCandidate: stream_id={stream_id}, target_clid={target_clid}, error={err}"
                     ),
                 });
                 let _ = reply.send(Err(err));
@@ -1079,7 +1093,7 @@ impl Actor {
                     SessionEvent::Log {
                         level: "warn".into(),
                         message: format!(
-                            "发送 iceCandidate 失败: stream_id={stream_id}, target_clid={target_clid}, error={err}"
+                            "failed to send iceCandidate: stream_id={stream_id}, target_clid={target_clid}, error={err}"
                         ),
                     },
                 );
@@ -1123,7 +1137,7 @@ impl Actor {
         };
         if session.publish.is_some() || session.starting_publish.is_some() {
             let _ = reply.send(Err(SessionError::Stream(
-                "当前已在推流或正在启动推流".into(),
+                "already publishing or starting a screen share".into(),
             )));
             return;
         }
@@ -1166,7 +1180,7 @@ impl Actor {
             let _ = reply.send(Err(if epoch != self.connection_epoch {
                 SessionError::NotConnected
             } else {
-                SessionError::Stream("屏幕共享启动已取消".into())
+                SessionError::Stream("screen share start was cancelled".into())
             }));
             return;
         }
@@ -1185,7 +1199,9 @@ impl Actor {
             if let Ok(published) = outcome {
                 spawn_best_effort_stop(PublishedStreamHandle::Live(published), self.events.clone());
             }
-            let _ = reply.send(Err(SessionError::Stream("屏幕共享启动已取消".into())));
+            let _ = reply.send(Err(SessionError::Stream(
+                "screen share start was cancelled".into(),
+            )));
             return;
         }
         session.starting_publish = None;
@@ -1270,18 +1286,19 @@ impl Actor {
             self.emit(SessionEvent::Log {
                 level: "warn".into(),
                 message: format!(
-                    "发送 respondjoinstreamrequest 失败: viewer_clid={viewer_clid}, accept={accept}, error={err}"
+                    "failed to send respondjoinstreamrequest: viewer_clid={viewer_clid}, accept={accept}, error={err}"
                 ),
             });
             let _ = reply.send(Err(err));
             return;
         }
         if accept && offer_sdp.trim().is_empty() {
-            let err = SessionError::Stream("接受观看请求必须提供 SDP Offer".into());
+            let err =
+                SessionError::Stream("accepting a watch request requires an SDP offer".into());
             self.emit(SessionEvent::Log {
                 level: "warn".into(),
                 message: format!(
-                    "发送 respondjoinstreamrequest 失败: viewer_clid={viewer_clid}, accept={accept}, error={err}"
+                    "failed to send respondjoinstreamrequest: viewer_clid={viewer_clid}, accept={accept}, error={err}"
                 ),
             });
             let _ = reply.send(Err(err));
@@ -1292,11 +1309,11 @@ impl Actor {
             .as_mut()
             .and_then(|session| session.publish.as_mut())
         else {
-            let err = SessionError::Stream("当前没有活动的屏幕共享推流".into());
+            let err = SessionError::Stream("no active screen share publisher".into());
             self.emit(SessionEvent::Log {
                 level: "warn".into(),
                 message: format!(
-                    "发送 respondjoinstreamrequest 失败: viewer_clid={viewer_clid}, accept={accept}, error={err}"
+                    "failed to send respondjoinstreamrequest: viewer_clid={viewer_clid}, accept={accept}, error={err}"
                 ),
             });
             let _ = reply.send(Err(err));
@@ -1304,22 +1321,25 @@ impl Actor {
         };
         let stream_id = publish.stream.id().to_string();
         let Some(pending) = publish.requests.get_mut(&viewer_clid) else {
-            let err = SessionError::Stream("该客户端未请求观看屏幕共享".into());
+            let err = SessionError::Stream(
+                "this client has not requested to watch the screen share".into(),
+            );
             self.emit(SessionEvent::Log {
                 level: "warn".into(),
                 message: format!(
-                    "发送 respondjoinstreamrequest 失败: stream_id={stream_id}, viewer_clid={viewer_clid}, accept={accept}, error={err}"
+                    "failed to send respondjoinstreamrequest: stream_id={stream_id}, viewer_clid={viewer_clid}, accept={accept}, error={err}"
                 ),
             });
             let _ = reply.send(Err(err));
             return;
         };
         if pending.responding {
-            let err = SessionError::Stream("正在响应这名观众的加入请求".into());
+            let err =
+                SessionError::Stream("already responding to this viewer's join request".into());
             self.emit(SessionEvent::Log {
                 level: "warn".into(),
                 message: format!(
-                    "发送 respondjoinstreamrequest 失败: stream_id={stream_id}, viewer_clid={viewer_clid}, accept={accept}, error={err}"
+                    "failed to send respondjoinstreamrequest: stream_id={stream_id}, viewer_clid={viewer_clid}, accept={accept}, error={err}"
                 ),
             });
             let _ = reply.send(Err(err));
@@ -1331,7 +1351,7 @@ impl Actor {
         self.emit(SessionEvent::Log {
             level: "info".into(),
             message: format!(
-                "发送 respondjoinstreamrequest: stream_id={stream_id}, viewer_clid={viewer_clid}, accept={accept}, offer_sdp_len={}",
+                "sending respondjoinstreamrequest: stream_id={stream_id}, viewer_clid={viewer_clid}, accept={accept}, offer_sdp_len={}",
                 offer_sdp.len()
             ),
         });
@@ -1374,7 +1394,7 @@ impl Actor {
             self.emit(SessionEvent::Log {
                 level: "warn".into(),
                 message: format!(
-                    "发送 respondjoinstreamrequest 失败: stream_id={stream_id}, viewer_clid={viewer_clid}, accept={accept}, error={err}"
+                    "failed to send respondjoinstreamrequest: stream_id={stream_id}, viewer_clid={viewer_clid}, accept={accept}, error={err}"
                 ),
             });
         }
@@ -1387,7 +1407,7 @@ impl Actor {
             let _ = reply.send(Err(if epoch != self.connection_epoch {
                 SessionError::NotConnected
             } else {
-                SessionError::Stream("屏幕共享会话已结束".into())
+                SessionError::Stream("screen share session has ended".into())
             }));
             return;
         }
@@ -1403,7 +1423,7 @@ impl Actor {
                 });
             }
             let _ = reply.send(Err(SessionError::Stream(
-                "当前没有活动的屏幕共享推流".into(),
+                "no active screen share publisher".into(),
             )));
             return;
         }
@@ -1420,18 +1440,18 @@ impl Actor {
                     tokio::task::spawn_local(async move {
                         let _ = peer.kick(1).await;
                     });
-                    Err(SessionError::Stream("观看请求已取消".into()))
+                    Err(SessionError::Stream("watch request was cancelled".into()))
                 }
                 Ok(None) => {
                     if accept {
-                        Err(SessionError::Stream("观看请求已取消".into()))
+                        Err(SessionError::Stream("watch request was cancelled".into()))
                     } else {
                         Ok(())
                     }
                 }
                 Err(err) => {
                     if accept {
-                        Err(SessionError::Stream("观看请求已取消".into()))
+                        Err(SessionError::Stream("watch request was cancelled".into()))
                     } else {
                         Err(stream_error(err))
                     }
@@ -1454,14 +1474,16 @@ impl Actor {
                     self.emit(SessionEvent::Log {
                         level: "warn".into(),
                         message: format!(
-                            "发送 respondjoinstreamrequest 后观众已关闭: stream_id={stream_id}, viewer_clid={viewer_clid}"
+                            "viewer closed after respondjoinstreamrequest: stream_id={stream_id}, viewer_clid={viewer_clid}"
                         ),
                     });
                     self.emit(SessionEvent::StreamViewerLeft {
                         stream_id,
                         viewer_clid,
                     });
-                    let _ = reply.send(Err(SessionError::Stream("观众已离开屏幕共享".into())));
+                    let _ = reply.send(Err(SessionError::Stream(
+                        "viewer left the screen share".into(),
+                    )));
                     return;
                 }
                 let peer_token = self.next_stream_token();
@@ -1551,7 +1573,9 @@ impl Actor {
         if let Err(err) = self.connected() {
             self.emit(SessionEvent::Log {
                 level: "warn".into(),
-                message: format!("发送 iceCandidate 失败: viewer_clid={viewer_clid}, error={err}"),
+                message: format!(
+                    "failed to send iceCandidate: viewer_clid={viewer_clid}, error={err}"
+                ),
             });
             let _ = reply.send(Err(err));
             return;
@@ -1561,10 +1585,12 @@ impl Actor {
             .as_ref()
             .and_then(|session| session.publish.as_ref())
         else {
-            let err = SessionError::Stream("当前没有活动的屏幕共享推流".into());
+            let err = SessionError::Stream("no active screen share publisher".into());
             self.emit(SessionEvent::Log {
                 level: "warn".into(),
-                message: format!("发送 iceCandidate 失败: viewer_clid={viewer_clid}, error={err}"),
+                message: format!(
+                    "failed to send iceCandidate: viewer_clid={viewer_clid}, error={err}"
+                ),
             });
             let _ = reply.send(Err(err));
             return;
@@ -1573,22 +1599,26 @@ impl Actor {
         let peer = match publish.viewers.get(&viewer_clid) {
             Some(accepted) => accepted.peer.clone(),
             None if publish.requests.contains_key(&viewer_clid) => {
-                let err = SessionError::Stream("观众尚未完成加入应答，不能发送信令".into());
+                let err = SessionError::Stream(
+                    "viewer has not completed the join handshake; cannot send signaling".into(),
+                );
                 self.emit(SessionEvent::Log {
                     level: "warn".into(),
                     message: format!(
-                        "发送 iceCandidate 失败: stream_id={stream_id}, viewer_clid={viewer_clid}, error={err}"
+                        "failed to send iceCandidate: stream_id={stream_id}, viewer_clid={viewer_clid}, error={err}"
                     ),
                 });
                 let _ = reply.send(Err(err));
                 return;
             }
             None => {
-                let err = SessionError::Stream("信令目标不是当前推流的观众".into());
+                let err = SessionError::Stream(
+                    "signaling target is not a viewer of the current stream".into(),
+                );
                 self.emit(SessionEvent::Log {
                     level: "warn".into(),
                     message: format!(
-                        "发送 iceCandidate 失败: stream_id={stream_id}, viewer_clid={viewer_clid}, error={err}"
+                        "failed to send iceCandidate: stream_id={stream_id}, viewer_clid={viewer_clid}, error={err}"
                     ),
                 });
                 let _ = reply.send(Err(err));
@@ -1601,7 +1631,7 @@ impl Actor {
                 self.emit(SessionEvent::Log {
                     level: "warn".into(),
                     message: format!(
-                        "发送 iceCandidate 失败: stream_id={stream_id}, viewer_clid={viewer_clid}, error={err}"
+                        "failed to send iceCandidate: stream_id={stream_id}, viewer_clid={viewer_clid}, error={err}"
                     ),
                 });
                 let _ = reply.send(Err(err));
@@ -1611,7 +1641,7 @@ impl Actor {
         self.emit(SessionEvent::Log {
             level: "info".into(),
             message: format!(
-                "发送 iceCandidate: stream_id={stream_id}, viewer_clid={viewer_clid}, {}",
+                "sending iceCandidate: stream_id={stream_id}, viewer_clid={viewer_clid}, {}",
                 candidate_summary(&cand)
             ),
         });
@@ -1627,7 +1657,7 @@ impl Actor {
                     SessionEvent::Log {
                         level: "warn".into(),
                         message: format!(
-                            "发送 iceCandidate 失败: stream_id={stream_id}, viewer_clid={viewer_clid}, error={err}"
+                            "failed to send iceCandidate: stream_id={stream_id}, viewer_clid={viewer_clid}, error={err}"
                         ),
                     },
                 );
@@ -1657,7 +1687,7 @@ impl Actor {
             .and_then(|session| session.publish.as_mut())
         else {
             let _ = reply.send(Err(SessionError::Stream(
-                "当前没有活动的屏幕共享推流".into(),
+                "no active screen share publisher".into(),
             )));
             return;
         };
@@ -1706,7 +1736,7 @@ impl Actor {
             return;
         }
         let _ = reply.send(Err(SessionError::Stream(
-            "目标客户端不是当前推流的观众".into(),
+            "target client is not a viewer of the current stream".into(),
         )));
     }
 
@@ -1725,7 +1755,7 @@ impl Actor {
         if require_matching_epoch && stream_epoch != self.stream_epoch {
             let _ = reply.send(Err(match outcome {
                 Err(err) => stream_error(err),
-                Ok(()) => SessionError::Stream("屏幕共享会话已结束".into()),
+                Ok(()) => SessionError::Stream("screen share session has ended".into()),
             }));
             return;
         }
@@ -1738,7 +1768,7 @@ impl Actor {
                 self.emit(SessionEvent::Log {
                     level: "debug".into(),
                     message: format!(
-                        "发现或更新屏幕共享: id={}, clid={}, name={}",
+                        "discovered or updated screen share: id={}, clid={}, name={}",
                         info.id, info.client_id, info.name
                     ),
                 });
@@ -1809,7 +1839,7 @@ impl Actor {
                     if should_log {
                         self.emit(SessionEvent::Log {
                             level: "info".into(),
-                            message: "服务器不支持 TS6 屏幕共享".into(),
+                            message: "server does not support TS6 screen sharing".into(),
                         });
                     }
                 }
@@ -1817,14 +1847,17 @@ impl Actor {
                 other => {
                     self.emit(SessionEvent::Log {
                         level: "warn".into(),
-                        message: format!("屏幕共享异常: {other}"),
+                        message: format!("screen share error: {other}"),
                     });
                 }
             },
             StreamsEvent::Warning(warning) => {
                 self.emit(SessionEvent::Log {
                     level: "warn".into(),
-                    message: format!("屏幕共享告警 [{}]: {}", warning.stream_id, warning.message),
+                    message: format!(
+                        "screen share warning [{}]: {}",
+                        warning.stream_id, warning.message
+                    ),
                 });
             }
         }
@@ -1898,7 +1931,7 @@ impl Actor {
                 if !matches!(err, StreamError::Aborted) {
                     self.emit(SessionEvent::Log {
                         level: "warn".into(),
-                        message: format!("观看屏幕共享 {stream_id} 失败: {err}"),
+                        message: format!("failed to watch screen share {stream_id}: {err}"),
                     });
                 }
                 self.emit(SessionEvent::StreamEnded {
@@ -2007,7 +2040,7 @@ impl Actor {
         self.emit(SessionEvent::Log {
             level: "info".into(),
             message: format!(
-                "收到 notifyjoinstreamrequest: stream_id={stream_id}, viewer_clid={viewer_clid}, replaced={replaced}"
+                "received notifyjoinstreamrequest: stream_id={stream_id}, viewer_clid={viewer_clid}, replaced={replaced}"
             ),
         });
         if replaced {
@@ -2110,7 +2143,7 @@ impl Actor {
                 self.emit(SessionEvent::Log {
                     level: "info".into(),
                     message: format!(
-                        "收到推流观众信令: stream_id={stream_id}, viewer_clid={viewer_clid}, type=Answer, sdp_len={}",
+                        "received publisher viewer signaling: stream_id={stream_id}, viewer_clid={viewer_clid}, type=Answer, sdp_len={}",
                         sdp.len()
                     ),
                 });
@@ -2124,7 +2157,7 @@ impl Actor {
                 self.emit(SessionEvent::Log {
                     level: "info".into(),
                     message: format!(
-                        "收到推流观众信令: stream_id={stream_id}, viewer_clid={viewer_clid}, type=iceCandidate, {}",
+                        "received publisher viewer signaling: stream_id={stream_id}, viewer_clid={viewer_clid}, type=iceCandidate, {}",
                         candidate_summary(&cand)
                     ),
                 });
@@ -2143,7 +2176,7 @@ impl Actor {
                     self.emit(SessionEvent::Log {
                         level: "info".into(),
                         message: format!(
-                            "推流观众会话关闭: stream_id={stream_id}, viewer_clid={viewer_clid}, cause={:?}",
+                            "publisher viewer session closed: stream_id={stream_id}, viewer_clid={viewer_clid}, cause={:?}",
                             closed.cause
                         ),
                     });

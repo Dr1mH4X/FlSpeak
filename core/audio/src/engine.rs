@@ -261,7 +261,7 @@ impl VoiceEngine {
             .try_send(CaptureCommand::GetNoiseSuppression(tx))
             .map_err(send_error)?;
         rx.recv()
-            .map_err(|_| AudioError::Engine("音频线程已退出".into()))
+            .map_err(|_| AudioError::Engine("audio thread has stopped".into()))
     }
 
     pub fn set_vad_config(&self, threshold: f32, hangover_frames: usize) -> Result<(), AudioError> {
@@ -279,7 +279,7 @@ impl VoiceEngine {
             .try_send(CaptureCommand::GetVad(tx))
             .map_err(send_error)?;
         rx.recv()
-            .map_err(|_| AudioError::Engine("音频线程已退出".into()))
+            .map_err(|_| AudioError::Engine("audio thread has stopped".into()))
     }
 
     pub fn set_deafened(&self, deafened: bool) -> Result<(), AudioError> {
@@ -307,8 +307,8 @@ impl Drop for VoiceEngine {
 
 fn send_error<T>(err: TrySendError<T>) -> AudioError {
     match err {
-        TrySendError::Full(_) => AudioError::Engine("音频命令队列已满".into()),
-        TrySendError::Disconnected(_) => AudioError::Engine("音频线程已退出".into()),
+        TrySendError::Full(_) => AudioError::Engine("audio command queue is full".into()),
+        TrySendError::Disconnected(_) => AudioError::Engine("audio thread has stopped".into()),
     }
 }
 

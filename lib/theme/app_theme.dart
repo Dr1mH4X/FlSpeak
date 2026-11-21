@@ -362,7 +362,10 @@ abstract final class ServerPalette {
         return result;
       }
     }
-    assert(false, '磁贴亮度没有收敛到 $_minLuminance–$_maxLuminance');
+    assert(
+      false,
+      'tile luminance did not converge within $_minLuminance–$_maxLuminance',
+    );
     return result;
   }
 }

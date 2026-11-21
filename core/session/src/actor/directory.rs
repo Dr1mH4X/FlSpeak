@@ -8,7 +8,7 @@ impl Actor {
         if let Some(err) = directory.metadata_error {
             self.emit(SessionEvent::Log {
                 level: "warn".into(),
-                message: format!("读取频道标志失败: {err}"),
+                message: format!("failed to read channel flags: {err}"),
             });
         }
         Ok(directory.channels)
@@ -35,7 +35,9 @@ impl Actor {
         let directory = client.directory_snapshot().map(|snapshot| snapshot.clients);
         if self.client_list_allowed == Some(false) {
             let Some(directory) = directory else {
-                return Err(SessionError::Protocol("成员目录尚未就绪".into()));
+                return Err(SessionError::Protocol(
+                    "member directory is not ready".into(),
+                ));
             };
             let mut rows: Vec<ClientView> = directory.into_iter().map(ClientView::from).collect();
             self.ensure_self_row(client, &mut rows).await;
@@ -96,7 +98,7 @@ impl Actor {
                     Err(_) => {
                         self.emit(SessionEvent::Log {
                             level: "debug".into(),
-                            message: format!("自身行补全失败: {err}"),
+                            message: format!("failed to complete the self row: {err}"),
                         });
                         return;
                     }
@@ -210,13 +212,13 @@ impl Actor {
                 if let Some(err) = directory.metadata_error {
                     self.emit(SessionEvent::Log {
                         level: "warn".into(),
-                        message: format!("读取频道标志失败: {err}"),
+                        message: format!("failed to read channel flags: {err}"),
                     });
                 }
                 Some((directory.channels, directory.codecs.unwrap_or_default()))
             }
             Err(err) => {
-                failures.push(format!("频道目录: {err}"));
+                failures.push(format!("channel directory: {err}"));
                 None
             }
         };
@@ -224,7 +226,7 @@ impl Actor {
         let incoming_clients = match self.read_clients(&client).await {
             Ok((clients, from_directory_only)) => Some((clients, from_directory_only)),
             Err(err) => {
-                failures.push(format!("成员列表: {err}"));
+                failures.push(format!("member list: {err}"));
                 None
             }
         };
@@ -235,7 +237,7 @@ impl Actor {
         for failure in failures {
             self.emit(SessionEvent::Log {
                 level: "warn".into(),
-                message: format!("刷新部分目录失败: {failure}"),
+                message: format!("failed to refresh part of the directory: {failure}"),
             });
         }
 
@@ -252,7 +254,7 @@ impl Actor {
                 }
                 Err(err) => self.emit(SessionEvent::Log {
                     level: "warn".into(),
-                    message: format!("读取当前频道 codec 失败: {err}"),
+                    message: format!("failed to read the current channel codec: {err}"),
                 }),
             }
         }
@@ -287,7 +289,7 @@ impl Actor {
                 self.subscribed_all_channels = false;
                 self.emit(SessionEvent::Log {
                     level: "warn".into(),
-                    message: format!("订阅全部频道失败，将只接收当前订阅范围内的成员事件: {err}"),
+                    message: format!("failed to subscribe to all channels; only members in the current subscription scope will be received: {err}"),
                 });
             }
         }
@@ -319,7 +321,9 @@ impl Actor {
                 .directory_snapshot()
                 .filter(|snapshot| !snapshot.channels.is_empty())
             else {
-                return Err(SessionError::Protocol("频道目录尚未就绪".into()));
+                return Err(SessionError::Protocol(
+                    "channel directory is not ready".into(),
+                ));
             };
             return Ok(directory_from_channels(snapshot.channels, None));
         }
@@ -399,7 +403,7 @@ impl Actor {
         if let Err(err) = self.refresh_snapshot(false).await {
             self.emit(SessionEvent::Log {
                 level: "warn".into(),
-                message: format!("刷新频道/成员失败: {err}"),
+                message: format!("failed to refresh channels or members: {err}"),
             });
         }
     }
@@ -423,7 +427,7 @@ impl Actor {
                 }
                 Err(err) => self.emit(SessionEvent::Log {
                     level: "warn".into(),
-                    message: format!("读取频道 {channel_id} codec 失败: {err}"),
+                    message: format!("failed to read codec for channel {channel_id}: {err}"),
                 }),
             }
         }

@@ -72,20 +72,20 @@ SetupArgs parseSetupArgs(List<String> args, {String? hostArch}) {
     final arg = args[i];
     if (arg == '--version') {
       if (i + 1 >= args.length) {
-        throw const FormatException('--version 缺少版本号参数');
+        throw const FormatException('--version requires a value');
       }
       version = args[++i];
     } else if (arg.startsWith('--version=')) {
       version = arg.substring('--version='.length);
     } else if (arg == '--targets') {
       if (i + 1 >= args.length) {
-        throw const FormatException('--targets 缺少目标格式参数');
+        throw const FormatException('--targets requires a value');
       }
       rawTargets = args[++i];
     } else if (arg.startsWith('--targets=')) {
       rawTargets = arg.substring('--targets='.length);
     } else if (arg.startsWith('--')) {
-      throw FormatException('未知参数: $arg');
+      throw FormatException('unknown argument: $arg');
     } else {
       positional.add(arg);
     }
@@ -117,7 +117,7 @@ List<String> resolvePackageTargets(String platform, String? rawTargets) {
   final defaults = _defaultTargets[platform];
   final supported = _supportedTargets[platform];
   if (defaults == null || supported == null) {
-    throw FormatException('不支持的平台: $platform');
+    throw FormatException('unsupported platform: $platform');
   }
   if (rawTargets == null || rawTargets.trim().isEmpty) {
     return defaults;
@@ -129,12 +129,12 @@ List<String> resolvePackageTargets(String platform, String? rawTargets) {
       .where((item) => item.isNotEmpty)
       .toList();
   if (parsed.isEmpty) {
-    throw const FormatException('--targets 不能为空');
+    throw const FormatException('--targets must not be empty');
   }
   for (final target in parsed) {
     if (!supported.contains(target)) {
       throw FormatException(
-        '$platform 不支持打包目标 "$target"；可选值: ${supported.join(', ')}',
+        '$platform does not support target "$target"; supported: ${supported.join(', ')}',
       );
     }
   }
@@ -235,12 +235,14 @@ Future<void> main(List<String> args) async {
 
   final artifacts = await _collect(platform, buildName, arch, parsed.targets);
   if (artifacts.isEmpty) {
-    stderr.writeln('没有找到 $platform 的产物，检查 flutter build 的输出。');
+    stderr.writeln(
+      'no artifacts found for $platform; check the flutter build output.',
+    );
     exit(1);
   }
 
   for (final artifact in artifacts) {
-    stdout.writeln('产物：${p.relative(artifact)}');
+    stdout.writeln('artifact: ${p.relative(artifact)}');
   }
 }
 
@@ -258,7 +260,9 @@ void _requireHostPlatform(String platform) {
     return;
   }
   if (platform != host) {
-    stderr.writeln('$platform 只能在 $platform 主机上打包，当前主机是 $host。');
+    stderr.writeln(
+      '$platform can only be packaged on a $platform host; current host is $host.',
+    );
     exit(2);
   }
 }
@@ -270,7 +274,7 @@ String _pubspecVersion() {
     multiLine: true,
   ).firstMatch(pubspec);
   if (match == null) {
-    stderr.writeln('pubspec.yaml 里没有 version。');
+    stderr.writeln('pubspec.yaml has no version.');
     exit(1);
   }
   return match.group(1)!;
@@ -385,7 +389,7 @@ Future<String> _packageMacosDmg({
     p.join('macos', 'packaging', 'dmg', 'make_config.json'),
   );
   if (!configFile.existsSync()) {
-    stderr.writeln('缺少 DMG 配置文件：${configFile.path}');
+    stderr.writeln('missing DMG configuration file: ${configFile.path}');
     exit(1);
   }
 
@@ -454,7 +458,7 @@ Future<String> _ensureAppDmg() async {
     return existing;
   }
 
-  stdout.writeln('正在安装 appdmg（DMG 打包工具）...');
+  stdout.writeln('installing appdmg (DMG packaging tool)...');
   await _run('npm', ['install', '-g', 'appdmg']);
 
   final installed = await _findAppDmgExecutable();
@@ -462,7 +466,9 @@ Future<String> _ensureAppDmg() async {
     return installed;
   }
 
-  stderr.writeln('安装 appdmg 后仍无法在 PATH 或 npm 全局目录中找到它。');
+  stderr.writeln(
+    'appdmg is still missing from PATH and the npm global directory after installation.',
+  );
   exit(1);
 }
 
@@ -503,7 +509,9 @@ Future<String> _packageWindowsExe({
   );
   for (final requiredFile in [templateFile, chineseIslFile, iconFile]) {
     if (!requiredFile.existsSync()) {
-      stderr.writeln('缺少 Windows 安装包必需文件：${requiredFile.path}');
+      stderr.writeln(
+        'missing required Windows installer file: ${requiredFile.path}',
+      );
       exit(1);
     }
   }
@@ -527,7 +535,9 @@ Future<String> _packageWindowsExe({
     await _run(isccExe, [issFile.path], runInShell: false);
     final outputPath = p.join(distDir, '$outputBaseFilename.exe');
     if (!File(outputPath).existsSync()) {
-      stderr.writeln('Inno Setup 未生成预期安装包：$outputPath');
+      stderr.writeln(
+        'Inno Setup did not produce the expected installer: $outputPath',
+      );
       exit(1);
     }
     return outputPath;
@@ -564,8 +574,8 @@ Future<String> _findInnoSetupCompiler() async {
   }
 
   stderr.writeln(
-    '未找到 Inno Setup 6 (ISCC.exe)。请先安装 Inno Setup 6'
-    '（如 winget install JRSoftware.InnoSetup）。',
+    'Inno Setup 6 (ISCC.exe) was not found. Install Inno Setup 6 first '
+    '(for example: winget install JRSoftware.InnoSetup).',
   );
   exit(1);
 }
@@ -669,7 +679,7 @@ Future<void> _run(
   );
   final code = await result.exitCode;
   if (code != 0) {
-    stderr.writeln('$executable 退出码 $code');
+    stderr.writeln('$executable exited with code $code');
     exit(code);
   }
 }

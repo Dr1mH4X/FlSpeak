@@ -94,13 +94,13 @@ pub enum ConnectError {
     #[error(transparent)]
     Address(#[from] AddressError),
 
-    #[error("拒绝连接官方基础设施 {host} (命中 {matched})")]
+    #[error("refusing to connect to official infrastructure {host} (matched {matched})")]
     Blocked { host: String, matched: String },
 
-    #[error("DNS 解析 {host} 失败: {reason}")]
+    #[error("DNS resolution for {host} failed: {reason}")]
     Dns { host: String, reason: String },
 
-    #[error("文件传输主机 {actual} 与会话主机 {expected} 不一致")]
+    #[error("file transfer host {actual} does not match session host {expected}")]
     TransferHostMismatch { expected: String, actual: String },
 
     #[error("{0}")]
@@ -361,7 +361,11 @@ async fn resolve_ipv4_socket(
         return Ok(SocketAddr::new(IpAddr::V4(ipv4), target.port));
     }
     if is_ip_literal(&target.host) {
-        return Err(AddressError::Malformed(format!("暂不支持 IPv6 地址: {}", target.host)).into());
+        return Err(AddressError::Malformed(format!(
+            "IPv6 addresses are not supported: {}",
+            target.host
+        ))
+        .into());
     }
     if target.host == "localhost" {
         return Ok(SocketAddr::new(
@@ -516,7 +520,7 @@ mod tests {
     fn profile(address: &str) -> ServerProfile {
         ServerRegistry::new()
             .register("home", address)
-            .expect("档案应当可登记")
+            .expect("the profile should be registrable")
     }
 
     #[test]

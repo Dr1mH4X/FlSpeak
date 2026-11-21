@@ -1113,7 +1113,10 @@ mod tests {
         );
         let recovered = pipeline.tick(now + Duration::from_millis(50), MIX_SAMPLES_PER_CHANNEL);
         assert!(recovered.samples.iter().any(|s| s.abs() > 0.01));
-        assert!(recovered.samples[0].abs() < 0.08, "恢复首帧应平滑淡入");
+        assert!(
+            recovered.samples[0].abs() < 0.08,
+            "the first recovered frame should fade in smoothly"
+        );
     }
 
     #[test]
@@ -1349,8 +1352,11 @@ mod tests {
                 break;
             }
         }
-        assert!(eos_1, "第 1 段发言应发出 EOS 尾包");
-        assert!(peak_1 > 0.01, "第 1 段短话应正常解码出声");
+        assert!(eos_1, "the first utterance should emit an EOS tail packet");
+        assert!(
+            peak_1 > 0.01,
+            "the first short utterance should decode to audible audio"
+        );
         if let Some(talker) = playback.talkers.get(&client_id) {
             assert_eq!(talker.plc_generated, 0);
             assert_eq!(talker.dropped, 0);
@@ -1394,7 +1400,7 @@ mod tests {
                 break;
             }
         }
-        assert!(eos_2, "第 2 段发言应发出 EOS 尾包");
+        assert!(eos_2, "the second utterance should emit an EOS tail packet");
         for _ in 0..10 {
             let tick = playback.tick(now, MIX_SAMPLES_PER_CHANNEL);
             for sample in &tick.samples {
@@ -1406,6 +1412,9 @@ mod tests {
             }
             now += Duration::from_millis(MIX_FRAME_MS);
         }
-        assert!(decoded_peak > 0.01, "第二段短话应正常解码出声");
+        assert!(
+            decoded_peak > 0.01,
+            "the second short utterance should decode to audible audio"
+        );
     }
 }

@@ -16,6 +16,7 @@ mod images;
 pub mod logging;
 mod network;
 pub use network::NetworkTelemetry;
+pub mod notices;
 mod proxy;
 mod server_icons;
 pub mod settings;
@@ -566,28 +567,28 @@ pub enum SessionError {
     #[error("{0}")]
     Transfer(String),
 
-    #[error("档案保存失败: {0}")]
+    #[error("failed to save the profile: {0}")]
     Storage(String),
 
-    #[error("会话 actor 已退出")]
+    #[error("session actor has stopped")]
     Closed,
 
-    #[error("连接超时")]
+    #[error("connection timed out")]
     Timeout,
 
-    #[error("尚未连接到服务器")]
+    #[error("not connected to a server")]
     NotConnected,
 
-    #[error("频道密码错误或需要密码")]
+    #[error("incorrect channel password or password required")]
     ChannelPasswordRequired,
 
-    #[error("尚未进入频道")]
+    #[error("not in a channel")]
     NotInChannel,
 
-    #[error("屏幕共享: {0}")]
+    #[error("screen share: {0}")]
     Stream(String),
 
-    #[error("actor 线程启动失败: {0}")]
+    #[error("actor thread failed to start: {0}")]
     Spawn(String),
 }
 
@@ -654,8 +655,9 @@ impl SessionHandle {
                 let runtime = match Builder::new_current_thread().enable_all().build() {
                     Ok(runtime) => runtime,
                     Err(err) => {
+                        eprintln!("actor runtime failed to start: {err}");
                         let _ = events.send(SessionEvent::Failed {
-                            message: format!("actor runtime 启动失败: {err}"),
+                            message: notices::SESSION_ACTOR_START_FAILED.into(),
                         });
                         return;
                     }
@@ -664,13 +666,15 @@ impl SessionHandle {
                     let history_path = store::history_path(&store_path);
                     if let Err(message) = store::compact_history(&history_path, HISTORY_LIMIT).await
                     {
+                        eprintln!("failed to compact message history: {message}");
                         let _ = events.send(SessionEvent::Failed {
-                            message: format!("历史消息压缩失败: {message}"),
+                            message: notices::SESSION_HISTORY_COMPACT_FAILED.into(),
                         });
                     }
                     if let Err(message) = SettingsManager::init(store_path.clone()) {
+                        eprintln!("failed to load settings: {message}");
                         let _ = events.send(SessionEvent::Failed {
-                            message: format!("设置加载失败: {message}"),
+                            message: notices::SESSION_SETTINGS_LOAD_FAILED.into(),
                         });
                         return;
                     }

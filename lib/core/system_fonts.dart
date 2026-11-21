@@ -19,7 +19,7 @@ Future<List<String>> loadSystemFontFamilies() async {
   try {
     return await systemFontFamiliesReader();
   } catch (e) {
-    logWarn('读取系统字体列表失败', error: e);
+    logWarn('failed to read the system font list', error: e);
     return const [];
   }
 }

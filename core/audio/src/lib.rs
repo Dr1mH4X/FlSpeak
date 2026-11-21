@@ -24,39 +24,39 @@ pub mod playback;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum CodecError {
-    #[error("Opus 编码缓冲不足: capacity={capacity}, max_data_bytes={max_data_bytes}")]
+    #[error("Opus encode buffer too small: capacity={capacity}, max_data_bytes={max_data_bytes}")]
     BufferTooSmall {
         capacity: usize,
         max_data_bytes: usize,
     },
 
-    #[error("Opus 错误: {0}")]
+    #[error("Opus error: {0}")]
     Opus(String),
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum AudioError {
-    #[error("音频设备不可用: {0}")]
+    #[error("audio device unavailable: {0}")]
     Device(String),
 
-    #[error("找不到音频设备: {0}")]
+    #[error("audio device not found: {0}")]
     DeviceNotFound(String),
 
-    #[error("音频设备权限被拒绝: {0}")]
+    #[error("audio device permission denied: {0}")]
     PermissionDenied(String),
 
-    #[error("音频引擎不可用: {0}")]
+    #[error("audio engine unavailable: {0}")]
     Engine(String),
 
-    #[error("Opus 编解码失败: {0}")]
+    #[error("Opus codec failed: {0}")]
     Codec(#[from] CodecError),
 
-    #[error("不支持的采样格式: {0}")]
+    #[error("unsupported sample format: {0}")]
     UnsupportedSampleFormat(String),
 
-    #[error("不支持的频道 codec: {0}（只支持 Opus 4/5）")]
+    #[error("unsupported channel codec: {0} (only Opus 4/5)")]
     UnsupportedCodec(i32),
 
-    #[error("不支持的声道数: {0}")]
+    #[error("unsupported channel count: {0}")]
     UnsupportedChannels(u16),
 }

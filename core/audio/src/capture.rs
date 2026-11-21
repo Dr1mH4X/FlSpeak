@@ -828,7 +828,10 @@ mod tests {
         let mut pipeline = CapturePipeline::new(VOICE_CODEC).unwrap();
         pipeline.begin();
         pipeline.push_capture(&loud_frame(1), OPUS_MONO);
-        let packet = pipeline.take_packet().unwrap().expect("应当产出语音包");
+        let packet = pipeline
+            .take_packet()
+            .unwrap()
+            .expect("should produce a voice packet");
         assert_eq!(packet.codec, VOICE_CODEC);
         assert!(!packet.data.is_empty());
         assert!(packet.data.len() < MAX_PACKET_BYTES);
@@ -839,7 +842,10 @@ mod tests {
         let mut pipeline = CapturePipeline::new(MUSIC_CODEC).unwrap();
         pipeline.begin();
         pipeline.push_capture(&loud_frame(2), OPUS_STEREO);
-        let packet = pipeline.take_packet().unwrap().expect("应当产出音乐包");
+        let packet = pipeline
+            .take_packet()
+            .unwrap()
+            .expect("should produce a music packet");
         assert_eq!(packet.codec, MUSIC_CODEC);
     }
 
@@ -863,13 +869,19 @@ mod tests {
                 FRAME_SAMPLES_PER_CHANNEL
             );
             pipeline.set_ptt_active(false);
-            let tail = pipeline.take_packet().unwrap().expect("应产出淡出尾帧");
+            let tail = pipeline
+                .take_packet()
+                .unwrap()
+                .expect("should produce a fade-out tail frame");
             assert!(tail.data.len() <= 484);
             assert_eq!(
                 decoder.decode_normal(&tail.data, &mut decoded).unwrap(),
                 FRAME_SAMPLES_PER_CHANNEL
             );
-            let eos = pipeline.take_packet().unwrap().expect("应产出 EOS 尾包");
+            let eos = pipeline
+                .take_packet()
+                .unwrap()
+                .expect("should produce an EOS tail packet");
             assert!(eos.data.is_empty());
             assert!(pipeline.take_packet().unwrap().is_none());
         }
@@ -961,7 +973,10 @@ mod tests {
         let second_half: Vec<f32> = (512..1024).map(|i| (i as f32 * 0.03).sin() * 0.5).collect();
         pipeline.push_capture(&second_half, OPUS_MONO);
         assert!(pipeline.has_ready_frame());
-        let packet = pipeline.take_packet().unwrap().expect("凑满 20ms 应产出包");
+        let packet = pipeline
+            .take_packet()
+            .unwrap()
+            .expect("should produce a packet after 20 ms");
         assert_eq!(pipeline.pcm.len(), 64);
 
         let mut decoder = crate::codec::OpusDecoder::new().unwrap();
@@ -1047,14 +1062,17 @@ mod tests {
                 break;
             }
         }
-        assert!(vad_packets.len() >= 2, "应产出挂断淡出尾帧与 EOS 包");
+        assert!(
+            vad_packets.len() >= 2,
+            "should produce a hang-up fade-out tail and an EOS packet"
+        );
         assert!(
             vad_packets.last().is_some_and(|p| p.data.is_empty()),
-            "应产出 0 字节 EOS 尾包"
+            "should produce a zero-byte EOS tail packet"
         );
         assert!(
             last_non_eos_pcm[FRAME_SAMPLES_PER_CHANNEL - 1].abs() < 1e-5,
-            "VAD 挂断末帧末端应淡出至 0"
+            "the VAD hang-up tail should fade to zero"
         );
         assert!(vad_pipeline.take_packet().unwrap().is_none());
 
@@ -1065,17 +1083,26 @@ mod tests {
         ptt_pipeline.set_ptt_active(true);
         ptt_pipeline.push_capture(&loud_frame(1), OPUS_MONO);
         ptt_pipeline.push_capture(&loud_frame(1), OPUS_MONO);
-        let first = ptt_pipeline.take_packet().unwrap().expect("PTT 首包");
+        let first = ptt_pipeline
+            .take_packet()
+            .unwrap()
+            .expect("PTT first packet");
         assert!(!first.data.is_empty());
 
         ptt_pipeline.set_ptt_active(false);
-        let ptt_tail = ptt_pipeline.take_packet().unwrap().expect("PTT 淡出尾帧");
+        let ptt_tail = ptt_pipeline
+            .take_packet()
+            .unwrap()
+            .expect("PTT fade-out tail frame");
         assert!(!ptt_tail.data.is_empty());
         assert!(
             ptt_pipeline.last_encoded_pcm()[FRAME_SAMPLES_PER_CHANNEL - 1].abs() < 1e-5,
-            "PTT 淡出尾帧末端应衰减至 0"
+            "the PTT fade-out tail should decay to zero"
         );
-        let ptt_eos = ptt_pipeline.take_packet().unwrap().expect("PTT EOS 尾包");
+        let ptt_eos = ptt_pipeline
+            .take_packet()
+            .unwrap()
+            .expect("PTT EOS tail packet");
         assert!(ptt_eos.data.is_empty());
         assert!(ptt_pipeline.take_packet().unwrap().is_none());
 
@@ -1084,10 +1111,16 @@ mod tests {
         ptt_pipeline.push_capture(&loud_frame(1), OPUS_MONO);
         assert!(ptt_pipeline.take_packet().unwrap().is_some());
         ptt_pipeline.set_ptt_active(false);
-        let synth_tail = ptt_pipeline.take_packet().unwrap().expect("合成淡出尾帧");
+        let synth_tail = ptt_pipeline
+            .take_packet()
+            .unwrap()
+            .expect("synthesized fade-out tail frame");
         assert!(!synth_tail.data.is_empty());
         assert!(ptt_pipeline.last_encoded_pcm()[FRAME_SAMPLES_PER_CHANNEL - 1].abs() < 1e-5);
-        let synth_eos = ptt_pipeline.take_packet().unwrap().expect("合成后 EOS 包");
+        let synth_eos = ptt_pipeline
+            .take_packet()
+            .unwrap()
+            .expect("EOS packet after synthesis");
         assert!(synth_eos.data.is_empty());
         assert!(ptt_pipeline.take_packet().unwrap().is_none());
 
@@ -1106,7 +1139,7 @@ mod tests {
             let mute_eos = mute_pipeline
                 .take_packet()
                 .unwrap()
-                .expect("静音应仅输出 EOS 包");
+                .expect("muted input should emit only an EOS packet");
             assert!(mute_eos.data.is_empty());
             assert!(mute_pipeline.take_packet().unwrap().is_none());
         }
@@ -1178,13 +1211,13 @@ mod tests {
         let end_tail = end_pipeline
             .take_packet()
             .unwrap()
-            .expect("停止采集应先输出淡出尾帧");
+            .expect("stopping capture should first emit a fade-out tail frame");
         assert!(!end_tail.data.is_empty());
         assert!(end_pipeline.last_encoded_pcm()[FRAME_SAMPLES_PER_CHANNEL - 1].abs() < 1e-5);
         let end_eos = end_pipeline
             .take_packet()
             .unwrap()
-            .expect("停止采集应输出 EOS");
+            .expect("stopping capture should emit EOS");
         assert!(end_eos.data.is_empty());
 
         let mut codec_pipeline = CapturePipeline::new(VOICE_CODEC).unwrap();
@@ -1198,13 +1231,13 @@ mod tests {
         let old_tail = codec_pipeline
             .take_packet()
             .unwrap()
-            .expect("切编码前应输出旧编码淡出尾帧");
+            .expect("switching codecs should first emit a fade-out tail in the old codec");
         assert_eq!(old_tail.codec, VOICE_CODEC);
         assert!(!old_tail.data.is_empty());
         let old_eos = codec_pipeline
             .take_packet()
             .unwrap()
-            .expect("切编码应输出旧编码 EOS");
+            .expect("switching codecs should emit EOS in the old codec");
         assert_eq!(old_eos.codec, VOICE_CODEC);
         assert!(old_eos.data.is_empty());
     }
@@ -1226,7 +1259,7 @@ mod tests {
         let eos = pipeline
             .take_packet()
             .unwrap()
-            .expect("出错后仍应产出 EOS 避免远端误触发 PLC");
+            .expect("an error should still emit EOS so the peer does not trigger PLC");
         assert!(eos.data.is_empty());
         assert!(pipeline.take_packet().unwrap().is_none());
     }
@@ -1274,7 +1307,10 @@ mod tests {
 
         // 第 2 帧触发 VAD：一次产出 pre-roll + 触发帧共 2 包，且首帧前 5ms 从 0.0 线性淡入。
         pipeline.push_capture(&loud_frame(1), OPUS_MONO);
-        let preroll_pkt = pipeline.take_packet().unwrap().expect("应先输出 pre-roll");
+        let preroll_pkt = pipeline
+            .take_packet()
+            .unwrap()
+            .expect("should emit pre-roll first");
         assert!(!preroll_pkt.data.is_empty());
         let preroll_pcm = pipeline.last_encoded_pcm().to_vec();
         assert_eq!(preroll_pcm[0], 0.0);
@@ -1282,7 +1318,7 @@ mod tests {
             preroll_pcm[FADE_IN_FRAMES_PER_CHANNEL..]
                 .iter()
                 .any(|s| s.abs() > 1e-4),
-            "pre-roll 后段应保留有效音频"
+            "the trailing pre-roll should keep valid audio"
         );
         assert!(
             preroll_pcm[1..FADE_IN_FRAMES_PER_CHANNEL]
@@ -1293,11 +1329,14 @@ mod tests {
                     .iter()
                     .map(|s| s.abs())
                     .sum::<f32>(),
-            "前 5ms 应当处于淡入包络内"
+            "the first 5 ms should be inside the fade-in envelope"
         );
 
         assert!(pipeline.has_ready_frame());
-        let trigger_pkt = pipeline.take_packet().unwrap().expect("紧接着输出触发帧");
+        let trigger_pkt = pipeline
+            .take_packet()
+            .unwrap()
+            .expect("should emit the trigger frame immediately after");
         assert!(!trigger_pkt.data.is_empty());
         assert!(pipeline.take_packet().unwrap().is_none());
     }
@@ -1350,7 +1389,7 @@ mod tests {
         let denoised_voice_rms = rms_of(voice.last_encoded_pcm());
         assert!(
             denoised_voice_rms > 0.08,
-            "RNNoise 含噪人声幅值不应被压成静音，实际 rms={denoised_voice_rms}"
+            "RNNoise should keep noisy speech above silence, actual rms={denoised_voice_rms}"
         );
 
         // 2. 纯背景噪声段：启用降噪的输出底噪 RMS 必须明显低于未降噪基线。
@@ -1366,7 +1405,7 @@ mod tests {
         let bypassed_noise_rms = rms_of(bypassed.last_encoded_pcm());
         assert!(
             denoised_noise_rms < bypassed_noise_rms * 0.4,
-            "RNNoise 应抑制背景噪声，denoised={denoised_noise_rms}, bypassed={bypassed_noise_rms}"
+            "RNNoise should suppress background noise, denoised={denoised_noise_rms}, bypassed={bypassed_noise_rms}"
         );
 
         // MUSIC_CODEC：即使 noise_suppression=true 也必须自动旁路，不改变立体声原始波形。

@@ -106,7 +106,7 @@ jobs:
               --pattern "$archive" \
               --dir "$RUNNER_TEMP" \
               --clobber; then
-            echo "gh release download 失败，回退到 curl 下载..."
+            echo "gh release download failed; falling back to curl..."
             curl --proto '=https' --tlsv1.2 -fsSL \
               --retry 5 --retry-delay 3 --retry-all-errors \
               -o "$RUNNER_TEMP/$archive" "$base/$archive"
@@ -114,7 +114,7 @@ jobs:
 
           actual=$(sha256sum "$RUNNER_TEMP/$archive" | cut -d' ' -f1)
           test "$actual" = "$FRB_CODEGEN_SHA256" || {
-            echo "codegen 校验和不匹配: $actual" >&2
+            echo "codegen checksum mismatch: $actual" >&2
             exit 1
           }
           mkdir -p "$RUNNER_TEMP/bin"
@@ -129,7 +129,7 @@ jobs:
           flutter_rust_bridge_codegen generate
           cd "$GITHUB_WORKSPACE"
           if ! git diff --exit-code --stat -- plugins/flspeak_ffi; then
-            echo '生成的绑定与提交的不一致，请本地重跑 flutter_rust_bridge_codegen generate' >&2
+            echo 'generated bindings differ from the committed files; rerun flutter_rust_bridge_codegen generate locally' >&2
             exit 1
           fi
 

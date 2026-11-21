@@ -19,6 +19,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get homeTitle => 'Home';
 
   @override
+  String get sidebarCollapse => 'Collapse sidebar';
+
+  @override
+  String get sidebarExpand => 'Expand sidebar';
+
+  @override
   String get windowPin => 'Pin';
 
   @override
@@ -652,6 +658,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get imageHostSave => 'Save';
 
   @override
+  String get imageHostErrorInvalid => 'The image host address is invalid.';
+
+  @override
+  String get imageHostErrorBlocked => 'The image host address is blocked.';
+
+  @override
+  String get imageHostErrorConnection => 'Could not connect to the image host.';
+
+  @override
+  String get imageHostErrorInternal => 'The image host operation failed.';
+
+  @override
   String get imageHostUploadHint => 'https://upload.example.com/images/';
 
   @override
@@ -708,6 +726,87 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fileDownloadSaved => 'File saved';
+
+  @override
+  String get noticeVoiceInputUnavailable => 'Microphone input is unavailable.';
+
+  @override
+  String get noticeVoiceOutputUnavailable => 'Audio output is unavailable.';
+
+  @override
+  String get noticeVoiceCodecUnavailable => 'Could not read the channel codec.';
+
+  @override
+  String get noticeVoiceCodecUnsupported =>
+      'The channel codec is not supported.';
+
+  @override
+  String get noticeVoiceCaptureFailed => 'Audio capture failed.';
+
+  @override
+  String get noticeVoicePlaybackFailed => 'Audio playback failed.';
+
+  @override
+  String get noticeVoiceCodecFailed => 'The audio codec failed.';
+
+  @override
+  String get noticeVoiceSyncFailed =>
+      'Voice state sync failed; it will retry automatically.';
+
+  @override
+  String get noticeConnectionLost => 'Connection lost.';
+
+  @override
+  String get noticeKicked => 'You were removed from the server.';
+
+  @override
+  String get noticeConnectFailed => 'Could not connect to the server.';
+
+  @override
+  String get noticeConnectTimeout => 'The connection timed out.';
+
+  @override
+  String get noticeConnectDenied => 'The server refused the connection.';
+
+  @override
+  String get noticeReconnectExhausted => 'Reconnect attempts exhausted.';
+
+  @override
+  String get noticeIdentityReadFailed => 'Could not read the identity.';
+
+  @override
+  String get noticeIdentityUpgradeFailed => 'Identity upgrade failed.';
+
+  @override
+  String get noticeIdentityThreadFailed =>
+      'Could not start the identity upgrade.';
+
+  @override
+  String get noticeHistoryWriteFailed => 'Could not save message history.';
+
+  @override
+  String get noticeHistoryCompactFailed => 'Could not compact message history.';
+
+  @override
+  String get noticeSettingsLoadFailed => 'Could not load settings.';
+
+  @override
+  String get noticeActorStartFailed => 'The session engine failed to start.';
+
+  @override
+  String get noticeUnknown => 'The operation failed.';
+
+  @override
+  String get errorInvalidAddress => 'The server address is invalid.';
+
+  @override
+  String get errorBlockedAddress => 'This address is blocked.';
+
+  @override
+  String get errorConnectionFailed => 'Could not connect to the server.';
+
+  @override
+  String get errorInternal => 'An internal error occurred.';
 
   @override
   String fileSizeBytes(int count) {

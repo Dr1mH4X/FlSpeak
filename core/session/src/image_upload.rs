@@ -32,7 +32,7 @@ pub async fn upload_image(
         .map_err(|err| ImageError::Request(err.to_string()))?;
     if !response.status().is_success() {
         return Err(ImageError::Request(format!(
-            "上传返回 HTTP {}",
+            "upload returned HTTP {}",
             response.status().as_u16()
         )));
     }
@@ -51,8 +51,9 @@ fn upload_request(
     if bytes.len() > MAX_IMAGE_BYTES {
         return Err(ImageError::TooLarge);
     }
-    let (mime, extension) = image_format(&bytes)
-        .ok_or_else(|| ImageError::UnsupportedContent("只支持 PNG/JPEG/GIF/WebP/AVIF".into()))?;
+    let (mime, extension) = image_format(&bytes).ok_or_else(|| {
+        ImageError::UnsupportedContent("only PNG/JPEG/GIF/WebP/AVIF are supported".into())
+    })?;
     let filename = format!("{:032x}.{extension}", rand::random::<u128>());
     let target = upload_base
         .join(&filename)
@@ -79,7 +80,7 @@ fn base_url(raw: &str) -> Result<Url, ImageError> {
     let mut url = Url::parse(raw.trim()).map_err(|err| ImageError::InvalidUrl(err.to_string()))?;
     let host = url
         .host_str()
-        .ok_or_else(|| ImageError::InvalidUrl("缺少图床主机名".into()))?;
+        .ok_or_else(|| ImageError::InvalidUrl("image host hostname is missing".into()))?;
     if proto::forbidden_host(host).is_some() {
         return Err(ImageError::BlockedHost(host.into()));
     }
@@ -90,7 +91,7 @@ fn base_url(raw: &str) -> Result<Url, ImageError> {
             .is_ok_and(|ip| ip.is_loopback());
     if url.scheme() != "https" && !(url.scheme() == "http" && loopback) {
         return Err(ImageError::InvalidUrl(
-            "图床必须使用 HTTPS；本机开发可使用 HTTP".into(),
+            "image host must use HTTPS; local development may use HTTP".into(),
         ));
     }
     if !url.username().is_empty()
@@ -99,7 +100,7 @@ fn base_url(raw: &str) -> Result<Url, ImageError> {
         || url.fragment().is_some()
     {
         return Err(ImageError::InvalidUrl(
-            "图床地址不能带凭据、查询参数或片段".into(),
+            "image host URL must not contain credentials, query parameters, or fragments".into(),
         ));
     }
     if !url.path().ends_with('/') {

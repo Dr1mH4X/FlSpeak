@@ -135,13 +135,13 @@ void main() {
       expect(sidebarBox.size.width, 78.0);
 
       // 桌面端点击折叠按钮就地展开至 220px
-      final toggle = find.bySemanticsLabel('展开侧边栏');
+      final toggle = find.bySemanticsLabel('Expand sidebar');
       if (toggle.evaluate().isNotEmpty) {
         await tester.tap(toggle);
         await tester.pumpAndSettle();
         expect(sidebarBox.size.width, 220.0);
 
-        final collapseToggle = find.bySemanticsLabel('收起侧边栏');
+        final collapseToggle = find.bySemanticsLabel('Collapse sidebar');
         await tester.tap(collapseToggle);
         await tester.pumpAndSettle();
         expect(sidebarBox.size.width, 78.0);
@@ -206,7 +206,7 @@ void main() {
       expect(sidebarBox.size.width, 48.0);
 
       // 点击展开按钮触发 OverlayPortal 浮层
-      final toggle = find.bySemanticsLabel('展开侧边栏');
+      final toggle = find.bySemanticsLabel('Expand sidebar');
       expect(toggle, findsOneWidget);
       await tester.tap(toggle);
       await tester.pumpAndSettle();
@@ -287,12 +287,12 @@ void main() {
         quality: LiquidGlassQuality.standard,
       );
       expect(find.byType(LiquidGlass), findsNothing);
-      await tester.tap(find.bySemanticsLabel('展开侧边栏'));
+      await tester.tap(find.bySemanticsLabel('Expand sidebar'));
       await tester.pumpAndSettle();
       expect(find.byType(LiquidGlass), findsNothing);
 
       // 收起桌面展开状态后再测窄屏浮层。
-      await tester.tap(find.bySemanticsLabel('收起侧边栏'));
+      await tester.tap(find.bySemanticsLabel('Collapse sidebar'));
       await tester.pumpAndSettle();
 
       await mount(
@@ -300,7 +300,7 @@ void main() {
         quality: LiquidGlassQuality.standard,
       );
       expect(find.byType(LiquidGlass), findsNothing);
-      await tester.tap(find.bySemanticsLabel('展开侧边栏'));
+      await tester.tap(find.bySemanticsLabel('Expand sidebar'));
       await tester.pumpAndSettle();
       expect(find.byType(LiquidGlass), findsOneWidget);
 
@@ -310,7 +310,7 @@ void main() {
 
       // 关闭玻璃开关时窄屏浮层回退为 Surface。
       await mount(size: const Size(500, 800), quality: null);
-      await tester.tap(find.bySemanticsLabel('展开侧边栏'));
+      await tester.tap(find.bySemanticsLabel('Expand sidebar'));
       await tester.pumpAndSettle();
       expect(find.byType(LiquidGlass), findsNothing);
     },
@@ -377,7 +377,7 @@ void main() {
 
       expect(readSidebarDivider(), closeTo(8.5, 0.001));
 
-      await tester.tap(find.bySemanticsLabel('展开侧边栏'));
+      await tester.tap(find.bySemanticsLabel('Expand sidebar'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 125));
       final expandingDivider = readSidebarDivider();
@@ -387,7 +387,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(readSidebarDivider(), closeTo(11.5, 0.001));
 
-      await tester.tap(find.bySemanticsLabel('收起侧边栏'));
+      await tester.tap(find.bySemanticsLabel('Collapse sidebar'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 125));
       final collapsingDivider = readSidebarDivider();

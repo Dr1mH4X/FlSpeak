@@ -225,7 +225,7 @@ void main() {
     }
   }
 
-  testWidgets('紧凑屏下身份条位于主标题下方', (tester) async {
+  testWidgets('compact layout places the identity row below the main title', (tester) async {
     tester.view.physicalSize = const Size(600, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -265,7 +265,7 @@ void main() {
     expect(stripTop, greaterThan(titleBottom));
   });
 
-  testWidgets('连接页不显示未连接状态及身份冗余文案', (tester) async {
+  testWidgets('connect page omits disconnected state and redundant identity copy', (tester) async {
     tester.view.physicalSize = const Size(1280, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -298,7 +298,7 @@ void main() {
     expect(find.text('身份保存在本机'), findsNothing);
   });
 
-  testWidgets('通过管理身份弹窗修改昵称并在连接页更新', (tester) async {
+  testWidgets('managing identity updates the nickname on the connect page', (tester) async {
     tester.view.physicalSize = const Size(1280, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -347,7 +347,7 @@ void main() {
     expect(find.text('FlSpeakUser'), findsNothing);
   });
 
-  testWidgets('管理身份弹窗中输入空昵称点击完成自动回退为默认昵称', (tester) async {
+  testWidgets('submitting an empty nickname in the identity dialog falls back to the default nickname', (tester) async {
     tester.view.physicalSize = const Size(1280, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -401,7 +401,7 @@ void main() {
     expect(find.text('Bob'), findsNothing);
   });
 
-  testWidgets('管理身份弹窗中取消编辑后点击完成不应修改昵称', (tester) async {
+  testWidgets('canceling edit in the identity dialog then submitting does not change the nickname', (tester) async {
     tester.view.physicalSize = const Size(1280, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -458,7 +458,7 @@ void main() {
     expect(find.text('NewCharlie'), findsNothing);
   });
 
-  testWidgets('桌面端服务器行不显示三点按钮，右键在点击位置呼出菜单而非卡片最左侧', (tester) async {
+  testWidgets('desktop server rows omit the overflow button and open the context menu at the pointer', (tester) async {
     tester.view.physicalSize = const Size(1280, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -502,7 +502,7 @@ void main() {
     expect(menuLeft, closeTo(clickPoint.dx, 4.0));
   });
 
-  testWidgets('窄屏下服务器行显示三点按钮并从按钮位置呼出菜单', (tester) async {
+  testWidgets('narrow server rows show the overflow button and open the menu from it', (tester) async {
     tester.view.physicalSize = const Size(500, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -542,7 +542,7 @@ void main() {
     expect(menuLeft, greaterThan(rowRect.center.dx));
   });
 
-  testWidgets('主页在浅色与深色模式下使用 pageColor 底板与 xl 超椭圆卡片对比', (tester) async {
+  testWidgets('home uses a pageColor base and xl squircle cards in light and dark modes', (tester) async {
     tester.view.physicalSize = const Size(1280, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -667,7 +667,7 @@ void main() {
     },
   );
 
-  testWidgets('服务器空列表时仍显示圆形搜索按钮，同行左对齐于「服务器」右侧', (tester) async {
+  testWidgets('the circular search button remains visible with an empty server list and aligns to the right of the Servers label', (tester) async {
     tester.view.physicalSize = const Size(1280, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -724,7 +724,7 @@ void main() {
     );
   });
 
-  testWidgets('搜索按钮点击展开、筛选、清空保持焦点、空失焦收起与 Esc 清空收起', (tester) async {
+  testWidgets('search expands on tap, filters, keeps focus after clearing, collapses on empty blur, and clears and collapses on Esc', (tester) async {
     tester.view.physicalSize = const Size(1280, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -802,7 +802,7 @@ void main() {
     expect(find.byType(ServerRow), findsNWidgets(2));
   });
 
-  testWidgets('窄屏与 2 倍字号下展开搜索框不发生溢出', (tester) async {
+  testWidgets('the expanded search field does not overflow on narrow screens at 2x text scale', (tester) async {
     tester.view.physicalSize = const Size(360, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -844,7 +844,7 @@ void main() {
     expect(find.bySemanticsLabel('Add server'), findsOneWidget);
   });
 
-  testWidgets('正文搜索框在开启 LiquidGlass 时仍保持无玻璃无阴影表面，并维持展开清空行为与 36dp 节头高度', (
+  testWidgets('the content search field keeps a flat surface with LiquidGlass enabled and preserves clear behavior and the 36dp section header height', (
     tester,
   ) async {
     Future<void> mount(LiquidGlassQuality? quality) async {
@@ -921,7 +921,7 @@ void main() {
     expect(tester.widget<GooSurface>(find.byType(GooSurface)).glass, isNull);
   });
 
-  testWidgets('连接页在窄屏与宽屏均让顶栏与内容退避状态栏', (tester) async {
+  testWidgets('the connect page clears the status bar on narrow and wide layouts', (tester) async {
     Future<void> verifyForSize(Size size, {required bool wide}) async {
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1.0;

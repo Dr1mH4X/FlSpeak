@@ -441,7 +441,7 @@ impl Actor {
                 self.emit(SessionEvent::Log {
                     level: "debug".into(),
                     message: format!(
-                        "状态上报进入节流窗口，已调度尾随合并: coalesced={coalesced}, wait_ms={}, window_ms={}",
+                        "state report entered the throttle window; scheduled trailing coalesce: coalesced={coalesced}, wait_ms={}, window_ms={}",
                         wait.as_millis(),
                         window.as_millis()
                     ),
@@ -453,7 +453,7 @@ impl Actor {
                 self.emit(SessionEvent::Log {
                     level: "debug".into(),
                     message: format!(
-                        "状态上报已合并至挂起窗口: coalesced={coalesced}, window_ms={}",
+                        "state report merged into the pending window: coalesced={coalesced}, window_ms={}",
                         window.as_millis()
                     ),
                 });
@@ -464,7 +464,7 @@ impl Actor {
                     self.emit(SessionEvent::Log {
                         level: "debug".into(),
                         message: format!(
-                            "发送合并后的状态快照: coalesced={coalesced}, window_ms={}",
+                            "sending coalesced state snapshot: coalesced={coalesced}, window_ms={}",
                             window.as_millis()
                         ),
                     });
@@ -488,7 +488,7 @@ impl Actor {
                     self.emit(SessionEvent::Log {
                         level: "debug".into(),
                         message: format!(
-                            "状态上报恢复正常，退避窗口已重置为 {}ms",
+                            "state reporting recovered; backoff window reset to {} ms",
                             VOICE_REPORT_BASE_WINDOW.as_millis()
                         ),
                     });
@@ -509,7 +509,7 @@ impl Actor {
                         self.emit(SessionEvent::Log {
                             level: "debug".into(),
                             message: format!(
-                                "状态上报触发 524 退避重试: retry={retry}, backoff_ms={}, coalesced={coalesced}, error={err}",
+                                "state report hit 524; backing off: retry={retry}, backoff_ms={}, coalesced={coalesced}, error={err}",
                                 wait.as_millis()
                             ),
                         });
@@ -519,12 +519,12 @@ impl Actor {
                         self.emit(SessionEvent::Log {
                             level: "warn".into(),
                             message: format!(
-                                "状态上报失败 (retries={retries}, unconfirmed=true): {err}"
+                                "state report failed (retries={retries}, unconfirmed=true): {err}"
                             ),
                         });
                         if notify_ui {
                             self.emit(SessionEvent::Failed {
-                                message: "状态同步失败，稍后切换状态或重连时将重新同步".into(),
+                                message: crate::notices::VOICE_SYNC_FAILED.into(),
                             });
                         }
                     }
@@ -632,15 +632,18 @@ impl Actor {
             return;
         }
         let Some(codec) = codec else {
-            self.stop_capture_with_message("无法读取当前频道的 codec");
+            crate::log_warn!("channel codec is unavailable");
+            self.stop_capture_with_message(crate::notices::VOICE_CODEC_UNAVAILABLE);
             return;
         };
         if !is_supported_codec(codec) {
-            self.stop_capture_with_message(&format!("频道 codec {codec} 不受支持（仅 Opus 4/5）"));
+            crate::log_warn!(codec = codec; "unsupported channel codec");
+            self.stop_capture_with_message(crate::notices::VOICE_CODEC_UNSUPPORTED);
             return;
         }
         if let Err(err) = self.voice.set_channel_codec(codec) {
-            self.voice_state.message = Some(err.to_string());
+            crate::log_warn!(error = err.to_string(); "failed to set channel codec");
+            self.voice_state.message = Some(crate::notices::VOICE_CODEC_FAILED.into());
             self.emit_voice_state();
             return;
         }
@@ -676,7 +679,8 @@ impl Actor {
         let _ = self.voice.set_ptt_mode(self.voice_state.ptt_mode);
         let _ = self.voice.set_ptt_active(self.voice_state.ptt_active);
         if let Err(err) = self.voice.start_capture(self.input_device.clone()) {
-            self.voice_state.message = Some(err.to_string());
+            crate::log_warn!(error = err.to_string(); "failed to start audio capture");
+            self.voice_state.message = Some(crate::notices::VOICE_INPUT_UNAVAILABLE.into());
             self.capture_active = false;
         } else {
             self.capture_active = true;
@@ -684,12 +688,12 @@ impl Actor {
         self.sync_voice_gate();
     }
 
-    fn stop_capture_with_message(&mut self, message: &str) {
+    fn stop_capture_with_message(&mut self, notice: &str) {
         if self.capture_active {
             let _ = self.voice.stop_capture();
             self.capture_active = false;
         }
-        self.voice_state.message = Some(message.to_string());
+        self.voice_state.message = Some(notice.to_string());
         self.emit_voice_state();
     }
     pub(super) fn handle_audio(&mut self, event: AudioEvent) {
@@ -749,12 +753,17 @@ impl Actor {
                 AudioStage::Codec => {}
             },
             AudioEvent::Error { stage, message } => {
-                let stage = match stage {
-                    AudioStage::Capture => "采集",
-                    AudioStage::Playback => "播放",
-                    AudioStage::Codec => "编解码",
+                crate::log_warn!(
+                    stage = format!("{stage:?}"),
+                    error = message;
+                    "audio pipeline error"
+                );
+                let notice = match stage {
+                    AudioStage::Capture => crate::notices::VOICE_CAPTURE_FAILED,
+                    AudioStage::Playback => crate::notices::VOICE_PLAYBACK_FAILED,
+                    AudioStage::Codec => crate::notices::VOICE_CODEC_FAILED,
                 };
-                self.voice_state.message = Some(format!("{stage}失败: {message}"));
+                self.voice_state.message = Some(notice.into());
                 self.emit_voice_state();
             }
         }
@@ -815,7 +824,8 @@ impl Actor {
         let _ = self.voice.set_ptt_mode(self.voice_state.ptt_mode);
         let _ = self.voice.set_ptt_active(self.voice_state.ptt_active);
         if let Err(err) = self.voice.start_playback(self.output_device.clone()) {
-            self.voice_state.message = Some(err.to_string());
+            crate::log_warn!(error = err.to_string(); "failed to start audio playback");
+            self.voice_state.message = Some(crate::notices::VOICE_OUTPUT_UNAVAILABLE.into());
         }
         self.capture_active = false;
         self.ensure_capture_started();

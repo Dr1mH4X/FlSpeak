@@ -340,7 +340,7 @@ fn default_device(host: &cpal::Host, input: bool) -> Result<cpal::Device, AudioE
     } else {
         host.default_output_device()
     };
-    device.ok_or_else(|| AudioError::Device("没有可用的默认音频设备".into()))
+    device.ok_or_else(|| AudioError::Device("no default audio device is available".into()))
 }
 
 fn select_device(input: bool, device_id: Option<&str>) -> Result<cpal::Device, AudioError> {
@@ -348,7 +348,7 @@ fn select_device(input: bool, device_id: Option<&str>) -> Result<cpal::Device, A
     if let Some(raw) = device_id {
         let id = raw
             .parse::<cpal::DeviceId>()
-            .map_err(|_| AudioError::Device(format!("设备 ID 非法: {raw}")))?;
+            .map_err(|_| AudioError::Device(format!("invalid device ID: {raw}")))?;
         if is_virtual_default_device_id(id.id()) {
             return default_device(&host, input);
         }

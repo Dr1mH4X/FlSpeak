@@ -201,7 +201,7 @@ void main() {
       await tester.tap(find.text('踢出服务器'));
       await tester.pumpAndSettle();
       expect(context.controller.calls, isEmpty);
-      await tester.enterText(find.byType(TextField), 'reason | 测试');
+      await tester.enterText(find.byType(TextField), 'reason | test');
       await tester.tap(find.widgetWithText(FilledButton, '确认踢出'));
       await tester.pump();
       expect(
@@ -215,14 +215,14 @@ void main() {
         id: 2,
         channel: 5,
         target: KickTarget.server,
-        reason: 'reason | 测试',
+        reason: 'reason | test',
         epoch: 42,
       ));
       context.controller.pending!.complete(false);
       await tester.pumpAndSettle();
       expect(
         tester.widget<TextField>(find.byType(TextField)).controller!.text,
-        'reason | 测试',
+        'reason | test',
       );
       await tester.tap(find.widgetWithText(FilledButton, '确认踢出'));
       await tester.pump();

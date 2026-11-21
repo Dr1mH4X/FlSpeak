@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../../../core/image_host.dart';
+import '../../../core/models.dart';
 import '../../../core/notices.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
@@ -21,6 +22,15 @@ class _ImageHostForm extends ConsumerStatefulWidget {
   @override
   ConsumerState<_ImageHostForm> createState() => _ImageHostFormState();
 }
+
+String _describeImageHostError(CoreError error, AppLocalizations l10n) =>
+    switch (error) {
+      CoreError_InvalidAddress() => l10n.imageHostErrorInvalid,
+      CoreError_BlockedAddress() => l10n.imageHostErrorBlocked,
+      CoreError_Connection() => l10n.imageHostErrorConnection,
+      CoreError_ChannelPasswordRequired() => l10n.channelPasswordWrong,
+      CoreError_Internal() => l10n.imageHostErrorInternal,
+    };
 
 class _ImageHostFormState extends ConsumerState<_ImageHostForm> {
   final _upload = TextEditingController();
@@ -60,13 +70,10 @@ class _ImageHostFormState extends ConsumerState<_ImageHostForm> {
     } on CoreError catch (error) {
       if (mounted) {
         setState(
-          () => _error = switch (error) {
-            CoreError_InvalidAddress(:final message) ||
-            CoreError_BlockedAddress(:final message) ||
-            CoreError_Connection(:final message) ||
-            CoreError_ChannelPasswordRequired(:final message) ||
-            CoreError_Internal(:final message) => message,
-          },
+          () => _error = _describeImageHostError(
+            error,
+            AppLocalizations.of(context),
+          ),
         );
       }
     } on Exception {

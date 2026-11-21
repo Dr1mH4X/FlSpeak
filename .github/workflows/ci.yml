@@ -99,7 +99,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           webrtc_dir="$(find "${PUB_CACHE:-$HOME/.pub-cache}" -type d -name "flutter_webrtc-*" 2>/dev/null | head -n 1)"
-          test -n "$webrtc_dir" || { echo "未在 pub-cache 中找到 flutter_webrtc" >&2; exit 1; }
+          test -n "$webrtc_dir" || { echo "flutter_webrtc not found in pub-cache" >&2; exit 1; }
           third_party="$webrtc_dir/third_party"
           mkdir -p "$third_party/downloads"
           asset="libwebrtc-linux-x64-release"
@@ -110,7 +110,7 @@ jobs:
                 --pattern "${asset}.zip" \
                 --dir "$RUNNER_TEMP" \
                 --clobber; then
-              echo "gh release download 失败，回退到 curl..."
+              echo "gh release download failed; falling back to curl..."
               curl --proto '=https' --tlsv1.2 -fsSL \
                 --retry 8 --retry-delay 5 --retry-all-errors \
                 -o "$RUNNER_TEMP/${asset}.zip" \
@@ -130,10 +130,10 @@ jobs:
             fi
           fi
           test -f "$third_party/libwebrtc/lib/libwebrtc.so" || {
-            echo "预置后仍未在预期路径找到 libwebrtc.so" >&2
+            echo "libwebrtc.so still missing after provisioning" >&2
             exit 1
           }
-          echo "WebRTC Linux 二进制已就位: $third_party/libwebrtc/lib/libwebrtc.so"
+          echo "WebRTC Linux binary ready: $third_party/libwebrtc/lib/libwebrtc.so"
 
       # 保留完整 bundle，包含 Rust 动态库与 Flutter 资源。
       - name: Build debug bundle
@@ -221,14 +221,14 @@ jobs:
           ANDROID_DEBUG_KEY_PASSWORD: ${{ secrets.ANDROID_DEBUG_KEY_PASSWORD }}
         run: |
           if [ -z "$ANDROID_DEBUG_KEYSTORE_BASE64" ]; then
-            echo 'ANDROID_DEBUG_KEYSTORE_BASE64 未配置，使用 runner 默认 debug keystore'
+            echo 'ANDROID_DEBUG_KEYSTORE_BASE64 is not configured; using the runner debug keystore'
             exit 0
           fi
           missing=
           for name in ANDROID_DEBUG_KEYSTORE_PASSWORD ANDROID_DEBUG_KEY_ALIAS ANDROID_DEBUG_KEY_PASSWORD; do
             test -n "${!name}" || missing="$missing $name"
           done
-          test -z "$missing" || { echo "缺少 debug 签名 secret:$missing" >&2; exit 1; }
+          test -z "$missing" || { echo "missing debug signing secret: $missing" >&2; exit 1; }
           printf '%s' "$ANDROID_DEBUG_KEYSTORE_BASE64" | base64 --decode > android/app/debug-upload.jks
           echo 'ANDROID_DEBUG_KEYSTORE_PATH=debug-upload.jks' >> "$GITHUB_ENV"
 
@@ -238,7 +238,7 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           base_version=$(sed -n 's/^version:[[:space:]]*\([^+[:space:]]*\).*/\1/p' pubspec.yaml | head -n 1)
-          test -n "$base_version" || { echo '拿不到 pubspec.yaml 基础版本号' >&2; exit 1; }
+          test -n "$base_version" || { echo 'could not read the base version from pubspec.yaml' >&2; exit 1; }
           build_number="${{ github.run_number }}"
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             short_sha="${PR_HEAD_SHA:0:7}"
@@ -253,7 +253,7 @@ jobs:
           echo "APP_BUILD_NAME=${version_name}" >> "$GITHUB_ENV"
           echo "APP_BUILD_NUMBER=${build_number}" >> "$GITHUB_ENV"
           echo "APP_DISPLAY_VERSION=${version_name}" >> "$GITHUB_ENV"
-          echo "Debug APK 版本: ${version_name} (${build_number})"
+          echo "Debug APK version: ${version_name} (${build_number})"
 
       - name: Build debug apk
         env:

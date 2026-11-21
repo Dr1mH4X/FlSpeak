@@ -96,10 +96,12 @@ pub(crate) fn publish_options(
     viewer_limit: u32,
 ) -> Result<PublishOptions, SessionError> {
     if name.trim().is_empty() {
-        return Err(SessionError::Stream("共享名称不能为空".into()));
+        return Err(SessionError::Stream("share name must not be empty".into()));
     }
     if bitrate == 0 {
-        return Err(SessionError::Stream("共享码率必须大于 0".into()));
+        return Err(SessionError::Stream(
+            "share bitrate must be greater than 0".into(),
+        ));
     }
     Ok(PublishOptions {
         name: name.to_string(),
@@ -120,11 +122,13 @@ pub(crate) fn ice_candidate(
     m_line: Option<i32>,
 ) -> Result<IceCandidate, SessionError> {
     if sdp.trim().is_empty() {
-        return Err(SessionError::Stream("ICE 候选不能为空".into()));
+        return Err(SessionError::Stream(
+            "ICE candidate must not be empty".into(),
+        ));
     }
     let sdp_m_line_index = m_line
         .map(|idx| {
-            u16::try_from(idx).map_err(|_| SessionError::Stream(format!("非法的 m_line: {idx}")))
+            u16::try_from(idx).map_err(|_| SessionError::Stream(format!("invalid m_line: {idx}")))
         })
         .transpose()?;
     Ok(IceCandidate {

@@ -36,10 +36,10 @@ jobs:
             tag="${GITHUB_REF_NAME}"
             version="${GITHUB_REF_NAME#v}"
           fi
-          test -n "$version" || { echo '拿不到版本号' >&2; exit 1; }
+          test -n "$version" || { echo 'could not read the version' >&2; exit 1; }
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "版本：$version，Tag：$tag"
+          echo "version: $version, tag: $tag"
 
   # tag 与手动发版都先过检查与测试；任一失败，打包矩阵不会启动。
   checks:
@@ -127,7 +127,7 @@ jobs:
           for name in ANDROID_RELEASE_KEYSTORE_BASE64 ANDROID_RELEASE_KEYSTORE_PASSWORD ANDROID_RELEASE_KEY_ALIAS ANDROID_RELEASE_KEY_PASSWORD; do
             test -n "${!name}" || missing="$missing $name"
           done
-          test -z "$missing" || { echo "缺少 release 签名 secret:$missing" >&2; exit 1; }
+          test -z "$missing" || { echo "missing release signing secret: $missing" >&2; exit 1; }
           printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > android/app/release.jks
 
       - name: Install Linux build dependencies
@@ -171,7 +171,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           webrtc_dir="$(find "${PUB_CACHE:-$HOME/.pub-cache}" -type d -name "flutter_webrtc-*" 2>/dev/null | head -n 1)"
-          test -n "$webrtc_dir" || { echo "未在 pub-cache 中找到 flutter_webrtc" >&2; exit 1; }
+          test -n "$webrtc_dir" || { echo "flutter_webrtc not found in pub-cache" >&2; exit 1; }
           third_party="$webrtc_dir/third_party"
           mkdir -p "$third_party/downloads"
           asset="libwebrtc-linux-x64-release"
@@ -182,7 +182,7 @@ jobs:
                 --pattern "${asset}.zip" \
                 --dir "$RUNNER_TEMP" \
                 --clobber; then
-              echo "gh release download 失败，回退到 curl..."
+              echo "gh release download failed; falling back to curl..."
               curl --proto '=https' --tlsv1.2 -fsSL \
                 --retry 8 --retry-delay 5 --retry-all-errors \
                 -o "$RUNNER_TEMP/${asset}.zip" \
@@ -202,10 +202,10 @@ jobs:
             fi
           fi
           test -f "$third_party/libwebrtc/lib/libwebrtc.so" || {
-            echo "预置后仍未在预期路径找到 libwebrtc.so" >&2
+            echo "libwebrtc.so still missing after provisioning" >&2
             exit 1
           }
-          echo "WebRTC Linux 二进制已就位: $third_party/libwebrtc/lib/libwebrtc.so"
+          echo "WebRTC Linux binary ready: $third_party/libwebrtc/lib/libwebrtc.so"
 
       - name: Package
         if: matrix.platform != 'android'
@@ -251,12 +251,12 @@ jobs:
           version="${{ needs.meta.outputs.version }}"
           path="docs/release/$tag.md"
           if [ ! -f "$path" ]; then
-            echo "::error::缺少发版日志 $path；按 docs/release/AGENTS.md 在发版前补齐"
+            echo "::error::missing release notes $path; add them before release as described in docs/release/AGENTS.md"
             exit 1
           fi
           heading="$(head -n 1 "$path")"
           if ! printf '%s\n' "$heading" | grep -Eq "^# ${version} \([0-9]{4}-[0-9]{2}-[0-9]{2}\): [^[:space:]].*$"; then
-            echo "::error::$path 首行必须为 '# $version (<date>): <summary>'；见 docs/release/AGENTS.md"
+            echo "::error::the first line of $path must be '# $version (<date>): <summary>'; see docs/release/AGENTS.md"
             exit 1
           fi
           echo "path=$path" >> "$GITHUB_OUTPUT"

@@ -591,12 +591,12 @@ void _expectSelfConsistentSdp(String sdp) {
     expect(
       rtpmapPts,
       containsAll(pts),
-      reason: 'm= 段里的 PT 缺少 a=rtpmap: ${section.first}',
+      reason: 'PT in the m= section is missing a=rtpmap: ${section.first}',
     );
     for (final line in section.skip(1)) {
       final attr = RegExp(r'^a=(rtpmap|rtcp-fb|fmtp):(\d+)\b').firstMatch(line);
       if (attr != null) {
-        expect(pts, contains(attr.group(2)!), reason: '属性引用已裁剪的 PT: $line');
+        expect(pts, contains(attr.group(2)!), reason: 'attribute references a pruned PT: $line');
       }
       final apt = RegExp(r'^a=fmtp:(\d+)\s.*\bapt=(\d+)\b').firstMatch(line);
       if (apt != null) {

@@ -81,10 +81,11 @@ pub(crate) fn save_with_limits(
     max_bytes: u64,
 ) -> Result<(), String> {
     if icon_id == 0 || bytes.is_empty() || bytes.len() > MAX_ICON_BYTES {
-        return Err("无效的频道图标缓存数据".to_string());
+        return Err("invalid channel icon cache data".to_string());
     }
     let dir = server_dir(store_path, server_id);
-    std::fs::create_dir_all(&dir).map_err(|err| format!("创建频道图标缓存目录失败: {err}"))?;
+    std::fs::create_dir_all(&dir)
+        .map_err(|err| format!("failed to create the channel icon cache directory: {err}"))?;
 
     let nanos = SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -101,14 +102,14 @@ pub(crate) fn save_with_limits(
             .write(true)
             .create_new(true)
             .open(&temp)
-            .map_err(|err| format!("创建频道图标临时文件失败: {err}"))?;
+            .map_err(|err| format!("failed to create a temporary channel icon file: {err}"))?;
         file.write_all(bytes)
-            .map_err(|err| format!("写入频道图标缓存失败: {err}"))?;
+            .map_err(|err| format!("failed to write the channel icon cache: {err}"))?;
         file.sync_all()
-            .map_err(|err| format!("同步频道图标缓存失败: {err}"))?;
+            .map_err(|err| format!("failed to sync the channel icon cache: {err}"))?;
         drop(file);
         std::fs::rename(&temp, icon_path(&dir, icon_id))
-            .map_err(|err| format!("替换频道图标缓存失败: {err}"))?;
+            .map_err(|err| format!("failed to replace the channel icon cache: {err}"))?;
         Ok(())
     })();
 

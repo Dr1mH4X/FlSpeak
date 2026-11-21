@@ -15,7 +15,9 @@ final _versionRegex = RegExp(
   final trimmed = input.trim();
   final match = _versionRegex.firstMatch(trimmed);
   if (match == null) {
-    throw FormatException('无效的版本格式: "$input"。请使用标准语义化版本，如 0.2.0 或 0.2.0+1。');
+    throw FormatException(
+      'invalid version format: "$input". Use a semantic version such as 0.2.0 or 0.2.0+1.',
+    );
   }
   final semver = match.group(1)!;
   final buildNumber = match.group(2) ?? defaultBuildNumber ?? '1';
@@ -97,27 +99,29 @@ String _updateWorkspaceCargoVersion(String content, String semver) {
 
 void main(List<String> args) {
   if (args.isEmpty) {
-    stderr.writeln('用法: dart tool/bump_version.dart <version>');
-    stderr.writeln('例如: dart tool/bump_version.dart 0.2.0');
-    stderr.writeln('      dart tool/bump_version.dart 0.2.0+2');
+    stderr.writeln('usage: dart tool/bump_version.dart <version>');
+    stderr.writeln('example: dart tool/bump_version.dart 0.2.0');
+    stderr.writeln('         dart tool/bump_version.dart 0.2.0+2');
     exit(1);
   }
 
   final version = args.first;
   try {
     final (semver, buildNumber) = parseVersion(version);
-    stdout.writeln('正在同步全仓版本: $semver (构建号: $buildNumber)...');
+    stdout.writeln(
+      'syncing versions across the repository: $semver (build $buildNumber)...',
+    );
     final updated = bumpAllVersions(version);
     if (updated.isEmpty) {
-      stdout.writeln('所有文件版本已是最新，无须更新。');
+      stdout.writeln('all version files are already up to date.');
     } else {
-      stdout.writeln('已成功更新以下文件：');
+      stdout.writeln('updated the following files:');
       for (final file in updated) {
         stdout.writeln('  - $file');
       }
     }
   } catch (e) {
-    stderr.writeln('更新版本失败: $e');
+    stderr.writeln('failed to update versions: $e');
     exit(1);
   }
 }

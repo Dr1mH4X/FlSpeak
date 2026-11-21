@@ -103,7 +103,7 @@ impl Actor {
             Ok(messages) => self.emit(SessionEvent::History { messages }),
             Err(message) => self.emit(SessionEvent::Log {
                 level: "warn".into(),
-                message: format!("历史消息读取失败: {message}"),
+                message: format!("failed to read message history: {message}"),
             }),
         }
     }

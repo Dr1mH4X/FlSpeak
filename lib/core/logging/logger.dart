@@ -135,7 +135,7 @@ Future<void> syncLogLevel(
       await setLogLevel(level: rustLevelId);
     }
   } on Object catch (error) {
-    logError('同步后端日志等级失败', error: error);
+    logError('failed to sync backend log level', error: error);
   }
 }
 

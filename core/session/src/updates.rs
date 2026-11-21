@@ -59,15 +59,15 @@ impl UpdateState {
 
 #[derive(Debug, Error)]
 pub enum UpdateError {
-    #[error("更新缓存目录不可用: {0}")]
+    #[error("update cache directory unavailable: {0}")]
     Storage(String),
-    #[error("请求 GitHub Releases 失败: {0}")]
+    #[error("GitHub Releases request failed: {0}")]
     Request(String),
-    #[error("GitHub Releases 返回 HTTP {0}")]
+    #[error("GitHub Releases returned HTTP {0}")]
     Http(u16),
-    #[error("GitHub Releases 响应过大")]
+    #[error("GitHub Releases response is too large")]
     TooLarge,
-    #[error("解析 GitHub Releases 失败: {0}")]
+    #[error("failed to parse GitHub Releases: {0}")]
     Parse(String),
 }
 
@@ -96,21 +96,21 @@ async fn check_locked() -> UpdateState {
     let local = match Version::parse(env!("CARGO_PKG_VERSION")) {
         Ok(local) => local,
         Err(error) => {
-            crate::log_warn!(error = error.to_string(); "本地版本不合法");
+            crate::log_warn!(error = error.to_string(); "invalid local version");
             return UpdateState::unavailable();
         }
     };
     let cache_path = match cache_path() {
         Ok(path) => path,
         Err(error) => {
-            crate::log_warn!(error = error.to_string(); "更新检查不可用");
+            crate::log_warn!(error = error.to_string(); "update check unavailable");
             return UpdateState::unavailable();
         }
     };
     let source = match HttpReleaseSource::new() {
         Ok(source) => source,
         Err(error) => {
-            crate::log_warn!(error = error.to_string(); "更新检查失败");
+            crate::log_warn!(error = error.to_string(); "update check failed");
             return fallback_from_cache(&cache_path, &local)
                 .unwrap_or_else(UpdateState::unavailable);
         }
@@ -125,7 +125,7 @@ async fn force_check_locked() -> Result<UpdateState, UpdateError> {
     let source = HttpReleaseSource::new()?;
     let result = check_with_source(&source, &cache_path, &local, SystemTime::now(), true).await;
     if let Err(error) = &result {
-        crate::log_warn!(error = error.to_string(); "手动更新检查失败");
+        crate::log_warn!(error = error.to_string(); "manual update check failed");
     }
     result
 }
@@ -139,7 +139,7 @@ async fn check_with_fallback(
     match check_with_source(source, cache_path, local, now, false).await {
         Ok(state) => state,
         Err(error) => {
-            crate::log_warn!(error = error.to_string(); "更新检查失败");
+            crate::log_warn!(error = error.to_string(); "update check failed");
             fallback_from_cache(cache_path, local).unwrap_or_else(UpdateState::unavailable)
         }
     }
@@ -169,7 +169,9 @@ async fn check_with_source(
     let payload = match outcome {
         FetchOutcome::NotModified => {
             let Some(mut cache) = cached.clone() else {
-                return Err(UpdateError::Request("304 响应缺少缓存".into()));
+                return Err(UpdateError::Request(
+                    "304 response is missing a cache entry".into(),
+                ));
             };
             if let Some(state) = state_from_cache(&cache, local) {
                 cache.checked_at = now_secs;
@@ -183,7 +185,7 @@ async fn check_with_source(
 
     let FetchOutcome::Payload { body, etag } = payload else {
         return Err(UpdateError::Request(
-            "GitHub Releases 返回了意外的 304".into(),
+            "GitHub Releases returned an unexpected 304".into(),
         ));
     };
     let candidate = select_candidate(&body, local)?;
@@ -362,7 +364,7 @@ fn read_cache(path: &Path) -> Option<CachedRelease> {
     match serde_json::from_str(&raw) {
         Ok(cache) => Some(cache),
         Err(error) => {
-            crate::log_warn!(error = error.to_string(); "更新缓存无法解析");
+            crate::log_warn!(error = error.to_string(); "failed to parse the update cache");
             None
         }
     }
@@ -372,26 +374,26 @@ fn write_cache(path: &Path, cache: &CachedRelease) {
     let serialized = match serde_json::to_vec(cache) {
         Ok(serialized) => serialized,
         Err(error) => {
-            crate::log_warn!(error = error.to_string(); "更新缓存序列化失败");
+            crate::log_warn!(error = error.to_string(); "failed to serialize the update cache");
             return;
         }
     };
     let Some(parent) = path.parent() else {
-        crate::log_warn!("更新缓存缺少父目录");
+        crate::log_warn!("update cache path has no parent directory");
         return;
     };
     if let Err(error) = std::fs::create_dir_all(parent) {
-        crate::log_warn!(error = error.to_string(); "创建更新缓存目录失败");
+        crate::log_warn!(error = error.to_string(); "failed to create the update cache directory");
         return;
     }
     let temporary = path.with_extension("json.tmp");
     if let Err(error) = std::fs::write(&temporary, serialized) {
-        crate::log_warn!(error = error.to_string(); "写入更新缓存失败");
+        crate::log_warn!(error = error.to_string(); "failed to write the update cache");
         return;
     }
     if let Err(error) = std::fs::rename(&temporary, path) {
         let _ = std::fs::remove_file(&temporary);
-        crate::log_warn!(error = error.to_string(); "替换更新缓存失败");
+        crate::log_warn!(error = error.to_string(); "failed to replace the update cache");
     }
 }
 
@@ -463,7 +465,7 @@ impl ReleaseSource for HttpReleaseSource {
             Ok(FetchOutcome::Payload { body, etag })
         })
         .await
-        .map_err(|_| UpdateError::Request("请求超时".into()))?
+        .map_err(|_| UpdateError::Request("request timed out".into()))?
     }
 }
 
@@ -729,7 +731,7 @@ mod tests {
     #[tokio::test]
     async fn surfaces_timeouts() {
         let path = cache_path();
-        let source = FakeSource::new(vec![Err(UpdateError::Request("请求超时".into()))]);
+        let source = FakeSource::new(vec![Err(UpdateError::Request("request timed out".into()))]);
         let result = check(&source, &path, "0.1.0").await;
         assert!(matches!(result, Err(UpdateError::Request(_))));
         cleanup(&path);
@@ -757,13 +759,16 @@ mod tests {
                 etag: None,
                 latest_version: Some("0.2.0".into()),
                 release_url: Some("https://github.com/Dr1mH4X/FlSpeak/releases/tag/v0.2.0".into()),
-                release_notes: Some("## 新增\n\n- 新功能".into()),
+                release_notes: Some("## New\n\n- New feature".into()),
             },
         );
         let source = FakeSource::new(Vec::new());
         let result = check(&source, &path, "0.1.0").await.expect("check");
         assert!(result.available);
-        assert_eq!(result.release_notes.as_deref(), Some("## 新增\n\n- 新功能"));
+        assert_eq!(
+            result.release_notes.as_deref(),
+            Some("## New\n\n- New feature")
+        );
         assert_eq!(source.calls(), 0);
         cleanup(&path);
     }
@@ -786,14 +791,14 @@ mod tests {
             "draft": false,
             "prerelease": false,
             "html_url": "https://github.com/Dr1mH4X/FlSpeak/releases/tag/v0.2.0",
-            "body": "# 0.2.0 (2026-11-20): Release\r\n\r\n## 新增\r\n- 更新弹窗",
+            "body": "# 0.2.0 (2026-11-20): Release\r\n\r\n## New\r\n- Update dialog",
         })]))]);
         let result = force_check(&source, &path, "0.1.0").await.expect("force");
         assert!(result.available);
         assert_eq!(result.latest_version.as_deref(), Some("0.2.0"));
         assert_eq!(
             result.release_notes.as_deref(),
-            Some("# 0.2.0 (2026-11-20): Release\n\n## 新增\n- 更新弹窗")
+            Some("# 0.2.0 (2026-11-20): Release\n\n## New\n- Update dialog")
         );
         assert_eq!(source.calls(), 1);
         cleanup(&path);
@@ -910,7 +915,7 @@ mod tests {
     async fn a_failed_check_without_cache_returns_unavailable() {
         let path = cache_path();
         let local = Version::parse("0.1.0").expect("local version");
-        let source = FakeSource::new(vec![Err(UpdateError::Request("请求超时".into()))]);
+        let source = FakeSource::new(vec![Err(UpdateError::Request("request timed out".into()))]);
         let state = check_with_fallback(&source, &path, &local, now()).await;
         assert!(!state.available);
         cleanup(&path);
@@ -971,7 +976,7 @@ mod tests {
         let parsed: CachedRelease = serde_json::from_str(legacy).expect("legacy cache");
         assert_eq!(parsed.release_notes, None);
 
-        let oversized = "中".repeat(MAX_RELEASE_NOTES_BYTES);
+        let oversized = "é".repeat(MAX_RELEASE_NOTES_BYTES);
         let sanitized = sanitize_release_notes(Some(&oversized)).expect("sanitized");
         assert!(sanitized.len() <= MAX_RELEASE_NOTES_BYTES);
     }

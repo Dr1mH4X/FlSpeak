@@ -10,6 +10,12 @@ Rust 单测与实现同文件，为 `#[cfg(test)] mod tests { use super::*; }` �
 
 Dart 单测集中放置在根目录 `test/` 下，镜像 `lib/` 源码目录层级，命名 `<被测文件>_test.dart`（例如 `lib/app.dart` 对应 `test/app_test.dart`）。`flutter test` 默认直接扫描 `test/`：`just test` 即 `flutter test`。
 
+## 测试输出语言
+
+- 测试描述、`reason`、`expect`/`panic` 消息与测试内 `print` 输出使用英文；注释用中文。
+- widget test 按被测界面的 locale 断言产品文案；验证中文 locale 的测试显式指定 `zh`。中文文案只作为 UI 夹具，不进入测试描述或失败消息。
+- 测试夹具可以使用中文数据（频道名、昵称、release notes），它们不进入测试失败消息。
+
 ## 测试范围选择
 
 提交改动时按「变更面」选最小测试集，不默认全量运行：改动所在 crate 及其直接依赖跑通即可，只改文档/配置时不重跑整套测试。定向示例（从 `plugins/flspeak_ffi/rust` 跑或使用 `just rust-test-proto`）：

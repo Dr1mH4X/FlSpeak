@@ -116,6 +116,18 @@ abstract class AppLocalizations {
   /// **'Home'**
   String get homeTitle;
 
+  /// No description provided for @sidebarCollapse.
+  ///
+  /// In en, this message translates to:
+  /// **'Collapse sidebar'**
+  String get sidebarCollapse;
+
+  /// No description provided for @sidebarExpand.
+  ///
+  /// In en, this message translates to:
+  /// **'Expand sidebar'**
+  String get sidebarExpand;
+
   /// No description provided for @windowPin.
   ///
   /// In en, this message translates to:
@@ -1280,6 +1292,30 @@ abstract class AppLocalizations {
   /// **'Save'**
   String get imageHostSave;
 
+  /// No description provided for @imageHostErrorInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'The image host address is invalid.'**
+  String get imageHostErrorInvalid;
+
+  /// No description provided for @imageHostErrorBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'The image host address is blocked.'**
+  String get imageHostErrorBlocked;
+
+  /// No description provided for @imageHostErrorConnection.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not connect to the image host.'**
+  String get imageHostErrorConnection;
+
+  /// No description provided for @imageHostErrorInternal.
+  ///
+  /// In en, this message translates to:
+  /// **'The image host operation failed.'**
+  String get imageHostErrorInternal;
+
   /// No description provided for @imageHostUploadHint.
   ///
   /// In en, this message translates to:
@@ -1393,6 +1429,162 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'File saved'**
   String get fileDownloadSaved;
+
+  /// No description provided for @noticeVoiceInputUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone input is unavailable.'**
+  String get noticeVoiceInputUnavailable;
+
+  /// No description provided for @noticeVoiceOutputUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio output is unavailable.'**
+  String get noticeVoiceOutputUnavailable;
+
+  /// No description provided for @noticeVoiceCodecUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read the channel codec.'**
+  String get noticeVoiceCodecUnavailable;
+
+  /// No description provided for @noticeVoiceCodecUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'The channel codec is not supported.'**
+  String get noticeVoiceCodecUnsupported;
+
+  /// No description provided for @noticeVoiceCaptureFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio capture failed.'**
+  String get noticeVoiceCaptureFailed;
+
+  /// No description provided for @noticeVoicePlaybackFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio playback failed.'**
+  String get noticeVoicePlaybackFailed;
+
+  /// No description provided for @noticeVoiceCodecFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The audio codec failed.'**
+  String get noticeVoiceCodecFailed;
+
+  /// No description provided for @noticeVoiceSyncFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice state sync failed; it will retry automatically.'**
+  String get noticeVoiceSyncFailed;
+
+  /// No description provided for @noticeConnectionLost.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection lost.'**
+  String get noticeConnectionLost;
+
+  /// No description provided for @noticeKicked.
+  ///
+  /// In en, this message translates to:
+  /// **'You were removed from the server.'**
+  String get noticeKicked;
+
+  /// No description provided for @noticeConnectFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not connect to the server.'**
+  String get noticeConnectFailed;
+
+  /// No description provided for @noticeConnectTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'The connection timed out.'**
+  String get noticeConnectTimeout;
+
+  /// No description provided for @noticeConnectDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'The server refused the connection.'**
+  String get noticeConnectDenied;
+
+  /// No description provided for @noticeReconnectExhausted.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnect attempts exhausted.'**
+  String get noticeReconnectExhausted;
+
+  /// No description provided for @noticeIdentityReadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read the identity.'**
+  String get noticeIdentityReadFailed;
+
+  /// No description provided for @noticeIdentityUpgradeFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Identity upgrade failed.'**
+  String get noticeIdentityUpgradeFailed;
+
+  /// No description provided for @noticeIdentityThreadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not start the identity upgrade.'**
+  String get noticeIdentityThreadFailed;
+
+  /// No description provided for @noticeHistoryWriteFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save message history.'**
+  String get noticeHistoryWriteFailed;
+
+  /// No description provided for @noticeHistoryCompactFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not compact message history.'**
+  String get noticeHistoryCompactFailed;
+
+  /// No description provided for @noticeSettingsLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load settings.'**
+  String get noticeSettingsLoadFailed;
+
+  /// No description provided for @noticeActorStartFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The session engine failed to start.'**
+  String get noticeActorStartFailed;
+
+  /// No description provided for @noticeUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'The operation failed.'**
+  String get noticeUnknown;
+
+  /// No description provided for @errorInvalidAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'The server address is invalid.'**
+  String get errorInvalidAddress;
+
+  /// No description provided for @errorBlockedAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'This address is blocked.'**
+  String get errorBlockedAddress;
+
+  /// No description provided for @errorConnectionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not connect to the server.'**
+  String get errorConnectionFailed;
+
+  /// No description provided for @errorInternal.
+  ///
+  /// In en, this message translates to:
+  /// **'An internal error occurred.'**
+  String get errorInternal;
 
   /// No description provided for @fileSizeBytes.
   ///

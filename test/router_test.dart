@@ -68,7 +68,7 @@ Future<GoRouter> _mount(
 }
 
 void main() {
-  testWidgets('SDK MaterialApp 的设置导航在进入和返回时均有中间帧', (tester) async {
+  testWidgets('settings navigation in the SDK MaterialApp renders intermediate frames on enter and return', (tester) async {
     final router = await _mount(tester);
     unawaited(router.push<void>(AppRoutes.settings));
     await tester.pump();
@@ -84,7 +84,7 @@ void main() {
     expect(find.byType(SettingsPage), findsNothing);
   });
 
-  testWidgets('宽屏根标签切换与 FlClash 一致直接替换页面', (tester) async {
+  testWidgets('wide root tab switches replace the page directly like FlClash', (tester) async {
     final router = await _mount(tester);
     expect(find.byType(ConnectPage), findsOneWidget);
 
@@ -95,7 +95,7 @@ void main() {
     expect(find.byType(WorkspaceShell), findsOneWidget);
   });
 
-  testWidgets('从连接页侧栏进入设置后，一级页通过侧栏首页返回能回到连接页而非连接丢失页', (tester) async {
+  testWidgets('returning from settings through the sidebar home returns to the connect page instead of the connection-lost page', (tester) async {
     await _mount(tester);
     expect(find.byType(ConnectPage), findsOneWidget);
 
@@ -123,7 +123,7 @@ void main() {
     expect(find.text('连接丢失'), findsNothing);
   });
 
-  testWidgets('从连接页进入设置后，按 ESC 键也能直接退回连接页', (tester) async {
+  testWidgets('pressing Esc from settings returns directly to the connect page', (tester) async {
     await _mount(tester);
     expect(find.byType(ConnectPage), findsOneWidget);
 

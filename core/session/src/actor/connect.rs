@@ -62,7 +62,7 @@ impl Actor {
             && !matches!(self.state, SessionState::Disconnected)
         {
             return Err(SessionError::Protocol(
-                "修改服务器地址前请先断开连接".into(),
+                "disconnect before changing the server address".into(),
             ));
         }
         SettingsManager::update(|settings| {
@@ -99,7 +99,7 @@ impl Actor {
         reconnecting: bool,
     ) -> Result<(), SessionError> {
         if self.client.is_some() {
-            return Err(SessionError::Protocol("已经连接".into()));
+            return Err(SessionError::Protocol("already connected".into()));
         }
 
         let profile = match self.registry.require(id) {
@@ -113,7 +113,7 @@ impl Actor {
                 });
                 if reconnecting {
                     self.emit(SessionEvent::Denied {
-                        message: err.to_string(),
+                        message: crate::notices::SESSION_CONNECT_DENIED.into(),
                     });
                     self.schedule_reconnect();
                 }
@@ -138,11 +138,11 @@ impl Actor {
                 if reconnecting {
                     if matches!(err, ConnectError::Address(_) | ConnectError::Blocked { .. }) {
                         self.emit(SessionEvent::Denied {
-                            message: err.to_string(),
+                            message: crate::notices::SESSION_CONNECT_DENIED.into(),
                         });
                     } else {
                         self.emit(SessionEvent::Failed {
-                            message: err.to_string(),
+                            message: crate::notices::SESSION_CONNECT_FAILED.into(),
                         });
                     }
                     self.schedule_reconnect();
@@ -190,11 +190,11 @@ impl Actor {
                 if reconnecting {
                     if matches!(err, ConnectError::Address(_) | ConnectError::Blocked { .. }) {
                         self.emit(SessionEvent::Denied {
-                            message: err.to_string(),
+                            message: crate::notices::SESSION_CONNECT_DENIED.into(),
                         });
                     } else {
                         self.emit(SessionEvent::Failed {
-                            message: err.to_string(),
+                            message: crate::notices::SESSION_CONNECT_FAILED.into(),
                         });
                     }
                     self.schedule_reconnect();
@@ -325,7 +325,7 @@ impl Actor {
                     self.set_state(SessionState::Disconnected);
                 } else {
                     self.emit(SessionEvent::Failed {
-                        message: err.to_string(),
+                        message: crate::notices::SESSION_CONNECT_FAILED.into(),
                     });
                     self.schedule_reconnect();
                 }
@@ -350,7 +350,7 @@ impl Actor {
                     self.set_state(SessionState::Disconnected);
                 } else {
                     self.emit(SessionEvent::Failed {
-                        message: SessionError::Timeout.to_string(),
+                        message: crate::notices::SESSION_CONNECT_TIMEOUT.into(),
                     });
                 }
                 if self.consecutive_timeouts >= IDENTITY_TIMEOUTS_BEFORE_UPGRADE {
@@ -396,10 +396,16 @@ impl Actor {
             Err(_) => Err(SessionError::Timeout),
         }
     }
-    pub(super) async fn on_connection_lost(&mut self, message: String, allow_reconnect: bool) {
+    pub(super) async fn on_connection_lost(
+        &mut self,
+        notice: &'static str,
+        detail: String,
+        allow_reconnect: bool,
+    ) {
         if self.client.is_none() {
             return;
         }
+        crate::log_warn!(message = detail; "connection ended");
         self.invalidate_handlers();
         self.client = None;
         self.sync_voice_gate();
@@ -418,7 +424,9 @@ impl Actor {
         } else {
             self.set_state(SessionState::Disconnected);
         }
-        self.emit(SessionEvent::Failed { message });
+        self.emit(SessionEvent::Failed {
+            message: notice.into(),
+        });
     }
 
     pub(super) async fn start_identity_upgrade(&mut self) {
@@ -429,8 +437,9 @@ impl Actor {
         let identity = match store::load_identity(&path).await {
             Ok(identity) => identity,
             Err(err) => {
+                crate::log_warn!(error = err.to_string(); "failed to read identity");
                 self.emit(SessionEvent::Failed {
-                    message: format!("读取身份失败: {err}"),
+                    message: crate::notices::SESSION_IDENTITY_READ_FAILED.into(),
                 });
                 self.schedule_reconnect();
                 return;
@@ -480,8 +489,9 @@ impl Actor {
         if let Err(err) = spawn {
             self.identity_upgrading = false;
             self.identity_upgrade = None;
+            crate::log_warn!(error = err.to_string(); "failed to start identity upgrade thread");
             self.emit(SessionEvent::Failed {
-                message: format!("身份提升线程启动失败: {err}"),
+                message: crate::notices::SESSION_IDENTITY_THREAD_FAILED.into(),
             });
             self.schedule_reconnect();
         }
@@ -495,7 +505,7 @@ impl Actor {
             self.auto_reconnect = false;
             self.set_state(SessionState::Disconnected);
             self.emit(SessionEvent::Failed {
-                message: "重连失败：已达到最大尝试次数".into(),
+                message: crate::notices::SESSION_RECONNECT_EXHAUSTED.into(),
             });
             return;
         }
@@ -576,7 +586,7 @@ pub(super) fn validate_port(port: i32) -> Result<(), SessionError> {
         Ok(())
     } else {
         Err(SessionError::Transfer(format!(
-            "服务器下发了非法端口: {port}"
+            "server sent an invalid port: {port}"
         )))
     }
 }
@@ -752,7 +762,7 @@ fn register_handlers(
         if let ProtocolEvent::Disconnected(err) = event {
             let message = err
                 .map(|err| err.to_string())
-                .unwrap_or_else(|| "连接已关闭".to_string());
+                .unwrap_or_else(|| "connection closed".to_string());
             let _ = channel.send(SessionSignal::Disconnected { epoch, message });
         }
     }));
@@ -766,7 +776,7 @@ fn register_handlers(
         if let ProtocolEvent::Kicked(reason) = event {
             let _ = channel.send(SessionSignal::Kicked {
                 epoch,
-                message: format!("被服务器移出: {reason}"),
+                message: format!("removed by the server: {reason}"),
             });
         }
     }));

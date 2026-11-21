@@ -96,7 +96,7 @@ Future<int> _peakPixels(WidgetTester tester, Key boundaryKey) async =>
     }))!;
 
 void main() {
-  testWidgets('换连接时隔离历史，即使没有渲染中间的断开帧', (tester) async {
+  testWidgets('history stays isolated across connections even without a rendered disconnect frame', (tester) async {
     final levels = StreamController<VoiceLevels>.broadcast(sync: true);
     addTearDown(levels.close);
     const boundaryKey = ValueKey('meter');
@@ -112,7 +112,7 @@ void main() {
     expect(await _peakPixels(tester, boundaryKey), 0);
   });
 
-  testWidgets('峰值在收到后的第一帧可见', (tester) async {
+  testWidgets('peaks are visible on the first frame after receipt', (tester) async {
     final levels = StreamController<VoiceLevels>.broadcast(sync: true);
     addTearDown(levels.close);
     const boundaryKey = ValueKey('meter');
@@ -123,7 +123,7 @@ void main() {
     expect(await _peakPixels(tester, boundaryKey), greaterThan(4));
   });
 
-  testWidgets('切换声源或断开连接立即清空历史，不保留旧峰值', (tester) async {
+  testWidgets('switching source or disconnecting clears history immediately without stale peaks', (tester) async {
     final levels = StreamController<VoiceLevels>.broadcast(sync: true);
     addTearDown(levels.close);
     const boundaryKey = ValueKey('meter');
@@ -149,7 +149,7 @@ void main() {
     expect(await _peakPixels(tester, boundaryKey), 0);
   });
 
-  testWidgets('在 TickerMode 关闭或后台生命周期时暂停监听电平，仅在 inactive 保持活跃', (tester) async {
+  testWidgets('level listening pauses when TickerMode is off or the app is backgrounded and stays active only while inactive', (tester) async {
     final levels = StreamController<VoiceLevels>.broadcast(sync: true);
     addTearDown(levels.close);
     const boundaryKey = ValueKey('meter-pause');

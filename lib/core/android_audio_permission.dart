@@ -49,7 +49,11 @@ class AndroidAudioPermission implements MicrophonePermissionGateway {
     } on MissingPluginException {
       return MicrophonePermissionStatus.granted;
     } on PlatformException catch (error) {
-      logWarn('申请 Android 录音权限失败', target: 'app', error: error);
+      logWarn(
+        'failed to request Android recording permission',
+        target: 'app',
+        error: error,
+      );
       return MicrophonePermissionStatus.denied;
     }
   }
@@ -64,7 +68,11 @@ class AndroidAudioPermission implements MicrophonePermissionGateway {
     } on MissingPluginException {
       return false;
     } on PlatformException catch (error) {
-      logWarn('打开系统应用设置失败', target: 'app', error: error);
+      logWarn(
+        'failed to open Android app settings',
+        target: 'app',
+        error: error,
+      );
       return false;
     }
   }

@@ -199,7 +199,7 @@ class _AddServerFormState extends ConsumerState<_AddServerForm> {
       }
       setState(() {
         _submitting = false;
-        _error = describeCoreError(error);
+        _error = describeCoreError(error, AppLocalizations.of(context));
       });
       _addressFocus.requestFocus();
       return;

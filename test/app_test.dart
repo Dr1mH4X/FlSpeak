@@ -230,14 +230,14 @@ void main() {
     });
   }
 
-  test('深色主题要求浅色系统栏图标', () {
+  test('dark theme uses light system bar icons', () {
     final style = appSystemUiOverlayStyle(buildAppTheme(Brightness.dark));
 
     expect(style.statusBarIconBrightness, Brightness.light);
     expect(style.systemNavigationBarIconBrightness, Brightness.light);
   });
 
-  test('浅色主题要求深色系统栏图标', () {
+  test('light theme uses dark system bar icons', () {
     final style = appSystemUiOverlayStyle(buildAppTheme(Brightness.light));
 
     expect(style.statusBarIconBrightness, Brightness.dark);

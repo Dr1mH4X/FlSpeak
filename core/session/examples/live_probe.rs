@@ -8,7 +8,7 @@ use session::{SessionEvent, SessionHandle, SessionOptions};
 #[tokio::main]
 async fn main() {
     let Ok(address) = std::env::var("FLSPEAK_TEST_SERVER") else {
-        eprintln!("需要 FLSPEAK_TEST_SERVER");
+        eprintln!("FLSPEAK_TEST_SERVER is required");
         return;
     };
     let nickname =
@@ -20,7 +20,7 @@ async fn main() {
         dir.join("preferences.json"),
         SessionOptions { audio: false },
     )
-    .expect("启动会话");
+    .expect("start the session");
     let mut events = handle.subscribe();
     let log_path = std::path::PathBuf::from("/tmp/flspeak-probe.log");
     let logger = tokio::spawn(async move {
@@ -59,6 +59,7 @@ async fn main() {
                     let chs = channels
                         .iter()
                         .filter(|c| {
+                            // language-check: allow external-data
                             c.name.contains("入口") || c.name.contains("t2a") || c.parent_id == 0
                         })
                         .map(|c| format!("{}:{},", c.id, c.name))
@@ -74,14 +75,14 @@ async fn main() {
     let profile = handle
         .register_server("probe".into(), address)
         .await
-        .expect("录入地址");
+        .expect("record the address");
     tokio::time::timeout(
         Duration::from_secs(30),
         handle.connect(profile.id.clone(), nickname.clone()),
     )
     .await
-    .expect("connect 超时")
-    .expect("连接失败");
+    .expect("connect timed out")
+    .expect("connection failed");
 
     tokio::time::sleep(Duration::from_secs(3)).await;
     let state = handle.state().await.expect("state");

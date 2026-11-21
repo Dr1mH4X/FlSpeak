@@ -142,7 +142,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       if (!mounted) {
         return;
       }
-      ref.read(noticeCenterProvider.notifier).show(describeCoreError(error));
+      ref
+          .read(noticeCenterProvider.notifier)
+          .show(describeCoreError(error, AppLocalizations.of(context)));
     }
   }
 

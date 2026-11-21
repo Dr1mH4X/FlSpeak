@@ -19,6 +19,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get homeTitle => '主页';
 
   @override
+  String get sidebarCollapse => '收起侧边栏';
+
+  @override
+  String get sidebarExpand => '展开侧边栏';
+
+  @override
   String get windowPin => '置顶';
 
   @override
@@ -638,6 +644,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get imageHostSave => '保存';
 
   @override
+  String get imageHostErrorInvalid => '图床地址无效。';
+
+  @override
+  String get imageHostErrorBlocked => '图床地址已被阻止。';
+
+  @override
+  String get imageHostErrorConnection => '无法连接到图床。';
+
+  @override
+  String get imageHostErrorInternal => '图床操作失败。';
+
+  @override
   String get imageHostUploadHint => 'https://upload.example.com/images/';
 
   @override
@@ -693,6 +711,84 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fileDownloadSaved => '文件已保存';
+
+  @override
+  String get noticeVoiceInputUnavailable => '麦克风输入不可用。';
+
+  @override
+  String get noticeVoiceOutputUnavailable => '音频输出不可用。';
+
+  @override
+  String get noticeVoiceCodecUnavailable => '无法读取频道编码。';
+
+  @override
+  String get noticeVoiceCodecUnsupported => '频道编码不受支持。';
+
+  @override
+  String get noticeVoiceCaptureFailed => '音频采集失败。';
+
+  @override
+  String get noticeVoicePlaybackFailed => '音频播放失败。';
+
+  @override
+  String get noticeVoiceCodecFailed => '音频编码失败。';
+
+  @override
+  String get noticeVoiceSyncFailed => '语音状态同步失败，将自动重试。';
+
+  @override
+  String get noticeConnectionLost => '连接已断开。';
+
+  @override
+  String get noticeKicked => '你已被移出服务器。';
+
+  @override
+  String get noticeConnectFailed => '无法连接到服务器。';
+
+  @override
+  String get noticeConnectTimeout => '连接超时。';
+
+  @override
+  String get noticeConnectDenied => '服务器拒绝了连接。';
+
+  @override
+  String get noticeReconnectExhausted => '重连次数已用尽。';
+
+  @override
+  String get noticeIdentityReadFailed => '无法读取身份。';
+
+  @override
+  String get noticeIdentityUpgradeFailed => '身份提升失败。';
+
+  @override
+  String get noticeIdentityThreadFailed => '无法启动身份提升。';
+
+  @override
+  String get noticeHistoryWriteFailed => '无法保存消息历史。';
+
+  @override
+  String get noticeHistoryCompactFailed => '无法压缩消息历史。';
+
+  @override
+  String get noticeSettingsLoadFailed => '无法加载设置。';
+
+  @override
+  String get noticeActorStartFailed => '会话引擎启动失败。';
+
+  @override
+  String get noticeUnknown => '操作失败。';
+
+  @override
+  String get errorInvalidAddress => '服务器地址无效。';
+
+  @override
+  String get errorBlockedAddress => '该地址已被阻止。';
+
+  @override
+  String get errorConnectionFailed => '无法连接到服务器。';
+
+  @override
+  String get errorInternal => '发生内部错误。';
 
   @override
   String fileSizeBytes(int count) {

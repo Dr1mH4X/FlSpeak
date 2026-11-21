@@ -47,7 +47,7 @@ impl SettingsManager {
                 let mut guard = existing
                     .inner
                     .write()
-                    .map_err(|e| format!("获取设置写锁失败: {e}"))?;
+                    .map_err(|e| format!("failed to acquire the settings write lock: {e}"))?;
                 *guard = loaded.clone();
             }
             Self::notify_audio_listeners(&loaded.audio);
@@ -63,14 +63,14 @@ impl SettingsManager {
         Self::notify_audio_listeners(&loaded.audio);
         SETTINGS_MANAGER
             .get()
-            .ok_or_else(|| "初始化 SettingsManager 单例失败".to_string())
+            .ok_or_else(|| "failed to initialize the SettingsManager singleton".to_string())
     }
 
     /// 获取全局已初始化的单例引用。
     pub fn global() -> Result<&'static Self, String> {
         SETTINGS_MANAGER
             .get()
-            .ok_or_else(|| "SettingsManager 尚未初始化，请先调用 init(path)".to_string())
+            .ok_or_else(|| "SettingsManager is not initialized; call init(path) first".to_string())
     }
 
     /// 设置文件所在目录，供同级的更新缓存等旁路文件使用。
@@ -80,7 +80,7 @@ impl SettingsManager {
             .path
             .parent()
             .map(Path::to_path_buf)
-            .ok_or_else(|| "设置文件缺少父目录".to_string())
+            .ok_or_else(|| "settings file has no parent directory".to_string())
     }
 
     /// 只读访问当前设置快照。
@@ -89,7 +89,7 @@ impl SettingsManager {
         let guard = manager
             .inner
             .read()
-            .map_err(|e| format!("获取设置读锁失败: {e}"))?;
+            .map_err(|e| format!("failed to acquire the settings read lock: {e}"))?;
         Ok(f(&guard))
     }
 
@@ -105,7 +105,7 @@ impl SettingsManager {
             let mut guard = manager
                 .inner
                 .write()
-                .map_err(|e| format!("获取设置写锁失败: {e}"))?;
+                .map_err(|e| format!("failed to acquire the settings write lock: {e}"))?;
 
             let prev_audio = guard.audio.clone();
             let result = f(&mut guard);
@@ -136,13 +136,13 @@ impl SettingsManager {
     /// 获取当前完整配置的 JSON 字符串（严格由 manager 内部序列化）。
     pub fn get_json() -> Result<String, String> {
         let settings = Self::get()?;
-        serde_json::to_string(&settings).map_err(|e| format!("序列化设置失败: {e}"))
+        serde_json::to_string(&settings).map_err(|e| format!("failed to serialize settings: {e}"))
     }
 
     /// 从 JSON 字符串更新 UI 设置并原子写盘（严格由 manager 内部反序列化）。
     pub fn update_ui_from_json(json: &str) -> Result<(), String> {
-        let mut ui: UiSettings =
-            serde_json::from_str(json).map_err(|e| format!("反序列化 UI 设置失败: {e}"))?;
+        let mut ui: UiSettings = serde_json::from_str(json)
+            .map_err(|e| format!("failed to deserialize UI settings: {e}"))?;
         ui.normalize_nickname();
         Self::update_ui(|current| {
             *current = ui;
@@ -151,8 +151,8 @@ impl SettingsManager {
 
     /// 从 JSON 字符串更新音频设置并原子写盘。
     pub fn update_audio_from_json(json: &str) -> Result<(), String> {
-        let audio: AudioSettings =
-            serde_json::from_str(json).map_err(|e| format!("反序列化音频设置失败: {e}"))?;
+        let audio: AudioSettings = serde_json::from_str(json)
+            .map_err(|e| format!("failed to deserialize audio settings: {e}"))?;
         Self::update_audio(|current| {
             *current = audio;
         })
@@ -166,9 +166,10 @@ impl SettingsManager {
             return Ok(default_settings);
         }
 
-        let raw = std::fs::read_to_string(path).map_err(|e| format!("读取配置文件失败: {e}"))?;
-        let parsed: serde_json::Value =
-            serde_json::from_str(&raw).map_err(|e| format!("配置文件 JSON 语法非法: {e}"))?;
+        let raw = std::fs::read_to_string(path)
+            .map_err(|e| format!("failed to read the settings file: {e}"))?;
+        let parsed: serde_json::Value = serde_json::from_str(&raw)
+            .map_err(|e| format!("invalid JSON in the settings file: {e}"))?;
 
         // 检测是否为旧版平铺格式（根节点存在 nickname/servers/theme 等且无 ui 对象）
         let is_legacy = parsed.is_object()
@@ -247,16 +248,17 @@ impl SettingsManager {
 
     /// 原子写入磁盘：临时文件 + fsync + rename 覆盖。
     fn save_atomic(path: &Path, settings: &AppSettings) -> Result<(), String> {
-        let serialized =
-            serde_json::to_vec_pretty(settings).map_err(|e| format!("序列化设置失败: {e}"))?;
+        let serialized = serde_json::to_vec_pretty(settings)
+            .map_err(|e| format!("failed to serialize settings: {e}"))?;
 
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| format!("创建配置目录失败: {e}"))?;
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("failed to create the settings directory: {e}"))?;
         }
 
         let file_name = path
             .file_name()
-            .ok_or_else(|| "文件路径缺失文件名".to_string())?;
+            .ok_or_else(|| "file path is missing a file name".to_string())?;
         let mut temp_name = file_name.to_os_string();
         temp_name.push(format!(".{:032x}.tmp", rand::random::<u128>()));
         let temp = path.with_file_name(temp_name);
@@ -267,14 +269,15 @@ impl SettingsManager {
                 .write(true)
                 .create_new(true)
                 .open(&temp)
-                .map_err(|e| format!("创建临时文件失败: {e}"))?;
+                .map_err(|e| format!("failed to create a temporary file: {e}"))?;
             file.write_all(&serialized)
-                .map_err(|e| format!("写入设置失败: {e}"))?;
+                .map_err(|e| format!("failed to write settings: {e}"))?;
             file.sync_all()
-                .map_err(|e| format!("同步设置写盘失败: {e}"))?;
+                .map_err(|e| format!("failed to sync settings to disk: {e}"))?;
         }
 
-        std::fs::rename(&temp, path).map_err(|e| format!("原子替换配置文件失败: {e}"))?;
+        std::fs::rename(&temp, path)
+            .map_err(|e| format!("failed to atomically replace the settings file: {e}"))?;
         Ok(())
     }
 }

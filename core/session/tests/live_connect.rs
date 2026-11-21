@@ -10,10 +10,10 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use session::{SessionEvent, SessionHandle, SessionOptions, SessionState};
 
 #[tokio::test]
-#[ignore = "需要 FLSPEAK_TEST_SERVER 与网络"]
+#[ignore = "FLSPEAK_TEST_SERVER and network access are required"]
 async fn live_connect_chain() {
     let Ok(address) = std::env::var("FLSPEAK_TEST_SERVER") else {
-        eprintln!("跳过：未设置 FLSPEAK_TEST_SERVER");
+        eprintln!("skipped: FLSPEAK_TEST_SERVER is not set");
         return;
     };
     let nickname =
@@ -29,7 +29,7 @@ async fn live_connect_chain() {
         dir.join("preferences.json"),
         SessionOptions { audio: false },
     )
-    .expect("启动会话");
+    .expect("start the session");
     let mut events = handle.subscribe();
     let logger = tokio::spawn(async move {
         loop {
@@ -50,7 +50,7 @@ async fn live_connect_chain() {
     let profile = handle
         .register_server("live".to_string(), address.clone())
         .await
-        .expect("录入地址");
+        .expect("record the address");
     println!("registered: {} -> {}", profile.label, profile.id);
     assert_eq!(profile.port, 9987);
 
@@ -59,26 +59,32 @@ async fn live_connect_chain() {
         handle.connect(profile.id.clone(), nickname.clone()),
     )
     .await
-    .expect("connect 不应超过 30s")
-    .expect("连接失败");
+    .expect("connect should finish within 30 s")
+    .expect("connection failed");
 
     let SessionState::Connected { channel_id, .. } = handle.state().await.expect("state") else {
-        panic!("连接后应处于 Connected");
+        panic!("the session should be Connected after connecting");
     };
-    assert_ne!(channel_id, 0, "欢迎目录应恢复自己的真实频道");
-    println!("connected, client_id/channel_id 已就绪");
+    assert_ne!(
+        channel_id, 0,
+        "the welcome snapshot should restore the real channel"
+    );
+    println!("connected, client_id/channel_id ready");
 
     // 很多服务器拒绝显式 channellist/clientlist；actor 应回退到欢迎目录。
     match handle.list_channels().await {
         Ok(channels) => {
             println!("channels: {}", channels.len());
-            assert!(!channels.is_empty(), "服务器至少应有一个频道");
+            assert!(
+                !channels.is_empty(),
+                "the server should have at least one channel"
+            );
             assert!(
                 channels.iter().any(|channel| channel.order.is_some()),
-                "欢迎目录应包含频道顺序"
+                "the welcome snapshot should include channel order"
             );
         }
-        Err(err) => eprintln!("listChannels 被拒绝（权限不足时正常）: {err}"),
+        Err(err) => eprintln!("listChannels was rejected (expected without permission): {err}"),
     }
 
     if let Ok(output) = std::env::var("FLSPEAK_TEST_ICON_DIR") {
@@ -128,14 +134,14 @@ async fn live_connect_chain() {
             }
             assert!(
                 clients.iter().any(|client| client.nickname == nickname),
-                "在线列表里应当有自己 {nickname}"
+                "the client list should contain self {nickname}"
             );
             assert!(
                 clients.iter().all(|client| client.channel_id != 0),
-                "所有在线成员都应解析出真实频道 ID"
+                "every online member should resolve a real channel ID"
             );
         }
-        Err(err) => eprintln!("listClients 被拒绝（权限不足时正常）: {err}"),
+        Err(err) => eprintln!("listClients was rejected (expected without permission): {err}"),
     }
 
     handle.disconnect().await.expect("disconnect");

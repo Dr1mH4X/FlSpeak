@@ -33,7 +33,7 @@ void main() {
     );
   }
 
-  testWidgets('打开身份管理弹窗展示当前身份与改名入口', (tester) async {
+  testWidgets('the identity dialog shows the current identity and rename entry', (tester) async {
     await tester.pumpWidget(
       buildTestWidget(nickname: 'FlSpeakUser', onRename: (_) {}),
     );
@@ -46,7 +46,7 @@ void main() {
     expect(find.text('完成'), findsOneWidget);
   });
 
-  testWidgets('未修改时点击完成直接关闭弹窗且不触发 onRename', (tester) async {
+  testWidgets('submitting without changes closes the dialog without calling onRename', (tester) async {
     var renamed = false;
     await tester.pumpWidget(
       buildTestWidget(nickname: 'FlSpeakUser', onRename: (_) => renamed = true),
@@ -61,7 +61,7 @@ void main() {
     expect(renamed, isFalse);
   });
 
-  testWidgets('编辑态下点击底部完成透传输入文本并关闭弹窗', (tester) async {
+  testWidgets('submitting in edit mode passes the input text and closes the dialog', (tester) async {
     String? updated;
     await tester.pumpWidget(
       buildTestWidget(
@@ -91,7 +91,7 @@ void main() {
     expect(find.text('身份'), findsNothing);
   });
 
-  testWidgets('编辑态下输入空字符串点击底部完成直接透传原始输入，前端不拦截报错', (tester) async {
+  testWidgets('submitting an empty string in edit mode passes the original input without client-side validation', (tester) async {
     String? updated;
     await tester.pumpWidget(
       buildTestWidget(
@@ -116,7 +116,7 @@ void main() {
     expect(find.text('身份'), findsNothing);
   });
 
-  testWidgets('若先点击行内取消退出编辑态，再点击底部完成不触发提交', (tester) async {
+  testWidgets('leaving edit mode with the inline cancel then submitting does not trigger a rename', (tester) async {
     String? updated;
     await tester.pumpWidget(
       buildTestWidget(
@@ -149,7 +149,7 @@ void main() {
     expect(updated, isNull);
   });
 
-  testWidgets('行内点击保存图标提交输入文本并退出编辑态', (tester) async {
+  testWidgets('the inline save icon submits the input text and exits edit mode', (tester) async {
     String? updated;
     await tester.pumpWidget(
       buildTestWidget(
@@ -181,7 +181,7 @@ void main() {
     expect(find.text('身份'), findsNothing);
   });
 
-  testWidgets('输入框软键盘完成/回车动作触发提交并退出编辑态', (tester) async {
+  testWidgets('the keyboard done or enter action submits and exits edit mode', (tester) async {
     String? updated;
     await tester.pumpWidget(
       buildTestWidget(

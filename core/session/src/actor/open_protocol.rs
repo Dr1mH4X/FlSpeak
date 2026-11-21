@@ -120,7 +120,7 @@ impl Actor {
         if flood_halted {
             self.emit(SessionEvent::Log {
                 level: "warn".into(),
-                message: "服务端触发防洪限制，已暂停跨频道成员自动探测".into(),
+                message: "server flood control triggered; paused automatic cross-channel member discovery".into(),
             });
         }
 
@@ -232,7 +232,7 @@ impl Actor {
             self.emit(SessionEvent::Log {
                 level: "debug".into(),
                 message: format!(
-                    "开放协议命令发送失败: plugin={plugin}, target_id={target_id:?}, err={err}"
+                    "failed to send open protocol command: plugin={plugin}, target_id={target_id:?}, err={err}"
                 ),
             });
         }
@@ -429,7 +429,7 @@ mod tests {
                 serde_json::json!({
                     "name": format!("cmd_{i:02}_{}", "n".repeat(30)),
                     "args": "a".repeat(45),
-                    "desc": "转化说明".repeat(25),
+                    "desc": "conversion note".repeat(25),
                 })
             })
             .collect();
@@ -504,7 +504,7 @@ mod tests {
             matches!(
                 ev,
                 SessionEvent::Log { level, message }
-                    if level == "warn" && message.contains("防洪")
+                    if level == "warn" && message.contains("flood control")
             )
         }));
 

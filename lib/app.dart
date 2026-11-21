@@ -194,7 +194,10 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
     if (!mounted || revision != _registrationRevision) return;
     _nativeRegistered = registered;
     if (keyId != null && !_nativeRegistered) {
-      logWarn('全局热键注册失败，按住说话退回应用内按键', target: 'hotkey');
+      logWarn(
+        'global hotkey registration failed; push-to-talk falls back to the in-app key',
+        target: 'hotkey',
+      );
     }
   }
 

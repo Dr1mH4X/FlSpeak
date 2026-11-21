@@ -578,7 +578,10 @@ class PreferencesStore {
           );
         }
       } on Object catch (error) {
-        logWarn('通过 FFI 读取设置失败，尝试回退磁盘读取', error: error);
+        logWarn(
+          'failed to read settings over FFI; falling back to disk',
+          error: error,
+        );
       }
     }
     try {
@@ -638,7 +641,10 @@ class PreferencesStore {
             return _preferences;
           }
         } on Object catch (e) {
-          logWarn('通过 FFI 保存设置失败，尝试直接落盘 fallback', error: e);
+          logWarn(
+            'failed to save settings over FFI; falling back to direct disk write',
+            error: e,
+          );
         }
       }
 

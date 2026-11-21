@@ -80,7 +80,7 @@ impl OpusEncoder {
     pub fn encode(&mut self, pcm: &[f32], output: &mut [u8]) -> Result<usize, AudioError> {
         if pcm.len() != FRAME_SAMPLES_PER_CHANNEL * self.channels as usize {
             return Err(CodecError::Opus(format!(
-                "PCM 长度 {} 与 {} 声道不匹配",
+                "PCM length {} does not match {} channels",
                 pcm.len(),
                 self.channels
             ))
@@ -100,7 +100,7 @@ impl OpusEncoder {
             .map_err(codec_error)?;
         if written > MAX_PACKET_BYTES {
             return Err(CodecError::Opus(format!(
-                "编码输出长度 {written} 超出单包预算 {MAX_PACKET_BYTES}"
+                "encoded output length {written} exceeds the packet budget {MAX_PACKET_BYTES}"
             ))
             .into());
         }
@@ -162,11 +162,13 @@ impl OpusDecoder {
     /// `pcm` 必须是至少 `MAX_OPUS_SAMPLES` 的 48kHz 立体声交织缓冲。
     pub fn decode_normal(&mut self, packet: &[u8], pcm: &mut [f32]) -> Result<usize, AudioError> {
         if packet.is_empty() {
-            return Err(CodecError::Opus("Opus 正常解码不允许空包".into()).into());
+            return Err(
+                CodecError::Opus("Opus decoding does not accept an empty packet".into()).into(),
+            );
         }
         if pcm.len() < MAX_OPUS_SAMPLES {
             return Err(CodecError::Opus(format!(
-                "Opus 解码缓冲太小: {} < {MAX_OPUS_SAMPLES}",
+                "Opus decode buffer too small: {} < {MAX_OPUS_SAMPLES}",
                 pcm.len()
             ))
             .into());
@@ -185,11 +187,14 @@ impl OpusDecoder {
     /// 严格请求单帧长度（`FRAME_SAMPLES_PER_CHANNEL` = 960 samples/ch），绝不生成 120ms 长尾。
     pub fn decode_fec(&mut self, next_packet: &[u8], pcm: &mut [f32]) -> Result<usize, AudioError> {
         if next_packet.is_empty() {
-            return Err(CodecError::Opus("Opus FEC 解码需要非空下一包载荷".into()).into());
+            return Err(CodecError::Opus(
+                "Opus FEC decoding requires a non-empty next packet".into(),
+            )
+            .into());
         }
         if pcm.len() < FRAME_SAMPLES {
             return Err(CodecError::Opus(format!(
-                "Opus FEC 缓冲太小: {} < {FRAME_SAMPLES}",
+                "Opus FEC buffer too small: {} < {FRAME_SAMPLES}",
                 pcm.len()
             ))
             .into());
@@ -207,7 +212,7 @@ impl OpusDecoder {
     pub fn decode_plc(&mut self, pcm: &mut [f32]) -> Result<usize, AudioError> {
         if pcm.len() < FRAME_SAMPLES {
             return Err(CodecError::Opus(format!(
-                "Opus PLC 缓冲太小: {} < {FRAME_SAMPLES}",
+                "Opus PLC buffer too small: {} < {FRAME_SAMPLES}",
                 pcm.len()
             ))
             .into());
@@ -429,7 +434,7 @@ mod tests {
                 assert_eq!(n, FRAME_SAMPLES_PER_CHANNEL);
                 assert!(
                     plc_out[FRAME_SAMPLES..].iter().all(|&s| s == 0.0),
-                    "decode_plc 不得写入超过单帧 20ms 的样本"
+                    "decode_plc must not write beyond one 20 ms frame"
                 );
                 plc_calls += 1;
             }
@@ -439,7 +444,10 @@ mod tests {
         }
 
         assert!(fec_recovered >= 100);
-        assert!(non_silent_fec > 0, "SILK LBRR FEC 应产出非静音恢复波形");
+        assert!(
+            non_silent_fec > 0,
+            "SILK LBRR FEC should produce a non-silent recovered waveform"
+        );
         assert!(plc_calls >= 40);
     }
 

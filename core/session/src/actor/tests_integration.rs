@@ -311,7 +311,7 @@ async fn outbound_voice_is_not_blocked_by_slow_actor_commands() {
                     }),
                 )
                 .await
-                .expect("音频发包不应被慢命令阻塞")
+                .expect("sending audio packets should not be blocked by a slow command")
                 .unwrap();
             }
             // 此时 ListChannels 仍在阻塞中，证明音频发包真正绕开了慢等待。

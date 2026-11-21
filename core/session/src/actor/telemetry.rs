@@ -36,7 +36,7 @@ impl Actor {
                     self.last_network_sample_error = Some(now);
                     self.emit(SessionEvent::Log {
                         level: "warn".into(),
-                        message: format!("网络遥测查询失败: {error}"),
+                        message: format!("network telemetry query failed: {error}"),
                     });
                 }
             }

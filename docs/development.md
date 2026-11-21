@@ -46,14 +46,21 @@ cd plugins/flspeak_ffi && flutter analyze
 
 `flutter build` 会通过 native assets 钩子自动编译 Rust（首次会下载 `rust-toolchain.toml` 里列的 10 个 target）。想跳过：`--dart-define` 无效，用 `hooks.user_defines.flspeak_ffi.build_assets=false` 改 `pubspec.yaml`。
 
+## 输出语言检查
+
+`just language-check` 扫描 Rust 字符串、Dart 日志与测试输出、`tool/` 与 workflow echo；`just language-test` 跑扫描器单测。判据见本文「语言约定」与 [testing.md](testing.md) 的测试输出语言。
+
 ## 开发流程
 
-动手前先读完相关文件与全部需求，不盲目编辑；只修改当前任务涉及的文件，不给未改动的代码补 docstring 或类型注解，避免无谓 diff。注释只写「为什么」，不写「是什么」，且只在逻辑不清晰处添加；标识符与字符串用 ASCII，注释可以用中文。
+动手前先读完相关文件与全部需求，不盲目编辑；只修改当前任务涉及的文件，不给未改动的代码补 docstring 或类型注解，避免无谓 diff。注释只写「为什么」，不写「是什么」，且只在逻辑不清晰处添加。
 
 语言约定：
 
+- 代码标识符、日志消息、错误 `Display`、`tool/` 与 CI 输出使用英文 ASCII。注释可以用中文；测试输出语言见 [testing.md](testing.md)。
+- 用户可见文案全部走 `arb/`；Rust 不向 UI 传自由文本。跨 FFI 的提示使用稳定 notice code，由 Dart 映射为本地化文案。
+- 外部数据保持原语言：昵称、频道名、服务器消息与上游库错误原文不翻译。无法翻译的外部数据字面量在所在行或上一行标注 `// language-check: allow external-data`。
 - Rust：公共类型字段默认 `pub`，与 tsclient-rs 的风格保持一致；内部细节才收窄。
-- Dart：业务逻辑不进 UI 层，页面只做展示与转发；文案全部走 `arb/`，不在 widget 里硬编码中文或英文。
+- Dart：业务逻辑不进 UI 层，页面只做展示与转发。
 
 ## git 约定
 

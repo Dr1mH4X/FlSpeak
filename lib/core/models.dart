@@ -430,15 +430,41 @@ class SessionView {
   );
 }
 
-/// 把 FFI 错误翻成可以直接显示给用户的文案。
-String describeCoreError(CoreError error, [AppLocalizations? l10n]) =>
+/// 把 FFI 错误映射为当前 locale 的文案。
+String describeCoreError(CoreError error, AppLocalizations l10n) =>
     switch (error) {
-      CoreError_InvalidAddress(:final message) => '服务器地址不可用：$message',
-      CoreError_BlockedAddress(:final message) => '已阻止该地址：$message',
-      CoreError_Connection(:final message) => '连接失败：$message',
-      CoreError_ChannelPasswordRequired(:final message) =>
-        l10n?.channelPasswordWrong ?? message,
-      CoreError_Internal(:final message) => '内部错误：$message',
+      CoreError_InvalidAddress() => l10n.errorInvalidAddress,
+      CoreError_BlockedAddress() => l10n.errorBlockedAddress,
+      CoreError_Connection() => l10n.errorConnectionFailed,
+      CoreError_ChannelPasswordRequired() => l10n.channelPasswordWrong,
+      CoreError_Internal() => l10n.errorInternal,
+    };
+
+/// 把后端稳定提示码映射为当前 locale 的文案。
+String describeBackendNotice(String code, AppLocalizations l10n) =>
+    switch (code) {
+      'voice.input_unavailable' => l10n.noticeVoiceInputUnavailable,
+      'voice.output_unavailable' => l10n.noticeVoiceOutputUnavailable,
+      'voice.codec_unavailable' => l10n.noticeVoiceCodecUnavailable,
+      'voice.codec_unsupported' => l10n.noticeVoiceCodecUnsupported,
+      'voice.capture_failed' => l10n.noticeVoiceCaptureFailed,
+      'voice.playback_failed' => l10n.noticeVoicePlaybackFailed,
+      'voice.codec_failed' => l10n.noticeVoiceCodecFailed,
+      'voice.sync_failed' => l10n.noticeVoiceSyncFailed,
+      'session.connection_lost' => l10n.noticeConnectionLost,
+      'session.kicked' => l10n.noticeKicked,
+      'session.connect_failed' => l10n.noticeConnectFailed,
+      'session.connect_timeout' => l10n.noticeConnectTimeout,
+      'session.connect_denied' => l10n.noticeConnectDenied,
+      'session.reconnect_exhausted' => l10n.noticeReconnectExhausted,
+      'session.identity_read_failed' => l10n.noticeIdentityReadFailed,
+      'session.identity_upgrade_failed' => l10n.noticeIdentityUpgradeFailed,
+      'session.identity_thread_failed' => l10n.noticeIdentityThreadFailed,
+      'session.history_write_failed' => l10n.noticeHistoryWriteFailed,
+      'session.history_compact_failed' => l10n.noticeHistoryCompactFailed,
+      'session.settings_load_failed' => l10n.noticeSettingsLoadFailed,
+      'session.actor_start_failed' => l10n.noticeActorStartFailed,
+      _ => l10n.noticeUnknown,
     };
 
 class FileTransfer {

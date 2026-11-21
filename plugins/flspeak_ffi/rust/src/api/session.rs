@@ -870,7 +870,7 @@ fn runtime() -> Result<&'static Runtime, CoreError> {
         })?;
     let _ = RUNTIME.set(built);
     RUNTIME.get().ok_or(CoreError::Internal {
-        message: "tokio runtime 初始化竞态".into(),
+        message: "tokio runtime initialization race".into(),
     })
 }
 

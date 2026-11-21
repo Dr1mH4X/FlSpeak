@@ -772,8 +772,10 @@ impl Actor {
                     self.emit(SessionEvent::IdentityUpgraded { level });
                     self.schedule_reconnect();
                 } else {
+                    let detail = error.unwrap_or_else(|| "identity upgrade failed".into());
+                    crate::log_warn!(error = detail; "identity upgrade failed");
                     self.emit(SessionEvent::Failed {
-                        message: error.unwrap_or_else(|| "身份等级提升失败".into()),
+                        message: crate::notices::SESSION_IDENTITY_UPGRADE_FAILED.into(),
                     });
                     self.schedule_reconnect();
                 }
@@ -922,8 +924,9 @@ impl Actor {
                 if let Some(server_id) = self.active_server_id.clone() {
                     let path = store::history_path(&self.store_path);
                     if let Err(message) = store::append_history(&path, &server_id, &message).await {
+                        crate::log_warn!(error = message; "failed to write message history");
                         self.emit(SessionEvent::Failed {
-                            message: format!("消息历史写入失败: {message}"),
+                            message: crate::notices::SESSION_HISTORY_WRITE_FAILED.into(),
                         });
                     }
                 }
@@ -1149,13 +1152,15 @@ impl Actor {
             }
             SessionSignal::Disconnected { epoch, message } => {
                 if epoch == self.connection_epoch {
-                    self.on_connection_lost(message, true).await;
+                    self.on_connection_lost(crate::notices::SESSION_CONNECTION_LOST, message, true)
+                        .await;
                 }
             }
             SessionSignal::Kicked { epoch, message } => {
                 if epoch == self.connection_epoch {
                     self.auto_reconnect = false;
-                    self.on_connection_lost(message, false).await;
+                    self.on_connection_lost(crate::notices::SESSION_KICKED, message, false)
+                        .await;
                 }
             }
             SessionSignal::ServerInfoUpdated { epoch, icon_id } => {
@@ -1189,7 +1194,7 @@ impl Actor {
                         ) {
                             self.emit(SessionEvent::Log {
                                 level: "warn".into(),
-                                message: format!("保存服务器图标缓存失败: {error}"),
+                                message: format!("failed to save the server icon cache: {error}"),
                             });
                         }
                         self.emit(SessionEvent::ServerIconUpdated {
@@ -1201,7 +1206,7 @@ impl Actor {
                         if !matches!(error, SessionError::NotConnected) {
                             self.emit(SessionEvent::Log {
                                 level: "warn".into(),
-                                message: format!("获取服务器图标 {icon_id} 失败: {error}"),
+                                message: format!("failed to fetch server icon {icon_id}: {error}"),
                             });
                         }
                     }
@@ -1237,7 +1242,7 @@ impl Actor {
                         ) {
                             self.emit(SessionEvent::Log {
                                 level: "warn".into(),
-                                message: format!("保存频道图标缓存失败: {error}"),
+                                message: format!("failed to save the channel icon cache: {error}"),
                             });
                         }
                         for reply in waiters {
@@ -1248,7 +1253,7 @@ impl Actor {
                         if !matches!(error, SessionError::NotConnected) {
                             self.emit(SessionEvent::Log {
                                 level: "warn".into(),
-                                message: format!("获取频道图标 {icon_id} 失败: {error}"),
+                                message: format!("failed to fetch channel icon {icon_id}: {error}"),
                             });
                         }
                         for reply in waiters {

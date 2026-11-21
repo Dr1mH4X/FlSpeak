@@ -30,6 +30,7 @@
 - 涉及 `Client` 与协议对象的 UI 命令必须经过 Actor 命令队列排队串行处理，不允许并发访问底库协议对象。
 - 原始音频采集与播放帧不进入 Actor 事件通道，仅 Opus 编码压缩后的包通过专有通道由 Actor 调度。
 - 日志文件 worker 必须启用 `lossy(true)` 非阻塞队列，在背压或写盘抖动时丢弃日志，严禁阻塞会话 Actor 或实时音频线程；重复初始化具备幂等保护。
+- 跨 FFI 的提示只传稳定 notice code：`VoiceStateView.message` 与 `SessionEvent::{Denied, Failed}` 携带 `voice.*` / `session.*` 代码，Dart 负责映射本地化文案；详细诊断写入后端日志。
 - 版本更新检查是旁路：全局异步锁保证同一时刻只跑一个检查，不占用 Actor 命令队列，也不访问 `Client`；失败不得覆盖上次成功缓存，并返回缓存推导出的最终状态。
 
 ## 相关决策

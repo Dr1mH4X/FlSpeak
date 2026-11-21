@@ -119,7 +119,7 @@ impl Actor {
                 Err(error) => {
                     self.emit(SessionEvent::Log {
                         level: "warn".into(),
-                        message: format!("清理服务器图标缓存失败: {error}"),
+                        message: format!("failed to clean the server icon cache: {error}"),
                     });
                 }
             }
@@ -316,13 +316,13 @@ impl Actor {
             .ok_or(SessionError::NotConnected)?;
         proto::check_transfer_host(target, &target.host)?;
 
-        let file = tokio::fs::File::open(&local_path)
-            .await
-            .map_err(|err| SessionError::Transfer(format!("打开本地文件失败: {err}")))?;
+        let file = tokio::fs::File::open(&local_path).await.map_err(|err| {
+            SessionError::Transfer(format!("failed to open the local file: {err}"))
+        })?;
         let size = file
             .metadata()
             .await
-            .map_err(|err| SessionError::Transfer(format!("读取文件大小失败: {err}")))?
+            .map_err(|err| SessionError::Transfer(format!("failed to read the file size: {err}")))?
             .len();
         let info = client
             .file_transfer_init_upload(

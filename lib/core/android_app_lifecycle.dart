@@ -33,7 +33,11 @@ class AndroidAppLifecycle implements AndroidAppLifecycleGateway {
     } on MissingPluginException {
       return false;
     } on PlatformException catch (error) {
-      logWarn('Android 退回后台失败', target: 'app', error: error);
+      logWarn(
+        'failed to move Android app to background',
+        target: 'app',
+        error: error,
+      );
       return false;
     }
   }

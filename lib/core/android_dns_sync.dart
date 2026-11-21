@@ -37,7 +37,11 @@ class AndroidDnsSync {
         apply(initial);
       }
     } on PlatformException catch (error) {
-      logWarn('读取 Android 初始 DNS 失败', target: 'app', error: error);
+      logWarn(
+        'failed to read initial Android DNS',
+        target: 'app',
+        error: error,
+      );
     } on MissingPluginException {
       return;
     }
@@ -50,7 +54,11 @@ class AndroidDnsSync {
         }
       },
       onError: (Object error) {
-        logWarn('监听 Android DNS 变化失败', target: 'app', error: error);
+        logWarn(
+          'failed to observe Android DNS changes',
+          target: 'app',
+          error: error,
+        );
       },
     );
   }

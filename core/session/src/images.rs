@@ -19,19 +19,19 @@ const TIMEOUT: Duration = Duration::from_secs(15);
 
 #[derive(Debug, Error)]
 pub enum ImageError {
-    #[error("图片 URL 不合法: {0}")]
+    #[error("invalid image URL: {0}")]
     InvalidUrl(String),
-    #[error("图片 URL 指向不允许的主机: {0}")]
+    #[error("image URL points to a disallowed host: {0}")]
     BlockedHost(String),
-    #[error("图片地址不允许: {0}")]
+    #[error("image address is not allowed: {0}")]
     BlockedAddress(String),
-    #[error("图片请求失败: {0}")]
+    #[error("image request failed: {0}")]
     Request(String),
-    #[error("不支持的图片格式: {0}")]
+    #[error("unsupported image format: {0}")]
     UnsupportedContent(String),
-    #[error("图片超过 20 MiB 上限")]
+    #[error("image exceeds the 20 MiB limit")]
     TooLarge,
-    #[error("图片重定向次数过多")]
+    #[error("too many image redirects")]
     TooManyRedirects,
 }
 
@@ -39,7 +39,7 @@ pub enum ImageError {
 pub async fn fetch_image(raw_url: &str) -> Result<Vec<u8>, ImageError> {
     tokio::time::timeout(TIMEOUT, fetch_image_inner(raw_url))
         .await
-        .map_err(|_| ImageError::Request("图片加载超时".into()))?
+        .map_err(|_| ImageError::Request("image load timed out".into()))?
 }
 
 async fn fetch_image_inner(raw_url: &str) -> Result<Vec<u8>, ImageError> {
@@ -61,7 +61,7 @@ async fn fetch_image_inner(raw_url: &str) -> Result<Vec<u8>, ImageError> {
                 .headers()
                 .get(LOCATION)
                 .and_then(|value| value.to_str().ok())
-                .ok_or_else(|| ImageError::InvalidUrl("重定向缺少 Location".into()))?;
+                .ok_or_else(|| ImageError::InvalidUrl("redirect is missing Location".into()))?;
             let next = current
                 .join(location)
                 .map_err(|err| ImageError::InvalidUrl(err.to_string()))?;
@@ -95,14 +95,14 @@ async fn fetch_image_inner(raw_url: &str) -> Result<Vec<u8>, ImageError> {
 
         let bytes = read_limited(response).await?;
         if bytes.is_empty() {
-            return Err(ImageError::UnsupportedContent("空响应".into()));
+            return Err(ImageError::UnsupportedContent("empty response".into()));
         }
         if !content_type.starts_with("image/") && !looks_like_image(&bytes) {
             return Err(ImageError::UnsupportedContent(content_type));
         }
         if !looks_like_image(&bytes) {
             return Err(ImageError::UnsupportedContent(
-                "content-type 是图片但字节不是 PNG/JPEG/GIF/WebP/AVIF".into(),
+                "content-type is an image but the bytes are not PNG/JPEG/GIF/WebP/AVIF".into(),
             ));
         }
         return Ok(bytes);
@@ -130,14 +130,18 @@ fn validate_url(raw: &str) -> Result<Url, ImageError> {
     let trimmed = raw.trim();
     let url = Url::parse(trimmed).map_err(|err| ImageError::InvalidUrl(err.to_string()))?;
     if !matches!(url.scheme(), "http" | "https") {
-        return Err(ImageError::InvalidUrl("只允许 http/https 图片 URL".into()));
+        return Err(ImageError::InvalidUrl(
+            "only http/https image URLs are allowed".into(),
+        ));
     }
     if !url.username().is_empty() || url.password().is_some() {
-        return Err(ImageError::InvalidUrl("图片 URL 不能带凭据".into()));
+        return Err(ImageError::InvalidUrl(
+            "image URL must not contain credentials".into(),
+        ));
     }
     let host = url
         .host_str()
-        .ok_or_else(|| ImageError::InvalidUrl("缺少主机名".into()))?;
+        .ok_or_else(|| ImageError::InvalidUrl("hostname is missing".into()))?;
     if proto::forbidden_host(host).is_some() {
         return Err(ImageError::BlockedHost(host.to_string()));
     }
@@ -159,10 +163,10 @@ fn is_forbidden_local_host(host: &str) -> bool {
 async fn build_client(url: &Url) -> Result<Client, ImageError> {
     let host = url
         .host_str()
-        .ok_or_else(|| ImageError::InvalidUrl("缺少主机名".into()))?;
+        .ok_or_else(|| ImageError::InvalidUrl("hostname is missing".into()))?;
     let port = url
         .port_or_known_default()
-        .ok_or_else(|| ImageError::InvalidUrl("缺少端口".into()))?;
+        .ok_or_else(|| ImageError::InvalidUrl("port is missing".into()))?;
 
     let (mut builder, has_proxy) =
         crate::proxy::configure(Client::builder().timeout(TIMEOUT).redirect(Policy::none()));
@@ -175,7 +179,7 @@ async fn build_client(url: &Url) -> Result<Client, ImageError> {
     } else if !has_proxy {
         let addresses = tokio::net::lookup_host((host, port))
             .await
-            .map_err(|err| ImageError::Request(format!("DNS 解析失败: {err}")))?;
+            .map_err(|err| ImageError::Request(format!("DNS resolution failed: {err}")))?;
         let mut public_addresses: Vec<SocketAddr> = Vec::new();
         for address in addresses {
             if !is_public_ip(address.ip()) {
@@ -187,7 +191,7 @@ async fn build_client(url: &Url) -> Result<Client, ImageError> {
             public_addresses.push(address);
         }
         if public_addresses.is_empty() {
-            return Err(ImageError::Request("DNS 无结果".into()));
+            return Err(ImageError::Request("DNS returned no results".into()));
         }
         builder = builder.resolve_to_addrs(host, &public_addresses);
     }

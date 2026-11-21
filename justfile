@@ -89,6 +89,15 @@ test:
 analyze-plugin:
     flutter analyze
 
+# 检查日志、错误、测试输出与工具输出中的中文
+[group('lint')]
+language-check:
+    dart tool/check_language.dart
+
+[group('lint')]
+language-test:
+    flutter test tool/check_language_test.dart
+
 # 桌面运行，按当前平台自动选设备；显式传 -d 会覆盖（flutter 取最后一个 -d）
 [group('flutter')]
 run *args:
@@ -112,7 +121,7 @@ website-check:
 # ── 聚合 ────────────────────────────────────────────────────────────────────
 
 # 提交前全量验证（AGENTS.md「验证」一节）
-check: fmt rust-clippy rust-test analyze test website-check
+check: fmt rust-clippy rust-test analyze test language-check language-test website-check
 
 # 对齐 CI 的静态检查，只读不落盘；生成物一致性另跑 just codegen-check
 ci: fmt-check rust-clippy rust-test analyze analyze-plugin test website-check

@@ -42,11 +42,11 @@ fn icon_file_path(dir: &Path, server_id: &str) -> PathBuf {
 fn write_atomic(path: &Path, data: &[u8]) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
-            .map_err(|err| format!("创建服务器图标缓存目录失败: {err}"))?;
+            .map_err(|err| format!("failed to create the server icon cache directory: {err}"))?;
     }
     let file_name = path
         .file_name()
-        .ok_or_else(|| "服务器图标缓存路径缺少文件名".to_string())?;
+        .ok_or_else(|| "server icon cache path is missing a file name".to_string())?;
     let mut temp_name = file_name.to_os_string();
     temp_name.push(format!(".{:032x}.tmp", rand::random::<u128>()));
     let temp = path.with_file_name(temp_name);
@@ -57,14 +57,15 @@ fn write_atomic(path: &Path, data: &[u8]) -> Result<(), String> {
             .write(true)
             .create_new(true)
             .open(&temp)
-            .map_err(|err| format!("创建临时缓存文件失败: {err}"))?;
+            .map_err(|err| format!("failed to create a temporary cache file: {err}"))?;
         file.write_all(data)
-            .map_err(|err| format!("写入缓存文件失败: {err}"))?;
+            .map_err(|err| format!("failed to write the cache file: {err}"))?;
         file.sync_all()
-            .map_err(|err| format!("同步缓存文件失败: {err}"))?;
+            .map_err(|err| format!("failed to sync the cache file: {err}"))?;
     }
 
-    std::fs::rename(&temp, path).map_err(|err| format!("替换缓存文件失败: {err}"))?;
+    std::fs::rename(&temp, path)
+        .map_err(|err| format!("failed to replace the cache file: {err}"))?;
     Ok(())
 }
 
@@ -74,7 +75,7 @@ fn write_index(dir: &Path, cache: &HashMap<String, CachedServerIcon>) -> Result<
         .map(|(server_id, entry)| (server_id.as_str(), entry.icon_id))
         .collect();
     let encoded = serde_json::to_vec_pretty(&index)
-        .map_err(|err| format!("序列化服务器图标索引失败: {err}"))?;
+        .map_err(|err| format!("failed to serialize the server icon index: {err}"))?;
     write_atomic(&index_path(dir), &encoded)
 }
 
@@ -131,7 +132,7 @@ pub(crate) fn save(
     bytes: Vec<u8>,
 ) -> Result<(), String> {
     if icon_id == 0 || bytes.is_empty() || bytes.len() > MAX_ICON_BYTES {
-        return Err("无效的服务器图标缓存数据".to_string());
+        return Err("invalid server icon cache data".to_string());
     }
     let dir = cache_dir(store_path);
     write_atomic(&icon_file_path(&dir, server_id), &bytes)?;

@@ -403,7 +403,7 @@ Future<ProviderContainer> _mountChannelPanel(
 }
 
 void main() {
-  testWidgets('频道切换交叉淡入，退出中的输入区不能接收焦点或点击', (tester) async {
+  testWidgets('channel switch cross-fades and the exiting input area cannot receive focus or taps', (tester) async {
     final container = await _mount(tester);
     final field = find.descendant(
       of: find.byType(ChatPane),
@@ -443,7 +443,7 @@ void main() {
     );
   });
 
-  testWidgets('展示屏幕共享入口并支持观看、静音切换与关闭', (tester) async {
+  testWidgets('shows the screen share entry and supports watching, mute toggling, and closing', (tester) async {
     final core = _Core();
     final bindings = _FakeWidgetWebRtcBindings();
     final container = await _mount(tester, core: core, bindings: bindings);
@@ -577,7 +577,7 @@ void main() {
     expect(bindings.peers.single.disposed, isTrue);
   });
 
-  testWidgets('观看端协商超时通过 NoticeCenter 提示', (tester) async {
+  testWidgets('viewer negotiation timeout is reported through NoticeCenter', (tester) async {
     final core = _Core();
     final bindings = _FakeWidgetWebRtcBindings();
     final container = await _mount(tester, core: core, bindings: bindings);
@@ -615,7 +615,7 @@ void main() {
     expect(core.left, ['stream-1']);
   });
 
-  testWidgets('多人同时屏幕共享时复用同一横幅组件且支持在多个屏幕共享间平滑切换', (tester) async {
+  testWidgets('multiple concurrent screen shares reuse one banner and switch smoothly between shares', (tester) async {
     final core = _Core();
     final bindings = _FakeWidgetWebRtcBindings();
     final container = await _mount(tester, core: core, bindings: bindings);
@@ -676,7 +676,7 @@ void main() {
     expect(find.byKey(const ValueKey('stream-viewer-stage')), findsOneWidget);
   });
 
-  testWidgets('推流状态栏展示当前屏幕共享源与本地预览开关，并可通过控制器停止共享', (tester) async {
+  testWidgets('publisher bar shows the current source and local preview toggle and can stop sharing through the controller', (tester) async {
     final core = _Core();
     final bindings = _FakeWidgetWebRtcBindings();
     final container = await _mount(tester, core: core, bindings: bindings);
@@ -741,7 +741,7 @@ void main() {
     expect(find.byKey(const ValueKey('stream-publisher-banner')), findsNothing);
   });
 
-  testWidgets('矮窗口下展开推流本地预览并存在其他屏幕共享横幅时不会发生纵向溢出', (tester) async {
+  testWidgets('expanding the local preview in a short window with other share banners does not overflow vertically', (tester) async {
     final core = _Core();
     final bindings = _FakeWidgetWebRtcBindings();
     final container = await _mount(
@@ -784,7 +784,7 @@ void main() {
     );
   });
 
-  testWidgets('语音控制栏屏幕共享按钮呼出桌面源选择弹窗并可选择分辨率与帧率开播', (tester) async {
+  testWidgets('the screen share button opens the source picker and starts with the selected resolution and frame rate', (tester) async {
     final core = _Core();
     final bindings = _FakeWidgetWebRtcBindings();
     final container = await _mountChannelPanel(
@@ -832,7 +832,7 @@ void main() {
     expect(container.read(streamPublisherProvider).isActive, isFalse);
   });
 
-  testWidgets('屏幕源枚举失败通过 NoticeCenter 提示并保留空态', (tester) async {
+  testWidgets('source enumeration failure is reported through NoticeCenter and keeps the empty state', (tester) async {
     final core = _Core();
     final bindings = _FakeWidgetWebRtcBindings()..failDesktopSources = true;
     final container = await _mountChannelPanel(
@@ -852,7 +852,7 @@ void main() {
     expect(notices.single.tone, NoticeTone.error);
   });
 
-  testWidgets('初始进入服务器聊天展示带 ServerBadge 的欢迎消息，点击频道后切到频道聊天', (tester) async {
+  testWidgets('server chat starts with a welcome message containing ServerBadge and switches to channel chat after selecting a channel', (tester) async {
     tester.view.physicalSize = const Size(1200, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -922,7 +922,7 @@ void main() {
     expect(container.read(sessionViewProvider).chatScope, ChatScope.channel);
   });
 
-  testWidgets('宽屏频道视图由 GlyphSegmentedControl 切换并即时替换内容', (tester) async {
+  testWidgets('wide channel view switches through GlyphSegmentedControl and replaces content immediately', (tester) async {
     await _mount(tester);
     final control = find.byWidgetPredicate(
       (widget) => widget is GlyphSegmentedControl,
@@ -946,7 +946,7 @@ void main() {
     expect(find.byType(ChatPane), findsOneWidget);
   });
 
-  testWidgets('工作区视图图标不触发窗口拖动', (tester) async {
+  testWidgets('workspace view icons do not start window dragging', (tester) async {
     const channel = MethodChannel('flspeak/window');
     final calls = <MethodCall>[];
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, (
@@ -990,7 +990,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
   });
 
-  testWidgets('工作区详情面板标题使用 glyph 图标', (tester) async {
+  testWidgets('workspace detail pane titles use glyph icons', (tester) async {
     await _mount(tester);
     unawaited(
       showWorkspaceDetailSheet(
@@ -1014,7 +1014,7 @@ void main() {
     );
   });
 
-  testWidgets('工作区在窄屏与平板宽屏均让顶栏与侧栏退避状态栏', (tester) async {
+  testWidgets('workspace clears the status bar in narrow and tablet-wide layouts', (tester) async {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     tester.view.devicePixelRatio = 1.0;

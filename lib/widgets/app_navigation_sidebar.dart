@@ -464,7 +464,9 @@ class _SidebarPane extends StatelessWidget {
               colors: colors,
               height: _itemSize,
               sideInset: sideInset,
-              semanticLabel: expanded ? '收起侧边栏' : '展开侧边栏',
+              semanticLabel: expanded
+                  ? l10n.sidebarCollapse
+                  : l10n.sidebarExpand,
               onTap: onToggle,
               child: SizedBox(
                 width: itemWidth,

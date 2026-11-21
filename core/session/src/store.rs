@@ -184,7 +184,7 @@ async fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
     }
     let file_name = path
         .file_name()
-        .ok_or_else(|| "文件路径没有文件名".to_string())?;
+        .ok_or_else(|| "file path has no file name".to_string())?;
     let mut temp_name = file_name.to_os_string();
     temp_name.push(format!(".{:032x}.tmp", rand::random::<u128>()));
     let temp = path.with_file_name(temp_name);
@@ -209,7 +209,9 @@ async fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
     };
     if let Err(error) = outcome {
         if let Err(cleanup) = tokio::fs::remove_file(&temp).await {
-            return Err(format!("{error}; 清理临时文件失败: {cleanup}"));
+            return Err(format!(
+                "{error}; failed to clean up the temporary file: {cleanup}"
+            ));
         }
         return Err(error.to_string());
     }
@@ -460,7 +462,7 @@ mod tests {
 
         assert!(
             load_history(&path, "x", 10).await.unwrap().is_empty(),
-            "坏行不能把整个历史读崩"
+            "a bad line must not break history loading"
         );
         compact_history(&path, 10).await.unwrap();
         assert_eq!(tokio::fs::read_to_string(&path).await.unwrap().trim(), "");

@@ -10,13 +10,13 @@ pub const DEFAULT_VOICE_PORT: u16 = 9987;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum AddressError {
-    #[error("服务器地址为空")]
+    #[error("server address is empty")]
     Empty,
 
-    #[error("服务器地址格式非法: {0}")]
+    #[error("invalid server address: {0}")]
     Malformed(String),
 
-    #[error("请填写服务器域名或 IP: {input}")]
+    #[error("enter a server hostname or IP: {input}")]
     HostRequired { input: String },
 }
 
@@ -25,10 +25,10 @@ pub enum ServerError {
     #[error(transparent)]
     Address(#[from] AddressError),
 
-    #[error("服务器 {0} 未在本地档案中登记")]
+    #[error("server {0} is not registered locally")]
     NotRegistered(String),
 
-    #[error("服务器 {0} 已在本地档案中登记")]
+    #[error("server {0} is already registered locally")]
     AlreadyRegistered(String),
 }
 
@@ -67,7 +67,7 @@ impl ServerProfile {
         let target = parse_address(&join_host_port(&self.host, self.port))?;
         if target.authority() != self.id {
             return Err(AddressError::Malformed(format!(
-                "档案主键 {} 与地址 {} 不一致",
+                "profile ID {} does not match address {}",
                 self.id,
                 target.authority()
             )));
@@ -161,7 +161,7 @@ pub fn parse_address(address: &str) -> Result<ServerTarget, AddressError> {
     }
     if trimmed.contains("://") {
         return Err(AddressError::Malformed(format!(
-            "{trimmed} 带协议前缀, 只接受 host 或 host:port"
+            "{trimmed} includes a scheme; only host or host:port is accepted"
         )));
     }
 
@@ -244,7 +244,7 @@ mod tests {
     use super::*;
 
     fn target(address: &str) -> ServerTarget {
-        parse_address(address).expect("地址应当可解析")
+        parse_address(address).expect("the address should parse")
     }
 
     #[test]

@@ -536,7 +536,7 @@ void main() {
       expect(container.read(sessionViewProvider).failureSeq, 1);
       final notices = container.read(noticeCenterProvider);
       expect(notices, hasLength(1));
-      expect(notices.single.message, '连接失败：连接超时');
+      expect(notices.single.message, 'Could not connect to the server.');
     },
   );
 
@@ -553,7 +553,7 @@ void main() {
       await events.close();
     });
     container.read(sessionViewProvider);
-    events.add(const CoreEvent.failed(message: 'history could not be saved'));
+    events.add(const CoreEvent.failed(message: 'session.history_write_failed'));
     final view = container.read(sessionViewProvider);
     expect(view.connected, isTrue);
     expect(view.channels, hasLength(1));
@@ -561,7 +561,7 @@ void main() {
     expect(view.failureSeq, 0);
     expect(
       container.read(noticeCenterProvider).single.message,
-      'history could not be saved',
+      'Could not save message history.',
     );
   });
 
@@ -664,7 +664,7 @@ void main() {
     expect(container.read(sessionViewProvider).busy, isFalse);
   });
 
-  test('电平不改变会话快照，断开后丢弃在途指标', () async {
+  test('levels do not change the session snapshot; in-flight metrics are dropped after disconnect', () async {
     final events = StreamController<CoreEvent>.broadcast(sync: true);
     final container = ProviderContainer(
       overrides: [coreSessionProvider.overrideWithValue(_Core(events))],
@@ -764,7 +764,7 @@ void main() {
     expect(
       container
           .read(noticeCenterProvider)
-          .any((notice) => notice.message.contains('kick rejected')),
+          .any((notice) => notice.message.contains('Could not connect to the server.')),
       isTrue,
     );
     core.fail = false;
