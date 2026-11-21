@@ -12,13 +12,20 @@ import 'package:flutter/services.dart';
 /// 同一个物理键在三种键盘布局下键码未必一致（如非 ANSI 布局的标点），这里
 /// 按美式布局登记；这是全局热键的常规取舍，TeamSpeak 也如此。
 
+/// 当前平台是否具备桌面全局热键能力。
+bool isGlobalHotkeyPlatformSupported([String? operatingSystem]) {
+  final os = operatingSystem ?? Platform.operatingSystem;
+  return os == 'macos' || os == 'windows' || os == 'linux';
+}
+
 /// 当前平台下该逻辑键的原生键码；平台不支持或键不在支持列表里返回 `null`。
-int? nativePttKeyCode(LogicalKeyboardKey key) {
+int? nativePttKeyCode(LogicalKeyboardKey key, {String? operatingSystem}) {
   final codes = _codes[key.keyId];
   if (codes == null) {
     return null;
   }
-  return switch (Platform.operatingSystem) {
+  final os = operatingSystem ?? Platform.operatingSystem;
+  return switch (os) {
     'macos' => codes.$1,
     'windows' => codes.$2,
     'linux' => codes.$3,
@@ -27,8 +34,8 @@ int? nativePttKeyCode(LogicalKeyboardKey key) {
 }
 
 /// 该逻辑键能否在当前平台注册为全局热键。
-bool isSupportedPttHotkey(LogicalKeyboardKey key) =>
-    nativePttKeyCode(key) != null;
+bool isSupportedPttHotkey(LogicalKeyboardKey key, {String? operatingSystem}) =>
+    nativePttKeyCode(key, operatingSystem: operatingSystem) != null;
 
 /// 展示用键名。`keyLabel` 对个别键不够友好，这里补一层人工命名。
 String pttHotkeyDisplayName(LogicalKeyboardKey key) => switch (key) {

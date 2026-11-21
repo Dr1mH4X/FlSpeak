@@ -151,11 +151,18 @@ class MainFlutterWindow: NSWindow {
     hotkeyChannel?.setMethodCallHandler { [weak self] call, result in
       switch call.method {
       case "register":
-        guard let self = self, let keyCode = call.arguments as? Int else {
-          result(false)
+        guard let self = self,
+          let rawCode = call.arguments as? Int,
+          let keyCode = UInt32(exactly: rawCode)
+        else {
+          result([
+            "ok": false,
+            "reason": "unsupportedKey",
+            "code": nil,
+          ] as [String: Any?])
           return
         }
-        result(self.registerHotkey(UInt32(keyCode)))
+        result(self.registerHotkey(keyCode))
       case "unregister":
         self?.unregisterHotkey()
         result(true)
@@ -165,13 +172,17 @@ class MainFlutterWindow: NSWindow {
     }
   }
 
-  private func registerHotkey(_ keyCode: UInt32) -> Bool {
+  private func registerHotkey(_ keyCode: UInt32) -> [String: Any?] {
     unregisterHotkey()
     // signature 取一个应用内唯一的四字符码即可，id 区分同应用内的多个热键。
     let hotKeyID = EventHotKeyID(signature: OSType(0x46_53_50_4B), id: 1)
-    return RegisterEventHotKey(
-      keyCode, 0, hotKeyID, GetApplicationEventTarget(), 0, &hotkeyRef
-    ) == noErr
+    let status = RegisterEventHotKey(
+      keyCode, 0, hotKeyID, GetApplicationEventTarget(), 0, &hotkeyRef)
+    if status == noErr {
+      return ["ok": true, "reason": "registered", "code": nil]
+    }
+    let reason = status == OSStatus(eventHotKeyExistsErr) ? "conflict" : "failed"
+    return ["ok": false, "reason": reason, "code": Int(status)]
   }
 
   private func unregisterHotkey() {

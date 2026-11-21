@@ -66,6 +66,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     super.initState();
     _activeCategory = widget.initialCategory;
     _activeGeneralSubcategory = widget.initialGeneralSubcategory;
+    ref.read(pttHotkeyStatusProvider.notifier).requestRetry();
   }
 
   void _openDetail(SettingsPage page) {
@@ -166,6 +167,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final pttHotkeyKey = preferences.pttHotkey == null
         ? null
         : LogicalKeyboardKey.findKeyByKeyId(preferences.pttHotkey!);
+    final pttHotkeyStatus = ref.watch(pttHotkeyStatusProvider);
 
     final isSubPage =
         _activeCategory != null || _activeGeneralSubcategory != null;
@@ -310,9 +312,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       SettingsTile(
                         icon: Icons.keyboard_rounded,
                         title: l10n.settingsPttHotkey,
-                        subtitle: pttHotkeyKey == null
-                            ? l10n.settingsPttHotkeyNone
-                            : pttHotkeyDisplayName(pttHotkeyKey),
+                        subtitle: _pttHotkeySubtitle(
+                          l10n,
+                          pttHotkeyKey,
+                          pttHotkeyStatus,
+                        ),
                         onTap: () => unawaited(_pickPttHotkey()),
                       ),
                       SettingsTile(
@@ -631,6 +635,24 @@ class _AudioDevicePicker extends ConsumerWidget {
       },
     );
   }
+}
+
+String _pttHotkeySubtitle(
+  AppLocalizations l10n,
+  LogicalKeyboardKey? key,
+  PttHotkeyStatus status,
+) {
+  if (key == null) return l10n.settingsPttHotkeyNone;
+  final keyName = pttHotkeyDisplayName(key);
+  return switch (status.state) {
+    PttHotkeyState.permissionDenied =>
+      '$keyName · ${l10n.settingsPttHotkeyPermissionRequired}',
+    PttHotkeyState.unsupportedPlatform ||
+    PttHotkeyState.unsupportedKey ||
+    PttHotkeyState.conflict ||
+    PttHotkeyState.failed => '$keyName · ${l10n.settingsPttHotkeyInAppOnly}',
+    PttHotkeyState.inactive || PttHotkeyState.registered => keyName,
+  };
 }
 
 String _localeLabel(AppLocalizations l10n, String? locale) => switch (locale) {

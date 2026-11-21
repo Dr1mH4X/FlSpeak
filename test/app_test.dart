@@ -14,7 +14,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import 'package:flspeak/app.dart';
+import 'package:flspeak/core/global_hotkey.dart';
+import 'package:flspeak/core/hotkey_codes.dart';
+import 'package:flspeak/core/logging/json_lines_file_observer.dart';
+import 'package:flspeak/core/logging/logger.dart';
 import 'package:flspeak/features/settings/settings_page.dart';
+import 'package:talker/talker.dart';
 import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/core/models.dart';
 import 'package:flspeak/core/notices.dart';
@@ -35,12 +40,33 @@ import 'package:flspeak/widgets/prism.dart'
 import 'package:flspeak/widgets/update_dot.dart';
 
 class _PttSession extends SessionController {
+  _PttSession({this.initialPttMode = true, this.initialConnected = true});
+
+  final bool initialPttMode;
+  final bool initialConnected;
   final presses = <bool>[];
+
   @override
-  SessionView build() => const SessionView(
-    state: CoreSessionState.connected(clientId: 1, channelId: 5),
-    pttMode: true,
+  SessionView build() => SessionView(
+    state: initialConnected
+        ? const CoreSessionState.connected(clientId: 1, channelId: 5)
+        : const CoreSessionState.disconnected(),
+    pttMode: initialPttMode,
   );
+
+  @override
+  Future<void> setPttMode(bool enabled) async {
+    state = state.copyWith(pttMode: enabled);
+  }
+
+  void setConnected(bool connected) {
+    state = state.copyWith(
+      state: connected
+          ? const CoreSessionState.connected(clientId: 1, channelId: 5)
+          : const CoreSessionState.disconnected(),
+    );
+  }
+
   @override
   Future<void> setPttActive(bool active) async {
     presses.add(active);
@@ -51,8 +77,10 @@ class _PttCore extends Fake implements CoreSession {}
 
 Future<ProviderContainer> _mountPtt(
   WidgetTester tester,
-  _PttSession controller,
-) async {
+  _PttSession controller, {
+  int? pttHotkey,
+  bool overrideHotkey = true,
+}) async {
   final container = ProviderContainer(
     overrides: [
       coreSessionProvider.overrideWithValue(_PttCore()),
@@ -63,7 +91,9 @@ Future<ProviderContainer> _mountPtt(
           preferences: SessionPreferences(
             nickname: 'Test',
             locale: 'zh',
-            pttHotkey: LogicalKeyboardKey.keyA.keyId,
+            pttHotkey: overrideHotkey
+                ? pttHotkey
+                : LogicalKeyboardKey.keyA.keyId,
           ),
         ),
       ),
@@ -88,7 +118,13 @@ void main() {
       (tester) async {
         tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
           hotkey,
-          (call) async => call.method == 'register' ? true : null,
+          (call) async => call.method == 'register'
+              ? <String, Object?>{
+                  'ok': true,
+                  'reason': 'registered',
+                  'code': null,
+                }
+              : null,
         );
         addTearDown(
           () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -97,7 +133,11 @@ void main() {
           ),
         );
         final controller = _PttSession();
-        final container = await _mountPtt(tester, controller);
+        final container = await _mountPtt(
+          tester,
+          controller,
+          overrideHotkey: false,
+        );
         container.read(routerProvider).go(AppRoutes.settings);
         await tester.pumpAndSettle();
         final generalCategory = find.text('通用');
@@ -144,7 +184,11 @@ void main() {
           unregisters++;
           return null;
         }
-        return true;
+        return <String, Object?>{
+          'ok': true,
+          'reason': 'registered',
+          'code': null,
+        };
       });
       addTearDown(
         () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -153,7 +197,11 @@ void main() {
         ),
       );
       final controller = _PttSession();
-      final container = await _mountPtt(tester, controller);
+      final container = await _mountPtt(
+        tester,
+        controller,
+        overrideHotkey: false,
+      );
       await tester.sendKeyDownEvent(LogicalKeyboardKey.keyA);
       container
           .read(preferencesProvider.notifier)
@@ -173,8 +221,8 @@ void main() {
   testWidgets(
     'late hotkey registration cannot disable the focus-loss PTT fallback',
     (tester) async {
-      final old = Completer<bool>();
-      final current = Completer<bool>();
+      final old = Completer<Map<String, Object?>>();
+      final current = Completer<Map<String, Object?>>();
       var registrations = 0;
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(hotkey, (
         call,
@@ -189,21 +237,448 @@ void main() {
         ),
       );
       final controller = _PttSession();
-      final container = await _mountPtt(tester, controller);
+      final container = await _mountPtt(
+        tester,
+        controller,
+        overrideHotkey: false,
+      );
       container
           .read(preferencesProvider.notifier)
           .setPttHotkey(LogicalKeyboardKey.keyB.keyId);
       await tester.pump();
-      current.complete(false);
+      current.complete(<String, Object?>{
+        'ok': false,
+        'reason': 'failed',
+        'code': 5,
+      });
       await tester.pump();
-      old.complete(true);
+      old.complete(<String, Object?>{
+        'ok': true,
+        'reason': 'registered',
+        'code': null,
+      });
       await tester.pump();
+      expect(
+        container.read(pttHotkeyStatusProvider).state,
+        PttHotkeyState.failed,
+      );
       await tester.sendKeyDownEvent(LogicalKeyboardKey.keyB);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
       await tester.pump();
       expect(controller.presses, [true, false]);
       await tester.sendKeyUpEvent(LogicalKeyboardKey.keyB);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'registers global hotkey only when pttMode is enabled and unregisters on disable',
+    (tester) async {
+      var registerCalls = 0;
+      var unregisterCalls = 0;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(hotkey, (
+        call,
+      ) async {
+        if (call.method == 'register') {
+          registerCalls++;
+          return <String, Object?>{
+            'ok': true,
+            'reason': 'registered',
+            'code': null,
+          };
+        }
+        if (call.method == 'unregister') {
+          unregisterCalls++;
+          return true;
+        }
+        return null;
+      });
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          hotkey,
+          null,
+        ),
+      );
+
+      final controller = _PttSession(initialPttMode: false);
+      final container = await _mountPtt(
+        tester,
+        controller,
+        pttHotkey: LogicalKeyboardKey.keyA.keyId,
+      );
+      expect(registerCalls, 0);
+      expect(unregisterCalls, 1);
+      expect(
+        container.read(pttHotkeyStatusProvider),
+        PttHotkeyStatus.inactive(keyId: LogicalKeyboardKey.keyA.keyId),
+      );
+
+      await container.read(sessionViewProvider.notifier).setPttMode(true);
+      await tester.pumpAndSettle();
+      expect(registerCalls, 1);
+      expect(
+        container.read(pttHotkeyStatusProvider).state,
+        PttHotkeyState.registered,
+      );
+
+      await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+        hotkey.name,
+        const StandardMethodCodec().encodeMethodCall(
+          const MethodCall('onKeyDown'),
+        ),
+        (_) {},
+      );
+      await tester.pump();
+      expect(controller.presses, [true]);
+
+      await container.read(sessionViewProvider.notifier).setPttMode(false);
+      await tester.pumpAndSettle();
+      expect(unregisterCalls, 2);
+      expect(controller.presses, [true, false]);
+      expect(
+        container.read(pttHotkeyStatusProvider),
+        PttHotkeyStatus.inactive(keyId: LogicalKeyboardKey.keyA.keyId),
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  for (final reason in [
+    GlobalHotkeyReason.permissionDenied,
+    GlobalHotkeyReason.conflict,
+    GlobalHotkeyReason.failed,
+  ]) {
+    testWidgets(
+      'retries hotkey registration on resume and settings open for ${reason.name}',
+      (tester) async {
+        var registerCalls = 0;
+        var currentResponse = <String, Object?>{
+          'ok': false,
+          'reason': reason.name,
+          'code': 5,
+        };
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(hotkey, (
+          call,
+        ) async {
+          if (call.method == 'register') {
+            registerCalls++;
+            return currentResponse;
+          }
+          return true;
+        });
+        addTearDown(
+          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            hotkey,
+            null,
+          ),
+        );
+
+        final controller = _PttSession();
+        final container = await _mountPtt(
+          tester,
+          controller,
+          pttHotkey: LogicalKeyboardKey.keyA.keyId,
+        );
+        expect(registerCalls, 1);
+
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await tester.pumpAndSettle();
+        expect(registerCalls, 2);
+
+        container.read(routerProvider).go(AppRoutes.settings);
+        await tester.pumpAndSettle();
+        expect(registerCalls, 3);
+
+        currentResponse = <String, Object?>{
+          'ok': true,
+          'reason': 'registered',
+          'code': null,
+        };
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await tester.pumpAndSettle();
+        expect(registerCalls, 4);
+        expect(
+          container.read(pttHotkeyStatusProvider).state,
+          PttHotkeyState.registered,
+        );
+
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        await tester.pumpAndSettle();
+        expect(registerCalls, 4);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
+  for (final reason in [
+    GlobalHotkeyReason.unsupportedPlatform,
+    GlobalHotkeyReason.unsupportedKey,
+  ]) {
+    testWidgets('does not retry hotkey registration for ${reason.name}', (
+      tester,
+    ) async {
+      var registerCalls = 0;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(hotkey, (
+        call,
+      ) async {
+        if (call.method == 'register') {
+          registerCalls++;
+          return <String, Object?>{
+            'ok': false,
+            'reason': reason.name,
+            'code': null,
+          };
+        }
+        return true;
+      });
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          hotkey,
+          null,
+        ),
+      );
+
+      final controller = _PttSession();
+      final container = await _mountPtt(
+        tester,
+        controller,
+        pttHotkey: LogicalKeyboardKey.keyA.keyId,
+      );
+      expect(registerCalls, 1);
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(registerCalls, 1);
+
+      container.read(routerProvider).go(AppRoutes.settings);
+      await tester.pumpAndSettle();
+      expect(registerCalls, 1);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
+  testWidgets('does not retry registration when PTT mode is inactive', (
+    tester,
+  ) async {
+    var registerCalls = 0;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(hotkey, (
+      call,
+    ) async {
+      if (call.method == 'register') {
+        registerCalls++;
+      }
+      return true;
+    });
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        hotkey,
+        null,
+      ),
+    );
+
+    final controller = _PttSession(initialPttMode: false);
+    final container = await _mountPtt(
+      tester,
+      controller,
+      pttHotkey: LogicalKeyboardKey.keyA.keyId,
+    );
+    expect(registerCalls, 0);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    container.read(routerProvider).go(AppRoutes.settings);
+    await tester.pumpAndSettle();
+    expect(registerCalls, 0);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('releases held PTT on disconnect and detached lifecycle', (
+    tester,
+  ) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(hotkey, (
+      call,
+    ) async {
+      if (call.method == 'register') {
+        return <String, Object?>{
+          'ok': true,
+          'reason': 'registered',
+          'code': null,
+        };
+      }
+      return true;
+    });
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        hotkey,
+        null,
+      ),
+    );
+
+    final controller = _PttSession();
+    await _mountPtt(
+      tester,
+      controller,
+      pttHotkey: LogicalKeyboardKey.keyA.keyId,
+    );
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.keyA);
+    expect(controller.presses, [true]);
+
+    // While native hotkey is registered, inactive keeps PTT active.
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await tester.pump();
+    expect(controller.presses, [true]);
+
+    // Disconnecting immediately resets PTT.
+    controller.setConnected(false);
+    await tester.pump();
+    expect(controller.presses, [true, false]);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.keyA);
+
+    // Reconnect, press again, and verify detached resets PTT even when native registered.
+    controller.setConnected(true);
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.keyA);
+    expect(controller.presses, [true, false, true]);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.detached);
+    await tester.pump();
+    expect(controller.presses, [true, false, true, false]);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.keyA);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+    'logs leveled hotkey errors, deduplicates NoticeCenter notices, and displays voice settings status',
+    (tester) async {
+      final previousTalker = talker;
+      final testTalker = Talker(
+        logger: TalkerLogger(formatter: const PlainLoggerFormatter()),
+        settings: TalkerSettings(useConsoleLogs: false),
+      );
+      talker = testTalker;
+      addTearDown(() => talker = previousTalker);
+
+      var channelResponse = <String, Object?>{
+        'ok': false,
+        'reason': 'conflict',
+        'code': -9878,
+      };
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(hotkey, (
+        call,
+      ) async {
+        if (call.method == 'register') {
+          return channelResponse;
+        }
+        return true;
+      });
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          hotkey,
+          null,
+        ),
+      );
+
+      final controller = _PttSession();
+      final container = await _mountPtt(
+        tester,
+        controller,
+        pttHotkey: LogicalKeyboardKey.keyA.keyId,
+      );
+
+      final conflictLogs = testTalker.history
+          .whereType<StructuredTalkerLog>()
+          .where((log) => log.title == 'hotkey')
+          .toList();
+      expect(conflictLogs, hasLength(1));
+      expect(conflictLogs.single.logLevel, LogLevel.warning);
+      expect(
+        conflictLogs.single.fields?['keyId'],
+        LogicalKeyboardKey.keyA.keyId,
+      );
+      expect(
+        conflictLogs.single.fields?['nativeCode'],
+        nativePttKeyCode(LogicalKeyboardKey.keyA),
+      );
+      expect(conflictLogs.single.fields?['platform'], isA<String>());
+      expect(conflictLogs.single.fields?['code'], -9878);
+
+      expect(find.text('全局快捷键不可用，当前仅应用内生效'), findsOneWidget);
+
+      // Retrying with the same failure reason does not duplicate NoticeCenter notices.
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(container.read(noticeCenterProvider), hasLength(1));
+
+      container.read(routerProvider).go(AppRoutes.settings);
+      await tester.pumpAndSettle();
+      final generalCategory = find.text('通用');
+      await tester.ensureVisible(generalCategory);
+      await tester.tap(generalCategory);
+      await tester.pumpAndSettle();
+      final voiceTile = find.text('语音');
+      await tester.ensureVisible(voiceTile);
+      await tester.tap(voiceTile);
+      await tester.pumpAndSettle();
+      expect(find.text('A · 仅应用内'), findsOneWidget);
+
+      // Switch to permissionDenied via key change and verify UI & NoticeCenter update.
+      channelResponse = <String, Object?>{
+        'ok': false,
+        'reason': 'permissionDenied',
+        'code': 5,
+      };
+      container
+          .read(preferencesProvider.notifier)
+          .setPttHotkey(LogicalKeyboardKey.keyB.keyId);
+      await tester.pumpAndSettle();
+      expect(find.text('B · 需要辅助功能权限'), findsOneWidget);
+      expect(find.text('全局快捷键需要辅助功能权限，当前仅应用内生效'), findsOneWidget);
+
+      // Switch to unsupportedPlatform and verify INFO log level (no new warning).
+      final warningsBeforeUnsupported = testTalker.history
+          .whereType<StructuredTalkerLog>()
+          .where(
+            (log) => log.title == 'hotkey' && log.logLevel == LogLevel.warning,
+          )
+          .length;
+      channelResponse = <String, Object?>{
+        'ok': false,
+        'reason': 'unsupportedPlatform',
+        'code': null,
+      };
+      container
+          .read(preferencesProvider.notifier)
+          .setPttHotkey(LogicalKeyboardKey.keyC.keyId);
+      await tester.pumpAndSettle();
+
+      final warningsAfterUnsupported = testTalker.history
+          .whereType<StructuredTalkerLog>()
+          .where(
+            (log) => log.title == 'hotkey' && log.logLevel == LogLevel.warning,
+          )
+          .length;
+      expect(warningsAfterUnsupported, warningsBeforeUnsupported);
+      final infoLogs = testTalker.history
+          .whereType<StructuredTalkerLog>()
+          .where(
+            (log) => log.title == 'hotkey' && log.logLevel == LogLevel.info,
+          )
+          .toList();
+      expect(infoLogs, hasLength(1));
+      expect(find.text('C · 仅应用内'), findsOneWidget);
+
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );

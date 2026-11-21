@@ -824,6 +824,18 @@ abstract class AppLocalizations {
   /// **'Clear'**
   String get settingsPttHotkeyClear;
 
+  /// No description provided for @settingsPttHotkeyInAppOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'In-app only'**
+  String get settingsPttHotkeyInAppOnly;
+
+  /// No description provided for @settingsPttHotkeyPermissionRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Accessibility permission required'**
+  String get settingsPttHotkeyPermissionRequired;
+
   /// No description provided for @settingsNoiseSuppression.
   ///
   /// In en, this message translates to:
@@ -1477,6 +1489,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Voice state sync failed; it will retry automatically.'**
   String get noticeVoiceSyncFailed;
+
+  /// No description provided for @noticePttHotkeyInAppOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Global hotkey unavailable; push-to-talk works in-app only'**
+  String get noticePttHotkeyInAppOnly;
+
+  /// No description provided for @noticePttHotkeyPermissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Global hotkey requires accessibility permission; working in-app only'**
+  String get noticePttHotkeyPermissionDenied;
 
   /// No description provided for @noticeConnectionLost.
   ///

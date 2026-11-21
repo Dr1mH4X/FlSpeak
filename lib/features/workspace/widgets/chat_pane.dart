@@ -1564,6 +1564,14 @@ class _CompactWorkspaceBottomBarState
         setState(() => _voiceControlMode = next);
       }
     });
+    ref.listen<bool>(sessionViewProvider.select((view) => view.connected), (
+      previous,
+      next,
+    ) {
+      if (!next) {
+        _setPttHeld(false);
+      }
+    });
 
     final Widget barRow = AnimatedSwitcher(
       duration: reduceMotion ? Duration.zero : Motion.effectsFast,

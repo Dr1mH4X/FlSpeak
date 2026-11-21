@@ -407,6 +407,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsPttHotkeyClear => 'Clear';
 
   @override
+  String get settingsPttHotkeyInAppOnly => 'In-app only';
+
+  @override
+  String get settingsPttHotkeyPermissionRequired =>
+      'Accessibility permission required';
+
+  @override
   String get settingsNoiseSuppression => 'Noise suppression';
 
   @override
@@ -752,6 +759,14 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get noticeVoiceSyncFailed =>
       'Voice state sync failed; it will retry automatically.';
+
+  @override
+  String get noticePttHotkeyInAppOnly =>
+      'Global hotkey unavailable; push-to-talk works in-app only';
+
+  @override
+  String get noticePttHotkeyPermissionDenied =>
+      'Global hotkey requires accessibility permission; working in-app only';
 
   @override
   String get noticeConnectionLost => 'Connection lost.';

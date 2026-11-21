@@ -102,14 +102,39 @@ void FlutterWindow::HandleHotkeyCall(
     } else if (const auto* int64_value = std::get_if<int64_t>(call.arguments())) {
       code = *int64_value;
     }
-    bool ok = code >= 0 && code <= 0xFFFFFFFF &&
-              keyboard_hook_.Start(static_cast<uint32_t>(code),
-                                   [this](bool down) {
-                                     hotkey_channel_->InvokeMethod(
-                                         down ? "onKeyDown" : "onKeyUp",
-                                         nullptr);
-                                    });
-    result->Success(flutter::EncodableValue(ok));
+    flutter::EncodableMap response;
+    if (code <= 0 || code > 0xFFFFFFFF) {
+      response[flutter::EncodableValue("ok")] = flutter::EncodableValue(false);
+      response[flutter::EncodableValue("reason")] =
+          flutter::EncodableValue("unsupportedKey");
+      response[flutter::EncodableValue("code")] = flutter::EncodableValue();
+      result->Success(flutter::EncodableValue(response));
+      return;
+    }
+    const auto start_result = keyboard_hook_.Start(
+        static_cast<uint32_t>(code),
+        [this](bool down) {
+          if (hotkey_channel_) {
+            hotkey_channel_->InvokeMethod(down ? "onKeyDown" : "onKeyUp",
+                                          nullptr);
+          }
+        });
+    if (start_result.ok) {
+      response[flutter::EncodableValue("ok")] = flutter::EncodableValue(true);
+      response[flutter::EncodableValue("reason")] =
+          flutter::EncodableValue("registered");
+      response[flutter::EncodableValue("code")] = flutter::EncodableValue();
+    } else {
+      const char* reason = start_result.error_code == ERROR_ACCESS_DENIED
+                               ? "permissionDenied"
+                               : "failed";
+      response[flutter::EncodableValue("ok")] = flutter::EncodableValue(false);
+      response[flutter::EncodableValue("reason")] =
+          flutter::EncodableValue(reason);
+      response[flutter::EncodableValue("code")] =
+          flutter::EncodableValue(static_cast<int64_t>(start_result.error_code));
+    }
+    result->Success(flutter::EncodableValue(response));
   } else if (call.method_name() == "unregister") {
     keyboard_hook_.Stop();
     result->Success(flutter::EncodableValue(true));

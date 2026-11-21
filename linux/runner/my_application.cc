@@ -25,13 +25,12 @@ G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
 #ifdef GDK_WINDOWING_X11
 namespace {
-// XGrabKey 的 BadAccess 是异步到达的，没有自定义错误处理器会直接终止进程。
-gboolean g_hotkey_grab_failed = FALSE;
+// XGrabKey 的错误是异步到达的，没有自定义错误处理器会直接终止进程。
+int g_hotkey_grab_error_code = 0;
 
 int hotkey_x11_error_handler(Display* display, XErrorEvent* event) {
-  if (event->error_code == BadAccess) {
-    g_hotkey_grab_failed = TRUE;
-    return 0;
+  if (g_hotkey_grab_error_code == 0 && event != nullptr) {
+    g_hotkey_grab_error_code = event->error_code;
   }
   return 0;
 }
@@ -82,17 +81,27 @@ static void ungrab_hotkey(MyApplication* self) {
   self->hotkey_keycode = 0;
 }
 
-static gboolean grab_hotkey(MyApplication* self, guint keycode) {
+static FlValue* make_hotkey_result(gboolean ok, const gchar* reason,
+                                   gboolean has_code, int code) {
+  FlValue* map = fl_value_new_map();
+  fl_value_set_string_take(map, "ok", fl_value_new_bool(ok));
+  fl_value_set_string_take(map, "reason", fl_value_new_string(reason));
+  fl_value_set_string_take(
+      map, "code", has_code ? fl_value_new_int(code) : fl_value_new_null());
+  return map;
+}
+
+static FlValue* grab_hotkey(MyApplication* self, guint keycode) {
   ungrab_hotkey(self);
 #ifdef GDK_WINDOWING_X11
   GdkDisplay* display = gdk_display_get_default();
   if (display == nullptr || !GDK_IS_X11_DISPLAY(display)) {
-    return FALSE;
+    return make_hotkey_result(FALSE, "unsupportedPlatform", FALSE, 0);
   }
   Display* xdisplay = gdk_x11_display_get_xdisplay(display);
   Window root = XDefaultRootWindow(xdisplay);
 
-  g_hotkey_grab_failed = FALSE;
+  g_hotkey_grab_error_code = 0;
   XErrorHandler previous_handler = XSetErrorHandler(hotkey_x11_error_handler);
   for (unsigned int mask : kHotkeyLockMasks) {
     XGrabKey(xdisplay, static_cast<int>(keycode), mask, root, False,
@@ -100,10 +109,15 @@ static gboolean grab_hotkey(MyApplication* self, guint keycode) {
   }
   XSync(xdisplay, False);
   XSetErrorHandler(previous_handler);
-  if (g_hotkey_grab_failed) {
-    // 键可能已被其他程序占用；把成功的几次 grab 也退掉再报失败。
+  if (g_hotkey_grab_error_code != 0) {
+    // 键可能已被其他程序占用或无效；把成功的几次 grab 也退掉再报失败。
+    const int error_code = g_hotkey_grab_error_code;
     ungrab_hotkey(self);
-    return FALSE;
+    const gchar* reason = error_code == BadAccess
+                              ? "conflict"
+                              : (error_code == BadValue ? "unsupportedKey"
+                                                        : "failed");
+    return make_hotkey_result(FALSE, reason, TRUE, error_code);
   }
 
   self->hotkey_keycode = keycode;
@@ -111,9 +125,9 @@ static gboolean grab_hotkey(MyApplication* self, guint keycode) {
     gdk_window_add_filter(nullptr, hotkey_x11_filter, self);
     self->hotkey_filter_installed = TRUE;
   }
-  return TRUE;
+  return make_hotkey_result(TRUE, "registered", FALSE, 0);
 #else
-  return FALSE;
+  return make_hotkey_result(FALSE, "unsupportedPlatform", FALSE, 0);
 #endif
 }
 
@@ -124,10 +138,16 @@ static void hotkey_method_call_cb(FlMethodChannel* channel, FlMethodCall* call,
   FlValue* args = fl_method_call_get_args(call);
   g_autoptr(FlValue) result = nullptr;
   if (strcmp(name, "register") == 0) {
-    gboolean ok = fl_value_get_type(args) == FL_VALUE_TYPE_INT &&
-                  grab_hotkey(self,
-                              static_cast<guint>(fl_value_get_int(args)));
-    result = fl_value_new_bool(ok);
+    if (fl_value_get_type(args) != FL_VALUE_TYPE_INT) {
+      result = make_hotkey_result(FALSE, "unsupportedKey", FALSE, 0);
+    } else {
+      const int64_t raw_code = fl_value_get_int(args);
+      if (raw_code <= 0 || raw_code > G_MAXUINT) {
+        result = make_hotkey_result(FALSE, "unsupportedKey", FALSE, 0);
+      } else {
+        result = grab_hotkey(self, static_cast<guint>(raw_code));
+      }
+    }
   } else if (strcmp(name, "unregister") == 0) {
     ungrab_hotkey(self);
     result = fl_value_new_bool(TRUE);
