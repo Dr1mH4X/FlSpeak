@@ -206,7 +206,7 @@ Future<ProviderContainer> _mountCompactApp(
 
 void main() {
   testWidgets(
-    'compact root renders NavigationDock vs NavigationBar, switches tabs with Slide/Fade, and pushes settings details over the root dock',
+    'compact root renders NavigationDock vs NavigationBar, switches tabs with Fade, and pushes settings details over the root dock',
     (tester) async {
       final container = await _mountCompactApp(
         tester,
@@ -214,7 +214,6 @@ void main() {
           nickname: 'Test',
           locale: 'zh',
           floatingNavigationBar: true,
-          tabAnimation: TabAnimation.fade,
         ),
       );
 
@@ -264,11 +263,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(NavigationDock), findsOneWidget);
 
-      // 切回 Slide 动画也能从设置切回主页。
-      container
-          .read(preferencesProvider.notifier)
-          .setTabAnimation(TabAnimation.slide);
-      await tester.pumpAndSettle();
+      // 从设置切回主页。
       await tester.tap(
         find.descendant(
           of: find.byType(NavigationDock),

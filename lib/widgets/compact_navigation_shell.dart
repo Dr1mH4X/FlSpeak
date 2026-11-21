@@ -1,11 +1,11 @@
 // 本文件包含的代码片段来源于 FlClash（https://github.com/chen08209/FlClash）项目，
 // 原始许可证为 GPL-3.0，来源提交 be84736605527034689c95bf27828ff27d912c5e。
-// 对应 lib/pages/home.dart 中的浮动/停靠底部导航栏切换及 PageView / _FadeTabPage 标签页动画（Slide / Fade）。
+// 对应 lib/pages/home.dart 中的浮动/停靠底部导航栏切换及 PageView / _FadeTabPage 标签页淡入淡出。
 
 import 'dart:async';
 
 import 'package:flutter/material.dart'
-    hide NavigationBar, NavigationDestination, kTabScrollDuration;
+    hide NavigationBar, NavigationDestination;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -65,8 +65,8 @@ class CompactBottomInsetScope extends InheritedWidget {
       inset != oldWidget.inset;
 }
 
-/// 窄屏（`< 768px`）顶级导航外壳：在「首页」「工作区」与「设置」间按 [TabAnimation]
-/// 滑动或淡入淡出切换，并按 [SessionPreferences.floatingNavigationBar] 在
+/// 窄屏（`< 768px`）顶级导航外壳：在「首页」「工作区」与「设置」间淡入淡出切换，
+/// 并按 [SessionPreferences.floatingNavigationBar] 在
 /// [NavigationDock] 悬浮药丸与 [NavigationBar] 停靠底栏间切换。
 class CompactNavigationShell extends ConsumerStatefulWidget {
   const CompactNavigationShell({
@@ -96,7 +96,7 @@ class _CompactNavigationShellState
   late final PageController _pageController;
   late int _currentIndex = _indexForLocation(widget.location);
   List<int>? _order;
-  int _slide = 0;
+  int _transition = 0;
 
   int _indexForLocation(String location) => switch (location) {
     AppRoutes.workspace => 1,
@@ -123,8 +123,7 @@ class _CompactNavigationShellState
 
   Future<void> _toPage(int index, {bool ignoreAnimateTo = false}) async {
     _currentIndex = index;
-    final tabAnimation = ref.read(preferencesProvider).tabAnimation;
-    final slide = ++_slide;
+    final transition = ++_transition;
     final page = _pageController.hasClients
         ? _pageController.page?.round() ?? index
         : index;
@@ -149,13 +148,12 @@ class _CompactNavigationShellState
       });
       _pageController.jumpToPage(adjacent);
     }
-    final fade = tabAnimation == TabAnimation.fade;
     await _pageController.animateToPage(
       index,
-      duration: fade ? fadeTabDuration : kTabScrollDuration,
-      curve: fade ? fadeTabCurve : Curves.easeOut,
+      duration: fadeTabDuration,
+      curve: fadeTabCurve,
     );
-    if (mounted && slide == _slide && _order != null) {
+    if (mounted && transition == _transition && _order != null) {
       setState(() => _order = null);
     }
   }
@@ -199,13 +197,8 @@ class _CompactNavigationShellState
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final (:floating, :fade) = ref.watch(
-      preferencesProvider.select(
-        (prefs) => (
-          floating: prefs.floatingNavigationBar,
-          fade: prefs.tabAnimation == TabAnimation.fade,
-        ),
-      ),
+    final floating = ref.watch(
+      preferencesProvider.select((prefs) => prefs.floatingNavigationBar),
     );
     final connected = ref.watch(
       sessionViewProvider.select((view) => view.connected),
@@ -252,7 +245,6 @@ class _CompactNavigationShellState
                 key: page.key,
                 controller: _pageController,
                 position: index,
-                enabled: fade,
                 child: page,
               );
             },
@@ -342,20 +334,18 @@ class _NavigationPadding extends StatelessWidget {
 
 const _restingDelta = 0.001;
 
-/// 当启用 Fade 动画时，用快照在原位交叉淡入淡出，取消 PageView 的水平位移，
-/// 并保持每一页在切换动画模式时状态不丢。
+/// 用快照在原位交叉淡入淡出，取消 PageView 的水平位移，
+/// 并保持每一页在切换时状态不丢。
 class _FadeTabPage extends StatefulWidget {
   const _FadeTabPage({
     super.key,
     required this.controller,
     required this.position,
-    required this.enabled,
     required this.child,
   });
 
   final PageController controller;
   final int position;
-  final bool enabled;
   final Widget child;
 
   @override
@@ -391,10 +381,9 @@ class _FadeTabPageState extends State<_FadeTabPage> {
       builder: (_, child) {
         final offset = _delta;
         _snapshot.allowSnapshotting = offset.abs() > _restingDelta;
-        final delta = widget.enabled ? offset : 0.0;
         return FractionalTranslation(
-          translation: Offset(-delta, 0),
-          child: Opacity(opacity: 1 - delta.abs(), child: child),
+          translation: Offset(-offset, 0),
+          child: Opacity(opacity: 1 - offset.abs(), child: child),
         );
       },
       child: SnapshotWidget(

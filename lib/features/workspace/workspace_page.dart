@@ -865,7 +865,6 @@ class _ChannelChatBodyState extends ConsumerState<_ChannelChatBody> {
           controller.selectDirectRecipient(peer.uid, clientId: peer.id),
       onFetchBotCommands: (peer) =>
           controller.fetchBotCommands(peer.id, peer.uid),
-      onReply: controller.replyToMessage,
     );
   }
 }

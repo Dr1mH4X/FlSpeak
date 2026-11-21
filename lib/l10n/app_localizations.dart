@@ -1130,12 +1130,6 @@ abstract class AppLocalizations {
   /// **'Retry channel icon'**
   String get channelIconRetry;
 
-  /// No description provided for @chatReply.
-  ///
-  /// In en, this message translates to:
-  /// **'Reply privately'**
-  String get chatReply;
-
   /// No description provided for @chatRecipientUnavailable.
   ///
   /// In en, this message translates to:
@@ -2065,24 +2059,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Docked'**
   String get settingsBottomBarDocked;
-
-  /// No description provided for @settingsTabAnimation.
-  ///
-  /// In en, this message translates to:
-  /// **'Tab animation'**
-  String get settingsTabAnimation;
-
-  /// No description provided for @settingsTabAnimationSlide.
-  ///
-  /// In en, this message translates to:
-  /// **'Slide'**
-  String get settingsTabAnimationSlide;
-
-  /// No description provided for @settingsTabAnimationFade.
-  ///
-  /// In en, this message translates to:
-  /// **'Fade'**
-  String get settingsTabAnimationFade;
 
   /// No description provided for @settingsFontFamily.
   ///

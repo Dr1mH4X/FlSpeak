@@ -4,7 +4,7 @@
 
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart' hide kTabScrollDuration;
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/preferences.dart';
@@ -20,7 +20,7 @@ class _ColorSchemeTween extends Tween<ColorScheme> {
 }
 
 /// 外观设置页顶部唯一的交互式实时预览卡片，反映明暗、纯黑、主题色、底栏、液态玻璃、
-/// 字体与字号缩放效果；点击预览底部导航目的可实时演练标签页切换动画。
+/// 字体与字号缩放效果；点击预览底部导航目的可实时演练标签页淡入淡出。
 class ThemeLivePreview extends ConsumerStatefulWidget {
   const ThemeLivePreview({super.key});
 
@@ -33,39 +33,26 @@ class _ThemeLivePreviewState extends ConsumerState<ThemeLivePreview>
   static const double _phoneWidth = 172;
   static const _duration = Duration(milliseconds: 300);
 
-  late final AnimationController _slide = AnimationController(
+  late final AnimationController _fade = AnimationController(
     vsync: this,
-    duration: kTabScrollDuration,
+    duration: fadeTabDuration,
   );
-  late final CurvedAnimation _slideCurve = CurvedAnimation(
-    parent: _slide,
-    curve: Curves.easeOut,
+  late final CurvedAnimation _fadeCurve = CurvedAnimation(
+    parent: _fade,
+    curve: fadeTabCurve,
   );
   int _selected = 0;
   int? _previous;
-
-  @override
-  void initState() {
-    super.initState();
-    ref.listenManual<TabAnimation>(
-      preferencesProvider.select((prefs) => prefs.tabAnimation),
-      (_, _) => _select((_selected + 1) % MiniScreen.destinationCount),
-    );
-  }
 
   Future<void> _select(int index) async {
     if (index == _selected) {
       return;
     }
-    final tabAnimation = ref.read(preferencesProvider).tabAnimation;
-    final fade = tabAnimation == TabAnimation.fade;
-    _slide.duration = fade ? fadeTabDuration : kTabScrollDuration;
-    _slideCurve.curve = fade ? fadeTabCurve : Curves.easeOut;
     setState(() {
       _previous = _selected;
       _selected = index;
     });
-    await _slide.forward(from: 0).orCancel.catchError((_) {});
+    await _fade.forward(from: 0).orCancel.catchError((_) {});
     if (mounted && _selected == index) {
       setState(() => _previous = null);
     }
@@ -73,8 +60,8 @@ class _ThemeLivePreviewState extends ConsumerState<ThemeLivePreview>
 
   @override
   void dispose() {
-    _slideCurve.dispose();
-    _slide.dispose();
+    _fadeCurve.dispose();
+    _fade.dispose();
     super.dispose();
   }
 
@@ -86,7 +73,6 @@ class _ThemeLivePreviewState extends ConsumerState<ThemeLivePreview>
       :primaryColor,
       :colorStyle,
       :floatingBar,
-      :tabAnimation,
       :liquidGlass,
       :fontFamily,
       :textScaleEnabled,
@@ -99,7 +85,6 @@ class _ThemeLivePreviewState extends ConsumerState<ThemeLivePreview>
           primaryColor: prefs.primaryColor,
           colorStyle: prefs.colorStyle,
           floatingBar: prefs.floatingNavigationBar,
-          tabAnimation: prefs.tabAnimation,
           liquidGlass: prefs.liquidGlass != LiquidGlassMode.none,
           fontFamily: prefs.fontFamily,
           textScaleEnabled: prefs.textScaleEnabled,
@@ -154,7 +139,7 @@ class _ThemeLivePreviewState extends ConsumerState<ThemeLivePreview>
                   duration: _duration,
                   child: AnimatedBuilder(
                     key: ValueKey((floatingBar, liquidGlass)),
-                    animation: _slideCurve,
+                    animation: _fadeCurve,
                     builder: (_, _) => MiniScreen(
                       colorScheme: animatedScheme,
                       floatingBar: floatingBar,
@@ -163,8 +148,7 @@ class _ThemeLivePreviewState extends ConsumerState<ThemeLivePreview>
                       textScale: previewScale,
                       selected: _selected,
                       previous: _previous,
-                      progress: _previous == null ? 1 : _slideCurve.value,
-                      tabAnimation: tabAnimation,
+                      progress: _previous == null ? 1 : _fadeCurve.value,
                       onSelect: _select,
                     ),
                   ),
@@ -192,7 +176,6 @@ class MiniScreen extends StatelessWidget {
     this.selected = 0,
     this.previous,
     this.progress = 1,
-    this.tabAnimation = TabAnimation.slide,
     this.onSelect,
   });
 
@@ -206,7 +189,6 @@ class MiniScreen extends StatelessWidget {
   final int selected;
   final int? previous;
   final double progress;
-  final TabAnimation tabAnimation;
   final ValueChanged<int>? onSelect;
 
   @override
@@ -222,7 +204,6 @@ class MiniScreen extends StatelessWidget {
           selected: selected,
           previous: previous,
           progress: progress,
-          tabAnimation: tabAnimation,
         ),
       ),
     );
@@ -299,7 +280,6 @@ class _MiniScreenPainter extends CustomPainter {
     required this.selected,
     required this.previous,
     required this.progress,
-    required this.tabAnimation,
   });
 
   final ColorScheme colorScheme;
@@ -310,7 +290,6 @@ class _MiniScreenPainter extends CustomPainter {
   final int selected;
   final int? previous;
   final double progress;
-  final TabAnimation tabAnimation;
 
   bool get _glass => floatingBar && liquidGlass;
 
@@ -374,33 +353,10 @@ class _MiniScreenPainter extends CustomPainter {
     canvas.clipRect(Offset.zero & size, doAntiAlias: false);
     final previous = this.previous;
     if (previous == null) {
-      _paintPage(canvas, geometry, selected, 0, blur: blur);
-    } else if (tabAnimation == TabAnimation.fade) {
-      _paintPage(
-        canvas,
-        geometry,
-        previous,
-        0,
-        opacity: 1 - progress,
-        blur: blur,
-      );
-      _paintPage(canvas, geometry, selected, 0, opacity: progress, blur: blur);
+      _paintPage(canvas, geometry, selected, blur: blur);
     } else {
-      final direction = previous > selected ? -1 : 1;
-      _paintPage(
-        canvas,
-        geometry,
-        previous,
-        -direction * size.width * progress,
-        blur: blur,
-      );
-      _paintPage(
-        canvas,
-        geometry,
-        selected,
-        direction * size.width * (1 - progress),
-        blur: blur,
-      );
+      _paintPage(canvas, geometry, previous, opacity: 1 - progress, blur: blur);
+      _paintPage(canvas, geometry, selected, opacity: progress, blur: blur);
     }
     canvas.restore();
   }
@@ -456,8 +412,7 @@ class _MiniScreenPainter extends CustomPainter {
   void _paintPage(
     Canvas canvas,
     _MiniGeometry geometry,
-    int index,
-    double offset, {
+    int index, {
     double opacity = 1,
     MaskFilter? blur,
   }) {
@@ -468,9 +423,9 @@ class _MiniScreenPainter extends CustomPainter {
     final size = geometry.size;
     final margin = geometry.margin;
     final content = Rect.fromLTRB(
-      offset + margin,
       margin,
-      offset + size.width - margin,
+      margin,
+      size.width - margin,
       size.height - geometry.pageBottom,
     );
     if (alpha < 255) {
@@ -553,8 +508,7 @@ class _MiniScreenPainter extends CustomPainter {
         oldDelegate.textScale != textScale ||
         oldDelegate.selected != selected ||
         oldDelegate.previous != previous ||
-        oldDelegate.progress != progress ||
-        oldDelegate.tabAnimation != tabAnimation;
+        oldDelegate.progress != progress;
   }
 }
 

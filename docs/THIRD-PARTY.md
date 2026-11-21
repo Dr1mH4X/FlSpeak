@@ -4,7 +4,7 @@
 
 | 来源 | 原始许可证 | 引入形式与内容 |
 | --- | --- | --- |
-| [FlClash](https://github.com/chen08209/FlClash) | GPL-3.0 | macOS 标题条布局、窗口尺寸与红绿灯让位，Windows 标题栏控制按钮与 Segoe Fluent 矢量图标，Windows Inno Setup 安装脚本与简体中文语言包，窄屏底部导航与标签切换动画，业务图标矢量定义（`AppGlyphs`），系统字体枚举、调色板、外观设置与交互预览卡片，设置行与设置文本卡片适配，页面 `Scaffold` / `ScaffoldBar` / `BaseScaffold`、系统栏与异常顶部边距保护及 Android `values-v27` 挖孔屏配置 |
+| [FlClash](https://github.com/chen08209/FlClash) | GPL-3.0 | macOS 标题条布局、窗口尺寸与红绿灯让位，Windows 标题栏控制按钮与 Segoe Fluent 矢量图标，Windows Inno Setup 安装脚本与简体中文语言包，窄屏底部导航与标签页淡入淡出，业务图标矢量定义（`AppGlyphs`），系统字体枚举、调色板、外观设置与交互预览卡片，设置行与设置文本卡片适配，页面 `Scaffold` / `ScaffoldBar` / `BaseScaffold`、系统栏与异常顶部边距保护及 Android `values-v27` 挖孔屏配置 |
 | [prism_ui](https://pub.dev/packages/prism_ui) | GPL-3.0 | Pub 依赖 `prism_ui`，直接提供按钮、弹性按压、`PressSurface`、表面层级、超椭圆形状、开关、滑块、`SegmentedControl`、`Glyph`/`Glyphs`（含 `Glyphs.sidebar`）/`GlyphIcon`/`AnimatedGlyph`、弹出菜单、`ListRow`、`DecorationListItem`、`NavigationDock`/`NavigationBar`、`PrismScaffold`/`ScaffoldBar`/`FloatingHeader`/`BuildContextExtension`、`AnimatedVisibility`、`OpenContainer`、`AlertDialog`/`showFloatingDialog`、`showSheet`、`SearchField`、`NullStatus`、seeded 取色与纯黑映射、Liquid Glass、Goo 与主题过渡原语 |
 | [FlClash 的 `plugins/window`](https://github.com/chen08209/FlClash/tree/main/plugins/window) | MIT | 隐藏标题栏、窗口拖拽、双击缩放、最小化/最大化/关闭、置顶、Windows Mica/Acrylic 样式支持、单实例检测与全屏状态 |
 | [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | MIT | Markdown 正文段落单物理行检查门禁脚本 |

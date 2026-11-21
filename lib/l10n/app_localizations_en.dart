@@ -563,9 +563,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get channelIconRetry => 'Retry channel icon';
 
   @override
-  String get chatReply => 'Reply privately';
-
-  @override
   String get chatRecipientUnavailable =>
       'Recipient is offline. Choose another recipient.';
 
@@ -1074,15 +1071,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsBottomBarDocked => 'Docked';
-
-  @override
-  String get settingsTabAnimation => 'Tab animation';
-
-  @override
-  String get settingsTabAnimationSlide => 'Slide';
-
-  @override
-  String get settingsTabAnimationFade => 'Fade';
 
   @override
   String get settingsFontFamily => 'Font family';

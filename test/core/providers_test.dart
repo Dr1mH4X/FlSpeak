@@ -879,16 +879,7 @@ void main() {
         ],
       ),
     );
-    controller.replyToMessage(
-      ChatMessage(
-        from: 'Peer',
-        fromUid: 'peer',
-        text: 'incoming',
-        at: DateTime(2026),
-        scope: ChatScope.direct,
-        targetId: 1,
-      ),
-    );
+    controller.selectDirectRecipient('peer');
     expect(container.read(sessionViewProvider).directRecipientUid, 'peer');
     expect(await controller.sendMessage('hello'), isTrue);
     expect(core.sent.single, (mode: 1, target: 2, text: 'hello'));
@@ -975,32 +966,12 @@ void main() {
         ],
       ),
     );
-    controller.replyToMessage(
-      ChatMessage(
-        from: 'CloneB',
-        fromUid: 'shared',
-        fromId: 3,
-        text: 'from second clone',
-        at: DateTime(2026),
-        scope: ChatScope.direct,
-        targetId: 1,
-      ),
-    );
+    controller.selectDirectRecipient('shared', clientId: 3);
     expect(container.read(sessionViewProvider).directRecipient?.id, 3);
     expect(await controller.sendMessage('reply to B'), isTrue);
     expect(core.sent.last, (mode: 1, target: 3, text: 'reply to B'));
 
-    controller.replyToMessage(
-      ChatMessage(
-        from: 'SelfClone',
-        fromUid: 'self',
-        fromId: 4,
-        text: 'from my other device',
-        at: DateTime(2026),
-        scope: ChatScope.direct,
-        targetId: 1,
-      ),
-    );
+    controller.selectDirectRecipient('self', clientId: 4);
     expect(container.read(sessionViewProvider).directRecipient?.id, 4);
     expect(await controller.sendMessage('reply to self clone'), isTrue);
     expect(core.sent.last, (mode: 1, target: 4, text: 'reply to self clone'));

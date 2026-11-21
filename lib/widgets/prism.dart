@@ -156,7 +156,6 @@ export 'package:prism_ui/prism_ui.dart'
         formSheetShape,
         generateGroup,
         isRouteMoving,
-        kTabScrollDuration,
         listHeaderPaddingOf,
         listRowMinHeight,
         listRowVerticalPadding,

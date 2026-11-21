@@ -47,7 +47,6 @@ class ChatPane extends StatefulWidget {
     required this.selfUid,
     required this.recipientUid,
     required this.onRecipientChanged,
-    required this.onReply,
     this.selfClientId,
     this.selfChannelId,
     this.recipientId,
@@ -79,7 +78,6 @@ class ChatPane extends StatefulWidget {
   final int? recipientId;
   final ValueChanged<String> onRecipientChanged;
   final ValueChanged<ClientView>? onRecipientSelected;
-  final ValueChanged<ChatMessage> onReply;
 
   /// 当前范围之外收到消息的来源，由输入框范围按钮提示。
   final Set<ChatScope> unreadScopes;
@@ -494,8 +492,6 @@ class _ChatPaneState extends State<ChatPane> {
                       );
                     }
                     final message = widget.messages[index - 1];
-                    final canReply =
-                        !_sending && !widget.busy && !_isOwnMessage(message);
                     final animateEntry = identical(message, _animatedMessage);
                     return Center(
                       child: ConstrainedBox(
@@ -503,17 +499,11 @@ class _ChatPaneState extends State<ChatPane> {
                           maxWidth: _contentMaxWidth,
                         ),
                         child: MemoBuilder(
-                          inputs: [
-                            message,
-                            canReply,
-                            animateEntry,
-                            context.isCompact,
-                          ],
+                          inputs: [message, animateEntry, context.isCompact],
                           builder: (context) => _MessageRow(
                             avatar: widget.avatarBuilder?.call(message),
                             message: message,
                             onImageTap: _openImage,
-                            onReply: canReply ? widget.onReply : null,
                             animateEntry: animateEntry,
                           ),
                         ),
@@ -2021,19 +2011,16 @@ class _MessageRow extends StatelessWidget {
     this.avatar,
     required this.message,
     required this.onImageTap,
-    required this.onReply,
     this.animateEntry = false,
   });
 
   final ChatMessage message;
   final Widget? avatar;
   final ValueChanged<String> onImageTap;
-  final ValueChanged<ChatMessage>? onReply;
   final bool animateEntry;
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
     final texts = context.texts;
 
@@ -2071,15 +2058,6 @@ class _MessageRow extends StatelessWidget {
                         fontFeatures: tabularFigures,
                       ),
                     ),
-                    if (message.scope == ChatScope.direct && onReply != null)
-                      IconButton(
-                        onPressed: () => onReply!(message),
-                        icon: Icon(
-                          Icons.reply_rounded,
-                          size: IconSizes.medium,
-                          semanticLabel: l10n.chatReply,
-                        ),
-                      ),
                   ],
                 ),
                 const SizedBox(height: 2),

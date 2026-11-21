@@ -136,8 +136,9 @@ void main() {
       expect(find.byType(MiniScreen), findsOneWidget);
       expect(find.byType(Tooltip), findsNothing);
       expect(find.byType(SettingsOptionsTile<VoiceMeterSource>), findsNothing);
+      expect(find.text('标签切换动画'), findsNothing);
 
-      // 点击预览底栏第二个标签触发实时切换动画。
+      // 点击预览底栏第二个标签触发实时淡入淡出。
       final previewRect = tester.getRect(find.byType(ThemeLivePreview));
       await tester.tapAt(
         Offset(previewRect.center.dx + 32, previewRect.bottom - 38),
@@ -164,7 +165,7 @@ void main() {
   );
 
   testWidgets(
-    'theme mode, pure black, bottom bar, tab animation, and liquid glass update preferences',
+    'theme mode, pure black, bottom bar, and liquid glass update preferences',
     (tester) async {
       final container = await _mountSettings(tester);
       await _openAppearance(tester);
@@ -192,15 +193,6 @@ void main() {
       expect(
         container.read(preferencesProvider).floatingNavigationBar,
         isFalse,
-      );
-
-      final fade = find.widgetWithText(DecorationListItem, '淡入淡出');
-      await tester.ensureVisible(fade);
-      await tester.tap(fade);
-      await tester.pumpAndSettle();
-      expect(
-        container.read(preferencesProvider).tabAnimation,
-        TabAnimation.fade,
       );
 
       final ultra = find.widgetWithText(DecorationListItem, '极致');

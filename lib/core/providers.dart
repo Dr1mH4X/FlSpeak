@@ -378,43 +378,6 @@ class SessionController extends Notifier<SessionView> {
     }
   }
 
-  void replyToMessage(ChatMessage message) {
-    if (message.scope != ChatScope.direct || state.isOwnMessage(message)) {
-      return;
-    }
-    ClientView? peer;
-    if (message.fromId > 0) {
-      peer = state.clients
-          .where(
-            (client) =>
-                client.id == message.fromId &&
-                client.uid == message.fromUid &&
-                client.id != state.selfClientId,
-          )
-          .firstOrNull;
-    }
-    if (peer == null) {
-      final matches = state.clients
-          .where(
-            (client) =>
-                client.uid == message.fromUid &&
-                client.id != state.selfClientId,
-          )
-          .toList();
-      if (matches.length == 1) {
-        peer = matches.first;
-      }
-    }
-    if (peer == null) {
-      _notify(ref.read(_localizationsProvider).chatRecipientUnavailable);
-      return;
-    }
-    selectDirectRecipient(
-      peer.uid,
-      clientId: message.fromId > 0 ? peer.id : null,
-    );
-  }
-
   Future<bool> pokeClient(String uid, String message, {int? clientId}) async {
     if (!state.connected || state.busy) return false;
     final matches = state.clients
@@ -1621,13 +1584,6 @@ class PreferencesController extends Notifier<SessionPreferences> {
       return;
     }
     _update(state.copyWith(floatingNavigationBar: floating));
-  }
-
-  void setTabAnimation(TabAnimation animation) {
-    if (animation == state.tabAnimation) {
-      return;
-    }
-    _update(state.copyWith(tabAnimation: animation));
   }
 
   void setFontFamily(String? family) {

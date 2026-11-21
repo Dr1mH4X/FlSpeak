@@ -69,25 +69,6 @@ enum AppColorStyle {
   }
 }
 
-/// 窄屏底部导航切换页签时的过渡动效。
-enum TabAnimation {
-  slide('slide'),
-  fade('fade');
-
-  const TabAnimation(this.id);
-
-  final String id;
-
-  static TabAnimation fromId(Object? value) {
-    for (final animation in values) {
-      if (animation.id == value) {
-        return animation;
-      }
-    }
-    return TabAnimation.slide;
-  }
-}
-
 /// 液态玻璃质感档位。默认关闭以减轻低性能设备的离屏捕获与着色器负担。
 enum LiquidGlassMode {
   none('none'),
@@ -273,7 +254,6 @@ class SessionPreferences {
     this.primaryColors = defaultPrimaryColors,
     this.colorStyle = AppColorStyle.vivid,
     this.floatingNavigationBar = true,
-    this.tabAnimation = TabAnimation.slide,
     this.liquidGlass = LiquidGlassMode.none,
     this.fontFamily,
     this.textScaleEnabled = false,
@@ -313,7 +293,6 @@ class SessionPreferences {
   final List<int> primaryColors;
   final AppColorStyle colorStyle;
   final bool floatingNavigationBar;
-  final TabAnimation tabAnimation;
   final LiquidGlassMode liquidGlass;
   final String? fontFamily;
   final bool textScaleEnabled;
@@ -349,7 +328,6 @@ class SessionPreferences {
     List<int>? primaryColors,
     AppColorStyle? colorStyle,
     bool? floatingNavigationBar,
-    TabAnimation? tabAnimation,
     LiquidGlassMode? liquidGlass,
     Object? fontFamily = _unset,
     bool? textScaleEnabled,
@@ -376,7 +354,6 @@ class SessionPreferences {
     primaryColors: primaryColors ?? this.primaryColors,
     colorStyle: colorStyle ?? this.colorStyle,
     floatingNavigationBar: floatingNavigationBar ?? this.floatingNavigationBar,
-    tabAnimation: tabAnimation ?? this.tabAnimation,
     liquidGlass: liquidGlass ?? this.liquidGlass,
     fontFamily: identical(fontFamily, _unset)
         ? this.fontFamily
@@ -418,7 +395,6 @@ class SessionPreferences {
     'primaryColors': primaryColors,
     'colorStyle': colorStyle.id,
     'floatingNavigationBar': floatingNavigationBar,
-    'tabAnimation': tabAnimation.id,
     'liquidGlass': liquidGlass.id,
     'fontFamily': fontFamily,
     'textScaleEnabled': textScaleEnabled,
@@ -521,7 +497,6 @@ class SessionPreferences {
       floatingNavigationBar: ui['floatingNavigationBar'] is bool
           ? ui['floatingNavigationBar'] as bool
           : true,
-      tabAnimation: TabAnimation.fromId(ui['tabAnimation']),
       liquidGlass: LiquidGlassMode.fromId(ui['liquidGlass']),
       fontFamily: trimmedFontFamily.isNotEmpty ? trimmedFontFamily : null,
       textScaleEnabled: ui['textScaleEnabled'] is bool

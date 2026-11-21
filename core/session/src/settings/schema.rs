@@ -104,8 +104,6 @@ pub struct UiSettings {
     pub color_style: String,
     /// 窄屏是否启用悬浮底部导航栏（否则停靠底边）。
     pub floating_navigation_bar: bool,
-    /// 窄屏底部导航切换动画：slide / fade。
-    pub tab_animation: String,
     /// 自定义全局字体族名称（None 表示跟随默认字体）。
     pub font_family: Option<String>,
     /// 是否启用自定义全局字体缩放。
@@ -207,7 +205,6 @@ impl Default for UiSettings {
             primary_colors: Self::DEFAULT_PRIMARY_COLORS.to_vec(),
             color_style: "vivid".to_string(),
             floating_navigation_bar: true,
-            tab_animation: "slide".to_string(),
             font_family: None,
             text_scale_enabled: false,
             text_scale: 1.0,
@@ -257,7 +254,6 @@ mod tests {
         assert_eq!(ui.primary_colors, UiSettings::DEFAULT_PRIMARY_COLORS);
         assert_eq!(ui.color_style, "vivid");
         assert!(ui.floating_navigation_bar);
-        assert_eq!(ui.tab_animation, "slide");
         assert_eq!(ui.font_family, None);
         assert!(!ui.text_scale_enabled);
         assert_eq!(ui.text_scale, 1.0);
@@ -275,6 +271,5 @@ mod tests {
         assert_eq!(ui.primary_color, UiSettings::DEFAULT_PRIMARY_COLOR);
         assert_eq!(ui.primary_colors, UiSettings::DEFAULT_PRIMARY_COLORS);
         assert!(ui.floating_navigation_bar);
-        assert_eq!(ui.tab_animation, "slide");
     }
 }

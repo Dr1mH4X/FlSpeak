@@ -555,9 +555,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get channelIconRetry => '重新加载频道图标';
 
   @override
-  String get chatReply => '回复私聊';
-
-  @override
   String get chatRecipientUnavailable => '私聊对象已离线，请重新选择';
 
   @override
@@ -1043,15 +1040,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsBottomBarDocked => '停靠';
-
-  @override
-  String get settingsTabAnimation => '标签切换动画';
-
-  @override
-  String get settingsTabAnimationSlide => '滑动';
-
-  @override
-  String get settingsTabAnimationFade => '淡入淡出';
 
   @override
   String get settingsFontFamily => '字体';
