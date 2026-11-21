@@ -403,7 +403,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsPttHotkeyInAppOnly => '仅应用内';
 
   @override
-  String get settingsPttHotkeyPermissionRequired => '需要辅助功能权限';
+  String get settingsPttHotkeyPermissionRequired => '需要输入监控权限';
+
+  @override
+  String get settingsPttHotkeyGrantPermission => '去授权';
 
   @override
   String get settingsNoiseSuppression => '降噪';
@@ -746,7 +749,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noticePttHotkeyInAppOnly => '全局快捷键不可用，当前仅应用内生效';
 
   @override
-  String get noticePttHotkeyPermissionDenied => '全局快捷键需要辅助功能权限，当前仅应用内生效';
+  String get noticePttHotkeyPermissionDenied => '全局快捷键需要输入监控权限，当前仅应用内生效';
 
   @override
   String get noticeConnectionLost => '连接已断开。';

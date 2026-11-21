@@ -411,7 +411,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsPttHotkeyPermissionRequired =>
-      'Accessibility permission required';
+      'Input Monitoring permission required';
+
+  @override
+  String get settingsPttHotkeyGrantPermission => 'Authorize';
 
   @override
   String get settingsNoiseSuppression => 'Noise suppression';
@@ -766,7 +769,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get noticePttHotkeyPermissionDenied =>
-      'Global hotkey requires accessibility permission; working in-app only';
+      'Global hotkey requires Input Monitoring permission; working in-app only';
 
   @override
   String get noticeConnectionLost => 'Connection lost.';

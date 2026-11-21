@@ -220,9 +220,10 @@ class PttHotkeyStatusController extends Notifier<PttHotkeyStatus> {
 
 /// `flspeak/global_hotkey` 通道的 Dart 侧封装。
 ///
-/// 原生实现只存在于桌面 runner（macOS Carbon、Windows 低级键盘钩子、Linux
-/// X11 XGrabKey）；没有实现的平台 `register` 返回 `unsupportedPlatform`，调用方
-/// 退到应用内按键兜底。按键事件由原生推到 [setHandler] 注册的回调。
+/// 原生实现只存在于桌面 runner（macOS Listen-Only `CGEventTap`、Windows 低级
+/// 键盘钩子、Linux X11 `XGrabKey`）；没有实现的平台 `register` 返回
+/// `unsupportedPlatform`，调用方退到应用内按键兜底。按键事件由原生推到
+/// [setHandler] 注册的回调。
 class GlobalHotkey {
   const GlobalHotkey();
 
@@ -245,7 +246,7 @@ class GlobalHotkey {
     });
   }
 
-  /// 注册全局热键。`code` 的含义由平台决定（macOS Carbon 键码 / Windows VK /
+  /// 注册全局热键。`code` 的含义由平台决定（macOS `CGKeyCode` / Windows VK /
   /// X11 键码），返回结构化注册结果。
   Future<GlobalHotkeyResult> register(int code) async {
     try {
@@ -278,6 +279,29 @@ class GlobalHotkey {
       // 平台不支持或未注册。
     } on MissingPluginException {
       // 同上。
+    }
+  }
+
+  /// 按需向系统申请全局按键监听权限（目前仅 macOS Input Monitoring 实现）。
+  Future<bool> requestPermission() async {
+    try {
+      return await _channel.invokeMethod<bool>('requestPermission') ?? false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
+  /// 打开系统设置中对应的全局按键监听权限页（macOS 输入监控）。
+  Future<bool> openPermissionSettings() async {
+    try {
+      return await _channel.invokeMethod<bool>('openPermissionSettings') ??
+          false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
     }
   }
 

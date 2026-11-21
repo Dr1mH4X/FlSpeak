@@ -643,8 +643,9 @@ void main() {
           .read(preferencesProvider.notifier)
           .setPttHotkey(LogicalKeyboardKey.keyB.keyId);
       await tester.pumpAndSettle();
-      expect(find.text('B · 需要辅助功能权限'), findsOneWidget);
-      expect(find.text('全局快捷键需要辅助功能权限，当前仅应用内生效'), findsOneWidget);
+      expect(find.text('B · 需要输入监控权限'), findsOneWidget);
+      expect(find.text('全局快捷键需要输入监控权限，当前仅应用内生效'), findsOneWidget);
+      expect(find.text('去授权'), findsOneWidget);
 
       // Switch to unsupportedPlatform and verify INFO log level (no new warning).
       final warningsBeforeUnsupported = testTalker.history
@@ -678,6 +679,91 @@ void main() {
           .toList();
       expect(infoLogs, hasLength(1));
       expect(find.text('C · 仅应用内'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'does not prompt Input Monitoring on startup and requests permission when user activates PTT or taps authorize',
+    (tester) async {
+      var requestPermissionCalls = 0;
+      var openSettingsCalls = 0;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(hotkey, (
+        call,
+      ) async {
+        switch (call.method) {
+          case 'register':
+            return <String, Object?>{
+              'ok': false,
+              'reason': 'permissionDenied',
+              'code': null,
+            };
+          case 'requestPermission':
+            requestPermissionCalls++;
+            return false;
+          case 'openPermissionSettings':
+            openSettingsCalls++;
+            return true;
+          default:
+            return true;
+        }
+      });
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          hotkey,
+          null,
+        ),
+      );
+
+      // App launch with PTT already enabled must never trigger a system permission dialog.
+      final startupController = _PttSession(initialPttMode: true);
+      await _mountPtt(
+        tester,
+        startupController,
+        pttHotkey: LogicalKeyboardKey.keyA.keyId,
+      );
+      expect(requestPermissionCalls, 0);
+      expect(openSettingsCalls, 0);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+
+      // Starting with PTT off, then actively enabling PTT triggers one permission request.
+      final controller = _PttSession(initialPttMode: false);
+      final container = await _mountPtt(
+        tester,
+        controller,
+        pttHotkey: LogicalKeyboardKey.keyA.keyId,
+      );
+      expect(requestPermissionCalls, 0);
+
+      await container.read(sessionViewProvider.notifier).setPttMode(true);
+      await tester.pumpAndSettle();
+      expect(requestPermissionCalls, 1);
+      expect(openSettingsCalls, 0);
+
+      // Resuming app does not repeat requestPermission; it tries registration directly.
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(requestPermissionCalls, 1);
+
+      container.read(routerProvider).go(AppRoutes.settings);
+      await tester.pumpAndSettle();
+      final generalCategory = find.text('通用');
+      await tester.ensureVisible(generalCategory);
+      await tester.tap(generalCategory);
+      await tester.pumpAndSettle();
+      final voiceTile = find.text('语音');
+      await tester.ensureVisible(voiceTile);
+      await tester.tap(voiceTile);
+      await tester.pumpAndSettle();
+
+      final authorizeButton = find.text('去授权');
+      expect(authorizeButton, findsOneWidget);
+      await tester.tap(authorizeButton);
+      await tester.pumpAndSettle();
+      expect(requestPermissionCalls, 2);
+      expect(openSettingsCalls, 1);
 
       await tester.pumpWidget(const SizedBox.shrink());
     },

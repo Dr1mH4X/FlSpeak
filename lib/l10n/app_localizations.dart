@@ -833,8 +833,14 @@ abstract class AppLocalizations {
   /// No description provided for @settingsPttHotkeyPermissionRequired.
   ///
   /// In en, this message translates to:
-  /// **'Accessibility permission required'**
+  /// **'Input Monitoring permission required'**
   String get settingsPttHotkeyPermissionRequired;
+
+  /// No description provided for @settingsPttHotkeyGrantPermission.
+  ///
+  /// In en, this message translates to:
+  /// **'Authorize'**
+  String get settingsPttHotkeyGrantPermission;
 
   /// No description provided for @settingsNoiseSuppression.
   ///
@@ -1499,7 +1505,7 @@ abstract class AppLocalizations {
   /// No description provided for @noticePttHotkeyPermissionDenied.
   ///
   /// In en, this message translates to:
-  /// **'Global hotkey requires accessibility permission; working in-app only'**
+  /// **'Global hotkey requires Input Monitoring permission; working in-app only'**
   String get noticePttHotkeyPermissionDenied;
 
   /// No description provided for @noticeConnectionLost.

@@ -46,6 +46,9 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
   /// 不收尾会一直卡在发送状态。
   bool _nativeRegistered = false;
   int _registrationRevision = 0;
+  bool _startupRegistrationDone = false;
+  bool _lastPttMode = false;
+  bool _pendingPermissionPrompt = false;
   SessionController? _pttOwner;
   PttHotkeyStatusController? _hotkeyStatusController;
   (int, GlobalHotkeyReason)? _lastNotifiedHotkeyFailure;
@@ -79,7 +82,11 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
           _setPtt(false);
         }
         if (!next.$2) {
+          _lastPttMode = false;
+          _pendingPermissionPrompt = false;
           _lastNotifiedHotkeyFailure = null;
+        } else if (previous != null && !previous.$2) {
+          _pendingPermissionPrompt = true;
         }
       },
     );
@@ -226,6 +233,13 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
   Future<void> _syncRegistration(int? keyId) async {
     _setPtt(false);
     _nativeRegistered = false;
+    final isStartup = !_startupRegistrationDone;
+    _startupRegistrationDone = true;
+    final currentPttMode = ref.read(sessionViewProvider).pttMode;
+    if (!isStartup && currentPttMode && !_lastPttMode) {
+      _pendingPermissionPrompt = true;
+    }
+    _lastPttMode = currentPttMode;
     final revision = ++_registrationRevision;
     if (keyId == null) {
       await _hotkey.unregister();
@@ -236,6 +250,8 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
           .setStatus(PttHotkeyStatus.inactive(keyId: configuredKeyId));
       return;
     }
+    final shouldPromptPermission = _pendingPermissionPrompt;
+    _pendingPermissionPrompt = false;
     final key = LogicalKeyboardKey.findKeyByKeyId(keyId);
     final nativeCode = key == null ? null : nativePttKeyCode(key);
     final result = await _hotkey.registerByKeyId(keyId);
@@ -253,6 +269,10 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
     if (result.ok) {
       _lastNotifiedHotkeyFailure = null;
       return;
+    }
+    if (result.reason == GlobalHotkeyReason.permissionDenied &&
+        shouldPromptPermission) {
+      unawaited(_hotkey.requestPermission());
     }
     _logRegistrationFailure(
       keyId: keyId,

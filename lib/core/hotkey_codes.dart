@@ -5,9 +5,9 @@ import 'package:flutter/services.dart';
 /// 全局「按住说话」快捷键的跨平台键码换算。
 ///
 /// 持久化存 Flutter `LogicalKeyboardKey.keyId`（跨平台稳定），注册到系统时按
-/// 平台取原生键码：macOS 是 Carbon 虚拟键码，Windows 是虚拟键码，Linux 是
-/// X11 键码（evdev + 8）。裸修饰键无法注册全局热键（macOS/Windows 都要求一
-/// 个非修饰键），所以不在支持范围里。
+/// 平台取原生键码：macOS 是 `CGKeyCode` 物理键码，Windows 是虚拟键码，Linux 是
+/// X11 键码（evdev + 8）。裸修饰键无法跨平台统一注册全局热键（Windows 钩子及
+/// 键码映射仅收录非修饰键），所以不在支持范围里。
 ///
 /// 同一个物理键在三种键盘布局下键码未必一致（如非 ANSI 布局的标点），这里
 /// 按美式布局登记；这是全局热键的常规取舍，TeamSpeak 也如此。
@@ -44,7 +44,7 @@ String pttHotkeyDisplayName(LogicalKeyboardKey key) => switch (key) {
   _ => key.keyLabel.isEmpty ? 'Unknown' : key.keyLabel,
 };
 
-/// (macOS Carbon, Windows VK, X11 keycode) 三元组；某平台没有该键时为 null。
+/// (macOS CGKeyCode, Windows VK, X11 keycode) 三元组；某平台没有该键时为 null。
 typedef _PlatformCodes = (int?, int, int);
 
 final Map<int, _PlatformCodes> _codes = _buildCodes();

@@ -238,6 +238,44 @@ void main() {
         ]);
       },
     );
+
+    test('requestPermission and openPermissionSettings forward channel booleans and degrade on errors', () async {
+      var requestResult = true;
+      var openSettingsResult = true;
+      final methods = <String>[];
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            methods.add(call.method);
+            return switch (call.method) {
+              'requestPermission' => requestResult,
+              'openPermissionSettings' => openSettingsResult,
+              _ => null,
+            };
+          });
+
+      expect(await hotkey.requestPermission(), isTrue);
+      expect(await hotkey.openPermissionSettings(), isTrue);
+      expect(methods, ['requestPermission', 'openPermissionSettings']);
+
+      requestResult = false;
+      openSettingsResult = false;
+      expect(await hotkey.requestPermission(), isFalse);
+      expect(await hotkey.openPermissionSettings(), isFalse);
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+      expect(await hotkey.requestPermission(), isFalse);
+      expect(await hotkey.openPermissionSettings(), isFalse);
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+            channel,
+            (_) async => throw PlatformException(code: 'ERR'),
+          );
+      expect(await hotkey.requestPermission(), isFalse);
+      expect(await hotkey.openPermissionSettings(), isFalse);
+    });
   });
 
   group('PttHotkeyStatus & controller', () {

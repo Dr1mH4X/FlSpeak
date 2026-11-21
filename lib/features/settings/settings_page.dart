@@ -154,6 +154,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     await pickPttHotkey(context, ref);
   }
 
+  Future<void> _authorizePttHotkey() async {
+    const hotkey = GlobalHotkey();
+    final granted = await hotkey.requestPermission();
+    if (granted) {
+      if (mounted) {
+        ref.read(pttHotkeyStatusProvider.notifier).requestRetry();
+      }
+      return;
+    }
+    await hotkey.openPermissionSettings();
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -317,6 +329,17 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                           pttHotkeyKey,
                           pttHotkeyStatus,
                         ),
+                        trailing:
+                            pttHotkeyKey != null &&
+                                pttHotkeyStatus.state ==
+                                    PttHotkeyState.permissionDenied
+                            ? TonalButton(
+                                size: TonalButtonSize.compact,
+                                label: l10n.settingsPttHotkeyGrantPermission,
+                                onPressed: () =>
+                                    unawaited(_authorizePttHotkey()),
+                              )
+                            : null,
                         onTap: () => unawaited(_pickPttHotkey()),
                       ),
                       SettingsTile(
