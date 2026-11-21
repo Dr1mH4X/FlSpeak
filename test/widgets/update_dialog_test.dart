@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart' hide AlertDialog, TextButton;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
+import 'package:flspeak/localization.dart';
 import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/widgets/prism.dart';
 import 'package:flspeak/widgets/update_dialog.dart';
@@ -63,10 +64,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: buildAppTheme(Brightness.light),
-          localizationsDelegates: const [
-            ...AppLocalizations.localizationsDelegates,
-            PrismUiLocalizationsDelegate(),
-          ],
+          localizationsDelegates: appLocalizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           locale: const Locale('zh'),
           builder: (context, child) =>

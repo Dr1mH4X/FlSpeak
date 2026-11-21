@@ -20,6 +20,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flspeak/core/models.dart';
 import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
+import 'package:flspeak/localization.dart';
 import 'package:flspeak/features/workspace/widgets/client_actions.dart';
 import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/widgets/prism.dart';
@@ -133,10 +134,7 @@ _mount(
           data: MediaQuery.of(context).copyWith(textScaler: textScaler),
           child: PrismRootScope(brightness: Brightness.light, child: child!),
         ),
-        localizationsDelegates: const [
-          ...AppLocalizations.localizationsDelegates,
-          PrismUiLocalizationsDelegate(),
-        ],
+        localizationsDelegates: appLocalizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: const Scaffold(
           body: ClientActionsButton(

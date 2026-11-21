@@ -1,7 +1,10 @@
 // ignore_for_file: depend_on_referenced_packages
 
 import 'package:flutter/gestures.dart';
-import 'package:material_ui/material_ui.dart';
+// flutter_markdown_plus 内部构建的是 SDK SelectableText。
+// ignore: deprecated_member_use
+import 'package:flutter/material.dart' show SelectableText;
+import 'package:material_ui/material_ui.dart' hide SelectableText;
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
 

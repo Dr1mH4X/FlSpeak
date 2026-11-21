@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flspeak/core/models.dart';
 import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
+import 'package:flspeak/localization.dart';
 import 'package:flspeak/router.dart';
 import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/features/workspace/workspace_page.dart';
@@ -75,7 +76,7 @@ void main() {
         container: container,
         child: const MaterialApp(
           locale: Locale('zh'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: appLocalizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(body: ChannelDetailsPane(channel: testChannel)),
         ),
@@ -109,7 +110,7 @@ void main() {
         container: container,
         child: const MaterialApp(
           locale: Locale('zh'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: appLocalizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(body: ChannelDetailsPane(channel: testChannel)),
         ),
@@ -138,7 +139,7 @@ void main() {
         container: container,
         child: const MaterialApp(
           locale: Locale('zh'),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: appLocalizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(body: ChannelDetailsPane(channel: testChannel)),
         ),
@@ -173,7 +174,7 @@ void main() {
           container: container,
           child: const MaterialApp(
             locale: Locale('zh'),
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             home: Scaffold(body: WorkspacePage()),
           ),
@@ -232,7 +233,7 @@ void main() {
           container: container,
           child: const MaterialApp(
             locale: Locale('zh'),
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             home: Scaffold(body: WorkspacePage()),
           ),
@@ -294,10 +295,7 @@ void main() {
           child: MaterialApp(
             theme: theme,
             locale: const Locale('zh'),
-            localizationsDelegates: const [
-              ...AppLocalizations.localizationsDelegates,
-              PrismUiLocalizationsDelegate(),
-            ],
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             builder: (context, child) =>
                 PrismRootScope(brightness: Brightness.light, child: child!),

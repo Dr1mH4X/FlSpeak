@@ -19,6 +19,7 @@ import 'package:flspeak/core/preferences.dart';
 import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/core/server_icon.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
+import 'package:flspeak/localization.dart';
 import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/widgets/monogram.dart';
 import 'package:flspeak/widgets/prism.dart';
@@ -116,10 +117,7 @@ Widget _wrapApp(ProviderContainer container, Widget child) {
     child: MaterialApp(
       theme: buildAppTheme(Brightness.light),
       locale: const Locale('zh'),
-      localizationsDelegates: const [
-        ...AppLocalizations.localizationsDelegates,
-        PrismUiLocalizationsDelegate(),
-      ],
+      localizationsDelegates: appLocalizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       builder: (context, inner) =>
           PrismRootScope(brightness: Brightness.light, child: inner!),

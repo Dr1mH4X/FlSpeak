@@ -26,6 +26,7 @@ import 'package:flspeak/features/settings/widgets/settings_section.dart';
 import 'package:flspeak/features/settings/widgets/theme_preview.dart';
 import 'package:flspeak/features/settings/widgets/theme_settings_view.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
+import 'package:flspeak/localization.dart';
 import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/widgets/prism.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
@@ -90,10 +91,7 @@ Future<ProviderContainer> _mountSettings(
           fontFamily: initialPreferences.fontFamily,
         ),
         locale: const Locale('zh'),
-        localizationsDelegates: const [
-          ...AppLocalizations.localizationsDelegates,
-          PrismUiLocalizationsDelegate(),
-        ],
+        localizationsDelegates: appLocalizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         builder: (context, child) {
           final theme = Theme.of(context);

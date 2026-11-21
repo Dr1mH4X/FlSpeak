@@ -21,6 +21,7 @@ import 'package:flspeak/features/workspace/widgets/channel_details_pane.dart';
 import 'package:flspeak/features/workspace/widgets/members_pane.dart';
 import 'package:flspeak/features/workspace/workspace_page.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
+import 'package:flspeak/localization.dart';
 import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/widgets/glyph_segmented_control.dart';
 import 'package:flspeak/widgets/prism.dart' hide Divider;
@@ -84,10 +85,7 @@ Future<ProviderContainer> _mountWorkspace(
       child: MaterialApp(
         theme: buildAppTheme(Brightness.light),
         locale: const Locale('zh'),
-        localizationsDelegates: const [
-          ...AppLocalizations.localizationsDelegates,
-          PrismUiLocalizationsDelegate(),
-        ],
+        localizationsDelegates: appLocalizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         builder: (context, child) =>
             PrismRootScope(brightness: Brightness.light, child: child!),

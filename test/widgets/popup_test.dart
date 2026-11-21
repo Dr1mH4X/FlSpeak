@@ -12,6 +12,7 @@ import 'package:material_ui/material_ui.dart'
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flspeak/l10n/app_localizations.dart';
+import 'package:flspeak/localization.dart';
 import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/widgets/prism.dart';
 
@@ -19,10 +20,7 @@ void main() {
   Widget wrapPopupApp(Widget child) {
     return MaterialApp(
       theme: buildAppTheme(Brightness.light),
-      localizationsDelegates: const [
-        ...AppLocalizations.localizationsDelegates,
-        PrismUiLocalizationsDelegate(),
-      ],
+      localizationsDelegates: appLocalizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       locale: const Locale('zh'),
       builder: (context, appChild) =>

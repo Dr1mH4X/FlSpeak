@@ -13,6 +13,7 @@ import 'package:flspeak/core/channel_icons.dart';
 import 'package:flspeak/core/models.dart';
 import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
+import 'package:flspeak/localization.dart';
 import 'package:flspeak/widgets/channel_icon.dart';
 import 'package:flspeak/widgets/expressive_frame.dart';
 
@@ -41,7 +42,7 @@ void main() {
           ],
           child: const MaterialApp(
             locale: Locale('zh'),
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             home: Scaffold(body: ChannelIcon(iconId: 42, color: Colors.purple)),
           ),

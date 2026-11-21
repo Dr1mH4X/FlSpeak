@@ -21,6 +21,7 @@ import 'package:flspeak/core/update_check.dart';
 import 'package:flspeak/features/settings/settings_page.dart';
 import 'package:flspeak/features/settings/widgets/settings_section.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
+import 'package:flspeak/localization.dart';
 import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/widgets/app_navigation_sidebar.dart';
 import 'package:flspeak/widgets/prism.dart';
@@ -72,10 +73,7 @@ void main() {
           child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
             locale: const Locale('zh'),
-            localizationsDelegates: const [
-              ...AppLocalizations.localizationsDelegates,
-              PrismUiLocalizationsDelegate(),
-            ],
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             builder: (context, child) =>
                 PrismRootScope(brightness: Brightness.light, child: child!),
@@ -131,10 +129,7 @@ void main() {
           child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
             locale: const Locale('zh'),
-            localizationsDelegates: const [
-              ...AppLocalizations.localizationsDelegates,
-              PrismUiLocalizationsDelegate(),
-            ],
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             builder: (context, child) =>
                 PrismRootScope(brightness: Brightness.light, child: child!),
@@ -194,10 +189,7 @@ void main() {
           child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
             locale: const Locale('zh'),
-            localizationsDelegates: const [
-              ...AppLocalizations.localizationsDelegates,
-              PrismUiLocalizationsDelegate(),
-            ],
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             builder: (context, child) =>
                 PrismRootScope(brightness: Brightness.light, child: child!),
@@ -305,10 +297,7 @@ void main() {
           child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
             locale: const Locale('zh'),
-            localizationsDelegates: const [
-              ...AppLocalizations.localizationsDelegates,
-              PrismUiLocalizationsDelegate(),
-            ],
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             builder: (context, child) =>
                 PrismRootScope(brightness: Brightness.light, child: child!),
@@ -372,10 +361,7 @@ void main() {
           child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
             locale: const Locale('zh'),
-            localizationsDelegates: const [
-              ...AppLocalizations.localizationsDelegates,
-              PrismUiLocalizationsDelegate(),
-            ],
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             builder: (context, child) =>
                 PrismRootScope(brightness: Brightness.light, child: child!),
@@ -453,10 +439,7 @@ void main() {
           child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
             locale: const Locale('zh'),
-            localizationsDelegates: const [
-              ...AppLocalizations.localizationsDelegates,
-              PrismUiLocalizationsDelegate(),
-            ],
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             builder: (context, child) =>
                 PrismRootScope(brightness: Brightness.light, child: child!),
@@ -536,10 +519,7 @@ void main() {
           child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
             locale: const Locale('zh'),
-            localizationsDelegates: const [
-              ...AppLocalizations.localizationsDelegates,
-              PrismUiLocalizationsDelegate(),
-            ],
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             builder: (context, child) =>
                 PrismRootScope(brightness: Brightness.light, child: child!),
@@ -612,10 +592,7 @@ void main() {
         child: MaterialApp(
           theme: buildAppTheme(Brightness.light),
           locale: const Locale('zh'),
-          localizationsDelegates: const [
-            ...AppLocalizations.localizationsDelegates,
-            PrismUiLocalizationsDelegate(),
-          ],
+          localizationsDelegates: appLocalizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           builder: (context, child) =>
               PrismRootScope(brightness: Brightness.light, child: child!),
@@ -660,10 +637,7 @@ void main() {
           child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
             locale: const Locale('zh'),
-            localizationsDelegates: const [
-              ...AppLocalizations.localizationsDelegates,
-              PrismUiLocalizationsDelegate(),
-            ],
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             builder: (context, child) =>
                 PrismRootScope(brightness: Brightness.light, child: child!),
@@ -758,10 +732,7 @@ void main() {
           child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
             locale: const Locale('zh'),
-            localizationsDelegates: const [
-              ...AppLocalizations.localizationsDelegates,
-              PrismUiLocalizationsDelegate(),
-            ],
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             builder: (context, child) =>
                 PrismRootScope(brightness: Brightness.light, child: child!),
@@ -844,10 +815,7 @@ void main() {
         child: MaterialApp(
           theme: buildAppTheme(Brightness.light),
           locale: const Locale('zh'),
-          localizationsDelegates: const [
-            ...AppLocalizations.localizationsDelegates,
-            PrismUiLocalizationsDelegate(),
-          ],
+          localizationsDelegates: appLocalizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           builder: (context, child) =>
               PrismRootScope(brightness: Brightness.light, child: child!),
@@ -925,10 +893,7 @@ void main() {
             child: MaterialApp(
               theme: buildAppTheme(Brightness.light),
               locale: const Locale('zh'),
-              localizationsDelegates: const [
-                ...AppLocalizations.localizationsDelegates,
-                PrismUiLocalizationsDelegate(),
-              ],
+              localizationsDelegates: appLocalizationsDelegates,
               supportedLocales: AppLocalizations.supportedLocales,
               builder: (context, child) => MediaQuery(
                 data: MediaQuery.of(
@@ -1001,10 +966,7 @@ void main() {
           child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
             locale: const Locale('zh'),
-            localizationsDelegates: const [
-              ...AppLocalizations.localizationsDelegates,
-              PrismUiLocalizationsDelegate(),
-            ],
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             builder: (context, child) =>
                 PrismRootScope(brightness: Brightness.light, child: child!),

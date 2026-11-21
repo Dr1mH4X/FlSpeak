@@ -10,6 +10,7 @@ import 'package:material_ui/material_ui.dart'
         TextButton;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
+import 'package:flspeak/localization.dart';
 import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/widgets/prism.dart';
 
@@ -17,10 +18,7 @@ void main() {
   Widget wrapTheme(Brightness brightness, Widget child) {
     return MaterialApp(
       theme: buildAppTheme(brightness),
-      localizationsDelegates: const [
-        ...AppLocalizations.localizationsDelegates,
-        PrismUiLocalizationsDelegate(),
-      ],
+      localizationsDelegates: appLocalizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       locale: const Locale('zh'),
       builder: (context, appChild) =>

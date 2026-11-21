@@ -12,6 +12,7 @@ import 'package:flspeak/features/workspace/widgets/media_grid.dart';
 import 'package:flspeak/features/workspace/widgets/media_viewer.dart';
 import 'package:flspeak/features/workspace/widgets/message_content.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
+import 'package:flspeak/localization.dart';
 import 'package:flspeak/widgets/remote_image.dart';
 
 final _png = base64Decode(
@@ -35,7 +36,7 @@ Future<void> _mount(WidgetTester tester, Widget child) async {
     ProviderScope(
       child: MaterialApp(
         locale: const Locale('zh'),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        localizationsDelegates: appLocalizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(body: child),
       ),

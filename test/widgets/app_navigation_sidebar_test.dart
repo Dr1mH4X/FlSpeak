@@ -10,6 +10,7 @@ import 'package:flspeak/core/models.dart';
 import 'package:flspeak/core/preferences.dart';
 import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
+import 'package:flspeak/localization.dart';
 import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/widgets/app_navigation_sidebar.dart';
 import 'package:flspeak/widgets/prism.dart';
@@ -45,10 +46,7 @@ void main() {
           container: container,
           child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
-            localizationsDelegates: const [
-              ...AppLocalizations.localizationsDelegates,
-              PrismUiLocalizationsDelegate(),
-            ],
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             builder: (context, child) =>
                 PrismRootScope(brightness: Brightness.light, child: child!),
@@ -103,10 +101,7 @@ void main() {
           container: container,
           child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
-            localizationsDelegates: const [
-              ...AppLocalizations.localizationsDelegates,
-              PrismUiLocalizationsDelegate(),
-            ],
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             builder: (context, child) =>
                 PrismRootScope(brightness: Brightness.light, child: child!),
@@ -178,10 +173,7 @@ void main() {
           container: container,
           child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
-            localizationsDelegates: const [
-              ...AppLocalizations.localizationsDelegates,
-              PrismUiLocalizationsDelegate(),
-            ],
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             builder: (context, child) =>
                 PrismRootScope(brightness: Brightness.light, child: child!),
@@ -256,10 +248,7 @@ void main() {
             child: MaterialApp(
               key: ValueKey((size, quality)),
               theme: buildAppTheme(Brightness.light),
-              localizationsDelegates: const [
-                ...AppLocalizations.localizationsDelegates,
-                PrismUiLocalizationsDelegate(),
-              ],
+              localizationsDelegates: appLocalizationsDelegates,
               supportedLocales: AppLocalizations.supportedLocales,
               builder: (context, child) => PrismRootScope(
                 brightness: Brightness.light,
@@ -349,10 +338,7 @@ void main() {
           container: container,
           child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
-            localizationsDelegates: const [
-              ...AppLocalizations.localizationsDelegates,
-              PrismUiLocalizationsDelegate(),
-            ],
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             builder: (context, child) =>
                 PrismRootScope(brightness: Brightness.light, child: child!),

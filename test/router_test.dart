@@ -15,6 +15,7 @@ import 'package:flspeak/features/connect/connect_page.dart';
 import 'package:flspeak/features/settings/settings_page.dart';
 import 'package:flspeak/features/workspace/workspace_shell.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
+import 'package:flspeak/localization.dart';
 import 'package:flspeak/router.dart';
 import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/widgets/prism.dart';
@@ -53,10 +54,7 @@ Future<GoRouter> _mount(
         routerConfig: router,
         theme: buildAppTheme(Brightness.light),
         locale: const Locale('zh'),
-        localizationsDelegates: const [
-          ...AppLocalizations.localizationsDelegates,
-          PrismUiLocalizationsDelegate(),
-        ],
+        localizationsDelegates: appLocalizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         builder: (context, child) =>
             PrismRootScope(brightness: Brightness.light, child: child!),

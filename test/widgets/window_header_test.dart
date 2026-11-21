@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flspeak/core/window_chrome.dart';
 import 'package:flspeak/core/window_metrics.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
+import 'package:flspeak/localization.dart';
 import 'package:flspeak/widgets/caption_icon.dart';
 import 'package:flspeak/widgets/window_header.dart';
 
@@ -75,7 +76,7 @@ void main() {
       (tester) async {
         await tester.pumpWidget(
           const MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             home: Scaffold(
               body: WindowHeaderBar(
@@ -122,7 +123,7 @@ void main() {
     ) async {
       await tester.pumpWidget(
         const MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: appLocalizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: WindowHeaderBar(
@@ -147,7 +148,7 @@ void main() {
     ) async {
       await tester.pumpWidget(
         const MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: appLocalizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: WindowHeaderBar(
@@ -175,7 +176,7 @@ void main() {
     ) async {
       await tester.pumpWidget(
         const MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: appLocalizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: WindowHeaderBar(
@@ -211,7 +212,7 @@ void main() {
     testWidgets('close button triggers WindowChrome.close', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          localizationsDelegates: appLocalizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: WindowHeaderBar(

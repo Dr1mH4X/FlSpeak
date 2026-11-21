@@ -26,6 +26,7 @@ import 'package:flspeak/features/workspace/widgets/members_pane.dart';
 import 'package:flspeak/features/workspace/workspace_page.dart';
 import 'package:flspeak/features/workspace/workspace_shell.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
+import 'package:flspeak/localization.dart';
 import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/widgets/prism.dart';
 
@@ -188,10 +189,7 @@ void main() {
           child: MaterialApp(
             theme: buildAppTheme(Brightness.dark),
             locale: const Locale('zh'),
-            localizationsDelegates: const [
-              ...AppLocalizations.localizationsDelegates,
-              PrismUiLocalizationsDelegate(),
-            ],
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             builder: (context, child) =>
                 PrismRootScope(brightness: Brightness.dark, child: child!),

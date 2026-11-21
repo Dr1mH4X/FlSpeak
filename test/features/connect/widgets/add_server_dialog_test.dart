@@ -20,6 +20,7 @@ import 'package:flspeak/core/server_icon.dart';
 import 'package:flspeak/features/connect/connect_page.dart';
 import 'package:flspeak/features/connect/widgets/server_row.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
+import 'package:flspeak/localization.dart';
 import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/widgets/app_navigation_sidebar.dart';
 import 'package:flspeak/widgets/monogram.dart';
@@ -92,10 +93,7 @@ Future<ProviderContainer> _mount(WidgetTester tester, _Core core) async {
       child: MaterialApp(
         theme: buildAppTheme(Brightness.light),
         locale: const Locale('zh'),
-        localizationsDelegates: const [
-          ...AppLocalizations.localizationsDelegates,
-          PrismUiLocalizationsDelegate(),
-        ],
+        localizationsDelegates: appLocalizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         builder: (context, child) =>
             PrismRootScope(brightness: Brightness.light, child: child!),

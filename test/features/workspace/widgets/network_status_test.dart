@@ -16,6 +16,7 @@ import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/features/workspace/widgets/channel_pane.dart';
 import 'package:flspeak/features/workspace/widgets/network_status.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
+import 'package:flspeak/localization.dart';
 import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/widgets/prism.dart';
 import 'package:flspeak/widgets/signal_ribbon.dart';
@@ -69,10 +70,7 @@ Future<void> _pumpStatus(
       child: MaterialApp(
         theme: buildAppTheme(Brightness.light),
         locale: const Locale('zh'),
-        localizationsDelegates: const [
-          ...AppLocalizations.localizationsDelegates,
-          PrismUiLocalizationsDelegate(),
-        ],
+        localizationsDelegates: appLocalizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         builder: (context, child) =>
             PrismRootScope(brightness: Brightness.light, child: child!),
@@ -302,10 +300,7 @@ void main() {
         child: MaterialApp(
           theme: buildAppTheme(Brightness.light),
           locale: const Locale('zh'),
-          localizationsDelegates: const [
-            ...AppLocalizations.localizationsDelegates,
-            PrismUiLocalizationsDelegate(),
-          ],
+          localizationsDelegates: appLocalizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           builder: (context, child) =>
               PrismRootScope(brightness: Brightness.light, child: child!),
@@ -352,10 +347,7 @@ void main() {
           child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
             locale: const Locale('zh'),
-            localizationsDelegates: const [
-              ...AppLocalizations.localizationsDelegates,
-              PrismUiLocalizationsDelegate(),
-            ],
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             builder: (context, child) =>
                 PrismRootScope(brightness: Brightness.light, child: child!),

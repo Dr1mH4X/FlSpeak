@@ -14,6 +14,7 @@ import 'package:flspeak/core/file_export.dart';
 import 'package:flspeak/core/models.dart';
 import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
+import 'package:flspeak/localization.dart';
 import 'package:flspeak/features/workspace/widgets/channel_files_pane.dart';
 import 'package:flspeak/widgets/prism.dart';
 
@@ -111,7 +112,7 @@ void main() {
             ],
             child: const MaterialApp(
               locale: Locale('zh'),
-              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              localizationsDelegates: appLocalizationsDelegates,
               supportedLocales: AppLocalizations.supportedLocales,
               home: Scaffold(body: ChannelFilesPane(channelId: 5)),
             ),
@@ -193,7 +194,7 @@ void main() {
           container: container,
           child: const MaterialApp(
             locale: Locale('zh'),
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             home: Scaffold(body: ChannelFilesPane(channelId: 5)),
           ),
@@ -231,7 +232,7 @@ void main() {
           container: container,
           child: const MaterialApp(
             locale: Locale('zh'),
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             home: Scaffold(body: ChannelFilesPane(channelId: 5)),
           ),

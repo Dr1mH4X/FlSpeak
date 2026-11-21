@@ -9,6 +9,7 @@ import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/core/update_check.dart';
 import 'package:flspeak/features/settings/widgets/about_card.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
+import 'package:flspeak/localization.dart';
 import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/widgets/prism.dart';
 import 'package:flspeak/widgets/update_dot.dart';
@@ -40,10 +41,7 @@ void main() {
       ],
       child: MaterialApp(
         theme: buildAppTheme(Brightness.light),
-        localizationsDelegates: [
-          ...AppLocalizations.localizationsDelegates,
-          const PrismUiLocalizationsDelegate(),
-        ],
+        localizationsDelegates: appLocalizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         locale: locale,
         builder: (context, child) =>
@@ -301,10 +299,7 @@ void main() {
           container: container,
           child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
-            localizationsDelegates: [
-              ...AppLocalizations.localizationsDelegates,
-              const PrismUiLocalizationsDelegate(),
-            ],
+            localizationsDelegates: appLocalizationsDelegates,
             supportedLocales: AppLocalizations.supportedLocales,
             locale: const Locale('zh'),
             builder: (context, child) =>

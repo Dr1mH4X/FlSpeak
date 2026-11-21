@@ -21,6 +21,7 @@ import 'core/update_check.dart';
 import 'core/window_chrome.dart';
 import 'core/window_metrics.dart';
 import 'l10n/app_localizations.dart';
+import 'localization.dart';
 import 'router.dart';
 import 'theme/app_theme.dart';
 import 'widgets/prism.dart';
@@ -386,10 +387,7 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
     return MaterialApp.router(
       debugShowCheckedModeBanner: false,
       onGenerateTitle: (context) => AppLocalizations.of(context).appTitle,
-      localizationsDelegates: const [
-        ...AppLocalizations.localizationsDelegates,
-        PrismUiLocalizationsDelegate(),
-      ],
+      localizationsDelegates: appLocalizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       locale: locale == null ? null : Locale(locale),
       themeMode: switch (themeMode) {
