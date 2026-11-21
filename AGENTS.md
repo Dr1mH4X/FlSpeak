@@ -20,7 +20,7 @@ FlSpeak 是 TeamSpeak 第三方客户端：Flutter 负责界面，Rust 负责协
 | `plugins/` | `plugins/AGENTS.md` |
 | `plugins/flspeak_ffi/` | `plugins/flspeak_ffi/AGENTS.md` |
 | `lib/` | `lib/AGENTS.md` (及其下 `core/`, `features/`, `theme/`, `widgets/` 等) |
-| `docs/` | `docs/AGENTS.md` (及架构与开发文档 `architecture.md`, `development.md`, `testing.md`，其下 `subsystems/`, `defensive-patterns/`, `cookbook/`, `release/`) |
+| `docs/` | `docs/AGENTS.md` (及架构与开发文档 `architecture.md`, `development.md`, `testing.md`，其下 `subsystems/`, `defensive-patterns/`, `cookbook/`, `release/`, `agents/`) |
 | `website/` | `website/AGENTS.md` |
 | `tool/` | `tool/AGENTS.md` |
 | `.github/` | `.github/AGENTS.md` |
@@ -59,3 +59,12 @@ just check
 
 等价于在 `plugins/flspeak_ffi/rust` 跑 `cargo fmt --all && cargo clippy --workspace --all-targets --all-features -- -D warnings && cargo test --workspace --all-features`，在根目录跑 `dart format lib test setup.dart`、`flutter analyze` 与 `flutter test`，以及在 `website/` 跑 `pnpm --dir website install --frozen-lockfile`、`pnpm --dir website run typecheck` 与 `pnpm --dir website run build`。没装 just 就按原始命令跑；全部任务用 `just --list` 查看，细节见 `docs/development.md`。
 
+## Agent skills
+
+### Issue tracker
+
+issue 与 spec 存放为 `Dr1mH4X/FlSpeak` 的 GitHub issue，使用 `gh` CLI 操作。见 [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md)。
+
+### Domain docs
+
+单上下文布局：根 `GLOSSARY.md` 与 `.agents/notes/` 决策记录。见 [docs/agents/domain.md](docs/agents/domain.md)。
