@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart'
     hide IconButton, Scaffold, Switch, TextButton;
 import 'package:flutter/services.dart';
@@ -155,15 +157,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Future<void> _authorizePttHotkey() async {
-    const hotkey = GlobalHotkey();
-    final granted = await hotkey.requestPermission();
-    if (granted) {
-      if (mounted) {
-        ref.read(pttHotkeyStatusProvider.notifier).requestRetry();
+    if (defaultTargetPlatform == TargetPlatform.macOS) {
+      const hotkey = GlobalHotkey();
+      final granted = await hotkey.requestPermission();
+      if (granted) {
+        if (mounted) {
+          ref.read(pttHotkeyStatusProvider.notifier).requestRetry(manual: true);
+        }
+        return;
       }
+      await hotkey.openPermissionSettings();
       return;
     }
-    await hotkey.openPermissionSettings();
+    ref.read(pttHotkeyStatusProvider.notifier).requestRetry(manual: true);
   }
 
   @override
@@ -669,7 +675,7 @@ String _pttHotkeySubtitle(
   final keyName = pttHotkeyDisplayName(key);
   return switch (status.state) {
     PttHotkeyState.permissionDenied =>
-      '$keyName · ${l10n.settingsPttHotkeyPermissionRequired}',
+      '$keyName · ${defaultTargetPlatform == TargetPlatform.macOS ? l10n.settingsPttHotkeyPermissionRequired : l10n.settingsPttHotkeyPortalPermissionRequired}',
     PttHotkeyState.unsupportedPlatform ||
     PttHotkeyState.unsupportedKey ||
     PttHotkeyState.conflict ||

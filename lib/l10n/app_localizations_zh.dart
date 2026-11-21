@@ -406,6 +406,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsPttHotkeyPermissionRequired => '需要输入监控权限';
 
   @override
+  String get settingsPttHotkeyPortalPermissionRequired => '全局快捷键未授权';
+
+  @override
   String get settingsPttHotkeyGrantPermission => '去授权';
 
   @override
@@ -750,6 +753,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get noticePttHotkeyPermissionDenied => '全局快捷键需要输入监控权限，当前仅应用内生效';
+
+  @override
+  String get noticePttHotkeyPortalPermissionDenied => '全局快捷键未授权，当前仅应用内生效';
 
   @override
   String get noticeConnectionLost => '连接已断开。';

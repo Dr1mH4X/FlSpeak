@@ -308,6 +308,9 @@ void main() {
       );
       expect(permissionDenied.isRegistered, isFalse);
       expect(permissionDenied.shouldRetry, isTrue);
+      expect(permissionDenied.shouldAutoRetry(TargetPlatform.macOS), isTrue);
+      expect(permissionDenied.shouldAutoRetry(TargetPlatform.windows), isTrue);
+      expect(permissionDenied.shouldAutoRetry(TargetPlatform.linux), isFalse);
       expect(permissionDenied.isInAppOnly, isFalse);
 
       for (final reason in [
@@ -318,6 +321,7 @@ void main() {
           GlobalHotkeyResult(ok: false, reason: reason, code: 12),
         );
         expect(status.shouldRetry, isTrue);
+        expect(status.shouldAutoRetry(TargetPlatform.linux), isTrue);
         expect(status.isInAppOnly, isTrue);
       }
 
@@ -329,6 +333,7 @@ void main() {
           GlobalHotkeyResult(ok: false, reason: reason),
         );
         expect(status.shouldRetry, isFalse);
+        expect(status.shouldAutoRetry(TargetPlatform.macOS), isFalse);
         expect(status.isInAppOnly, isTrue);
       }
     });
@@ -342,13 +347,14 @@ void main() {
         const PttHotkeyStatus.inactive(),
       );
 
-      var retries = 0;
-      void onRetry() => retries++;
+      final calls = <bool>[];
+      void onRetry({bool manual = false}) => calls.add(manual);
 
       final controller = container.read(pttHotkeyStatusProvider.notifier);
       controller.attachRetryHandler(onRetry);
       controller.requestRetry();
-      expect(retries, 1);
+      controller.requestRetry(manual: true);
+      expect(calls, [false, true]);
 
       controller.setStatus(
         const PttHotkeyStatus(
@@ -365,7 +371,7 @@ void main() {
 
       controller.detachRetryHandler(onRetry);
       controller.requestRetry();
-      expect(retries, 1);
+      expect(calls, [false, true]);
     });
   });
 }

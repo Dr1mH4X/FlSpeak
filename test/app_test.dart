@@ -353,6 +353,10 @@ void main() {
     testWidgets(
       'retries hotkey registration on resume and settings open for ${reason.name}',
       (tester) async {
+        if (reason == GlobalHotkeyReason.permissionDenied) {
+          debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+          addTearDown(() => debugDefaultTargetPlatformOverride = null);
+        }
         var registerCalls = 0;
         var currentResponse = <String, Object?>{
           'ok': false,
@@ -562,6 +566,8 @@ void main() {
   testWidgets(
     'logs leveled hotkey errors, deduplicates NoticeCenter notices, and displays voice settings status',
     (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
       final previousTalker = talker;
       final testTalker = Talker(
         logger: TalkerLogger(formatter: const PlainLoggerFormatter()),
@@ -687,6 +693,8 @@ void main() {
   testWidgets(
     'does not prompt Input Monitoring on startup and requests permission when user activates PTT or taps authorize',
     (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
       var requestPermissionCalls = 0;
       var openSettingsCalls = 0;
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(hotkey, (
@@ -764,6 +772,88 @@ void main() {
       await tester.pumpAndSettle();
       expect(requestPermissionCalls, 2);
       expect(openSettingsCalls, 1);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'Linux permissionDenied does not auto-retry on resume or settings open, shows portal label, and manually retries on button tap',
+    (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+      var registerCalls = 0;
+      var openSettingsCalls = 0;
+      var currentResponse = <String, Object?>{
+        'ok': false,
+        'reason': 'permissionDenied',
+        'code': 1,
+      };
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(hotkey, (
+        call,
+      ) async {
+        switch (call.method) {
+          case 'register':
+            registerCalls++;
+            return currentResponse;
+          case 'openPermissionSettings':
+            openSettingsCalls++;
+            return true;
+          default:
+            return true;
+        }
+      });
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          hotkey,
+          null,
+        ),
+      );
+
+      final controller = _PttSession();
+      final container = await _mountPtt(
+        tester,
+        controller,
+        pttHotkey: LogicalKeyboardKey.keyA.keyId,
+      );
+      expect(registerCalls, 1);
+      expect(find.text('全局快捷键未授权，当前仅应用内生效'), findsOneWidget);
+
+      // Resuming after cancelling a Portal prompt must not auto-retry.
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(registerCalls, 1);
+
+      // Opening Settings must not auto-retry either.
+      container.read(routerProvider).go(AppRoutes.settings);
+      await tester.pumpAndSettle();
+      expect(registerCalls, 1);
+
+      final generalCategory = find.text('通用');
+      await tester.ensureVisible(generalCategory);
+      await tester.tap(generalCategory);
+      await tester.pumpAndSettle();
+      final voiceTile = find.text('语音');
+      await tester.ensureVisible(voiceTile);
+      await tester.tap(voiceTile);
+      await tester.pumpAndSettle();
+
+      expect(find.text('A · 全局快捷键未授权'), findsOneWidget);
+      final authorizeButton = find.text('去授权');
+      expect(authorizeButton, findsOneWidget);
+
+      currentResponse = <String, Object?>{
+        'ok': true,
+        'reason': 'registered',
+        'code': null,
+      };
+      await tester.tap(authorizeButton);
+      await tester.pumpAndSettle();
+      expect(registerCalls, 2);
+      expect(openSettingsCalls, 0);
+      expect(find.text('A'), findsOneWidget);
+      expect(find.text('去授权'), findsNothing);
 
       await tester.pumpWidget(const SizedBox.shrink());
     },

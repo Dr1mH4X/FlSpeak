@@ -221,12 +221,15 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
     unawaited(owner.setPttActive(true));
   }
 
-  void _retryRegistrationIfNeeded() {
+  void _retryRegistrationIfNeeded({bool manual = false}) {
     if (!mounted) return;
     final keyId = ref.read(activePttHotkeyProvider);
     if (keyId == null) return;
     final status = ref.read(pttHotkeyStatusProvider);
-    if (!status.shouldRetry) return;
+    final allow = manual
+        ? status.shouldRetry
+        : status.shouldAutoRetry(defaultTargetPlatform);
+    if (!allow) return;
     unawaited(_syncRegistration(keyId));
   }
 
@@ -327,7 +330,9 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
     final l10n = ref.read(appLocalizationsProvider);
     final message = switch (result.reason) {
       GlobalHotkeyReason.permissionDenied =>
-        l10n.noticePttHotkeyPermissionDenied,
+        defaultTargetPlatform == TargetPlatform.macOS
+            ? l10n.noticePttHotkeyPermissionDenied
+            : l10n.noticePttHotkeyPortalPermissionDenied,
       GlobalHotkeyReason.conflict ||
       GlobalHotkeyReason.failed ||
       GlobalHotkeyReason.unsupportedPlatform ||

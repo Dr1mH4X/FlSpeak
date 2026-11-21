@@ -20,3 +20,4 @@
 - **存储权限降级**：Android 端避免声明全盘文件访问权限（如 `MANAGE_EXTERNAL_STORAGE`），一律使用 MediaStore API 导出文件至下载目录，保障用户隐私与合规性。
 - **权限拒绝处理**：用户拒绝授予麦克风权限时，仅禁用音频采集发送，接收端播放与文字聊天、频道浏览功能保持正常可用，并通过应用内通知中心（`NoticeCenter`）提示权限缺失。
 - **macOS 输入监控按需授权与探测**：`macos/Runner/MainFlutterWindow.swift` 在保留 `com.apple.security.app-sandbox` 的前提下通过 `CGEvent.tapCreate(..., options: .listenOnly, ...)` 注册全局按键观察，不吞掉其他应用的按键输入；注册及切回前台或打开设置页重试时直接试探 `CGEvent.tapCreate`（仅在返回 `nil` 后用 `CGPreflightListenEventAccess()` 区分 `permissionDenied` 与其他失败，避免进程内 TCC 缓存短路导致用户在系统设置授权后无法立即生效）。系统不会在应用启动时主动弹窗请求输入监控权限，仅在用户主动开启按住说话或点击设置页授权按钮时调用 `CGRequestListenEventAccess()`，并支持通过 `x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent` 跳转系统设置「输入监控」面板；未授权期间全局按住说话自动降级为应用内按键兜底，并在状态展示区与 `NoticeCenter` 提示授权状态。
+- **Linux GlobalShortcuts Portal 授权重试边界**：Wayland 与 XWayland 下 `BindShortcuts` 会弹出桌面授权确认框；用户取消拒绝后返回 `permissionDenied` 并提示「全局快捷键未授权」，应用恢复前台或打开设置页时不会自动重弹，仅由用户手动点击设置页授权按钮重新发起绑定。

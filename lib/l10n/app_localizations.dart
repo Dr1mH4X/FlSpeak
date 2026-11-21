@@ -836,6 +836,12 @@ abstract class AppLocalizations {
   /// **'Input Monitoring permission required'**
   String get settingsPttHotkeyPermissionRequired;
 
+  /// No description provided for @settingsPttHotkeyPortalPermissionRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Global shortcut not authorized'**
+  String get settingsPttHotkeyPortalPermissionRequired;
+
   /// No description provided for @settingsPttHotkeyGrantPermission.
   ///
   /// In en, this message translates to:
@@ -1507,6 +1513,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Global hotkey requires Input Monitoring permission; working in-app only'**
   String get noticePttHotkeyPermissionDenied;
+
+  /// No description provided for @noticePttHotkeyPortalPermissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Global shortcut not authorized; working in-app only'**
+  String get noticePttHotkeyPortalPermissionDenied;
 
   /// No description provided for @noticeConnectionLost.
   ///

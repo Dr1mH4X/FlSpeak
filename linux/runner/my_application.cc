@@ -49,6 +49,7 @@ struct _MyApplication {
   gboolean hotkey_x11_filter_installed;
   gboolean hotkey_x11_events_selected;
   int hotkey_xi_opcode;
+  guint hotkey_x11_release_timer_id;
 
   // Wayland / XWayland Portal 状态。
   GDBusConnection* portal_bus;
@@ -138,6 +139,24 @@ void copy_existing_xi_master_mask(Display* xdisplay, Window root,
 
 }  // namespace
 
+static void cancel_x11_release_timer(MyApplication* self) {
+  if (self->hotkey_x11_release_timer_id != 0) {
+    g_source_remove(self->hotkey_x11_release_timer_id);
+    self->hotkey_x11_release_timer_id = 0;
+  }
+}
+
+static gboolean hotkey_x11_commit_release_cb(gpointer data) {
+  auto* self = MY_APPLICATION(data);
+  self->hotkey_x11_release_timer_id = 0;
+  if (self->hotkey_key_down && self->hotkey_channel != nullptr) {
+    self->hotkey_key_down = FALSE;
+    fl_method_channel_invoke_method(self->hotkey_channel, "onKeyUp", nullptr,
+                                    nullptr, nullptr, nullptr);
+  }
+  return G_SOURCE_REMOVE;
+}
+
 static GdkFilterReturn hotkey_x11_filter(GdkXEvent* xevent, GdkEvent*,
                                          gpointer data) {
   auto* self = MY_APPLICATION(data);
@@ -175,21 +194,26 @@ static GdkFilterReturn hotkey_x11_filter(GdkXEvent* xevent, GdkEvent*,
   if (raw != nullptr &&
       static_cast<guint>(raw->detail) == self->hotkey_keycode) {
     if (cookie->evtype == XI_RawKeyPress) {
+      if (self->hotkey_x11_release_timer_id != 0) {
+        // X11 按键连发会紧挨着发送 Release + Press：取消待确认释放以吞掉伪松开。
+        cancel_x11_release_timer(self);
+      } else {
 #ifdef XIKeyRepeat
-      const gboolean is_repeat = (raw->flags & XIKeyRepeat) != 0;
+        const gboolean is_repeat = (raw->flags & XIKeyRepeat) != 0;
 #else
-      const gboolean is_repeat = (raw->flags & (1 << 16)) != 0;
+        const gboolean is_repeat = (raw->flags & (1 << 16)) != 0;
 #endif
-      if (!is_repeat && !self->hotkey_key_down) {
-        self->hotkey_key_down = TRUE;
-        fl_method_channel_invoke_method(self->hotkey_channel, "onKeyDown",
-                                        nullptr, nullptr, nullptr, nullptr);
+        if (!is_repeat && !self->hotkey_key_down) {
+          self->hotkey_key_down = TRUE;
+          fl_method_channel_invoke_method(self->hotkey_channel, "onKeyDown",
+                                          nullptr, nullptr, nullptr, nullptr);
+        }
       }
     } else if (cookie->evtype == XI_RawKeyRelease) {
       if (self->hotkey_key_down) {
-        self->hotkey_key_down = FALSE;
-        fl_method_channel_invoke_method(self->hotkey_channel, "onKeyUp",
-                                        nullptr, nullptr, nullptr, nullptr);
+        cancel_x11_release_timer(self);
+        self->hotkey_x11_release_timer_id =
+            g_timeout_add(20, hotkey_x11_commit_release_cb, self);
       }
     }
   }
@@ -201,6 +225,7 @@ static GdkFilterReturn hotkey_x11_filter(GdkXEvent* xevent, GdkEvent*,
 }
 
 static void unregister_x11_hotkey(MyApplication* self) {
+  cancel_x11_release_timer(self);
   if (self->hotkey_x11_filter_installed) {
     gdk_window_remove_filter(nullptr, hotkey_x11_filter, self);
     self->hotkey_x11_filter_installed = FALSE;

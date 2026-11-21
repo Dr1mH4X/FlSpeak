@@ -155,6 +155,17 @@ class PttHotkeyStatus {
     PttHotkeyState.unsupportedKey => false,
   };
 
+  /// 前台恢复或打开设置页时的无弹窗自动重试判定：
+  /// Linux 下的 `permissionDenied` 会弹出 Portal 确认框，因此仅允许用户手动触发。
+  bool shouldAutoRetry(TargetPlatform platform) => switch (state) {
+    PttHotkeyState.conflict || PttHotkeyState.failed => true,
+    PttHotkeyState.permissionDenied => platform != TargetPlatform.linux,
+    PttHotkeyState.inactive ||
+    PttHotkeyState.registered ||
+    PttHotkeyState.unsupportedPlatform ||
+    PttHotkeyState.unsupportedKey => false,
+  };
+
   bool get isInAppOnly => switch (state) {
     PttHotkeyState.unsupportedPlatform ||
     PttHotkeyState.unsupportedKey ||
@@ -189,7 +200,7 @@ final pttHotkeyStatusProvider =
     );
 
 class PttHotkeyStatusController extends Notifier<PttHotkeyStatus> {
-  VoidCallback? _onRetryRequested;
+  void Function({bool manual})? _onRetryRequested;
 
   @override
   PttHotkeyStatus build() {
@@ -203,18 +214,18 @@ class PttHotkeyStatusController extends Notifier<PttHotkeyStatus> {
     }
   }
 
-  void attachRetryHandler(VoidCallback handler) {
+  void attachRetryHandler(void Function({bool manual}) handler) {
     _onRetryRequested = handler;
   }
 
-  void detachRetryHandler(VoidCallback handler) {
+  void detachRetryHandler(void Function({bool manual}) handler) {
     if (identical(_onRetryRequested, handler)) {
       _onRetryRequested = null;
     }
   }
 
-  void requestRetry() {
-    _onRetryRequested?.call();
+  void requestRetry({bool manual = false}) {
+    _onRetryRequested?.call(manual: manual);
   }
 }
 

@@ -414,6 +414,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Input Monitoring permission required';
 
   @override
+  String get settingsPttHotkeyPortalPermissionRequired =>
+      'Global shortcut not authorized';
+
+  @override
   String get settingsPttHotkeyGrantPermission => 'Authorize';
 
   @override
@@ -770,6 +774,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get noticePttHotkeyPermissionDenied =>
       'Global hotkey requires Input Monitoring permission; working in-app only';
+
+  @override
+  String get noticePttHotkeyPortalPermissionDenied =>
+      'Global shortcut not authorized; working in-app only';
 
   @override
   String get noticeConnectionLost => 'Connection lost.';
