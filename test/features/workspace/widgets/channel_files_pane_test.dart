@@ -4,7 +4,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
-import 'package:flutter/material.dart' hide LinearProgressIndicator, TextField;
+import 'package:material_ui/material_ui.dart'
+    hide LinearProgressIndicator, TextField;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';

@@ -8,7 +8,7 @@ import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, kIsWeb;
-import 'package:flutter/material.dart'
+import 'package:material_ui/material_ui.dart'
     hide
         ButtonStyle,
         FilledButton,
@@ -20,7 +20,6 @@ import 'package:flutter/material.dart'
         Switch,
         TextButton,
         TextField;
-import 'package:flutter/physics.dart' show SpringDescription;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';

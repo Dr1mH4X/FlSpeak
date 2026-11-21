@@ -4,7 +4,8 @@
 
 import 'package:flutter/foundation.dart' show clampDouble, listEquals;
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart' hide InputDecoration, Slider, TextField;
+import 'package:material_ui/material_ui.dart'
+    hide InputDecoration, Slider, TextField;
 import 'package:flutter/services.dart';
 
 import '../../../l10n/app_localizations.dart';

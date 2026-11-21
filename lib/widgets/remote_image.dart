@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart'
+import 'package:material_ui/material_ui.dart'
     hide ButtonStyle, SelectableText, TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:prism_ui/prism_ui.dart' as prism_ui show SelectableText;

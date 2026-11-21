@@ -596,7 +596,11 @@ void _expectSelfConsistentSdp(String sdp) {
     for (final line in section.skip(1)) {
       final attr = RegExp(r'^a=(rtpmap|rtcp-fb|fmtp):(\d+)\b').firstMatch(line);
       if (attr != null) {
-        expect(pts, contains(attr.group(2)!), reason: 'attribute references a pruned PT: $line');
+        expect(
+          pts,
+          contains(attr.group(2)!),
+          reason: 'attribute references a pruned PT: $line',
+        );
       }
       final apt = RegExp(r'^a=fmtp:(\d+)\s.*\bapt=(\d+)\b').firstMatch(line);
       if (apt != null) {

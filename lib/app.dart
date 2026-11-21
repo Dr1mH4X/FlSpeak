@@ -6,7 +6,7 @@ import 'dart:async';
 import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart' hide AlertDialog;
+import 'package:material_ui/material_ui.dart' hide AlertDialog;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart' show UpdateStateView;

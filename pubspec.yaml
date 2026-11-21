@@ -44,6 +44,7 @@ dev_dependencies:
   integration_test:
     sdk: flutter
 
+  path_provider_platform_interface: any
 flutter:
   uses-material-design: true
   generate: true

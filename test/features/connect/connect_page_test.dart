@@ -4,7 +4,7 @@ import 'dart:async';
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart' hide TextField;
+import 'package:material_ui/material_ui.dart' hide TextField;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -225,7 +225,9 @@ void main() {
     }
   }
 
-  testWidgets('compact layout places the identity row below the main title', (tester) async {
+  testWidgets('compact layout places the identity row below the main title', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(600, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -265,40 +267,45 @@ void main() {
     expect(stripTop, greaterThan(titleBottom));
   });
 
-  testWidgets('connect page omits disconnected state and redundant identity copy', (tester) async {
-    tester.view.physicalSize = const Size(1280, 800);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+  testWidgets(
+    'connect page omits disconnected state and redundant identity copy',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          coreSessionProvider.overrideWithValue(_FakeCore()),
-          sessionViewProvider.overrideWith(_TestSessionController.new),
-        ],
-        child: MaterialApp(
-          theme: buildAppTheme(Brightness.light),
-          locale: const Locale('zh'),
-          localizationsDelegates: const [
-            ...AppLocalizations.localizationsDelegates,
-            PrismUiLocalizationsDelegate(),
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            coreSessionProvider.overrideWithValue(_FakeCore()),
+            sessionViewProvider.overrideWith(_TestSessionController.new),
           ],
-          supportedLocales: AppLocalizations.supportedLocales,
-          builder: (context, child) =>
-              PrismRootScope(brightness: Brightness.light, child: child!),
-          home: const ConnectPage(),
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            locale: const Locale('zh'),
+            localizationsDelegates: const [
+              ...AppLocalizations.localizationsDelegates,
+              PrismUiLocalizationsDelegate(),
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) =>
+                PrismRootScope(brightness: Brightness.light, child: child!),
+            home: const ConnectPage(),
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.text('未连接'), findsNothing);
-    expect(find.text('一个身份，连接你熟悉的每个社区。'), findsNothing);
-    expect(find.text('身份保存在本机'), findsNothing);
-  });
+      expect(find.text('未连接'), findsNothing);
+      expect(find.text('一个身份，连接你熟悉的每个社区。'), findsNothing);
+      expect(find.text('身份保存在本机'), findsNothing);
+    },
+  );
 
-  testWidgets('managing identity updates the nickname on the connect page', (tester) async {
+  testWidgets('managing identity updates the nickname on the connect page', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1280, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -347,212 +354,130 @@ void main() {
     expect(find.text('FlSpeakUser'), findsNothing);
   });
 
-  testWidgets('submitting an empty nickname in the identity dialog falls back to the default nickname', (tester) async {
-    tester.view.physicalSize = const Size(1280, 800);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+  testWidgets(
+    'submitting an empty nickname in the identity dialog falls back to the default nickname',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-    final store = PreferencesStore.inMemory(
-      preferences: const SessionPreferences(nickname: 'Bob'),
-    );
+      final store = PreferencesStore.inMemory(
+        preferences: const SessionPreferences(nickname: 'Bob'),
+      );
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          coreSessionProvider.overrideWithValue(_FakeCore()),
-          sessionViewProvider.overrideWith(_TestSessionController.new),
-          preferencesStoreProvider.overrideWithValue(store),
-        ],
-        child: MaterialApp(
-          theme: buildAppTheme(Brightness.light),
-          locale: const Locale('zh'),
-          localizationsDelegates: const [
-            ...AppLocalizations.localizationsDelegates,
-            PrismUiLocalizationsDelegate(),
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            coreSessionProvider.overrideWithValue(_FakeCore()),
+            sessionViewProvider.overrideWith(_TestSessionController.new),
+            preferencesStoreProvider.overrideWithValue(store),
           ],
-          supportedLocales: AppLocalizations.supportedLocales,
-          builder: (context, child) =>
-              PrismRootScope(brightness: Brightness.light, child: child!),
-          home: const ConnectPage(),
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            locale: const Locale('zh'),
+            localizationsDelegates: const [
+              ...AppLocalizations.localizationsDelegates,
+              PrismUiLocalizationsDelegate(),
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) =>
+                PrismRootScope(brightness: Brightness.light, child: child!),
+            home: const ConnectPage(),
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.text('Bob'), findsOneWidget);
+      expect(find.text('Bob'), findsOneWidget);
 
-    await tester.tap(find.text('管理身份'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('管理身份'));
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.edit_rounded));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.edit_rounded));
+      await tester.pumpAndSettle();
 
-    final renameField = find.byWidgetPredicate(
-      (w) => w is TextField && w.decoration?.hintText == '昵称',
-    );
-    await tester.enterText(renameField, '   ');
-    await tester.pumpAndSettle();
+      final renameField = find.byWidgetPredicate(
+        (w) => w is TextField && w.decoration?.hintText == '昵称',
+      );
+      await tester.enterText(renameField, '   ');
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('完成'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('完成'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('FlSpeakUser'), findsOneWidget);
-    expect(find.text('Bob'), findsNothing);
-  });
+      expect(find.text('FlSpeakUser'), findsOneWidget);
+      expect(find.text('Bob'), findsNothing);
+    },
+  );
 
-  testWidgets('canceling edit in the identity dialog then submitting does not change the nickname', (tester) async {
-    tester.view.physicalSize = const Size(1280, 800);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+  testWidgets(
+    'canceling edit in the identity dialog then submitting does not change the nickname',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-    final store = PreferencesStore.inMemory(
-      preferences: const SessionPreferences(nickname: 'Charlie'),
-    );
+      final store = PreferencesStore.inMemory(
+        preferences: const SessionPreferences(nickname: 'Charlie'),
+      );
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          coreSessionProvider.overrideWithValue(_FakeCore()),
-          sessionViewProvider.overrideWith(_TestSessionController.new),
-          preferencesStoreProvider.overrideWithValue(store),
-        ],
-        child: MaterialApp(
-          theme: buildAppTheme(Brightness.light),
-          locale: const Locale('zh'),
-          localizationsDelegates: const [
-            ...AppLocalizations.localizationsDelegates,
-            PrismUiLocalizationsDelegate(),
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            coreSessionProvider.overrideWithValue(_FakeCore()),
+            sessionViewProvider.overrideWith(_TestSessionController.new),
+            preferencesStoreProvider.overrideWithValue(store),
           ],
-          supportedLocales: AppLocalizations.supportedLocales,
-          builder: (context, child) =>
-              PrismRootScope(brightness: Brightness.light, child: child!),
-          home: const ConnectPage(),
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            locale: const Locale('zh'),
+            localizationsDelegates: const [
+              ...AppLocalizations.localizationsDelegates,
+              PrismUiLocalizationsDelegate(),
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) =>
+                PrismRootScope(brightness: Brightness.light, child: child!),
+            home: const ConnectPage(),
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.text('Charlie'), findsOneWidget);
+      expect(find.text('Charlie'), findsOneWidget);
 
-    await tester.tap(find.text('管理身份'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('管理身份'));
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.edit_rounded));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.edit_rounded));
+      await tester.pumpAndSettle();
 
-    final renameField = find.byWidgetPredicate(
-      (w) => w is TextField && w.decoration?.hintText == '昵称',
-    );
-    await tester.enterText(renameField, 'NewCharlie');
-    await tester.pumpAndSettle();
+      final renameField = find.byWidgetPredicate(
+        (w) => w is TextField && w.decoration?.hintText == '昵称',
+      );
+      await tester.enterText(renameField, 'NewCharlie');
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.bySemanticsLabel('取消'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.bySemanticsLabel('取消'));
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('完成'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('完成'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Charlie'), findsOneWidget);
-    expect(find.text('NewCharlie'), findsNothing);
-  });
+      expect(find.text('Charlie'), findsOneWidget);
+      expect(find.text('NewCharlie'), findsNothing);
+    },
+  );
 
-  testWidgets('desktop server rows omit the overflow button and open the context menu at the pointer', (tester) async {
-    tester.view.physicalSize = const Size(1280, 800);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          coreSessionProvider.overrideWithValue(_FakeCore()),
-          sessionViewProvider.overrideWith(_TestSessionController.new),
-        ],
-        child: MaterialApp(
-          theme: buildAppTheme(Brightness.light),
-          locale: const Locale('zh'),
-          localizationsDelegates: const [
-            ...AppLocalizations.localizationsDelegates,
-            PrismUiLocalizationsDelegate(),
-          ],
-          supportedLocales: AppLocalizations.supportedLocales,
-          builder: (context, child) =>
-              PrismRootScope(brightness: Brightness.light, child: child!),
-          home: const ConnectPage(),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(
-      find.byWidgetPredicate((w) => w is GlyphIcon && w.glyph == Glyphs.more),
-      findsNothing,
-    );
-    final rowRect = tester.getRect(find.byType(ServerRow));
-    final clickPoint = Offset(
-      rowRect.left + rowRect.width * 0.65,
-      rowRect.center.dy,
-    );
-    await tester.tapAt(clickPoint, buttons: kSecondaryButton);
-    await tester.pumpAndSettle();
-
-    final menuLeft = tester.getTopLeft(find.byType(PopupMenu)).dx;
-    expect(menuLeft, closeTo(clickPoint.dx, 4.0));
-  });
-
-  testWidgets('narrow server rows show the overflow button and open the menu from it', (tester) async {
-    tester.view.physicalSize = const Size(500, 800);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          coreSessionProvider.overrideWithValue(_FakeCore()),
-          sessionViewProvider.overrideWith(_TestSessionController.new),
-        ],
-        child: MaterialApp(
-          theme: buildAppTheme(Brightness.light),
-          locale: const Locale('zh'),
-          localizationsDelegates: const [
-            ...AppLocalizations.localizationsDelegates,
-            PrismUiLocalizationsDelegate(),
-          ],
-          supportedLocales: AppLocalizations.supportedLocales,
-          builder: (context, child) =>
-              PrismRootScope(brightness: Brightness.light, child: child!),
-          home: const ConnectPage(),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    final rowRect = tester.getRect(find.byType(ServerRow));
-    final moreFinder = find.byWidgetPredicate(
-      (w) => w is GlyphIcon && w.glyph == Glyphs.more,
-    );
-    expect(moreFinder, findsOneWidget);
-    await tester.tap(moreFinder);
-    await tester.pumpAndSettle();
-
-    final menuLeft = tester.getTopLeft(find.byType(PopupMenu)).dx;
-    expect(menuLeft, greaterThan(rowRect.center.dx));
-  });
-
-  testWidgets('home uses a pageColor base and xl squircle cards in light and dark modes', (tester) async {
-    tester.view.physicalSize = const Size(1280, 800);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    for (final brightness in Brightness.values) {
-      final theme = buildAppTheme(brightness);
-      final pageColor = surfaceColorFor(SurfaceLevel.page, theme.colorScheme);
-      final cardColor = surfaceColorFor(SurfaceLevel.card, theme.colorScheme);
-      expect(cardColor, isNot(pageColor));
+  testWidgets(
+    'desktop server rows omit the overflow button and open the context menu at the pointer',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
       await tester.pumpWidget(
         ProviderScope(
@@ -561,7 +486,7 @@ void main() {
             sessionViewProvider.overrideWith(_TestSessionController.new),
           ],
           child: MaterialApp(
-            theme: theme,
+            theme: buildAppTheme(Brightness.light),
             locale: const Locale('zh'),
             localizationsDelegates: const [
               ...AppLocalizations.localizationsDelegates,
@@ -569,49 +494,146 @@ void main() {
             ],
             supportedLocales: AppLocalizations.supportedLocales,
             builder: (context, child) =>
-                PrismRootScope(brightness: brightness, child: child!),
+                PrismRootScope(brightness: Brightness.light, child: child!),
             home: const ConnectPage(),
           ),
         ),
       );
       await tester.pumpAndSettle();
 
-      final scaffold = tester.widget<app_scaffold.Scaffold>(
-        find.byType(app_scaffold.Scaffold),
+      expect(
+        find.byWidgetPredicate((w) => w is GlyphIcon && w.glyph == Glyphs.more),
+        findsNothing,
       );
-      expect(scaffold.backgroundColor, pageColor);
-
-      final pageCanvas = tester.widget<Material>(
-        find
-            .descendant(
-              of: find.byType(ConnectPage),
-              matching: find.byWidgetPredicate(
-                (w) => w is Material && w.color == pageColor,
-              ),
-            )
-            .first,
+      final rowRect = tester.getRect(find.byType(ServerRow));
+      final clickPoint = Offset(
+        rowRect.left + rowRect.width * 0.65,
+        rowRect.center.dy,
       );
-      expect(pageCanvas.color, pageColor);
+      await tester.tapAt(clickPoint, buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
 
-      final cards = tester
-          .widgetList<SurfaceCard>(find.byType(SurfaceCard))
-          .toList();
-      expect(cards, isNotEmpty);
-      for (final card in cards) {
-        final box = tester.widget<DecoratedBox>(
+      final menuLeft = tester.getTopLeft(find.byType(PopupMenu)).dx;
+      expect(menuLeft, closeTo(clickPoint.dx, 4.0));
+    },
+  );
+
+  testWidgets(
+    'narrow server rows show the overflow button and open the menu from it',
+    (tester) async {
+      tester.view.physicalSize = const Size(500, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            coreSessionProvider.overrideWithValue(_FakeCore()),
+            sessionViewProvider.overrideWith(_TestSessionController.new),
+          ],
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            locale: const Locale('zh'),
+            localizationsDelegates: const [
+              ...AppLocalizations.localizationsDelegates,
+              PrismUiLocalizationsDelegate(),
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) =>
+                PrismRootScope(brightness: Brightness.light, child: child!),
+            home: const ConnectPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final rowRect = tester.getRect(find.byType(ServerRow));
+      final moreFinder = find.byWidgetPredicate(
+        (w) => w is GlyphIcon && w.glyph == Glyphs.more,
+      );
+      expect(moreFinder, findsOneWidget);
+      await tester.tap(moreFinder);
+      await tester.pumpAndSettle();
+
+      final menuLeft = tester.getTopLeft(find.byType(PopupMenu)).dx;
+      expect(menuLeft, greaterThan(rowRect.center.dx));
+    },
+  );
+
+  testWidgets(
+    'home uses a pageColor base and xl squircle cards in light and dark modes',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      for (final brightness in Brightness.values) {
+        final theme = buildAppTheme(brightness);
+        final pageColor = surfaceColorFor(SurfaceLevel.page, theme.colorScheme);
+        final cardColor = surfaceColorFor(SurfaceLevel.card, theme.colorScheme);
+        expect(cardColor, isNot(pageColor));
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              coreSessionProvider.overrideWithValue(_FakeCore()),
+              sessionViewProvider.overrideWith(_TestSessionController.new),
+            ],
+            child: MaterialApp(
+              theme: theme,
+              locale: const Locale('zh'),
+              localizationsDelegates: const [
+                ...AppLocalizations.localizationsDelegates,
+                PrismUiLocalizationsDelegate(),
+              ],
+              supportedLocales: AppLocalizations.supportedLocales,
+              builder: (context, child) =>
+                  PrismRootScope(brightness: brightness, child: child!),
+              home: const ConnectPage(),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final scaffold = tester.widget<app_scaffold.Scaffold>(
+          find.byType(app_scaffold.Scaffold),
+        );
+        expect(scaffold.backgroundColor, pageColor);
+
+        final pageCanvas = tester.widget<Material>(
           find
               .descendant(
-                of: find.byWidget(card),
-                matching: find.byType(DecoratedBox),
+                of: find.byType(ConnectPage),
+                matching: find.byWidgetPredicate(
+                  (w) => w is Material && w.color == pageColor,
+                ),
               )
               .first,
         );
-        final decoration = box.decoration as ShapeDecoration;
-        expect(decoration.color, cardColor);
-        expect(decoration.shape, AppShape.xl);
+        expect(pageCanvas.color, pageColor);
+
+        final cards = tester
+            .widgetList<SurfaceCard>(find.byType(SurfaceCard))
+            .toList();
+        expect(cards, isNotEmpty);
+        for (final card in cards) {
+          final box = tester.widget<DecoratedBox>(
+            find
+                .descendant(
+                  of: find.byWidget(card),
+                  matching: find.byType(DecoratedBox),
+                )
+                .first,
+          );
+          final decoration = box.decoration as ShapeDecoration;
+          expect(decoration.color, cardColor);
+          expect(decoration.shape, AppShape.xl);
+        }
       }
-    }
-  });
+    },
+  );
 
   testWidgets(
     'ServerRow connecting uses left ExpressiveFrame spin without ActivityIndicator',
@@ -667,190 +689,76 @@ void main() {
     },
   );
 
-  testWidgets('the circular search button remains visible with an empty server list and aligns to the right of the Servers label', (tester) async {
-    tester.view.physicalSize = const Size(1280, 800);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+  testWidgets(
+    'the circular search button remains visible with an empty server list and aligns to the right of the Servers label',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          coreSessionProvider.overrideWithValue(_FakeCore()),
-          sessionViewProvider.overrideWith(_EmptySessionController.new),
-        ],
-        child: MaterialApp(
-          theme: buildAppTheme(Brightness.light),
-          locale: const Locale('zh'),
-          localizationsDelegates: const [
-            ...AppLocalizations.localizationsDelegates,
-            PrismUiLocalizationsDelegate(),
-          ],
-          supportedLocales: AppLocalizations.supportedLocales,
-          builder: (context, child) =>
-              PrismRootScope(brightness: Brightness.light, child: child!),
-          home: const ConnectPage(),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.byType(TextField), findsNothing);
-    final titleFinder = find.descendant(
-      of: find.byType(SingleChildScrollView),
-      matching: find.text('服务器'),
-    );
-    final searchFinder = find.bySemanticsLabel('搜索服务器');
-    final addFinder = find.descendant(
-      of: find.byType(SingleChildScrollView),
-      matching: find.text('添加服务器'),
-    );
-    expect(titleFinder, findsOneWidget);
-    expect(searchFinder, findsOneWidget);
-    expect(addFinder, findsOneWidget);
-
-    final titleRect = tester.getRect(titleFinder);
-    final searchRect = tester.getRect(searchFinder);
-    final addRect = tester.getRect(addFinder);
-
-    expect(searchRect.size, const Size(36, 36));
-    expect(searchRect.center.dy, closeTo(titleRect.center.dy, 4.0));
-    expect(searchRect.center.dy, closeTo(addRect.center.dy, 4.0));
-    expect(searchRect.left, greaterThan(titleRect.right));
-    expect(searchRect.right, lessThan(addRect.left));
-    expect(
-      searchRect.left - titleRect.right,
-      lessThan(addRect.left - searchRect.right),
-    );
-  });
-
-  testWidgets('search expands on tap, filters, keeps focus after clearing, collapses on empty blur, and clears and collapses on Esc', (tester) async {
-    tester.view.physicalSize = const Size(1280, 800);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          coreSessionProvider.overrideWithValue(_FakeCore()),
-          sessionViewProvider.overrideWith(_TwoServersSessionController.new),
-        ],
-        child: MaterialApp(
-          theme: buildAppTheme(Brightness.light),
-          locale: const Locale('zh'),
-          localizationsDelegates: const [
-            ...AppLocalizations.localizationsDelegates,
-            PrismUiLocalizationsDelegate(),
-          ],
-          supportedLocales: AppLocalizations.supportedLocales,
-          builder: (context, child) =>
-              PrismRootScope(brightness: Brightness.light, child: child!),
-          home: const ConnectPage(),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.byType(ServerRow), findsNWidgets(2));
-    expect(find.byType(TextField), findsNothing);
-
-    await tester.tap(find.bySemanticsLabel('搜索服务器'));
-    await tester.pumpAndSettle();
-
-    final fieldFinder = find.byType(TextField);
-    expect(fieldFinder, findsOneWidget);
-    expect(tester.getSize(fieldFinder).width, lessThanOrEqualTo(260));
-
-    await tester.enterText(fieldFinder, 'b.example');
-    await tester.pumpAndSettle();
-    expect(find.byType(ServerRow), findsOneWidget);
-
-    // 失焦但内容非空时保持展开，不丢失筛选输入。
-    await tester.tapAt(const Offset(10, 10));
-    await tester.pumpAndSettle();
-    expect(find.byType(TextField), findsOneWidget);
-    expect(find.byType(ServerRow), findsOneWidget);
-
-    // 点击清空按钮清空内容并恢复焦点，保持展开。
-    await tester.tap(
-      find.byWidgetPredicate(
-        (w) => w is GlyphIcon && w.glyph == Glyphs.clearField,
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.byType(ServerRow), findsNWidgets(2));
-    expect(find.byType(TextField), findsOneWidget);
-    expect(tester.widget<TextField>(fieldFinder).focusNode?.hasFocus, isTrue);
-
-    // 内容为空且失焦时自动收起为圆形按钮。
-    await tester.tapAt(const Offset(10, 10));
-    await tester.pumpAndSettle();
-    expect(find.byType(TextField), findsNothing);
-    expect(find.bySemanticsLabel('搜索服务器'), findsOneWidget);
-
-    // 再次展开并输入文本，按 Esc 立即清空并收起。
-    await tester.tap(find.bySemanticsLabel('搜索服务器'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'nomatch');
-    await tester.pumpAndSettle();
-    expect(find.text('没有匹配的服务器'), findsOneWidget);
-
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pumpAndSettle();
-    expect(find.byType(TextField), findsNothing);
-    expect(find.byType(ServerRow), findsNWidgets(2));
-  });
-
-  testWidgets('the expanded search field does not overflow on narrow screens at 2x text scale', (tester) async {
-    tester.view.physicalSize = const Size(360, 800);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          coreSessionProvider.overrideWithValue(_FakeCore()),
-          sessionViewProvider.overrideWith(_TwoServersSessionController.new),
-        ],
-        child: MaterialApp(
-          theme: buildAppTheme(Brightness.light),
-          locale: const Locale('en'),
-          localizationsDelegates: const [
-            ...AppLocalizations.localizationsDelegates,
-            PrismUiLocalizationsDelegate(),
-          ],
-          supportedLocales: AppLocalizations.supportedLocales,
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context)
-                .copyWith(textScaler: const TextScaler.linear(2.0)),
-            child: PrismRootScope(brightness: Brightness.light, child: child!),
-          ),
-          home: const ConnectPage(),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.ensureVisible(find.bySemanticsLabel('Search servers'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.bySemanticsLabel('Search servers'));
-    await tester.pumpAndSettle();
-
-    expect(tester.takeException(), isNull);
-    expect(find.byType(TextField), findsOneWidget);
-    expect(find.text('Servers'), findsOneWidget);
-    expect(find.bySemanticsLabel('Add server'), findsOneWidget);
-  });
-
-  testWidgets('the content search field keeps a flat surface with LiquidGlass enabled and preserves clear behavior and the 36dp section header height', (
-    tester,
-  ) async {
-    Future<void> mount(LiquidGlassQuality? quality) async {
       await tester.pumpWidget(
         ProviderScope(
-          key: ValueKey(quality),
+          overrides: [
+            coreSessionProvider.overrideWithValue(_FakeCore()),
+            sessionViewProvider.overrideWith(_EmptySessionController.new),
+          ],
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            locale: const Locale('zh'),
+            localizationsDelegates: const [
+              ...AppLocalizations.localizationsDelegates,
+              PrismUiLocalizationsDelegate(),
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) =>
+                PrismRootScope(brightness: Brightness.light, child: child!),
+            home: const ConnectPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TextField), findsNothing);
+      final titleFinder = find.descendant(
+        of: find.byType(SingleChildScrollView),
+        matching: find.text('服务器'),
+      );
+      final searchFinder = find.bySemanticsLabel('搜索服务器');
+      final addFinder = find.descendant(
+        of: find.byType(SingleChildScrollView),
+        matching: find.text('添加服务器'),
+      );
+      expect(titleFinder, findsOneWidget);
+      expect(searchFinder, findsOneWidget);
+      expect(addFinder, findsOneWidget);
+
+      final titleRect = tester.getRect(titleFinder);
+      final searchRect = tester.getRect(searchFinder);
+      final addRect = tester.getRect(addFinder);
+
+      expect(searchRect.size, const Size(36, 36));
+      expect(searchRect.center.dy, closeTo(titleRect.center.dy, 4.0));
+      expect(searchRect.center.dy, closeTo(addRect.center.dy, 4.0));
+      expect(searchRect.left, greaterThan(titleRect.right));
+      expect(searchRect.right, lessThan(addRect.left));
+      expect(
+        searchRect.left - titleRect.right,
+        lessThan(addRect.left - searchRect.right),
+      );
+    },
+  );
+
+  testWidgets(
+    'search expands on tap, filters, keeps focus after clearing, collapses on empty blur, and clears and collapses on Esc',
+    (tester) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        ProviderScope(
           overrides: [
             coreSessionProvider.overrideWithValue(_FakeCore()),
             sessionViewProvider.overrideWith(_TwoServersSessionController.new),
@@ -863,67 +771,69 @@ void main() {
               PrismUiLocalizationsDelegate(),
             ],
             supportedLocales: AppLocalizations.supportedLocales,
-            builder: (context, child) => PrismRootScope(
-              brightness: Brightness.light,
-              liquidGlass: quality,
-              child: child!,
-            ),
+            builder: (context, child) =>
+                PrismRootScope(brightness: Brightness.light, child: child!),
             home: const ConnectPage(),
           ),
         ),
       );
       await tester.pumpAndSettle();
-    }
 
-    await mount(null);
-    final initialSurface = tester.widget<GooSurface>(find.byType(GooSurface));
-    expect(initialSurface.glass, isNull);
-    expect(initialSurface.shadows, isEmpty);
-    expect(
-      tester.getSize(find.byType(GooSurface)).height,
-      TonalButtonSize.section.button,
-    );
-    expect(
-      tester.getSize(find.widgetWithText(TonalButton, '添加服务器')).height,
-      TonalButtonSize.section.button,
-    );
+      expect(find.byType(ServerRow), findsNWidgets(2));
+      expect(find.byType(TextField), findsNothing);
 
-    await tester.tap(find.bySemanticsLabel('搜索服务器'));
-    await tester.pumpAndSettle();
-    expect(find.byType(TextField), findsOneWidget);
-    expect(find.byType(GooPane), findsOneWidget);
-    expect(tester.widget<GooSurface>(find.byType(GooSurface)).glass, isNull);
+      await tester.tap(find.bySemanticsLabel('搜索服务器'));
+      await tester.pumpAndSettle();
 
-    await tester.enterText(find.byType(TextField), 'B');
-    await tester.pumpAndSettle();
-    expect(find.byType(ServerRow), findsOneWidget);
+      final fieldFinder = find.byType(TextField);
+      expect(fieldFinder, findsOneWidget);
+      expect(tester.getSize(fieldFinder).width, lessThanOrEqualTo(260));
 
-    await tester.tap(
-      find.byWidgetPredicate(
-        (w) => w is GlyphIcon && w.glyph == Glyphs.clearField,
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.byType(ServerRow), findsNWidgets(2));
+      await tester.enterText(fieldFinder, 'b.example');
+      await tester.pumpAndSettle();
+      expect(find.byType(ServerRow), findsOneWidget);
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pumpAndSettle();
-    expect(find.byType(TextField), findsNothing);
+      // 失焦但内容非空时保持展开，不丢失筛选输入。
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsOneWidget);
+      expect(find.byType(ServerRow), findsOneWidget);
 
-    await mount(LiquidGlassQuality.standard);
-    final glassSurface = tester.widget<GooSurface>(find.byType(GooSurface));
-    expect(glassSurface.glass, isNull);
-    expect(glassSurface.shadows, isEmpty);
+      // 点击清空按钮清空内容并恢复焦点，保持展开。
+      await tester.tap(
+        find.byWidgetPredicate(
+          (w) => w is GlyphIcon && w.glyph == Glyphs.clearField,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(ServerRow), findsNWidgets(2));
+      expect(find.byType(TextField), findsOneWidget);
+      expect(tester.widget<TextField>(fieldFinder).focusNode?.hasFocus, isTrue);
 
-    await tester.tap(find.bySemanticsLabel('搜索服务器'));
-    await tester.pumpAndSettle();
-    expect(find.byType(TextField), findsOneWidget);
-    expect(tester.widget<GooSurface>(find.byType(GooSurface)).glass, isNull);
-  });
+      // 内容为空且失焦时自动收起为圆形按钮。
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsNothing);
+      expect(find.bySemanticsLabel('搜索服务器'), findsOneWidget);
 
-  testWidgets('the connect page clears the status bar on narrow and wide layouts', (tester) async {
-    Future<void> verifyForSize(Size size, {required bool wide}) async {
-      tester.view.physicalSize = size;
+      // 再次展开并输入文本，按 Esc 立即清空并收起。
+      await tester.tap(find.bySemanticsLabel('搜索服务器'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'nomatch');
+      await tester.pumpAndSettle();
+      expect(find.text('没有匹配的服务器'), findsOneWidget);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsNothing);
+      expect(find.byType(ServerRow), findsNWidgets(2));
+    },
+  );
+
+  testWidgets(
+    'the expanded search field does not overflow on narrow screens at 2x text scale',
+    (tester) async {
+      tester.view.physicalSize = const Size(360, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -932,20 +842,19 @@ void main() {
         ProviderScope(
           overrides: [
             coreSessionProvider.overrideWithValue(_FakeCore()),
-            sessionViewProvider.overrideWith(_TestSessionController.new),
+            sessionViewProvider.overrideWith(_TwoServersSessionController.new),
           ],
           child: MaterialApp(
             theme: buildAppTheme(Brightness.light),
-            locale: const Locale('zh'),
+            locale: const Locale('en'),
             localizationsDelegates: const [
               ...AppLocalizations.localizationsDelegates,
               PrismUiLocalizationsDelegate(),
             ],
             supportedLocales: AppLocalizations.supportedLocales,
             builder: (context, child) => MediaQuery(
-              data: MediaQuery.of(
-                context,
-              ).copyWith(padding: const EdgeInsets.only(top: 40, bottom: 24)),
+              data: MediaQuery.of(context)
+                  .copyWith(textScaler: const TextScaler.linear(2.0)),
               child: PrismRootScope(
                 brightness: Brightness.light,
                 child: child!,
@@ -957,34 +866,165 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final barFinder = find.byType(ScaffoldBar);
-      expect(barFinder, findsOneWidget);
-      expect(tester.getTopLeft(barFinder).dy, 0.0);
+      await tester.ensureVisible(find.bySemanticsLabel('Search servers'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.bySemanticsLabel('Search servers'));
+      await tester.pumpAndSettle();
 
-      final barTitle = find.descendant(
-        of: barFinder,
-        matching: find.text(wide ? '服务器' : 'FlSpeak'),
-      );
-      expect(tester.getTopLeft(barTitle).dy, greaterThanOrEqualTo(40.0));
+      expect(tester.takeException(), isNull);
+      expect(find.byType(TextField), findsOneWidget);
+      expect(find.text('Servers'), findsOneWidget);
+      expect(find.bySemanticsLabel('Add server'), findsOneWidget);
+    },
+  );
 
-      final introTitle = find.text('找到你的声音');
-      expect(
-        tester.getTopLeft(introTitle).dy,
-        greaterThanOrEqualTo(40.0 + pageToolbarHeight),
-      );
-
-      if (wide) {
-        final toggle = find.descendant(
-          of: find.byType(AppNavigationSidebar),
-          matching: find.byType(GlyphIcon),
+  testWidgets(
+    'the content search field keeps a flat surface with LiquidGlass enabled and preserves clear behavior and the 36dp section header height',
+    (tester) async {
+      Future<void> mount(LiquidGlassQuality? quality) async {
+        await tester.pumpWidget(
+          ProviderScope(
+            key: ValueKey(quality),
+            overrides: [
+              coreSessionProvider.overrideWithValue(_FakeCore()),
+              sessionViewProvider.overrideWith(
+                _TwoServersSessionController.new,
+              ),
+            ],
+            child: MaterialApp(
+              theme: buildAppTheme(Brightness.light),
+              locale: const Locale('zh'),
+              localizationsDelegates: const [
+                ...AppLocalizations.localizationsDelegates,
+                PrismUiLocalizationsDelegate(),
+              ],
+              supportedLocales: AppLocalizations.supportedLocales,
+              builder: (context, child) => PrismRootScope(
+                brightness: Brightness.light,
+                liquidGlass: quality,
+                child: child!,
+              ),
+              home: const ConnectPage(),
+            ),
+          ),
         );
-        expect(tester.getTopLeft(toggle).dy, greaterThanOrEqualTo(40.0));
+        await tester.pumpAndSettle();
       }
-    }
 
-    await verifyForSize(const Size(390, 844), wide: false);
-    await verifyForSize(const Size(900, 800), wide: true);
-  });
+      await mount(null);
+      final initialSurface = tester.widget<GooSurface>(find.byType(GooSurface));
+      expect(initialSurface.glass, isNull);
+      expect(initialSurface.shadows, isEmpty);
+      expect(
+        tester.getSize(find.byType(GooSurface)).height,
+        TonalButtonSize.section.button,
+      );
+      expect(
+        tester.getSize(find.widgetWithText(TonalButton, '添加服务器')).height,
+        TonalButtonSize.section.button,
+      );
+
+      await tester.tap(find.bySemanticsLabel('搜索服务器'));
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsOneWidget);
+      expect(find.byType(GooPane), findsOneWidget);
+      expect(tester.widget<GooSurface>(find.byType(GooSurface)).glass, isNull);
+
+      await tester.enterText(find.byType(TextField), 'B');
+      await tester.pumpAndSettle();
+      expect(find.byType(ServerRow), findsOneWidget);
+
+      await tester.tap(
+        find.byWidgetPredicate(
+          (w) => w is GlyphIcon && w.glyph == Glyphs.clearField,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(ServerRow), findsNWidgets(2));
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsNothing);
+
+      await mount(LiquidGlassQuality.standard);
+      final glassSurface = tester.widget<GooSurface>(find.byType(GooSurface));
+      expect(glassSurface.glass, isNull);
+      expect(glassSurface.shadows, isEmpty);
+
+      await tester.tap(find.bySemanticsLabel('搜索服务器'));
+      await tester.pumpAndSettle();
+      expect(find.byType(TextField), findsOneWidget);
+      expect(tester.widget<GooSurface>(find.byType(GooSurface)).glass, isNull);
+    },
+  );
+
+  testWidgets(
+    'the connect page clears the status bar on narrow and wide layouts',
+    (tester) async {
+      Future<void> verifyForSize(Size size, {required bool wide}) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              coreSessionProvider.overrideWithValue(_FakeCore()),
+              sessionViewProvider.overrideWith(_TestSessionController.new),
+            ],
+            child: MaterialApp(
+              theme: buildAppTheme(Brightness.light),
+              locale: const Locale('zh'),
+              localizationsDelegates: const [
+                ...AppLocalizations.localizationsDelegates,
+                PrismUiLocalizationsDelegate(),
+              ],
+              supportedLocales: AppLocalizations.supportedLocales,
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(padding: const EdgeInsets.only(top: 40, bottom: 24)),
+                child: PrismRootScope(
+                  brightness: Brightness.light,
+                  child: child!,
+                ),
+              ),
+              home: const ConnectPage(),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final barFinder = find.byType(ScaffoldBar);
+        expect(barFinder, findsOneWidget);
+        expect(tester.getTopLeft(barFinder).dy, 0.0);
+
+        final barTitle = find.descendant(
+          of: barFinder,
+          matching: find.text(wide ? '服务器' : 'FlSpeak'),
+        );
+        expect(tester.getTopLeft(barTitle).dy, greaterThanOrEqualTo(40.0));
+
+        final introTitle = find.text('找到你的声音');
+        expect(
+          tester.getTopLeft(introTitle).dy,
+          greaterThanOrEqualTo(40.0 + pageToolbarHeight),
+        );
+
+        if (wide) {
+          final toggle = find.descendant(
+            of: find.byType(AppNavigationSidebar),
+            matching: find.byType(GlyphIcon),
+          );
+          expect(tester.getTopLeft(toggle).dy, greaterThanOrEqualTo(40.0));
+        }
+      }
+
+      await verifyForSize(const Size(390, 844), wide: false);
+      await verifyForSize(const Size(900, 800), wide: true);
+    },
+  );
 }
 
 class _TwoServersSessionController extends SessionController {

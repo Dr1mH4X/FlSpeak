@@ -2,7 +2,7 @@
 // 原始许可证为 GPL-3.0，来源提交：be84736605527034689c95bf27828ff27d912c5e。
 // 对应原文件：lib/common/dialog.dart、lib/providers/actions/common.dart。
 
-import 'package:flutter/material.dart'
+import 'package:material_ui/material_ui.dart'
     hide
         AlertDialog,
         ButtonStyle,

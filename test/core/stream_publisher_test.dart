@@ -1147,7 +1147,11 @@ void main() {
       await _pumpEventQueue();
 
       final peer = bindings.createdPeers.single;
-      expect(peer.addedCandidates, isEmpty, reason: 'Answer has not been applied');
+      expect(
+        peer.addedCandidates,
+        isEmpty,
+        reason: 'Answer has not been applied',
+      );
 
       events.add(
         const CoreEvent.publisherSignalReceived(

@@ -4,7 +4,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
-import 'package:flutter/material.dart'
+import 'package:material_ui/material_ui.dart'
     hide
         ButtonStyle,
         FilledButton,

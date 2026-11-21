@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart' hide TextButton;
+import 'package:material_ui/material_ui.dart' hide TextButton;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 

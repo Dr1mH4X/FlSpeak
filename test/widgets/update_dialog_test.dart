@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart' hide AlertDialog, TextButton;
+import 'package:material_ui/material_ui.dart' hide AlertDialog, TextButton;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
 import 'package:flspeak/theme/app_theme.dart';

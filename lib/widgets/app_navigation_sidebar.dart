@@ -7,7 +7,7 @@ import 'dart:math' as math;
 import 'dart:ui' show lerpDouble;
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
-import 'package:flutter/material.dart'
+import 'package:material_ui/material_ui.dart'
     hide
         ButtonStyle,
         Checkbox,
@@ -861,8 +861,8 @@ class _SidebarOverlay extends StatelessWidget {
                 child: LiquidGlassScope.of(context)
                     ? LiquidGlass(
                         style: glassMenuStyleOf(context),
-                        borderRadius: BorderRadiusDirectional.horizontal(
-                          end: const Radius.circular(AppCorner.lg),
+                        borderRadius: const BorderRadiusDirectional.horizontal(
+                          end: Radius.circular(AppCorner.lg),
                         ).resolve(Directionality.of(context)),
                         shadows: menuShadowsOf(context),
                         child: SurfaceScope(

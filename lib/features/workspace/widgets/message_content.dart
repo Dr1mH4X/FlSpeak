@@ -3,7 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
 import 'package:url_launcher/url_launcher.dart';
@@ -238,18 +238,22 @@ class _MessageContentState extends State<MessageContent> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final codeBackgroundColor = scheme.surfaceContainerHighest;
+    final dividerColor = dividerColorOf(context);
 
-    final sheet = MarkdownStyleSheet.fromTheme(theme).copyWith(
+    final sheet = MarkdownStyleSheet(
       p: style,
+      pPadding: EdgeInsets.zero,
       code: style.copyWith(
         fontFamily: 'monospace',
         backgroundColor: codeBackgroundColor,
         fontSize: (style.fontSize ?? 14) - 1,
       ),
+      codeblockPadding: const EdgeInsets.all(8.0),
       codeblockDecoration: BoxDecoration(
         color: codeBackgroundColor,
         borderRadius: BorderRadius.circular(Radii.small),
       ),
+      blockquote: style,
       blockquoteDecoration: BoxDecoration(
         border: Border(left: BorderSide(color: scheme.primary, width: 3)),
       ),
@@ -259,13 +263,36 @@ class _MessageContentState extends State<MessageContent> {
         decoration: TextDecoration.underline,
       ),
       h1: style.copyWith(fontSize: 22, fontWeight: FontWeight.w700),
+      h1Padding: EdgeInsets.zero,
       h2: style.copyWith(fontSize: 19, fontWeight: FontWeight.w700),
+      h2Padding: EdgeInsets.zero,
       h3: style.copyWith(fontSize: 17, fontWeight: FontWeight.w700),
+      h3Padding: EdgeInsets.zero,
       h4: style.copyWith(fontSize: 15.5, fontWeight: FontWeight.w600),
+      h4Padding: EdgeInsets.zero,
       h5: style.copyWith(fontSize: 14, fontWeight: FontWeight.w600),
+      h5Padding: EdgeInsets.zero,
       h6: style.copyWith(fontSize: 13, fontWeight: FontWeight.w600),
+      h6Padding: EdgeInsets.zero,
+      em: const TextStyle(fontStyle: FontStyle.italic),
+      strong: const TextStyle(fontWeight: FontWeight.bold),
+      del: const TextStyle(decoration: TextDecoration.lineThrough),
+      img: style,
+      checkbox: style.copyWith(color: scheme.primary),
+      blockSpacing: 8.0,
+      listIndent: 24.0,
+      listBullet: style,
+      listBulletPadding: const EdgeInsets.only(right: 4),
+      tableHead: const TextStyle(fontWeight: FontWeight.w600),
+      tableBody: style,
+      tableHeadAlign: TextAlign.center,
+      tablePadding: const EdgeInsets.only(bottom: 4.0),
+      tableBorder: TableBorder.all(color: dividerColor),
+      tableColumnWidth: const FlexColumnWidth(),
+      tableCellsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      tableCellsDecoration: const BoxDecoration(),
       horizontalRuleDecoration: BoxDecoration(
-        border: Border(top: BorderSide(color: dividerColorOf(context))),
+        border: Border(top: BorderSide(color: dividerColor)),
       ),
     );
 

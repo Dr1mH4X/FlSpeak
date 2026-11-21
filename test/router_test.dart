@@ -3,7 +3,7 @@
 import 'dart:async';
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -68,23 +68,28 @@ Future<GoRouter> _mount(
 }
 
 void main() {
-  testWidgets('settings navigation in the SDK MaterialApp renders intermediate frames on enter and return', (tester) async {
-    final router = await _mount(tester);
-    unawaited(router.push<void>(AppRoutes.settings));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 80));
-    final route = ModalRoute.of(tester.element(find.byType(SettingsPage)))!;
-    expect(route.animation!.value, inExclusiveRange(0.0, 1.0));
-    await tester.pumpAndSettle();
-    router.pop();
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 60));
-    expect(route.animation!.value, inExclusiveRange(0.0, 1.0));
-    await tester.pumpAndSettle();
-    expect(find.byType(SettingsPage), findsNothing);
-  });
+  testWidgets(
+    'settings navigation in the SDK MaterialApp renders intermediate frames on enter and return',
+    (tester) async {
+      final router = await _mount(tester);
+      unawaited(router.push<void>(AppRoutes.settings));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 80));
+      final route = ModalRoute.of(tester.element(find.byType(SettingsPage)))!;
+      expect(route.animation!.value, inExclusiveRange(0.0, 1.0));
+      await tester.pumpAndSettle();
+      router.pop();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 60));
+      expect(route.animation!.value, inExclusiveRange(0.0, 1.0));
+      await tester.pumpAndSettle();
+      expect(find.byType(SettingsPage), findsNothing);
+    },
+  );
 
-  testWidgets('wide root tab switches replace the page directly like FlClash', (tester) async {
+  testWidgets('wide root tab switches replace the page directly like FlClash', (
+    tester,
+  ) async {
     final router = await _mount(tester);
     expect(find.byType(ConnectPage), findsOneWidget);
 
@@ -95,47 +100,53 @@ void main() {
     expect(find.byType(WorkspaceShell), findsOneWidget);
   });
 
-  testWidgets('returning from settings through the sidebar home returns to the connect page instead of the connection-lost page', (tester) async {
-    await _mount(tester);
-    expect(find.byType(ConnectPage), findsOneWidget);
+  testWidgets(
+    'returning from settings through the sidebar home returns to the connect page instead of the connection-lost page',
+    (tester) async {
+      await _mount(tester);
+      expect(find.byType(ConnectPage), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.settings_outlined));
-    await tester.pumpAndSettle();
-    expect(find.byType(SettingsPage), findsOneWidget);
-    expect(
-      find.bySemanticsLabel(
-        MaterialLocalizations.of(tester.element(find.byType(SettingsPage)))
-            .backButtonTooltip,
-      ),
-      findsNothing,
-    );
+      await tester.tap(find.byIcon(Icons.settings_outlined));
+      await tester.pumpAndSettle();
+      expect(find.byType(SettingsPage), findsOneWidget);
+      expect(
+        find.bySemanticsLabel(
+          MaterialLocalizations.of(tester.element(find.byType(SettingsPage)))
+              .backButtonTooltip,
+        ),
+        findsNothing,
+      );
 
-    await tester.tap(
-      find.descendant(
-        of: find.byType(SettingsPage),
-        matching: find.byIcon(Icons.home_outlined),
-      ),
-    );
-    await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byType(SettingsPage),
+          matching: find.byIcon(Icons.home_outlined),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.byType(ConnectPage), findsOneWidget);
-    expect(find.byType(SettingsPage), findsNothing);
-    expect(find.text('连接丢失'), findsNothing);
-  });
+      expect(find.byType(ConnectPage), findsOneWidget);
+      expect(find.byType(SettingsPage), findsNothing);
+      expect(find.text('连接丢失'), findsNothing);
+    },
+  );
 
-  testWidgets('pressing Esc from settings returns directly to the connect page', (tester) async {
-    await _mount(tester);
-    expect(find.byType(ConnectPage), findsOneWidget);
+  testWidgets(
+    'pressing Esc from settings returns directly to the connect page',
+    (tester) async {
+      await _mount(tester);
+      expect(find.byType(ConnectPage), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.settings_outlined));
-    await tester.pumpAndSettle();
-    expect(find.byType(SettingsPage), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.settings_outlined));
+      await tester.pumpAndSettle();
+      expect(find.byType(SettingsPage), findsOneWidget);
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
 
-    expect(find.byType(ConnectPage), findsOneWidget);
-    expect(find.byType(SettingsPage), findsNothing);
-    expect(find.text('连接丢失'), findsNothing);
-  });
+      expect(find.byType(ConnectPage), findsOneWidget);
+      expect(find.byType(SettingsPage), findsNothing);
+      expect(find.text('连接丢失'), findsNothing);
+    },
+  );
 }

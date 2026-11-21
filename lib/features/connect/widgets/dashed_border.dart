@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// 虚线圆角描边。空状态与「添加服务器」行用虚线表达「这里还不是实体」，
 /// Flutter 没有内置虚线边框，只能沿路径按段裁切。

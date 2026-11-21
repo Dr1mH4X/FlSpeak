@@ -2,7 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui' show ClipOp, lerpDouble;
 
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:prism_ui/prism_ui.dart' as prism;
 
 import '../core/preferences.dart';

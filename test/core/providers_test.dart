@@ -764,7 +764,10 @@ void main() {
     expect(
       container
           .read(noticeCenterProvider)
-          .any((notice) => notice.message.contains('Could not connect to the server.')),
+          .any(
+            (notice) =>
+                notice.message.contains('Could not connect to the server.'),
+          ),
       isTrue,
     );
     core.fail = false;

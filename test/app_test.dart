@@ -6,7 +6,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart'
     show debugDefaultTargetPlatformOverride;
-import 'package:flutter/material.dart' hide InputDecorationTheme, TextField;
+import 'package:material_ui/material_ui.dart'
+    hide InputDecorationTheme, TextField;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flutter/services.dart';

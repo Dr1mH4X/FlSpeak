@@ -1,6 +1,6 @@
 // ignore_for_file: depend_on_referenced_packages
 
-import 'package:flutter/material.dart' hide AlertDialog;
+import 'package:material_ui/material_ui.dart' hide AlertDialog;
 import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -270,7 +270,7 @@ void main() {
     'manual check updates button handles available, up-to-date, and error results',
     (tester) async {
       final opened = <String>[];
-      var forceFlags = <bool>[];
+      final forceFlags = <bool>[];
       var mode = 'available';
 
       final container = ProviderContainer(

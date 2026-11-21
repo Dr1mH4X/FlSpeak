@@ -5,7 +5,7 @@
 import 'dart:async';
 import 'dart:collection';
 
-import 'package:flutter/material.dart' hide IconButton;
+import 'package:material_ui/material_ui.dart' hide IconButton;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 

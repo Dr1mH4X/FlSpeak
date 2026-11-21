@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart' hide Checkbox, Switch;
+import 'package:material_ui/material_ui.dart' hide Checkbox, Switch;
 
 import '../../../theme/app_theme.dart';
 import '../../../widgets/prism.dart';

@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart'
     show SynchronousFuture, defaultTargetPlatform;
-import 'package:flutter/material.dart'
+import 'package:material_ui/material_ui.dart'
     hide
         AlertDialog,
         ButtonStyle,
@@ -335,7 +335,7 @@ class PrismRootScope extends StatelessWidget {
 
     final size = baseMediaQuery.size;
     final prismScheme = prismTheme.colorScheme;
-    final inputShape = prism.AppShape.input;
+    const inputShape = prism.AppShape.input;
     Widget content = prism.InputDecorationTheme(
       data: prism.InputDecorationThemeData(
         filled: true,

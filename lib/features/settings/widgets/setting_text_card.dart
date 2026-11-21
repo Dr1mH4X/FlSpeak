@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart' hide Card;
+import 'package:material_ui/material_ui.dart' hide Card;
 
 import '../../../widgets/prism.dart';
 

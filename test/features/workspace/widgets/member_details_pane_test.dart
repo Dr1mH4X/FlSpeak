@@ -2,7 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart'
+import 'package:material_ui/material_ui.dart'
     hide
         ButtonStyle,
         FilledButton,
@@ -95,7 +95,7 @@ Future<ProviderContainer> _mountWorkspace(
           body: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (sidePanel != null) sidePanel,
+              ?sidePanel,
               const Expanded(child: WorkspacePage()),
             ],
           ),

@@ -7,7 +7,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../core/window_chrome.dart';
 import '../core/window_metrics.dart';

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart'
+import 'package:material_ui/material_ui.dart'
     hide FilledButton, InputDecoration, TextButton, TextField;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
