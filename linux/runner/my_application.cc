@@ -146,6 +146,16 @@ static void cancel_x11_release_timer(MyApplication* self) {
   }
 }
 
+static void reset_hotkey_key_down(MyApplication* self) {
+  if (self->hotkey_key_down) {
+    self->hotkey_key_down = FALSE;
+    if (self->hotkey_channel != nullptr) {
+      fl_method_channel_invoke_method(self->hotkey_channel, "onKeyUp", nullptr,
+                                      nullptr, nullptr, nullptr);
+    }
+  }
+}
+
 static gboolean hotkey_x11_commit_release_cb(gpointer data) {
   auto* self = MY_APPLICATION(data);
   self->hotkey_x11_release_timer_id = 0;
@@ -226,6 +236,8 @@ static GdkFilterReturn hotkey_x11_filter(GdkXEvent* xevent, GdkEvent*,
 
 static void unregister_x11_hotkey(MyApplication* self) {
   cancel_x11_release_timer(self);
+  reset_hotkey_key_down(self);
+  self->hotkey_keycode = 0;
   if (self->hotkey_x11_filter_installed) {
     gdk_window_remove_filter(nullptr, hotkey_x11_filter, self);
     self->hotkey_x11_filter_installed = FALSE;
@@ -488,8 +500,8 @@ static void unregister_hotkey(MyApplication* self) {
   unregister_x11_hotkey(self);
 #endif
   unregister_portal_hotkey(self, TRUE);
+  reset_hotkey_key_down(self);
   self->hotkey_keycode = 0;
-  self->hotkey_key_down = FALSE;
 }
 
 static gchar* make_portal_request_path(GDBusConnection* bus,
@@ -1038,8 +1050,8 @@ static void my_application_shutdown(GApplication* application) {
 // Implements GObject::dispose.
 static void my_application_dispose(GObject* object) {
   MyApplication* self = MY_APPLICATION(object);
-  unregister_hotkey(self);
   g_clear_object(&self->hotkey_channel);
+  unregister_hotkey(self);
   g_clear_object(&self->hotkey_codec);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
   G_OBJECT_CLASS(my_application_parent_class)->dispose(object);

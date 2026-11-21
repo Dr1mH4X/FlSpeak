@@ -1517,7 +1517,7 @@ abstract class AppLocalizations {
   /// No description provided for @noticePttHotkeyPortalPermissionDenied.
   ///
   /// In en, this message translates to:
-  /// **'Global shortcut not authorized; working in-app only'**
+  /// **'Global shortcut not authorized (in-app only); if no prompt appears, reset it in System Settings under App Permissions or Global Shortcuts'**
   String get noticePttHotkeyPortalPermissionDenied;
 
   /// No description provided for @noticeConnectionLost.

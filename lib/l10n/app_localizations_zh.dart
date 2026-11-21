@@ -755,7 +755,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noticePttHotkeyPermissionDenied => '全局快捷键需要输入监控权限，当前仅应用内生效';
 
   @override
-  String get noticePttHotkeyPortalPermissionDenied => '全局快捷键未授权，当前仅应用内生效';
+  String get noticePttHotkeyPortalPermissionDenied =>
+      '全局快捷键未授权，当前仅应用内生效；若系统不再弹窗，请在系统设置的“应用权限 / 全局快捷键”中重置';
 
   @override
   String get noticeConnectionLost => '连接已断开。';

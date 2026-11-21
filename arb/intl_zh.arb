@@ -338,7 +338,7 @@
   "noticeVoiceSyncFailed": "语音状态同步失败，将自动重试。",
   "noticePttHotkeyInAppOnly": "全局快捷键不可用，当前仅应用内生效",
   "noticePttHotkeyPermissionDenied": "全局快捷键需要输入监控权限，当前仅应用内生效",
-  "noticePttHotkeyPortalPermissionDenied": "全局快捷键未授权，当前仅应用内生效",
+  "noticePttHotkeyPortalPermissionDenied": "全局快捷键未授权，当前仅应用内生效；若系统不再弹窗，请在系统设置的“应用权限 / 全局快捷键”中重置",
   "noticeConnectionLost": "连接已断开。",
   "noticeKicked": "你已被移出服务器。",
   "noticeConnectFailed": "无法连接到服务器。",

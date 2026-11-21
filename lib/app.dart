@@ -230,6 +230,9 @@ class _TsClientAppState extends ConsumerState<TsClientApp>
         ? status.shouldRetry
         : status.shouldAutoRetry(defaultTargetPlatform);
     if (!allow) return;
+    if (manual) {
+      _lastNotifiedHotkeyFailure = null;
+    }
     unawaited(_syncRegistration(keyId));
   }
 

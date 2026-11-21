@@ -818,7 +818,9 @@ void main() {
         pttHotkey: LogicalKeyboardKey.keyA.keyId,
       );
       expect(registerCalls, 1);
-      expect(find.text('全局快捷键未授权，当前仅应用内生效'), findsOneWidget);
+      const portalNotice = '全局快捷键未授权，当前仅应用内生效；若系统不再弹窗，请在系统设置的“应用权限 / 全局快捷键”中重置';
+      expect(find.text(portalNotice), findsOneWidget);
+      final initialNoticeId = container.read(noticeCenterProvider).single.id;
 
       // Resuming after cancelling a Portal prompt must not auto-retry.
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
@@ -843,6 +845,18 @@ void main() {
       final authorizeButton = find.text('去授权');
       expect(authorizeButton, findsOneWidget);
 
+      // Manual tap when PermissionStore silently returns permissionDenied re-notifies the reset guide.
+      await tester.tap(authorizeButton);
+      await tester.pumpAndSettle();
+      expect(registerCalls, 2);
+      expect(openSettingsCalls, 0);
+      expect(
+        container.read(noticeCenterProvider).single.id,
+        greaterThan(initialNoticeId),
+      );
+      expect(find.text(portalNotice), findsOneWidget);
+
+      // Once user resets permission in System Settings, tapping authorize registers cleanly.
       currentResponse = <String, Object?>{
         'ok': true,
         'reason': 'registered',
@@ -850,7 +864,7 @@ void main() {
       };
       await tester.tap(authorizeButton);
       await tester.pumpAndSettle();
-      expect(registerCalls, 2);
+      expect(registerCalls, 3);
       expect(openSettingsCalls, 0);
       expect(find.text('A'), findsOneWidget);
       expect(find.text('去授权'), findsNothing);
