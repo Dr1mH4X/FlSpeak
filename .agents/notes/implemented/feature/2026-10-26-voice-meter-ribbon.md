@@ -6,14 +6,14 @@ Status: implemented
 
 频道栏底部的用户卡同时显示昵称与「已连接 / 未连接」，还要放麦克风、耳机、离开三个开关。它占掉了整块背景，却只在重复别处已有的身份与连接信息；语音客户端最有价值的实时信息「现在有没有声音」反而没有位置。
 
-Material 3 没有现成的音频可视化组件。界面需要一条跟随真实电平的波形，并且让用户在设置里选择波形跟随本端麦克风还是远端接收到的音频。
+Material 3 没有现成的音频可视化组件。界面需要一条跟随真实电平的波形，并且让用户在设置里选择波形跟随本端发送还是远端接收到的音频。
 
 ## Decision
 
 - 语音连接卡显示连接状态与当前频道；操作行把电平条放在麦克风、耳机、离开开关左侧，身份管理由主页与设置承担。
-- `VoiceActivityRibbon` 使用主题 `primary` 色与圆角竖条，按响度调整高度和透明度；空闲显示短线，不做常驻呼吸动画。刷新、投递与复位策略见[实时电平发布](../architecture/2026-10-29-realtime-voice-levels.md)。
+- `VoiceActivityRibbon` 使用主题 `primary` 色与圆角竖条，按响度调整高度和透明度；空闲显示短线，不做常驻呼吸动画。刷新、投递与复位策略见[实时电平发布](../architecture/2026-10-29-realtime-voice-levels.md)，本端声源为发送侧电平，见[发送侧电平](../architecture/2026-11-21-transmit-level-meter.md)。
 - RMS、噪声门与平滑留在 Rust；Dart 用独立电平流驱动画布，不写 `SessionView`。
-- 偏好项 `voiceMeterSource` 只有 `microphone` / `received` 两档，默认麦克风；设置的「语音」分组用单选弹层切换，切换不需要重连。
+- 偏好项 `voiceMeterSource` 只有 `microphone` / `received` 两档，默认发送；设置的「语音」分组用单选弹层切换，切换不需要重连。
 - 整机系统音频回环（ScreenCaptureKit / WASAPI loopback）不实现，设置里不出现第三项。
 
 ## Alternatives considered

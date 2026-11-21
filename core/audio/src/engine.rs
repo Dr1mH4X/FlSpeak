@@ -13,7 +13,7 @@ use crate::capture::{CapturePipeline, VoicePacer};
 use crate::convert::FormatConverter;
 use crate::device::{CaptureStream, PlaybackStream, start_capture, start_playback};
 use crate::format::{AudioFormat, OPUS_STEREO};
-use crate::level::{LevelMeter, LevelReading, MeterClock, SharedMeter, rms};
+use crate::level::{LevelMeter, LevelReading, MeterClock, SharedMeter, TransmitMeter, rms};
 use crate::playback::{MIX_SAMPLES_PER_CHANNEL, PlaybackPipeline, VoiceFrame};
 use crate::recovery::{RecoveryFailure, RecoveryState, StreamError, StreamErrorKind};
 
@@ -322,7 +322,7 @@ struct CaptureLoopState {
     speaking: bool,
     capture_epoch: u64,
     pacer: VoicePacer,
-    mic_meter: LevelMeter,
+    mic_meter: TransmitMeter,
     sink: EventSink,
     meter: Arc<SharedMeter>,
 }
@@ -351,10 +351,20 @@ impl CaptureLoopState {
         }
     }
 
+    fn meter_outbound(&mut self, is_eos: bool, now: Instant) {
+        if is_eos {
+            self.mic_meter.end_of_stream();
+        } else {
+            let level = rms(self.pipeline.last_encoded_pcm());
+            self.mic_meter.packet(now, level);
+        }
+    }
+
     fn flush_pending_packets(&mut self, now: Instant) {
         while self.pipeline.has_pending_packets() {
             match self.pipeline.take_packet() {
                 Ok(Some(packet)) => {
+                    self.meter_outbound(packet.data.is_empty(), now);
                     (self.sink)(AudioEvent::Outbound {
                         codec: packet.codec,
                         data: packet.data,
@@ -442,7 +452,11 @@ impl CaptureLoopState {
                 {
                     self.handle_stream_error(error, now);
                 }
+                let was_transmitting = self.pipeline.is_transmitting();
                 self.pipeline.set_ptt_active(next);
+                if next && !was_transmitting {
+                    self.mic_meter.silence();
+                }
                 if !next {
                     self.flush_pending_packets(now);
                 }
@@ -551,7 +565,7 @@ fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, meter: Arc<
         speaking: false,
         capture_epoch: 0,
         pacer: VoicePacer::default(),
-        mic_meter: LevelMeter::default(),
+        mic_meter: TransmitMeter::default(),
         sink,
         meter,
     };
@@ -604,36 +618,25 @@ fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, meter: Arc<
             state.handle_stream_error(error, now);
         }
 
-        let mic = if state.stream.is_some() && state.pipeline.is_capturing() {
-            if state.raw.is_empty() {
-                state.mic_meter.level()
-            } else {
-                state.mic_meter.update(rms(&state.raw))
-            }
-        } else {
-            state.mic_meter.silence()
-        };
-        // 只是共享给 playback 线程合成事件；跨 FFI 的频率由那边控制。
-        state.meter.store_mic(state.capture_epoch, mic);
-
-        let now = Instant::now();
+        let send_now = Instant::now();
         while state.pipeline.has_ready_frame() {
             if state.pipeline.is_transmitting()
                 && !state.pipeline.has_pending_eos()
-                && !state.pacer.is_due(now)
+                && !state.pacer.is_due(send_now)
             {
                 break;
             }
             match state.pipeline.take_packet() {
                 Ok(Some(packet)) => {
                     let is_eos = packet.data.is_empty();
+                    state.meter_outbound(is_eos, send_now);
                     if !is_eos {
-                        let _ = state.pacer.is_due(now);
+                        let _ = state.pacer.is_due(send_now);
                     }
                     (state.sink)(AudioEvent::Outbound {
                         codec: packet.codec,
                         data: packet.data,
-                        produced_at: now,
+                        produced_at: send_now,
                     });
                     if is_eos {
                         state.pacer.reset();
@@ -661,6 +664,14 @@ fn capture_loop(commands: Receiver<CaptureCommand>, sink: EventSink, meter: Arc<
         if !state.pipeline.is_capturing() {
             state.pacer.reset();
         }
+
+        let mic = if state.stream.is_some() && state.pipeline.is_capturing() {
+            state.mic_meter.tick(Instant::now())
+        } else {
+            state.mic_meter.silence()
+        };
+        // 只是共享给 playback 线程合成事件；跨 FFI 的频率由那边控制。
+        state.meter.store_mic(state.capture_epoch, mic);
 
         state.sync_self_speaking();
     }
@@ -1152,6 +1163,62 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    fn capture_state_with_pipeline(pipeline: CapturePipeline) -> CaptureLoopState {
+        CaptureLoopState {
+            pipeline,
+            stream: None,
+            raw: Vec::new(),
+            device: None,
+            want_active: false,
+            recovery: RecoveryState::default(),
+            speaking: false,
+            capture_epoch: 1,
+            pacer: VoicePacer::default(),
+            mic_meter: TransmitMeter::default(),
+            sink: Arc::new(|_| {}),
+            meter: Arc::new(SharedMeter::default()),
+        }
+    }
+
+    #[test]
+    fn transmit_level_follows_outbound_packets_and_ignores_input_without_packets() {
+        let mut state =
+            capture_state_with_pipeline(CapturePipeline::new(crate::format::VOICE_CODEC).unwrap());
+        state.pipeline.begin();
+        state.pipeline.set_ptt_mode(true);
+        state.pipeline.set_ptt_active(true);
+
+        let samples: Vec<f32> = (0..crate::format::FRAME_SAMPLES_PER_CHANNEL)
+            .map(|index| (index as f32 * 0.05).sin() * 0.5)
+            .collect();
+        state
+            .pipeline
+            .push_capture(&samples, crate::format::OPUS_MONO);
+        let packet = state
+            .pipeline
+            .take_packet()
+            .unwrap()
+            .expect("PTT should encode a packet");
+        assert!(!packet.data.is_empty());
+        assert_eq!(state.mic_meter.level(), 0.0);
+
+        state.meter_outbound(false, Instant::now());
+        assert!(state.mic_meter.level() > 0.0);
+
+        // 松开 PTT 后仍持续采到同样的原始输入；没有包就没有电平。
+        state.pipeline.set_ptt_active(false);
+        while let Some(packet) = state.pipeline.take_packet().unwrap() {
+            state.meter_outbound(packet.data.is_empty(), Instant::now());
+        }
+        assert_eq!(state.mic_meter.level(), 0.0);
+
+        state
+            .pipeline
+            .push_capture(&samples, crate::format::OPUS_MONO);
+        assert!(state.pipeline.take_packet().unwrap().is_none());
+        assert_eq!(state.mic_meter.tick(Instant::now()), 0.0);
     }
 
     #[test]

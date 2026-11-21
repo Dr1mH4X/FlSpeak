@@ -199,7 +199,7 @@
   "settingsInputDevice": "麦克风",
   "settingsOutputDevice": "扬声器",
   "settingsVoiceMeter": "音频显示",
-  "settingsVoiceMeterMic": "麦克风音频",
+  "settingsVoiceMeterMic": "发送音频",
   "settingsVoiceMeterReceived": "接收音频",
   "settingsDeviceDefault": "系统默认",
   "settingsAudioUnavailable": "音频设备不可用",

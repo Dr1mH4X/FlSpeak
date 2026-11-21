@@ -115,6 +115,7 @@ class _VoiceActivityRibbonState extends ConsumerState<VoiceActivityRibbon>
           connected: view.connected,
           serverId: view.activeServerId,
           epoch: view.connectionEpoch,
+          channelId: view.selfChannelId,
         ),
       ),
     );
@@ -124,6 +125,7 @@ class _VoiceActivityRibbonState extends ConsumerState<VoiceActivityRibbon>
         levels: _isActive ? _levels : VoiceLevels.silent,
         source: source,
         connected: connection.connected && _isActive,
+        inChannel: connection.channelId != null,
       ),
     );
   }
@@ -134,12 +136,14 @@ class _Ribbon extends StatefulWidget {
     required this.levels,
     required this.source,
     required this.connected,
+    required this.inChannel,
     super.key,
   });
 
   final VoiceLevels levels;
   final VoiceMeterSource source;
   final bool connected;
+  final bool inChannel;
 
   @override
   State<_Ribbon> createState() => _RibbonState();
@@ -151,11 +155,15 @@ class _RibbonState extends State<_Ribbon> {
   /// 最近约 480ms 的电平，每个新读数左移一格。
   List<double> _history = List.filled(_historyLength, 0);
 
-  double get _level => !widget.connected
-      ? 0
-      : widget.source == VoiceMeterSource.microphone
-      ? widget.levels.mic
-      : widget.levels.received;
+  double get _level {
+    if (!widget.connected) {
+      return 0;
+    }
+    return switch (widget.source) {
+      VoiceMeterSource.microphone => widget.inChannel ? widget.levels.mic : 0,
+      VoiceMeterSource.received => widget.levels.received,
+    };
+  }
 
   @override
   void initState() {
@@ -171,12 +179,15 @@ class _RibbonState extends State<_Ribbon> {
       return;
     }
     final switched = widget.source != oldWidget.source;
-    if (switched) {
+    final channelChanged = widget.inChannel != oldWidget.inChannel;
+    if (switched || channelChanged) {
       _history = List.filled(_historyLength, 0);
     }
     // 每个电平事件都是新对象；其他无关重建保持同一对象，
     // 不会把历史推快。
-    if (switched || !identical(widget.levels, oldWidget.levels)) {
+    if (switched ||
+        channelChanged ||
+        !identical(widget.levels, oldWidget.levels)) {
       _history = [..._history.skip(1), _level.clamp(0.0, 1.0).toDouble()];
     }
   }

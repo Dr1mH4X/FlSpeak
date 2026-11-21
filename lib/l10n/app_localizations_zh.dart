@@ -424,7 +424,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsVoiceMeter => '音频显示';
 
   @override
-  String get settingsVoiceMeterMic => '麦克风音频';
+  String get settingsVoiceMeterMic => '发送音频';
 
   @override
   String get settingsVoiceMeterReceived => '接收音频';

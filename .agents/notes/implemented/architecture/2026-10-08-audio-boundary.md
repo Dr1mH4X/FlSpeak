@@ -10,7 +10,7 @@ TeamSpeak 语音是 48kHz 立体声、20ms 一帧。一个 8 人频道意味着�
 
 - 音频路径完全留在 Rust：`core/audio` 负责采集、Opus 编解码、播放；`core/session` 的actor 负责收发语音包。
 - FFI 只暴露 UI 需要的事件（连接状态、频道、成员、文字消息、提示），音频一个字节都不传。
-- 电平只携带麦克风与远端混音的 0–1 标量，不携带样本，也不进入 `SessionView`；刷新与转发策略由[实时电平发布](2026-10-29-realtime-voice-levels.md)持有。
+- 电平只携带本端发送与远端混音的 0–1 标量，不携带样本，也不进入 `SessionView`；刷新与转发策略由[实时电平发布](2026-10-29-realtime-voice-levels.md)持有，本端来源见[发送侧电平](2026-11-21-transmit-level-meter.md)。
 - 编码器单例（出站），解码器按说话人独立（Opus 解码器有状态）。
 - 出站按 20ms 节拍送，说话人队列有上限，满了丢最旧的帧，并记 `dropped_frames` 计数。
 

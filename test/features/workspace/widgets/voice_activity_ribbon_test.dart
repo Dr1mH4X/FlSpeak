@@ -28,6 +28,12 @@ class _Session extends SessionController {
   void switchConnection() {
     state = state.copyWith(activeServerId: 'next', connectionEpoch: 1);
   }
+
+  void enterNoChannel() {
+    state = state.copyWith(
+      state: const CoreSessionState.connected(clientId: 1, channelId: 0),
+    );
+  }
 }
 
 Future<ProviderContainer> _mount(
@@ -112,6 +118,34 @@ void main() {
           .switchConnection();
       await tester.pump();
       expect(await _peakPixels(tester, boundaryKey), 0);
+    },
+  );
+
+  testWidgets(
+    'microphone history stays flat outside a channel while received audio keeps rendering',
+    (tester) async {
+      final levels = StreamController<VoiceLevels>.broadcast(sync: true);
+      addTearDown(levels.close);
+      const boundaryKey = ValueKey('meter-channel');
+      final container = await _mount(tester, levels.stream, boundaryKey);
+      levels.add(const VoiceLevels(mic: 1));
+      await tester.pump();
+      expect(await _peakPixels(tester, boundaryKey), greaterThan(4));
+
+      (container.read(sessionViewProvider.notifier) as _Session)
+          .enterNoChannel();
+      await tester.pump();
+      expect(await _peakPixels(tester, boundaryKey), 0);
+      levels.add(const VoiceLevels(mic: 1));
+      await tester.pump();
+      expect(await _peakPixels(tester, boundaryKey), 0);
+
+      container
+          .read(preferencesProvider.notifier)
+          .setVoiceMeterSource(VoiceMeterSource.received);
+      levels.add(const VoiceLevels(received: 1));
+      await tester.pump();
+      expect(await _peakPixels(tester, boundaryKey), greaterThan(4));
     },
   );
 

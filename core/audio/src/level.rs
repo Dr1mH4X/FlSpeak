@@ -91,6 +91,53 @@ pub fn level_from_rms(rms: f32) -> f32 {
     ((normalized - NOISE_GATE) / (1.0 - NOISE_GATE)).clamp(0.0, 1.0)
 }
 
+/// 20ms 帧加一个 10ms 采集 tick：连续说话时两次发包之间的空 tick 保持读数。
+pub const TRANSMIT_METER_HOLD: Duration = Duration::from_millis(crate::format::FRAME_MS + 10);
+
+/// 发送侧电平：只跟随真正编码发包的帧，帧间空 tick 保持读数，门关闭后归零。
+#[derive(Debug, Default)]
+pub struct TransmitMeter {
+    meter: LevelMeter,
+    last_packet_at: Option<Instant>,
+}
+
+impl TransmitMeter {
+    /// 记录一个已编码的非 EOS 包；`now` 是该包离开采集线程的时间。
+    pub fn packet(&mut self, now: Instant, rms: f32) -> f32 {
+        self.last_packet_at = Some(now);
+        self.meter.update(rms)
+    }
+
+    /// 发出 EOS 表示本轮发送结束，电平立即归零。
+    pub fn end_of_stream(&mut self) -> f32 {
+        self.last_packet_at = None;
+        self.meter.silence()
+    }
+
+    /// 采集 tick 读取当前值；超过一个帧周期没有新包时归零。
+    pub fn tick(&mut self, now: Instant) -> f32 {
+        match self.last_packet_at {
+            Some(at) if now.saturating_duration_since(at) <= TRANSMIT_METER_HOLD => {
+                self.meter.level()
+            }
+            _ => {
+                self.last_packet_at = None;
+                self.meter.silence()
+            }
+        }
+    }
+
+    /// 停采、启动新流或设备重选时清空。
+    pub fn silence(&mut self) -> f32 {
+        self.last_packet_at = None;
+        self.meter.silence()
+    }
+
+    pub fn level(&self) -> f32 {
+        self.meter.level()
+    }
+}
+
 /// 按 [`METER_INTERVAL`] 放行事件；首次调用立即放行。
 #[derive(Debug, Default)]
 pub struct MeterClock {
@@ -222,5 +269,42 @@ mod tests {
         assert!(!clock.due(start + Duration::from_millis(205)));
         assert!(!clock.due(start + Duration::from_millis(215)));
         assert!(clock.due(start + Duration::from_millis(225)));
+    }
+
+    #[test]
+    fn transmit_meter_holds_between_packets_and_zeroes_after_a_frame_period() {
+        let mut meter = TransmitMeter::default();
+        let start = Instant::now();
+        let sent = meter.packet(start, 0.1);
+        assert!(sent > 0.0);
+        assert_eq!(meter.tick(start + Duration::from_millis(10)), sent);
+        assert_eq!(meter.tick(start + Duration::from_millis(20)), sent);
+        assert_eq!(meter.tick(start + Duration::from_millis(30)), sent);
+        assert_eq!(meter.tick(start + Duration::from_millis(31)), 0.0);
+    }
+
+    #[test]
+    fn transmit_meter_zeroes_immediately_on_eos_and_silence() {
+        let mut meter = TransmitMeter::default();
+        let start = Instant::now();
+        assert!(meter.packet(start, 0.1) > 0.0);
+        assert_eq!(meter.end_of_stream(), 0.0);
+        assert_eq!(meter.tick(start + Duration::from_millis(1)), 0.0);
+
+        assert!(meter.packet(start, 0.1) > 0.0);
+        assert_eq!(meter.silence(), 0.0);
+        assert_eq!(meter.level(), 0.0);
+    }
+
+    #[test]
+    fn continuous_speech_never_flickers_to_zero_between_frames() {
+        let mut meter = TransmitMeter::default();
+        let start = Instant::now();
+        for index in 0..50 {
+            let packet_at = start + Duration::from_millis(index * 20);
+            assert!(meter.packet(packet_at, 0.1) > 0.0);
+            assert!(meter.tick(packet_at + Duration::from_millis(10)) > 0.0);
+            assert!(meter.tick(packet_at + Duration::from_millis(20)) > 0.0);
+        }
     }
 }
