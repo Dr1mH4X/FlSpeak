@@ -11,7 +11,7 @@
 | **音频录制** | `NSMicrophoneUsageDescription`、`com.apple.security.device.audio-input` | `android.permission.RECORD_AUDIO` | 系统音频设备访问（PulseAudio/PipeWire/ALSA/WASAPI） | 仅在用户进入语音频道并启动麦克风推流时按需使用 |
 | **网络通信** | `com.apple.security.network.client`、`com.apple.security.network.server`（App Sandbox，授权出站连接与本地 UDP 端口 `bind`） | `android.permission.INTERNET` | 标准系统套接字 | 用于连接自托管 TeamSpeak 服务器（UDP 语音/命令与 TCP 文件传输） |
 | **文件读写** | `com.apple.security.files.user-selected.read-write` | Android 10+ 范围化存储（MediaStore API） | 操作系统标准文件选择器 | 导出频道文件或保存下载内容时通过用户主动选择的文件/目录进行交互 |
-| **全局快捷键（输入监控）** | App Sandbox 下以 Listen-Only `CGEventTap` 监听物理键码，依赖「输入监控」（Input Monitoring）运行时授权 | 不支持全局监听，仅应用内按键与触控按住说话 | Linux X11 使用 `XGrabKey`（Wayland 仅应用内）；Windows 使用低级键盘钩子 `WH_KEYBOARD_LL` | 只观察目标按住说话键；未授权或平台受限时自动降级为应用内监听 |
+| **全局快捷键（输入监控）** | App Sandbox 下以 Listen-Only `CGEventTap` 监听物理键码，依赖「输入监控」（Input Monitoring）运行时授权 | 不支持全局监听，仅应用内按键与触控按住说话 | 纯 X11 使用 XInput2 被动原始按键监听；Wayland / XWayland 通过 `org.freedesktop.portal.GlobalShortcuts` 请求桌面全局快捷键（不可用时退回应用内）；Windows 使用低级键盘钩子 `WH_KEYBOARD_LL` | 只观察目标按住说话键；未授权或平台受限时自动降级为应用内监听 |
 
 ## 运行时请求与访问边界
 

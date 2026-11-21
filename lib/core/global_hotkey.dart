@@ -221,7 +221,7 @@ class PttHotkeyStatusController extends Notifier<PttHotkeyStatus> {
 /// `flspeak/global_hotkey` 通道的 Dart 侧封装。
 ///
 /// 原生实现只存在于桌面 runner（macOS Listen-Only `CGEventTap`、Windows 低级
-/// 键盘钩子、Linux X11 `XGrabKey`）；没有实现的平台 `register` 返回
+/// 键盘钩子、Linux X11 XInput2 / Wayland Portal）；没有实现的平台 `register` 返回
 /// `unsupportedPlatform`，调用方退到应用内按键兜底。按键事件由原生推到
 /// [setHandler] 注册的回调。
 class GlobalHotkey {
