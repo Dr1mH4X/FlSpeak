@@ -3569,6 +3569,41 @@ mod tests {
                 .unwrap();
             assert_eq!(publish.viewers.len(), 2);
             assert!(!publish.requests.contains_key(&103));
+
+            // 3. Default viewer_limit = 0 allows unlimited viewers without interception.
+            actor.stream_session.as_mut().unwrap().publish = Some(ActivePublish {
+                stream: PublishedStreamHandle::Test {
+                    id: "pub-unlimited".into(),
+                },
+                viewer_limit: crate::DEFAULT_MAX_STREAM_VIEWERS,
+                requests: HashMap::new(),
+                viewers: HashMap::new(),
+                _task: PumpGuard(tokio::task::spawn_local(async {})),
+            });
+            for clid in 201..=206 {
+                let (peer, _peer_tx) = make_test_peer("pub-unlimited");
+                let (req, _req_handle) = make_test_request(clid, Ok(peer));
+                actor.handle_published_stream_request("pub-unlimited".into(), req);
+                let (reply_tx, reply_rx) = oneshot::channel();
+                actor.respond_stream_join_request(
+                    clid,
+                    true,
+                    "v=0\r\nm=video 9\r\n".into(),
+                    reply_tx,
+                );
+                pump_actor_signals(&mut actor).await;
+                assert!(reply_rx.await.unwrap().is_ok());
+            }
+            assert_eq!(
+                actor
+                    .stream_session
+                    .as_ref()
+                    .and_then(|s| s.publish.as_ref())
+                    .unwrap()
+                    .viewers
+                    .len(),
+                6
+            );
         })
         .await;
     }

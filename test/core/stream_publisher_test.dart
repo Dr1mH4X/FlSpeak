@@ -601,13 +601,9 @@ void main() {
             frameRate: ScreenShareFrameRatePreset.fps60,
           );
       expect(started, isTrue);
+      expect(defaultMaxStreamViewers(), 0);
       expect(core.startedShares, [
-        (
-          name: 'Code Editor',
-          audio: false,
-          bitrate: 5000,
-          viewerLimit: defaultMaxStreamViewers(),
-        ),
+        (name: 'Code Editor', audio: false, bitrate: 5000, viewerLimit: 0),
       ]);
 
       events.add(
@@ -664,12 +660,13 @@ void main() {
       await _pumpEventQueue();
 
       await container
-          .read(sessionViewProvider.notifier)
+          .read(streamPublisherProvider.notifier)
           .startScreenShare(
             sourceId: 'screen:0',
             sourceName: 'Entire Screen',
             resolution: ScreenShareResolutionPreset.p1080,
             frameRate: ScreenShareFrameRatePreset.fps30,
+            maxViewers: 5,
           );
       events.add(
         const CoreEvent.screenSharePublished(streamId: 'pub-stream-2'),
@@ -971,12 +968,13 @@ void main() {
 
       // 1. Start sharing and become active
       await container
-          .read(sessionViewProvider.notifier)
+          .read(streamPublisherProvider.notifier)
           .startScreenShare(
             sourceId: 'screen:0',
             sourceName: 'Entire Screen',
             resolution: ScreenShareResolutionPreset.p1080,
             frameRate: ScreenShareFrameRatePreset.fps30,
+            maxViewers: 5,
           );
       events.add(
         const CoreEvent.screenSharePublished(streamId: 'pub-stream-4'),
