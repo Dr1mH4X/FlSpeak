@@ -136,6 +136,7 @@ class SessionController extends Notifier<SessionView> {
 
   final _transferReplies = <int, Completer<bool>>{};
   final _levels = StreamController<VoiceLevels>.broadcast();
+  final _avatarUpdates = StreamController<String>.broadcast(sync: true);
   VoiceLevels _latestLevels = VoiceLevels.silent;
   int _pendingActions = 0;
   int _serversRevision = 0;
@@ -148,6 +149,7 @@ class SessionController extends Notifier<SessionView> {
   String? _lastVoiceNotice;
 
   Stream<VoiceLevels> get levels => _levels.stream;
+  Stream<String> get avatarUpdates => _avatarUpdates.stream;
 
   @override
   SessionView build() {
@@ -155,6 +157,7 @@ class SessionController extends Notifier<SessionView> {
     final subscription = session.events().listen(_onEvent);
     ref.onDispose(subscription.cancel);
     ref.onDispose(_levels.close);
+    ref.onDispose(_avatarUpdates.close);
     ref.onDispose(() {
       for (final reply in _transferReplies.values) {
         if (!reply.isCompleted) reply.complete(false);
@@ -668,6 +671,16 @@ class SessionController extends Notifier<SessionView> {
     }
   }
 
+  /// 上传当前服务器上的自己的头像；错误由 `_run` 统一转成 NoticeCenter 文案。
+  Future<bool> uploadAvatar(Uint8List bytes) {
+    return _run(() => ref.read(coreSessionProvider).uploadAvatar(bytes: bytes));
+  }
+
+  /// 删除当前服务器上的自己的头像。
+  Future<bool> deleteAvatar() {
+    return _run(() => ref.read(coreSessionProvider).deleteAvatar());
+  }
+
   Future<PickedChatImage?> pickChatImage({required bool paste}) async {
     final l10n = ref.read(appLocalizationsProvider);
     try {
@@ -1060,6 +1073,10 @@ class SessionController extends Notifier<SessionView> {
           next.remove(serverId);
         }
         state = current.copyWith(serverIconBytes: Map.unmodifiable(next));
+      case CoreEvent_AvatarUpdated(:final uid):
+        if (current.connected && uid.isNotEmpty) {
+          _avatarUpdates.add(uid);
+        }
       case CoreEvent_Snapshot(:final channels, :final clients):
         state = current.copyWith(
           channels: channels,

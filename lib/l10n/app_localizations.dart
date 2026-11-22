@@ -422,6 +422,60 @@ abstract class AppLocalizations {
   /// **'Identity upgraded to level {level}. Reconnecting…'**
   String identityUpgraded(int level);
 
+  /// No description provided for @avatarManage.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage avatar'**
+  String get avatarManage;
+
+  /// No description provided for @avatarTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Avatar'**
+  String get avatarTitle;
+
+  /// No description provided for @avatarChoose.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose image'**
+  String get avatarChoose;
+
+  /// No description provided for @avatarDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete avatar'**
+  String get avatarDelete;
+
+  /// No description provided for @avatarTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'The selected image is too large.'**
+  String get avatarTooLarge;
+
+  /// No description provided for @avatarTooLargeWithLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'The selected image is too large. The limit is {limit}.'**
+  String avatarTooLargeWithLimit(String limit);
+
+  /// No description provided for @avatarPermissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'You cannot change your avatar on this server.'**
+  String get avatarPermissionDenied;
+
+  /// No description provided for @avatarUnsupportedFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a PNG, JPEG, GIF, or WebP image.'**
+  String get avatarUnsupportedFormat;
+
+  /// No description provided for @avatarUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'The avatar could not be updated. Try again.'**
+  String get avatarUnavailable;
+
   /// No description provided for @workspaceDropped.
   ///
   /// In en, this message translates to:

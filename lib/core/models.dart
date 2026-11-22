@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../l10n/app_localizations.dart';
+import 'byte_size.dart';
 import 'channel_display.dart';
 
 /// 文字消息的投递范围，由协议里的 `targetMode` 归一化而来。
@@ -437,6 +438,13 @@ String describeCoreError(CoreError error, AppLocalizations l10n) =>
       CoreError_BlockedAddress() => l10n.errorBlockedAddress,
       CoreError_Connection() => l10n.errorConnectionFailed,
       CoreError_ChannelPasswordRequired() => l10n.channelPasswordWrong,
+      CoreError_AvatarTooLarge(:final maxBytes) =>
+        maxBytes == null
+            ? l10n.avatarTooLarge
+            : l10n.avatarTooLargeWithLimit(formatByteSize(maxBytes)),
+      CoreError_AvatarPermissionDenied() => l10n.avatarPermissionDenied,
+      CoreError_AvatarUnsupportedFormat() => l10n.avatarUnsupportedFormat,
+      CoreError_AvatarUnavailable() => l10n.avatarUnavailable,
       CoreError_Internal() => l10n.errorInternal,
     };
 

@@ -27,6 +27,9 @@ import 'package:flspeak/widgets/scaffold/scaffold.dart' as app_scaffold;
 class _FakeCore extends Fake implements CoreSession {
   @override
   Stream<CoreEvent> events() => const Stream.empty();
+
+  @override
+  Future<Uint8List?> fetchAvatar({required String uid}) async => null;
 }
 
 class _TestSessionController extends SessionController {
@@ -49,6 +52,15 @@ class _ConnectedSessionController extends _TestSessionController {
   SessionView build() => super.build().copyWith(
     state: const CoreSessionState.connected(clientId: 1, channelId: 5),
     activeServerId: 'server-1',
+  );
+}
+
+class _AvatarSessionController extends _ConnectedSessionController {
+  @override
+  SessionView build() => super.build().copyWith(
+    clients: const [
+      ClientView(id: 1, nickname: 'Self', uid: 'self-uid', channelId: 5),
+    ],
   );
 }
 
@@ -172,6 +184,103 @@ void main() {
       },
     );
   }
+
+  testWidgets('connected identity avatar opens the avatar dialog', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_FakeCore()),
+          sessionViewProvider.overrideWith(_AvatarSessionController.new),
+        ],
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('en'),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
+          home: const ConnectPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final l10n = lookupAppLocalizations(const Locale('en'));
+    expect(find.bySemanticsLabel(l10n.avatarManage), findsOneWidget);
+    await tester.tap(find.bySemanticsLabel(l10n.avatarManage));
+    await tester.pumpAndSettle();
+    expect(find.text(l10n.avatarTitle), findsOneWidget);
+  });
+
+  testWidgets('compact identity avatar opens only the avatar dialog', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(600, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_FakeCore()),
+          sessionViewProvider.overrideWith(_AvatarSessionController.new),
+        ],
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('en'),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
+          home: const ConnectPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final l10n = lookupAppLocalizations(const Locale('en'));
+    await tester.tap(find.bySemanticsLabel(l10n.avatarManage));
+    await tester.pumpAndSettle();
+    expect(find.text(l10n.avatarTitle), findsOneWidget);
+    expect(find.text(l10n.identityTitle), findsNothing);
+  });
+
+  testWidgets('disconnected identity avatar is not tappable', (tester) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_FakeCore()),
+          sessionViewProvider.overrideWith(_TestSessionController.new),
+        ],
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('en'),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
+          home: const ConnectPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final l10n = lookupAppLocalizations(const Locale('en'));
+    expect(find.bySemanticsLabel(l10n.avatarManage), findsNothing);
+  });
 
   for (final locale in ['zh', 'en']) {
     for (final scale in [1.0, 2.0]) {

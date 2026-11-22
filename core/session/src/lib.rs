@@ -8,12 +8,14 @@
 //! `Client::send_voice`；音频帧本身不进入这条事件流。
 
 mod actor;
+mod avatars;
 mod channel_icons;
 mod downloads;
 mod events;
 mod image_upload;
 mod images;
 pub mod logging;
+mod media_cache;
 mod network;
 pub use network::NetworkTelemetry;
 pub mod notices;
@@ -188,6 +190,9 @@ pub enum SessionEvent {
     ServerIconUpdated {
         server_id: String,
         bytes: Option<Vec<u8>>,
+    },
+    AvatarUpdated {
+        uid: String,
     },
     Snapshot {
         channels: Vec<ChannelView>,
@@ -437,6 +442,13 @@ pub enum SessionCommand {
         overwrite: bool,
         reply: oneshot::Sender<Result<u64, SessionError>>,
     },
+    UploadAvatar {
+        bytes: Vec<u8>,
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
+    DeleteAvatar {
+        reply: oneshot::Sender<Result<(), SessionError>>,
+    },
     DownloadFile {
         remote_path: String,
         local_path: String,
@@ -450,7 +462,7 @@ pub enum SessionCommand {
     },
     FetchAvatar {
         uid: String,
-        reply: oneshot::Sender<Result<Vec<u8>, SessionError>>,
+        reply: oneshot::Sender<Result<Option<Vec<u8>>, SessionError>>,
     },
     Access {
         reply: oneshot::Sender<Result<AccessView, SessionError>>,
@@ -584,6 +596,18 @@ pub enum SessionError {
 
     #[error("not in a channel")]
     NotInChannel,
+
+    #[error("avatar is too large (limit: {max_bytes:?})")]
+    AvatarTooLarge { max_bytes: Option<u64> },
+
+    #[error("insufficient permission to change the avatar")]
+    AvatarPermissionDenied,
+
+    #[error("unsupported avatar image format")]
+    AvatarUnsupportedFormat,
+
+    #[error("avatar operation is unavailable")]
+    AvatarUnavailable,
 
     #[error("screen share: {0}")]
     Stream(String),
@@ -942,6 +966,18 @@ impl SessionHandle {
         rx.await.map_err(|_| SessionError::Closed)?
     }
 
+    pub async fn upload_avatar(&self, bytes: Vec<u8>) -> Result<(), SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::UploadAvatar { bytes, reply })?;
+        rx.await.map_err(|_| SessionError::Closed)?
+    }
+
+    pub async fn delete_avatar(&self) -> Result<(), SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::DeleteAvatar { reply })?;
+        rx.await.map_err(|_| SessionError::Closed)?
+    }
+
     pub async fn access(&self) -> Result<AccessView, SessionError> {
         let (reply, response) = oneshot::channel();
         self.send(SessionCommand::Access { reply })?;
@@ -1163,7 +1199,7 @@ impl SessionHandle {
         rx.await.map_err(|_| SessionError::Closed)?
     }
 
-    pub async fn fetch_avatar(&self, uid: String) -> Result<Vec<u8>, SessionError> {
+    pub async fn fetch_avatar(&self, uid: String) -> Result<Option<Vec<u8>>, SessionError> {
         let (reply, rx) = oneshot::channel();
         self.send(SessionCommand::FetchAvatar { uid, reply })?;
         rx.await.map_err(|_| SessionError::Closed)?

@@ -135,30 +135,50 @@ class ServerIconGlyph extends StatelessWidget {
 
 /// 身份头像：主色实底圆形；与服务器磁贴同形，靠颜色语义区分（主色 vs 散列色）。
 class IdentityAvatar extends StatelessWidget {
-  const IdentityAvatar({required this.nickname, this.size = 64, super.key});
+  const IdentityAvatar({
+    required this.nickname,
+    this.size = 64,
+    this.image,
+    super.key,
+  });
 
   final String nickname;
   final double size;
+  final Uint8List? image;
 
   @override
   Widget build(BuildContext context) {
-    return ExcludeSemantics(
-      child: Container(
-        width: size,
-        height: size,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: context.scheme.primary,
-          shape: BoxShape.circle,
+    final fallback = Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: context.scheme.primary,
+        shape: BoxShape.circle,
+      ),
+      child: Text(
+        initialsOf(nickname),
+        style: TextStyle(
+          color: context.scheme.onPrimary,
+          fontSize: size * 0.34,
+          fontWeight: FontWeight.w600,
+          height: 1,
         ),
-        child: Text(
-          initialsOf(nickname),
-          style: TextStyle(
-            color: context.scheme.onPrimary,
-            fontSize: size * 0.34,
-            fontWeight: FontWeight.w600,
-            height: 1,
-          ),
+      ),
+    );
+    final bytes = image;
+    if (bytes == null || bytes.isEmpty) {
+      return ExcludeSemantics(child: fallback);
+    }
+    return ExcludeSemantics(
+      child: ClipOval(
+        child: Image.memory(
+          bytes,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          cacheWidth: (size * 2).ceil(),
+          errorBuilder: (context, error, stackTrace) => fallback,
         ),
       ),
     );

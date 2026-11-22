@@ -223,6 +223,47 @@ void main() {
   }
 
   testWidgets(
+    'self details expose the avatar action and other members do not',
+    (tester) async {
+      final container = await _mountWorkspace(
+        tester,
+        sidePanel: const SizedBox(width: 320, child: ChannelPanel()),
+      );
+      (container.read(sessionViewProvider.notifier) as _Controller)
+          .updateClients([
+            const ClientView(
+              id: 1,
+              nickname: 'Self',
+              uid: 'self-uid',
+              channelId: 1,
+            ),
+            const ClientView(
+              id: 2,
+              nickname: 'Peer',
+              uid: 'peer-uid',
+              channelId: 1,
+            ),
+          ]);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Peer'));
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsLabel('管理头像'), findsNothing);
+
+      await tester.tap(find.text('Self'));
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsLabel('管理头像'), findsOneWidget);
+      expect(find.byIcon(Icons.photo_camera_rounded), findsNothing);
+
+      await tester.tap(find.bySemanticsLabel('管理头像'));
+      await tester.pumpAndSettle();
+      expect(find.text('头像'), findsOneWidget);
+      expect(find.text('选择图片'), findsOneWidget);
+      expect(find.text('删除头像'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
     'clicking messages tab after selecting member switches to direct chat with that member',
     (tester) async {
       final container = await _mountWorkspace(

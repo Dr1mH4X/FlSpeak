@@ -25,12 +25,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/member_avatars.dart';
 import '../../core/notices.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../router.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_navigation_sidebar.dart';
+import '../../widgets/avatar_dialog.dart';
 import '../../widgets/compact_navigation_shell.dart';
 import '../../widgets/prism.dart' hide Divider;
 import '../../widgets/scaffold/scaffold.dart';
@@ -117,11 +119,23 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
   }
 
   Future<void> _openIdentity() async {
+    final view = ref.read(sessionViewProvider);
+    final self = view.selfClient;
     await showIdentityDialog(
       context,
       nickname: ref.read(preferencesProvider).nickname,
       onRename: ref.read(preferencesProvider.notifier).setNickname,
+      avatarUid: view.connected && self != null && self.uid.isNotEmpty
+          ? self.uid
+          : null,
     );
+  }
+
+  Future<void> _openAvatar() async {
+    final view = ref.read(sessionViewProvider);
+    final self = view.selfClient;
+    if (!view.connected || self == null || self.uid.isEmpty) return;
+    await showAvatarDialog(context, uid: self.uid, nickname: self.nickname);
   }
 
   Future<void> _removeServer(ServerProfileView profile) async {
@@ -141,6 +155,7 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
       :reconnecting,
       :activeServerId,
       :sessionBusy,
+      :selfUid,
     ) = ref.watch(
       sessionViewProvider.select(
         (view) => (
@@ -150,9 +165,14 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
           reconnecting: view.reconnecting,
           activeServerId: view.activeServerId,
           sessionBusy: view.busy,
+          selfUid: view.selfClient?.uid ?? '',
         ),
       ),
     );
+    final canManageAvatar = connected && selfUid.isNotEmpty;
+    final avatarBytes = canManageAvatar
+        ? ref.watch(memberAvatarProvider(selfUid)).asData?.value
+        : null;
     final (:nickname, :lastConnected) = ref.watch(
       preferencesProvider.select(
         (prefs) =>
@@ -257,11 +277,18 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
     );
 
     final identity = wide
-        ? IdentityCard(nickname: nickname, onManage: _openIdentity)
+        ? IdentityCard(
+            nickname: nickname,
+            onManage: _openIdentity,
+            avatarBytes: avatarBytes,
+            onAvatarTap: canManageAvatar ? _openAvatar : null,
+          )
         : IdentityStrip(
             nickname: nickname,
             serverCount: servers.length,
             onManage: _openIdentity,
+            avatarBytes: avatarBytes,
+            onAvatarTap: canManageAvatar ? _openAvatar : null,
           );
 
     final horizontal = wide ? 40.0 : 20.0;

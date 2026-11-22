@@ -8,13 +8,34 @@ import 'providers.dart';
 class _AvatarCache {
   final refreshers = <String, void Function()>{};
   bool alive = true;
-  final requests = <String, Future<Uint8List>>{};
+  final requests = <String, Future<Uint8List?>>{};
   final attempts = <String, int>{};
   final timers = <String, Timer>{};
   final cooldowns = <String, ({DateTime expiresAt, bool isTransient})>{};
+  final generations = <String, int>{};
+  final revisions = <String, int>{};
+
+  int generationOf(String uid) => generations[uid] ?? 0;
 
   void cancelTimer(String uid) {
     timers.remove(uid)?.cancel();
+  }
+
+  void invalidate(String uid, {int? revision}) {
+    generations[uid] = (generations[uid] ?? 0) + 1;
+    cancelTimer(uid);
+    requests.remove(uid);
+    cooldowns.remove(uid);
+    attempts.remove(uid);
+    if (revision != null) {
+      revisions[uid] = revision;
+    }
+  }
+
+  void syncRevision(String uid, int revision) {
+    if ((revisions[uid] ?? 0) != revision) {
+      invalidate(uid, revision: revision);
+    }
   }
 
   void scheduleCooldown({
@@ -48,6 +69,10 @@ class _AvatarCache {
     }
     timers.clear();
     cooldowns.clear();
+    attempts.clear();
+    requests.clear();
+    generations.clear();
+    revisions.clear();
   }
 }
 
@@ -60,9 +85,38 @@ final Provider<_AvatarCache?> _memberAvatarCacheProvider =
       );
       if (!session.$3 || session.$1 == null) return null;
       final cache = _AvatarCache();
-      ref.onDispose(cache.dispose);
+      final subscription = ref
+          .read(sessionViewProvider.notifier)
+          .avatarUpdates
+          .listen((uid) {
+            final currentRev =
+                ref.read(memberAvatarRevisionsProvider)[uid] ?? 0;
+            // 在通知订阅组件重建前先清掉缓存与冷却，避免重建瞬间命中旧 Future。
+            cache.invalidate(uid, revision: currentRev + 1);
+            ref.read(memberAvatarRevisionsProvider.notifier).bump(uid);
+          });
+      ref.onDispose(() {
+        subscription.cancel();
+        cache.dispose();
+      });
       return cache;
     });
+
+class MemberAvatarRevisionsController extends Notifier<Map<String, int>> {
+  @override
+  Map<String, int> build() => const <String, int>{};
+
+  void bump(String uid) {
+    if (uid.isEmpty) return;
+    final next = (state[uid] ?? 0) + 1;
+    state = Map.unmodifiable({...state, uid: next});
+  }
+}
+
+final memberAvatarRevisionsProvider =
+    NotifierProvider<MemberAvatarRevisionsController, Map<String, int>>(
+      MemberAvatarRevisionsController.new,
+    );
 
 bool _isTransientAvatarError(Object error) {
   final message = error.toString().toLowerCase();
@@ -72,11 +126,16 @@ bool _isTransientAvatarError(Object error) {
 }
 
 final memberAvatarProvider = FutureProvider.autoDispose
-    .family<Uint8List, String>((ref, uid) {
+    .family<Uint8List?, String>((ref, uid) {
       final cache = ref.watch(_memberAvatarCacheProvider);
       if (cache == null) {
         throw StateError('Member avatar requires an active connection');
       }
+      final revision = ref.watch(
+        memberAvatarRevisionsProvider.select((revs) => revs[uid] ?? 0),
+      );
+      cache.syncRevision(uid, revision);
+
       void refresh() => ref.invalidateSelf();
       cache.refreshers[uid] = refresh;
       ref.onDispose(() {
@@ -104,17 +163,21 @@ final memberAvatarProvider = FutureProvider.autoDispose
         }
       }
       return cache.requests.putIfAbsent(uid, () {
+        final generation = cache.generationOf(uid);
         return Future.sync(
           () => ref.read(coreSessionProvider).fetchAvatar(uid: uid),
         ).then(
           (bytes) {
-            cache.cancelTimer(uid);
-            cache.cooldowns.remove(uid);
-            cache.attempts.remove(uid);
-            return bytes;
+            final normalized = (bytes == null || bytes.isEmpty) ? null : bytes;
+            if (cache.alive && cache.generationOf(uid) == generation) {
+              cache.cancelTimer(uid);
+              cache.cooldowns.remove(uid);
+              cache.attempts.remove(uid);
+            }
+            return normalized;
           },
           onError: (Object error, StackTrace stack) {
-            if (cache.alive) {
+            if (cache.alive && cache.generationOf(uid) == generation) {
               final isTransient = _isTransientAvatarError(error);
               if (isTransient) {
                 cache.scheduleCooldown(

@@ -193,6 +193,37 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get avatarManage => 'Manage avatar';
+
+  @override
+  String get avatarTitle => 'Avatar';
+
+  @override
+  String get avatarChoose => 'Choose image';
+
+  @override
+  String get avatarDelete => 'Delete avatar';
+
+  @override
+  String get avatarTooLarge => 'The selected image is too large.';
+
+  @override
+  String avatarTooLargeWithLimit(String limit) {
+    return 'The selected image is too large. The limit is $limit.';
+  }
+
+  @override
+  String get avatarPermissionDenied =>
+      'You cannot change your avatar on this server.';
+
+  @override
+  String get avatarUnsupportedFormat =>
+      'Choose a PNG, JPEG, GIF, or WebP image.';
+
+  @override
+  String get avatarUnavailable => 'The avatar could not be updated. Try again.';
+
+  @override
   String get workspaceDropped => 'Disconnected';
 
   @override

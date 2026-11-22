@@ -38,6 +38,8 @@ impl Actor {
         self.registry = registry;
         self.emit(SessionEvent::Servers(self.registry.profiles().to_vec()));
         crate::channel_icons::remove_server(&self.store_path, &id);
+        self.avatar_disk
+            .remove_server(self.store_path.clone(), id.clone());
         if crate::server_icons::remove(&self.store_path, &mut self.server_icons, &id)
             .unwrap_or(false)
         {
@@ -73,6 +75,8 @@ impl Actor {
         self.emit(SessionEvent::Servers(self.registry.profiles().to_vec()));
         if profile.id != id {
             crate::channel_icons::move_server(&self.store_path, &id, &profile.id);
+            self.avatar_disk
+                .move_server(self.store_path.clone(), id.clone(), profile.id.clone());
             if let Ok(Some(entry)) = crate::server_icons::move_entry(
                 &self.store_path,
                 &mut self.server_icons,
@@ -204,6 +208,7 @@ impl Actor {
         };
 
         self.reset_directory_permissions();
+        self.reset_avatar_session_state();
         self.subscribed_all_channels = false;
         self.self_server_groups.clear();
         self.reset_streams(StreamEndReason::Disconnected);
@@ -542,13 +547,16 @@ impl Actor {
     pub(super) fn invalidate_handlers(&mut self) {
         self.cancel_active_image();
         for request in self.pending_images.drain(..) {
-            let _ = request.reply.send(Err(SessionError::NotConnected));
+            let _ = request
+                .reply
+                .send(Err(ImageFetchError::Session(SessionError::NotConnected)));
         }
         for (_, waiters) in self.in_flight_channel_icons.drain() {
             for reply in waiters {
                 let _ = reply.send(Err(SessionError::NotConnected));
             }
         }
+        self.reset_avatar_session_state();
         self.active_server_icon_id = None;
         self.fetching_server_icon = None;
         self.audio_since = Instant::now();
@@ -654,9 +662,11 @@ fn register_handlers(
             return;
         }
         if let ProtocolEvent::ClientEnter(info) = event {
+            let avatar_hash = info.avatar_hash.clone();
             let _ = channel.send(SessionSignal::ClientJoined {
                 epoch,
                 client: ClientView::from(info),
+                avatar_hash,
             });
         }
     }));
@@ -695,12 +705,14 @@ fn register_handlers(
             let _ = updated.send(SessionSignal::ClientUpdated {
                 epoch,
                 id: info.id,
+                uid: info.uid,
                 channel_id: info.channel_id,
                 input_muted: info.input_muted,
                 output_muted: info.output_muted,
                 away: info.away,
                 away_message: info.away_message,
                 server_groups: info.server_groups,
+                avatar_hash: info.avatar_hash,
             });
         }
     }));

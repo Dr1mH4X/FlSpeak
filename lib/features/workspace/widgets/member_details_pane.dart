@@ -17,6 +17,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/channel_icon.dart';
 import '../../../widgets/monogram.dart';
+import '../../../widgets/avatar_dialog.dart';
 import '../../../widgets/prism.dart' hide Divider;
 import 'member_avatar.dart';
 
@@ -62,6 +63,21 @@ class MemberDetailsPane extends ConsumerWidget {
                 (member.id == view.selfClientId && view.selfSpeaking)),
       ),
     );
+    final isSelf = ref.watch(
+      sessionViewProvider.select(
+        (view) =>
+            !isOffline &&
+            view.connected &&
+            view.selfClientId == member.id &&
+            member.uid.isNotEmpty,
+      ),
+    );
+    final avatar = SessionMemberAvatar(
+      uid: member.uid,
+      nickname: member.nickname,
+      size: AvatarSize.large,
+      speaking: isSpeaking,
+    );
 
     return SizedBox.expand(
       child: SingleChildScrollView(
@@ -82,12 +98,22 @@ class MemberDetailsPane extends ConsumerWidget {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        SessionMemberAvatar(
-                          uid: member.uid,
-                          nickname: member.nickname,
-                          size: AvatarSize.large,
-                          speaking: isSpeaking,
-                        ),
+                        if (isSelf)
+                          Semantics(
+                            button: true,
+                            label: l10n.avatarManage,
+                            child: AnimatedInkWell(
+                              customBorder: AppShape.circle,
+                              onTap: () => showAvatarDialog(
+                                context,
+                                uid: member.uid,
+                                nickname: member.nickname,
+                              ),
+                              child: avatar,
+                            ),
+                          )
+                        else
+                          avatar,
                         const SizedBox(width: 20),
                         Expanded(
                           child: Column(

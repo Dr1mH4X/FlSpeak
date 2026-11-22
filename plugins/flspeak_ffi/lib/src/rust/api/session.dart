@@ -8,7 +8,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'session.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `runtime`
+// These functions are ignored because they are not marked as `pub`: `map_avatar_error`, `runtime`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 /// 抓取第三方图片 URL。myTS 的 `ts.file.myts` 附件不经过这里。
@@ -77,6 +77,8 @@ abstract class CoreSession implements RustOpaqueInterface {
 
   Future<void> connect({required String id, required String nickname});
 
+  Future<void> deleteAvatar();
+
   Future<void> disconnect();
 
   Future<int> downloadFile({
@@ -92,7 +94,7 @@ abstract class CoreSession implements RustOpaqueInterface {
   /// 先取消时要等下一次 `add` 失败或会话退出才能收尾。
   Stream<CoreEvent> events();
 
-  Future<Uint8List> fetchAvatar({required String uid});
+  Future<Uint8List?> fetchAvatar({required String uid});
 
   Future<void> fetchBotCommands({
     required int targetClid,
@@ -243,6 +245,8 @@ abstract class CoreSession implements RustOpaqueInterface {
     required String label,
     required String address,
   });
+
+  Future<void> uploadAvatar({required List<int> bytes});
 
   Future<int> uploadFile({
     required String localPath,
@@ -544,6 +548,21 @@ sealed class CoreError with _$CoreError implements FrbException {
   const factory CoreError.channelPasswordRequired({required String message}) =
       CoreError_ChannelPasswordRequired;
 
+  /// 头像超过客户端或服务器上限。
+  const factory CoreError.avatarTooLarge({int? maxBytes}) =
+      CoreError_AvatarTooLarge;
+
+  /// 当前服务器不允许修改头像。
+  const factory CoreError.avatarPermissionDenied() =
+      CoreError_AvatarPermissionDenied;
+
+  /// 图片不是 PNG / JPEG / GIF / WebP。
+  const factory CoreError.avatarUnsupportedFormat() =
+      CoreError_AvatarUnsupportedFormat;
+
+  /// 头像操作暂时不可用（未连接、传输失败或服务器未响应）。
+  const factory CoreError.avatarUnavailable() = CoreError_AvatarUnavailable;
+
   /// 桥自身的问题。
   const factory CoreError.internal({required String message}) =
       CoreError_Internal;
@@ -564,6 +583,8 @@ sealed class CoreEvent with _$CoreEvent {
     required String serverId,
     Uint8List? bytes,
   }) = CoreEvent_ServerIconUpdated;
+  const factory CoreEvent.avatarUpdated({required String uid}) =
+      CoreEvent_AvatarUpdated;
   const factory CoreEvent.snapshot({
     required List<ChannelView> channels,
     required List<ClientView> clients,

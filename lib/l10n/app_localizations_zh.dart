@@ -191,6 +191,35 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get avatarManage => '管理头像';
+
+  @override
+  String get avatarTitle => '头像';
+
+  @override
+  String get avatarChoose => '选择图片';
+
+  @override
+  String get avatarDelete => '删除头像';
+
+  @override
+  String get avatarTooLarge => '所选图片过大。';
+
+  @override
+  String avatarTooLargeWithLimit(String limit) {
+    return '所选图片过大，上限为 $limit。';
+  }
+
+  @override
+  String get avatarPermissionDenied => '你在该服务器不能更换头像。';
+
+  @override
+  String get avatarUnsupportedFormat => '请选择 PNG、JPEG、GIF 或 WebP 图片。';
+
+  @override
+  String get avatarUnavailable => '头像未能更新，请重试。';
+
+  @override
   String get workspaceDropped => '连接丢失';
 
   @override

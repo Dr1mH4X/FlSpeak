@@ -2489,6 +2489,7 @@ mod tests {
                         is_streaming: Some(true),
                         ..client_info(9, 8, "Peer9")
                     }),
+                    avatar_hash: None,
                 })
                 .await;
             actor.push_test_stream_event(StreamsEvent::Started(stream_info(
@@ -2523,6 +2524,7 @@ mod tests {
                         is_streaming: Some(true),
                         ..client_info(10, 8, "Peer10")
                     }),
+                    avatar_hash: None,
                 })
                 .await;
             assert_eq!(
@@ -2833,12 +2835,14 @@ mod tests {
                 .handle_signal(SessionSignal::ClientUpdated {
                     epoch,
                     id: 2,
+                    uid: String::new(),
                     channel_id: 5,
                     input_muted: None,
                     output_muted: None,
                     away: None,
                     away_message: None,
                     server_groups: Vec::new(),
+                    avatar_hash: None,
                 })
                 .await;
             assert_eq!(actor.client_channels.get(&2), Some(&5));
@@ -2857,12 +2861,14 @@ mod tests {
                 .handle_signal(SessionSignal::ClientUpdated {
                     epoch,
                     id: 3,
+                    uid: String::new(),
                     channel_id: 8,
                     input_muted: None,
                     output_muted: None,
                     away: None,
                     away_message: None,
                     server_groups: Vec::new(),
+                    avatar_hash: None,
                 })
                 .await;
             assert_eq!(actor.client_channels.get(&3), Some(&8));
@@ -2999,6 +3005,7 @@ mod tests {
                 .handle_signal(SessionSignal::ClientJoined {
                     epoch: actor.connection_epoch,
                     client: joined,
+                    avatar_hash: None,
                 })
                 .await;
 

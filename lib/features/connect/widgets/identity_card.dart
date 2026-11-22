@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:material_ui/material_ui.dart'
     hide
         ButtonStyle,
@@ -20,11 +22,15 @@ class IdentityCard extends StatelessWidget {
   const IdentityCard({
     required this.nickname,
     required this.onManage,
+    this.avatarBytes,
+    this.onAvatarTap,
     super.key,
   });
 
   final String nickname;
   final VoidCallback onManage;
+  final Uint8List? avatarBytes;
+  final VoidCallback? onAvatarTap;
 
   @override
   Widget build(BuildContext context) {
@@ -75,7 +81,26 @@ class IdentityCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                IdentityAvatar(nickname: nickname, size: 56),
+                if (onAvatarTap == null)
+                  IdentityAvatar(
+                    nickname: nickname,
+                    size: 56,
+                    image: avatarBytes,
+                  )
+                else
+                  Semantics(
+                    button: true,
+                    label: l10n.avatarManage,
+                    child: AnimatedInkWell(
+                      customBorder: AppShape.circle,
+                      onTap: onAvatarTap,
+                      child: IdentityAvatar(
+                        nickname: nickname,
+                        size: 56,
+                        image: avatarBytes,
+                      ),
+                    ),
+                  ),
                 const SizedBox(height: 20),
                 Text(
                   l10n.identityCurrent,
@@ -117,63 +142,92 @@ class IdentityStrip extends StatelessWidget {
     required this.nickname,
     required this.serverCount,
     required this.onManage,
+    this.avatarBytes,
+    this.onAvatarTap,
     super.key,
   });
 
   final String nickname;
   final int serverCount;
   final VoidCallback onManage;
+  final Uint8List? avatarBytes;
+  final VoidCallback? onAvatarTap;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
+    final avatar = IdentityAvatar(
+      nickname: nickname,
+      size: 40,
+      image: avatarBytes,
+    );
+    final avatarSlot = onAvatarTap == null
+        ? avatar
+        : Semantics(
+            button: true,
+            label: l10n.avatarManage,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: onAvatarTap,
+                child: avatar,
+              ),
+            ),
+          );
 
     return SurfaceCard(
       clip: true,
-      child: AnimatedInkWell(
-        onTap: onManage,
-        customBorder: AppShape.xl,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              IdentityAvatar(nickname: nickname, size: 40),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            avatarSlot,
+            const SizedBox(width: 12),
+            Expanded(
+              child: AnimatedInkWell(
+                onTap: onManage,
+                customBorder: AppShape.xl,
+                child: Row(
                   children: [
-                    Text(
-                      nickname,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: context.texts.bodyLarge?.copyWith(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            nickname,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: context.texts.bodyLarge?.copyWith(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            l10n.serversUsedBy(serverCount),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: context.texts.bodySmall?.copyWith(
+                              fontSize: 12,
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      l10n.serversUsedBy(serverCount),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: context.texts.bodySmall?.copyWith(
-                        fontSize: 12,
-                        color: scheme.onSurfaceVariant,
-                      ),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: IconSizes.medium,
+                      color: scheme.onSurfaceVariant,
                     ),
                   ],
                 ),
               ),
-              Icon(
-                Icons.chevron_right_rounded,
-                size: IconSizes.medium,
-                color: scheme.onSurfaceVariant,
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

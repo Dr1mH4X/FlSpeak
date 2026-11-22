@@ -28,6 +28,10 @@ String _describeImageHostError(CoreError error, AppLocalizations l10n) =>
       CoreError_BlockedAddress() => l10n.imageHostErrorBlocked,
       CoreError_Connection() => l10n.imageHostErrorConnection,
       CoreError_ChannelPasswordRequired() => l10n.channelPasswordWrong,
+      CoreError_AvatarTooLarge() ||
+      CoreError_AvatarPermissionDenied() ||
+      CoreError_AvatarUnsupportedFormat() ||
+      CoreError_AvatarUnavailable() => l10n.imageHostErrorInternal,
       CoreError_Internal() => l10n.imageHostErrorInternal,
     };
 

@@ -91,36 +91,42 @@ async fn query(client: &Client, command: &str) -> Result<Vec<Row>, SessionError>
         .map_err(protocol_error)
 }
 
+impl ChannelTools {
+    async fn ensure_permission_ids(
+        &mut self,
+        client: &Client,
+    ) -> Result<&HashMap<String, u32>, SessionError> {
+        if self.permission_ids.is_none() {
+            let rows = query(client, "permissionlist").await?;
+            let mut ids = HashMap::new();
+            for (index, row) in rows
+                .iter()
+                .filter(|row| row.contains_key("permname"))
+                .enumerate()
+            {
+                let id = match row.get("permid") {
+                    Some(id) => id
+                        .parse::<u32>()
+                        .map_err(|_| SessionError::Protocol("invalid permission id".into()))?,
+                    None => u32::try_from(index + 1)
+                        .map_err(|_| SessionError::Protocol("too many permissions".into()))?,
+                };
+                ids.insert(row["permname"].clone(), id);
+            }
+            self.permission_ids = Some(ids);
+        }
+        self.permission_ids
+            .as_ref()
+            .ok_or_else(|| SessionError::Protocol("permission list unavailable".into()))
+    }
+}
+
 pub(crate) async fn access(
     client: &Client,
     tools: &mut ChannelTools,
 ) -> Result<AccessView, SessionError> {
-    if tools.permission_ids.is_none() {
-        let rows = query(client, "permissionlist").await?;
-        let mut ids = HashMap::new();
-        for (index, row) in rows
-            .iter()
-            .filter(|row| row.contains_key("permname"))
-            .enumerate()
-        {
-            let id = match row.get("permid") {
-                Some(id) => id
-                    .parse::<u32>()
-                    .map_err(|_| SessionError::Protocol("invalid permission id".into()))?,
-                None => u32::try_from(index + 1)
-                    .map_err(|_| SessionError::Protocol("too many permissions".into()))?,
-            };
-            ids.insert(row["permname"].clone(), id);
-        }
-        tools.permission_ids = Some(ids);
-    }
-    let value = |name: &str| {
-        tools
-            .permission_ids
-            .as_ref()
-            .and_then(|ids| ids.get(name))
-            .and_then(|id| client.permission_value(*id))
-    };
+    let ids = tools.ensure_permission_ids(client).await?;
+    let value = |name: &str| ids.get(name).and_then(|id| client.permission_value(*id));
     Ok(AccessView {
         member_add_power: value("i_group_member_add_power"),
         member_remove_power: value("i_group_member_remove_power"),
@@ -128,6 +134,15 @@ pub(crate) async fn access(
         kick_server_power: value("i_client_kick_from_server_power"),
         connection_epoch: None,
     })
+}
+
+/// 读取本端 `i_client_max_avatar_filesize`；权限列表或该权限不可用时返回 `None`。
+pub(crate) async fn avatar_size_limit(client: &Client, tools: &mut ChannelTools) -> Option<i32> {
+    let id = {
+        let ids = tools.ensure_permission_ids(client).await.ok()?;
+        *ids.get("i_client_max_avatar_filesize")?
+    };
+    client.permission_value(id)
 }
 
 fn number(row: &Row, key: &str) -> Result<u64, SessionError> {
@@ -430,6 +445,7 @@ mod tests {
             output_muted: None,
             channel_commander: None,
             is_streaming: None,
+            avatar_hash: None,
         };
         let mut clients = vec![peer(2, "same"), peer(3, "same")];
         assert_eq!(kick_target(&clients, "same", 3).unwrap().id, 3);

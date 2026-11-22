@@ -103,6 +103,22 @@
       }
     }
   },
+  "avatarManage": "Manage avatar",
+  "avatarTitle": "Avatar",
+  "avatarChoose": "Choose image",
+  "avatarDelete": "Delete avatar",
+  "avatarTooLarge": "The selected image is too large.",
+  "avatarTooLargeWithLimit": "The selected image is too large. The limit is {limit}.",
+  "@avatarTooLargeWithLimit": {
+    "placeholders": {
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "avatarPermissionDenied": "You cannot change your avatar on this server.",
+  "avatarUnsupportedFormat": "Choose a PNG, JPEG, GIF, or WebP image.",
+  "avatarUnavailable": "The avatar could not be updated. Try again.",
   "workspaceDropped": "Disconnected",
   "workspaceRetrying": "Retrying…",
   "channelsSection": "Channels",

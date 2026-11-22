@@ -10,21 +10,37 @@ import 'package:flspeak/core/models.dart';
 import 'package:flspeak/core/providers.dart';
 
 class _Core extends Fake implements CoreSession {
-  final requests = <Completer<Uint8List>>[];
+  _Core([Stream<CoreEvent>? eventsStream])
+    : _eventsStream = eventsStream ?? const Stream<CoreEvent>.empty();
+
+  final Stream<CoreEvent> _eventsStream;
+  final requests = <Completer<Uint8List?>>[];
+  final requestedUids = <String>[];
+
   @override
-  Future<Uint8List> fetchAvatar({required String uid}) {
-    final reply = Completer<Uint8List>();
+  Stream<CoreEvent> events() => _eventsStream;
+
+  @override
+  Future<List<ServerProfileView>> listServers() async => const [];
+
+  @override
+  Future<List<ServerIconView>> listServerIcons() async => const [];
+
+  @override
+  Future<Uint8List?> fetchAvatar({required String uid}) {
+    final reply = Completer<Uint8List?>();
     requests.add(reply);
+    requestedUids.add(uid);
     return reply.future;
   }
 }
 
 class _Controller extends SessionController {
   @override
-  SessionView build() => const SessionView(
+  SessionView build() => super.build().copyWith(
     activeServerId: 'a',
     connectionEpoch: 1,
-    state: CoreSessionState.connected(clientId: 1, channelId: 1),
+    state: const CoreSessionState.connected(clientId: 1, channelId: 1),
   );
   void switchServer() =>
       state = state.copyWith(activeServerId: 'b', connectionEpoch: 2);
@@ -76,6 +92,46 @@ void main() {
     container.dispose();
     await tester.pump();
   });
+
+  testWidgets(
+    'missing avatar or negative cache resolves to null and does not trigger 30s retry',
+    (tester) async {
+      final core = _Core();
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(core),
+          sessionViewProvider.overrideWith(_Controller.new),
+        ],
+      );
+      final providerNull = memberAvatarProvider('uid-null');
+      final subNull = container.listen(providerNull, (_, _) {});
+      expect(core.requests, hasLength(1));
+      core.requests.last.complete(null);
+      await tester.pump();
+      expect(await container.read(providerNull.future), isNull);
+
+      final providerEmpty = memberAvatarProvider('uid-empty');
+      final subEmpty = container.listen(providerEmpty, (_, _) {});
+      expect(core.requests, hasLength(2));
+      core.requests.last.complete(Uint8List(0));
+      await tester.pump();
+      expect(await container.read(providerEmpty.future), isNull);
+
+      await tester.pump(const Duration(minutes: 2));
+      expect(core.requests, hasLength(2));
+
+      subNull.close();
+      subEmpty.close();
+      await tester.pump();
+      final remounted = container.listen(providerNull, (_, _) {});
+      expect(await container.read(providerNull.future), isNull);
+      expect(core.requests, hasLength(2));
+
+      remounted.close();
+      container.dispose();
+      await tester.pump();
+    },
+  );
 
   testWidgets(
     'transient queue-full and interrupted errors retry promptly within 500ms without consuming attempt count',
@@ -158,6 +214,103 @@ void main() {
     },
   );
 
+  testWidgets(
+    'avatarUpdated event clears cache, cooldowns, and attempts and refetches only mounted target uid',
+    (tester) async {
+      final events = StreamController<CoreEvent>.broadcast(sync: true);
+      final core = _Core(events.stream);
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(core),
+          sessionViewProvider.overrideWith(_Controller.new),
+        ],
+      );
+      addTearDown(() async {
+        await events.close();
+      });
+
+      final providerA = memberAvatarProvider('uid-a');
+      final providerB = memberAvatarProvider('uid-b');
+      final subA = container.listen(providerA, (_, _) {});
+      final subB = container.listen(providerB, (_, _) {});
+
+      expect(core.requestedUids, ['uid-a', 'uid-b']);
+      core.requests[0].complete(null);
+      core.requests[1].complete(Uint8List.fromList([2]));
+      await tester.pump();
+      expect(await container.read(providerA.future), isNull);
+      expect(await container.read(providerB.future), [2]);
+
+      // 未挂载的 uid 收到 avatarUpdated 时仅记录 revision，不主动发起拉取
+      events.add(const CoreEvent.avatarUpdated(uid: 'uid-unmounted'));
+      await tester.pump();
+      await tester.pump(Duration.zero);
+      expect(core.requestedUids, ['uid-a', 'uid-b']);
+
+      // uid-a 从缓存 null 收到 avatarUpdated：立刻重拉且不影响 uid-b
+      events.add(const CoreEvent.avatarUpdated(uid: 'uid-a'));
+      await tester.pump();
+      await tester.pump(Duration.zero);
+      expect(core.requestedUids, ['uid-a', 'uid-b', 'uid-a']);
+      expect(await container.read(providerB.future), [2]);
+
+      // 让 uid-a 本次请求失败进入 30s 冷却，10s 时未重试；再收 avatarUpdated 应清掉冷却并立刻重拉
+      final failure = expectLater(
+        container.read(providerA.future),
+        throwsA(isA<TimeoutException>()),
+      );
+      core.requests.last.completeError(TimeoutException('temporary'));
+      await tester.pump();
+      await tester.pump(Duration.zero);
+      await failure;
+
+      await tester.pump(const Duration(seconds: 10));
+      expect(core.requestedUids, hasLength(3));
+
+      events.add(const CoreEvent.avatarUpdated(uid: 'uid-a'));
+      await tester.pump();
+      await tester.pump(Duration.zero);
+      expect(core.requestedUids, ['uid-a', 'uid-b', 'uid-a', 'uid-a']);
+
+      // 在途旧请求失效后失败，不应把新请求推进 30s 冷却或覆盖结果
+      final staleRequest = core.requests.last;
+      events.add(const CoreEvent.avatarUpdated(uid: 'uid-a'));
+      await tester.pump();
+      await tester.pump(Duration.zero);
+      expect(core.requestedUids, hasLength(5));
+
+      staleRequest.completeError(TimeoutException('stale'));
+      core.requests.last.complete(Uint8List.fromList([7, 7]));
+      await tester.pump();
+      await tester.pump(Duration.zero);
+      expect(await container.read(providerA.future), [7, 7]);
+
+      // 等到原先 30s 冷却时间点后仍无多余重拉
+      await tester.pump(const Duration(seconds: 35));
+      expect(core.requestedUids, hasLength(5));
+
+      // 稍后挂载 uid-unmounted 时才按需请求
+      final subUnmounted = container.listen(
+        memberAvatarProvider('uid-unmounted'),
+        (_, _) {},
+      );
+      expect(core.requestedUids.last, 'uid-unmounted');
+      core.requests.last.complete(Uint8List.fromList([8]));
+      await tester.pump();
+      await tester.pump(Duration.zero);
+      expect(
+        await container.read(memberAvatarProvider('uid-unmounted').future),
+        [8],
+      );
+
+      subA.close();
+      subB.close();
+      subUnmounted.close();
+      container.dispose();
+      await tester.pump();
+    },
+  );
+
   for (final hasAvatar in [true, false]) {
     test(
       'recycled rows retain cached avatars and missing results, present=$hasAvatar',
@@ -175,10 +328,10 @@ void main() {
         final initial = container.read(provider.future);
         if (hasAvatar) {
           core.requests.single.complete(Uint8List.fromList([1]));
-          await initial;
+          expect(await initial, [1]);
         } else {
-          core.requests.single.completeError(StateError('no avatar'));
-          await expectLater(initial, throwsStateError);
+          core.requests.single.complete(null);
+          expect(await initial, isNull);
         }
         first.close();
         await container.pump();
@@ -186,7 +339,7 @@ void main() {
         if (hasAvatar) {
           expect(await container.read(provider.future), [1]);
         } else {
-          await expectLater(container.read(provider.future), throwsStateError);
+          expect(await container.read(provider.future), isNull);
         }
         expect(core.requests, hasLength(1));
         second.close();

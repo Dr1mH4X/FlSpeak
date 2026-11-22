@@ -1,13 +1,38 @@
 // ignore_for_file: depend_on_referenced_packages
 
+import 'dart:typed_data';
+
+import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:material_ui/material_ui.dart' hide TextField;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:flspeak/core/models.dart';
+import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
 import 'package:flspeak/localization.dart';
 import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/widgets/prism.dart' show TextField;
 import 'package:flspeak/features/connect/widgets/identity_dialog.dart';
+
+class _FakeCore extends Fake implements CoreSession {
+  @override
+  Stream<CoreEvent> events() => const Stream.empty();
+
+  @override
+  Future<Uint8List?> fetchAvatar({required String uid}) async => null;
+}
+
+class _AvatarSession extends SessionController {
+  @override
+  SessionView build() => const SessionView(
+    state: CoreSessionState.connected(clientId: 1, channelId: 5),
+    activeServerId: 'server-1',
+    clients: [
+      ClientView(id: 1, nickname: 'Self', uid: 'self-uid', channelId: 5),
+    ],
+  );
+}
 
 void main() {
   Widget buildTestWidget({
@@ -227,5 +252,44 @@ void main() {
     expect(updated, equals('SubmittedViaEnter'));
     expect(find.byType(TextField), findsNothing);
     expect(find.text('SubmittedViaEnter'), findsOneWidget);
+  });
+
+  testWidgets('identity dialog avatar opens the avatar dialog', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_FakeCore()),
+          sessionViewProvider.overrideWith(_AvatarSession.new),
+        ],
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: buildAppTheme(Brightness.light),
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => showIdentityDialog(
+                  context,
+                  nickname: 'FlSpeakUser',
+                  onRename: (_) {},
+                  avatarUid: 'self-uid',
+                ),
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsLabel('管理头像'), findsOneWidget);
+    await tester.tap(find.bySemanticsLabel('管理头像'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('头像'), findsOneWidget);
+    expect(find.text('选择图片'), findsOneWidget);
   });
 }

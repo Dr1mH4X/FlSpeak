@@ -1,59 +1,34 @@
 //! 频道自定义图标的按需本地磁盘缓存。
 //!
 //! 缓存文件存放在 `store_path` 同级的 `channel-icons/<sha1(server_id)>/<icon_id>.bin`：
-//! - 使用 `Sha1` 目录隔离不同服务器（避免同 `icon_id` 串图与 Windows 路径中的 `:` 限制）；
-//! - 每次命中刷新文件修改时间，并在写入新图标时按单服数量/容量上限执行 LRU 淘汰。
+//! - 复用 `media_cache` 的按服隔离、原子写、命中刷新与单服数量/字节 LRU 淘汰；
+//! - 保持单服 256 个 / 16 MiB 预算与 `sync_all` 持久化语义不变。
 
-use std::collections::HashSet;
-use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::path::Path;
 
-use sha1::{Digest, Sha1};
+use crate::media_cache::{self, MediaCacheSpec};
 
 const MAX_ICON_BYTES: usize = 1024 * 1024;
 pub(crate) const MAX_ICONS_PER_SERVER: usize = 256;
 pub(crate) const MAX_BYTES_PER_SERVER: u64 = 16 * 1024 * 1024;
 
-fn cache_root(store_path: &Path) -> PathBuf {
-    store_path.with_file_name("channel-icons")
-}
+const SPEC: MediaCacheSpec = MediaCacheSpec {
+    dir_name: "channel-icons",
+    max_entry_bytes: MAX_ICON_BYTES,
+    max_files_per_server: MAX_ICONS_PER_SERVER,
+    max_bytes_per_server: MAX_BYTES_PER_SERVER,
+    sync_all: true,
+};
 
-fn server_key(server_id: &str) -> String {
-    let digest = Sha1::digest(server_id.as_bytes());
-    let mut hex = String::with_capacity(digest.len() * 2);
-    for byte in digest {
-        use std::fmt::Write;
-        let _ = write!(&mut hex, "{byte:02x}");
-    }
-    hex
-}
-
-fn server_dir(store_path: &Path, server_id: &str) -> PathBuf {
-    cache_root(store_path).join(server_key(server_id))
-}
-
-fn icon_path(dir: &Path, icon_id: u32) -> PathBuf {
-    dir.join(format!("{icon_id}.bin"))
+fn icon_file_name(icon_id: u32) -> String {
+    format!("{icon_id}.bin")
 }
 
 pub(crate) fn load_hit(store_path: &Path, server_id: &str, icon_id: u32) -> Option<Vec<u8>> {
     if icon_id == 0 {
         return None;
     }
-    let path = icon_path(&server_dir(store_path, server_id), icon_id);
-    match std::fs::read(&path) {
-        Ok(bytes) if !bytes.is_empty() && bytes.len() <= MAX_ICON_BYTES => {
-            if let Ok(file) = std::fs::OpenOptions::new().write(true).open(&path) {
-                let _ = file.set_modified(SystemTime::now());
-            }
-            Some(bytes)
-        }
-        Ok(_) => {
-            let _ = std::fs::remove_file(&path);
-            None
-        }
-        Err(_) => None,
-    }
+    media_cache::load_hit(store_path, SPEC, server_id, &icon_file_name(icon_id))
 }
 
 pub(crate) fn save(
@@ -62,16 +37,13 @@ pub(crate) fn save(
     icon_id: u32,
     bytes: &[u8],
 ) -> Result<(), String> {
-    save_with_limits(
-        store_path,
-        server_id,
-        icon_id,
-        bytes,
-        MAX_ICONS_PER_SERVER,
-        MAX_BYTES_PER_SERVER,
-    )
+    if icon_id == 0 {
+        return Err("invalid channel icon cache data".to_string());
+    }
+    media_cache::save(store_path, SPEC, server_id, &icon_file_name(icon_id), bytes)
 }
 
+#[cfg(test)]
 pub(crate) fn save_with_limits(
     store_path: &Path,
     server_id: &str,
@@ -80,157 +52,46 @@ pub(crate) fn save_with_limits(
     max_files: usize,
     max_bytes: u64,
 ) -> Result<(), String> {
-    if icon_id == 0 || bytes.is_empty() || bytes.len() > MAX_ICON_BYTES {
+    if icon_id == 0 {
         return Err("invalid channel icon cache data".to_string());
     }
-    let dir = server_dir(store_path, server_id);
-    std::fs::create_dir_all(&dir)
-        .map_err(|err| format!("failed to create the channel icon cache directory: {err}"))?;
-
-    let nanos = SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    let temp = dir.join(format!(
-        "{icon_id}.{nanos}.{:016x}.tmp",
-        rand::random::<u64>()
-    ));
-
-    let write_outcome = (|| -> Result<(), String> {
-        use std::io::Write;
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temp)
-            .map_err(|err| format!("failed to create a temporary channel icon file: {err}"))?;
-        file.write_all(bytes)
-            .map_err(|err| format!("failed to write the channel icon cache: {err}"))?;
-        file.sync_all()
-            .map_err(|err| format!("failed to sync the channel icon cache: {err}"))?;
-        drop(file);
-        std::fs::rename(&temp, icon_path(&dir, icon_id))
-            .map_err(|err| format!("failed to replace the channel icon cache: {err}"))?;
-        Ok(())
-    })();
-
-    if let Err(err) = write_outcome {
-        let _ = std::fs::remove_file(&temp);
-        return Err(err);
-    }
-
-    evict_over_budget(&dir, max_files, max_bytes);
-    Ok(())
-}
-
-struct CachedEntry {
-    path: PathBuf,
-    len: u64,
-    modified: SystemTime,
-}
-
-fn evict_over_budget(dir: &Path, max_files: usize, max_bytes: u64) {
-    let Ok(read_dir) = std::fs::read_dir(dir) else {
-        return;
-    };
-    let mut entries = Vec::new();
-    let mut total_bytes = 0u64;
-
-    for item in read_dir.flatten() {
-        let path = item.path();
-        if path.extension().and_then(|ext| ext.to_str()) != Some("bin") {
-            continue;
-        }
-        let Ok(meta) = item.metadata() else {
-            continue;
-        };
-        if !meta.is_file() {
-            continue;
-        }
-        let len = meta.len();
-        let modified = meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
-        total_bytes = total_bytes.saturating_add(len);
-        entries.push(CachedEntry {
-            path,
-            len,
-            modified,
-        });
-    }
-
-    let mut count = entries.len();
-    if count <= max_files && total_bytes <= max_bytes {
-        return;
-    }
-
-    entries.sort_by(|a, b| {
-        a.modified
-            .cmp(&b.modified)
-            .then_with(|| a.path.cmp(&b.path))
-    });
-    for entry in entries {
-        if count <= max_files && total_bytes <= max_bytes {
-            break;
-        }
-        if std::fs::remove_file(&entry.path).is_ok() {
-            count -= 1;
-            total_bytes = total_bytes.saturating_sub(entry.len);
-        }
-    }
+    media_cache::save_with_limits(
+        store_path,
+        SPEC,
+        server_id,
+        &icon_file_name(icon_id),
+        bytes,
+        max_files,
+        max_bytes,
+    )
 }
 
 pub(crate) fn prune_orphans(store_path: &Path, active_server_ids: &[&str]) {
-    let root = cache_root(store_path);
-    let Ok(read_dir) = std::fs::read_dir(&root) else {
-        return;
-    };
-    let valid: HashSet<String> = active_server_ids.iter().map(|id| server_key(id)).collect();
-    for item in read_dir.flatten() {
-        let Some(name) = item.file_name().to_str().map(str::to_owned) else {
-            let path = item.path();
-            let _ = if path.is_dir() {
-                std::fs::remove_dir_all(path)
-            } else {
-                std::fs::remove_file(path)
-            };
-            continue;
-        };
-        if !valid.contains(&name) {
-            let path = item.path();
-            let _ = if path.is_dir() {
-                std::fs::remove_dir_all(path)
-            } else {
-                std::fs::remove_file(path)
-            };
-        }
-    }
+    media_cache::prune_orphans(store_path, SPEC, active_server_ids);
 }
 
 pub(crate) fn remove_server(store_path: &Path, server_id: &str) {
-    let dir = server_dir(store_path, server_id);
-    if dir.exists() {
-        let _ = std::fs::remove_dir_all(dir);
-    }
+    media_cache::remove_server(store_path, SPEC, server_id);
 }
 
 pub(crate) fn move_server(store_path: &Path, old_id: &str, new_id: &str) {
-    if old_id == new_id {
-        return;
-    }
-    let from = server_dir(store_path, old_id);
-    if !from.exists() {
-        return;
-    }
-    let to = server_dir(store_path, new_id);
-    if to.exists() {
-        let _ = std::fs::remove_dir_all(&to);
-    }
-    let _ = std::fs::rename(&from, &to);
+    media_cache::move_server(store_path, SPEC, old_id, new_id);
 }
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
+    use std::path::PathBuf;
+    use std::time::{Duration, SystemTime};
 
     use super::*;
+
+    fn server_dir(store_path: &Path, server_id: &str) -> PathBuf {
+        media_cache::server_dir(store_path, SPEC, server_id)
+    }
+
+    fn icon_path(dir: &Path, icon_id: u32) -> PathBuf {
+        dir.join(icon_file_name(icon_id))
+    }
 
     fn temp_store_path(label: &str) -> (PathBuf, PathBuf) {
         let dir = std::env::temp_dir().join(format!(

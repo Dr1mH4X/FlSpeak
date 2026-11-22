@@ -33,6 +33,9 @@ impl Actor {
         client: &Arc<Client>,
     ) -> Result<(Vec<ClientView>, bool), SessionError> {
         let directory = client.directory_snapshot().map(|snapshot| snapshot.clients);
+        if let Some(ref dir_clients) = directory {
+            self.sync_avatar_hashes_from_clients(dir_clients);
+        }
         if self.client_list_allowed == Some(false) {
             let Some(directory) = directory else {
                 return Err(SessionError::Protocol(
@@ -48,6 +51,15 @@ impl Actor {
         let (mut rows, from_directory_only) = match listed {
             Ok(listed) => {
                 self.client_list_allowed = Some(true);
+                // clientlist 不请求头像标志（始终为 None）；仅在显式带回非空 hash 时补充记录，绝不用 None 覆盖目录状态。
+                for info in &listed {
+                    if let Some(ref hash) = info.avatar_hash
+                        && !hash.is_empty()
+                        && !info.uid.is_empty()
+                    {
+                        self.record_avatar_hash(&info.uid, Some(hash.clone()), false);
+                    }
+                }
                 (merged_clients(listed, directory.unwrap_or_default()), false)
             }
             Err(err) => {
@@ -114,16 +126,23 @@ impl Actor {
         let Some(channel_id) = channel_id else {
             return;
         };
+        let uid = info
+            .get("client_unique_identifier")
+            .cloned()
+            .unwrap_or_default();
+        if !uid.is_empty()
+            && let Some(raw_hash) = info.get("client_flag_avatar")
+        {
+            let hash = (!raw_hash.is_empty()).then(|| raw_hash.clone());
+            self.record_avatar_hash(&uid, hash, false);
+        }
         let view = ClientView {
             id: self_id,
             nickname: info
                 .get("client_nickname")
                 .map(|value| unescape_text(value))
                 .unwrap_or_default(),
-            uid: info
-                .get("client_unique_identifier")
-                .cloned()
-                .unwrap_or_default(),
+            uid,
             channel_id,
             input_muted: info
                 .get("client_input_muted")
@@ -460,6 +479,7 @@ impl Actor {
     }
 
     pub(super) fn handle_directory_snapshot(&mut self, snapshot: tsclient_rs::DirectorySnapshot) {
+        self.sync_avatar_hashes_from_clients(&snapshot.clients);
         let mut snapshot_self_channel = None;
         if let Some(self_id) = self.self_client_id
             && let Some(me) = snapshot.clients.iter().find(|c| c.id == self_id)
@@ -948,5 +968,39 @@ mod tests {
                 assert!(network_events[1].round_trip_ms.is_some());
             })
             .await;
+    }
+
+    #[test]
+    fn snapshot_avatar_sync_folds_clones_and_keeps_some_hash() {
+        let mut actor = audio_actor();
+        actor.active_server_id = Some("a.example:9987".into());
+        let mut events = actor.events.subscribe();
+
+        actor.handle_directory_snapshot(tsclient_rs::DirectorySnapshot {
+            channels: Vec::new(),
+            clients: vec![
+                ClientInfo {
+                    uid: "shared-uid".into(),
+                    avatar_hash: None,
+                    ..client_info(2, 5, "CloneA")
+                },
+                ClientInfo {
+                    uid: "shared-uid".into(),
+                    avatar_hash: Some("clone_hash".into()),
+                    ..client_info(3, 5, "CloneB")
+                },
+            ],
+            truncated: false,
+        });
+
+        assert_eq!(
+            actor.avatar_hashes.get("shared-uid"),
+            Some(&Some("clone_hash".to_string()))
+        );
+        assert!(matches!(
+            events.try_recv(),
+            Ok(SessionEvent::Snapshot { .. })
+        ));
+        assert!(events.try_recv().is_err());
     }
 }

@@ -206,6 +206,9 @@ pub enum CoreEvent {
         server_id: String,
         bytes: Option<Vec<u8>>,
     },
+    AvatarUpdated {
+        uid: String,
+    },
     Snapshot {
         channels: Vec<ChannelView>,
         clients: Vec<ClientView>,
@@ -358,6 +361,16 @@ pub enum CoreError {
     ChannelPasswordRequired {
         message: String,
     },
+    /// 头像超过客户端或服务器上限。
+    AvatarTooLarge {
+        max_bytes: Option<u64>,
+    },
+    /// 当前服务器不允许修改头像。
+    AvatarPermissionDenied,
+    /// 图片不是 PNG / JPEG / GIF / WebP。
+    AvatarUnsupportedFormat,
+    /// 头像操作暂时不可用（未连接、传输失败或服务器未响应）。
+    AvatarUnavailable,
     /// 桥自身的问题。
     Internal {
         message: String,
@@ -600,8 +613,19 @@ impl CoreSession {
         Ok(self.handle.fetch_icon(icon_id).await?)
     }
 
-    pub async fn fetch_avatar(&self, uid: String) -> Result<Vec<u8>, CoreError> {
+    pub async fn fetch_avatar(&self, uid: String) -> Result<Option<Vec<u8>>, CoreError> {
         Ok(self.handle.fetch_avatar(uid).await?)
+    }
+
+    pub async fn upload_avatar(&self, bytes: Vec<u8>) -> Result<(), CoreError> {
+        self.handle
+            .upload_avatar(bytes)
+            .await
+            .map_err(map_avatar_error)
+    }
+
+    pub async fn delete_avatar(&self) -> Result<(), CoreError> {
+        self.handle.delete_avatar().await.map_err(map_avatar_error)
     }
 
     pub async fn access(&self) -> Result<AccessView, CoreError> {
@@ -1095,6 +1119,7 @@ impl From<SessionEvent> for CoreEvent {
             SessionEvent::ServerIconUpdated { server_id, bytes } => {
                 CoreEvent::ServerIconUpdated { server_id, bytes }
             }
+            SessionEvent::AvatarUpdated { uid } => CoreEvent::AvatarUpdated { uid },
             SessionEvent::Snapshot { channels, clients } => CoreEvent::Snapshot {
                 channels: channels.into_iter().map(ChannelView::from).collect(),
                 clients: clients.into_iter().map(ClientView::from).collect(),
@@ -1238,6 +1263,13 @@ impl From<SessionEvent> for CoreEvent {
     }
 }
 
+fn map_avatar_error(err: SessionError) -> CoreError {
+    match err {
+        SessionError::NotConnected | SessionError::Closed => CoreError::AvatarUnavailable,
+        other => other.into(),
+    }
+}
+
 impl From<SessionError> for CoreError {
     fn from(err: SessionError) -> Self {
         match err {
@@ -1252,6 +1284,10 @@ impl From<SessionError> for CoreError {
             SessionError::ChannelPasswordRequired => CoreError::ChannelPasswordRequired {
                 message: err.to_string(),
             },
+            SessionError::AvatarTooLarge { max_bytes } => CoreError::AvatarTooLarge { max_bytes },
+            SessionError::AvatarPermissionDenied => CoreError::AvatarPermissionDenied,
+            SessionError::AvatarUnsupportedFormat => CoreError::AvatarUnsupportedFormat,
+            SessionError::AvatarUnavailable => CoreError::AvatarUnavailable,
             SessionError::Closed | SessionError::Spawn(_) | SessionError::Storage(_) => {
                 CoreError::Internal {
                     message: err.to_string(),
@@ -1374,6 +1410,45 @@ mod tests {
                 is_streaming: true,
                 ..
             }
+        ));
+    }
+
+    #[test]
+    fn avatar_updated_mapping_preserves_uid() {
+        let updated = SessionEvent::AvatarUpdated {
+            uid: "KqXRNkJgnzjGFbp0GTCPJN1ODJY=".into(),
+        };
+        assert!(matches!(
+            CoreEvent::from(updated),
+            CoreEvent::AvatarUpdated { uid } if uid == "KqXRNkJgnzjGFbp0GTCPJN1ODJY="
+        ));
+    }
+
+    #[test]
+    fn avatar_errors_map_to_dedicated_core_errors() {
+        assert!(matches!(
+            CoreError::from(SessionError::AvatarTooLarge {
+                max_bytes: Some(200_000)
+            }),
+            CoreError::AvatarTooLarge {
+                max_bytes: Some(200_000)
+            }
+        ));
+        assert!(matches!(
+            CoreError::from(SessionError::AvatarPermissionDenied),
+            CoreError::AvatarPermissionDenied
+        ));
+        assert!(matches!(
+            CoreError::from(SessionError::AvatarUnsupportedFormat),
+            CoreError::AvatarUnsupportedFormat
+        ));
+        assert!(matches!(
+            CoreError::from(SessionError::AvatarUnavailable),
+            CoreError::AvatarUnavailable
+        ));
+        assert!(matches!(
+            map_avatar_error(SessionError::NotConnected),
+            CoreError::AvatarUnavailable
         ));
     }
 }

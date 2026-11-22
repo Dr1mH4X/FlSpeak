@@ -10,10 +10,13 @@ import 'package:material_ui/material_ui.dart'
         TextButton,
         TextField;
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/member_avatars.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
+import '../../../widgets/avatar_dialog.dart';
 import '../../../widgets/common.dart';
 import '../../../widgets/monogram.dart';
 import '../../../widgets/prism.dart';
@@ -24,6 +27,7 @@ Future<void> showIdentityDialog(
   BuildContext context, {
   required String nickname,
   required ValueChanged<String> onRename,
+  String? avatarUid,
 }) {
   final contentKey = GlobalKey<_IdentityDialogContentState>();
 
@@ -34,6 +38,7 @@ Future<void> showIdentityDialog(
       key: contentKey,
       nickname: nickname,
       onRename: onRename,
+      avatarUid: avatarUid,
     ),
     footer: (context) => ElasticButton(
       child: FilledButton(
@@ -52,10 +57,12 @@ class _IdentityDialogContent extends StatefulWidget {
     super.key,
     required this.nickname,
     required this.onRename,
+    this.avatarUid,
   });
 
   final String nickname;
   final ValueChanged<String> onRename;
+  final String? avatarUid;
 
   @override
   State<_IdentityDialogContent> createState() => _IdentityDialogContentState();
@@ -112,6 +119,36 @@ class _IdentityDialogContentState extends State<_IdentityDialogContent> {
     });
   }
 
+  Widget _avatar({
+    required AppLocalizations l10n,
+    required String labelNickname,
+    required String dialogNickname,
+  }) {
+    final uid = widget.avatarUid;
+    if (uid == null) {
+      return IdentityAvatar(nickname: labelNickname, size: 36);
+    }
+    return Consumer(
+      builder: (context, ref, _) {
+        final bytes = ref.watch(memberAvatarProvider(uid)).asData?.value;
+        return Semantics(
+          button: true,
+          label: l10n.avatarManage,
+          child: AnimatedInkWell(
+            customBorder: AppShape.circle,
+            onTap: () =>
+                showAvatarDialog(context, uid: uid, nickname: dialogNickname),
+            child: IdentityAvatar(
+              nickname: labelNickname,
+              size: 36,
+              image: bytes,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -144,7 +181,11 @@ class _IdentityDialogContentState extends State<_IdentityDialogContent> {
     final scheme = context.scheme;
     return Row(
       children: [
-        IdentityAvatar(nickname: _nickname, size: 36),
+        _avatar(
+          l10n: l10n,
+          labelNickname: _nickname,
+          dialogNickname: _nickname,
+        ),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
@@ -195,9 +236,14 @@ class _IdentityDialogContentState extends State<_IdentityDialogContent> {
     final scheme = context.scheme;
     return Row(
       children: [
-        IdentityAvatar(
-          nickname: _draft.text.trim().isEmpty ? _nickname : _draft.text.trim(),
-          size: 36,
+        _avatar(
+          l10n: l10n,
+          labelNickname: _draft.text.trim().isEmpty
+              ? _nickname
+              : _draft.text.trim(),
+          dialogNickname: _draft.text.trim().isEmpty
+              ? _nickname
+              : _draft.text.trim(),
         ),
         const SizedBox(width: 8),
         Expanded(

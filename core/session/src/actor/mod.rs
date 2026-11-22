@@ -27,6 +27,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use audio::engine::{AudioEvent, AudioStage, VoiceEngine};
 use audio::format::{MAX_PACKET_BYTES, VOICE_CODEC, is_supported_codec};
 use audio::playback::VoiceFrame;
+#[cfg(test)]
 use base64::Engine;
 use proto::ConnectError;
 use server::{ServerError, ServerProfile, ServerRegistry, ServerTarget};
@@ -82,6 +83,7 @@ pub(crate) enum SessionSignal {
     ClientJoined {
         epoch: u64,
         client: ClientView,
+        avatar_hash: Option<String>,
     },
     ClientMoved {
         epoch: u64,
@@ -97,12 +99,14 @@ pub(crate) enum SessionSignal {
     ClientUpdated {
         epoch: u64,
         id: i32,
+        uid: String,
         channel_id: u64,
         input_muted: Option<bool>,
         output_muted: Option<bool>,
         away: Option<bool>,
         away_message: Option<String>,
         server_groups: Vec<String>,
+        avatar_hash: Option<String>,
     },
     Disconnected {
         epoch: u64,
@@ -208,6 +212,10 @@ pub(crate) enum SessionSignal {
         icon_id: u32,
         result: Result<Vec<u8>, SessionError>,
     },
+    /// 头像磁盘缓存异步读取完成。
+    AvatarDiskLoaded(AvatarDiskLoad),
+    /// 当前连接的头像远程拉取完成。
+    AvatarFetched(AvatarFetchOutcome),
     /// 开放协议延迟定时器触发（去抖尾随广播或失败单次重试）。
     OpenProtocolTimer {
         epoch: u64,
@@ -300,6 +308,12 @@ pub(crate) struct Actor {
     active_server_icon_id: Option<u32>,
     fetching_server_icon: Option<(u64, String, u32)>,
     in_flight_channel_icons: HashMap<ChannelIconKey, ChannelIconWaiters>,
+    avatar_hashes: HashMap<String, Option<String>>,
+    avatar_negative_cache: HashSet<String>,
+    avatar_revisions: HashMap<String, u64>,
+    avatars_fetched_without_hash: HashSet<String>,
+    in_flight_avatars: HashMap<AvatarFetchKey, AvatarWaiters>,
+    avatar_disk: crate::avatars::AvatarDiskQueue,
     disconnect_tx: watch::Sender<u64>,
     disconnect_rx: watch::Receiver<u64>,
 }
@@ -330,6 +344,14 @@ impl Actor {
             .collect();
         let server_icons = crate::server_icons::load(&store_path, &active_server_ids);
         crate::channel_icons::prune_orphans(&store_path, &active_server_ids);
+        let avatar_disk = crate::avatars::AvatarDiskQueue::new();
+        avatar_disk.prune_orphans(
+            store_path.clone(),
+            active_server_ids
+                .iter()
+                .map(|id| (*id).to_owned())
+                .collect(),
+        );
         let initial_audio = SettingsManager::with(|s| s.audio.clone()).unwrap_or_default();
         let _ = voice.set_vad_config(
             initial_audio.vad_threshold,
@@ -404,6 +426,12 @@ impl Actor {
             active_server_icon_id: None,
             fetching_server_icon: None,
             in_flight_channel_icons: HashMap::new(),
+            avatar_hashes: HashMap::new(),
+            avatar_negative_cache: HashSet::new(),
+            avatar_revisions: HashMap::new(),
+            avatars_fetched_without_hash: HashSet::new(),
+            in_flight_avatars: HashMap::new(),
+            avatar_disk,
             disconnect_tx,
             disconnect_rx,
         }
@@ -814,15 +842,18 @@ impl Actor {
                         .await,
                 );
             }
+            SessionCommand::UploadAvatar { bytes, reply } => {
+                let _ = reply.send(self.upload_avatar(bytes).await);
+            }
+            SessionCommand::DeleteAvatar { reply } => {
+                let _ = reply.send(self.delete_avatar().await);
+            }
             SessionCommand::FetchIcon { icon_id, reply } => {
                 self.fetch_channel_icon(icon_id, reply);
             }
-            SessionCommand::FetchAvatar { uid, reply } => match avatar_file_name(&uid) {
-                Ok(path) => self.fetch_server_image(&path, reply),
-                Err(error) => {
-                    let _ = reply.send(Err(error));
-                }
-            },
+            SessionCommand::FetchAvatar { uid, reply } => {
+                self.fetch_avatar(uid, reply);
+            }
             SessionCommand::DownloadFile {
                 remote_path,
                 local_path,
@@ -932,10 +963,15 @@ impl Actor {
                 }
                 self.emit(SessionEvent::TextMessage(message));
             }
-            SessionSignal::ClientJoined { epoch, mut client } => {
+            SessionSignal::ClientJoined {
+                epoch,
+                mut client,
+                avatar_hash,
+            } => {
                 if epoch != self.connection_epoch {
                     return;
                 }
+                self.sync_avatar_hash_from_join(&client.uid, avatar_hash);
                 let client_id = client.id;
                 let client_channel_id = client.channel_id;
                 self.open_protocol_peer_joined(client.id, &client.uid);
@@ -1101,16 +1137,29 @@ impl Actor {
             SessionSignal::ClientUpdated {
                 epoch,
                 id,
+                uid,
                 channel_id,
                 mut input_muted,
                 mut output_muted,
                 mut away,
                 away_message,
                 server_groups,
+                avatar_hash,
             } => {
                 if epoch != self.connection_epoch {
                     return;
                 }
+                let resolved_uid = if uid.is_empty() {
+                    self.last_snapshot
+                        .as_ref()
+                        .and_then(|(_, clients)| {
+                            clients.iter().find(|c| c.id == id).map(|c| c.uid.clone())
+                        })
+                        .unwrap_or_default()
+                } else {
+                    uid
+                };
+                self.sync_avatar_hash_from_update(&resolved_uid, avatar_hash);
                 if Some(id) != self.self_client_id
                     && channel_id != 0
                     && self.client_channels.get(&id).copied() != Some(channel_id)
@@ -1261,6 +1310,12 @@ impl Actor {
                         }
                     }
                 }
+            }
+            SessionSignal::AvatarDiskLoaded(load) => {
+                self.handle_avatar_disk_loaded(load);
+            }
+            SessionSignal::AvatarFetched(outcome) => {
+                self.handle_avatar_fetched(outcome);
             }
             SessionSignal::OpenProtocolTimer { epoch, token } => {
                 if epoch != self.connection_epoch {

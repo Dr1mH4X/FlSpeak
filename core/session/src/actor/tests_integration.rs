@@ -39,6 +39,7 @@ async fn avatar_negotiation_keeps_audio_and_controls_responsive() {
             );
             client.mark_connected();
             let mut actor = audio_actor();
+            actor.active_server_id = Some("127.0.0.1:9987".into());
             actor.client = Some(Arc::new(client));
             actor.transfer_target = Some(ServerTarget {
                 host: "127.0.0.1".into(),
@@ -179,12 +180,14 @@ async fn dynamic_reset_triggers_clear_permission_flags() {
         .handle_signal(SessionSignal::ClientUpdated {
             epoch: actor.connection_epoch,
             id: 7,
+            uid: String::new(),
             channel_id: 0,
             input_muted: None,
             output_muted: None,
             away: None,
             away_message: None,
             server_groups: vec!["8".into(), "6".into()],
+            avatar_hash: None,
         })
         .await;
     assert_eq!(actor.channel_list_allowed, Some(false));
@@ -193,12 +196,14 @@ async fn dynamic_reset_triggers_clear_permission_flags() {
         .handle_signal(SessionSignal::ClientUpdated {
             epoch: actor.connection_epoch,
             id: 7,
+            uid: String::new(),
             channel_id: 0,
             input_muted: None,
             output_muted: None,
             away: None,
             away_message: None,
             server_groups: vec!["6".into(), "7".into(), "8".into()],
+            avatar_hash: None,
         })
         .await;
     assert_eq!(actor.channel_list_allowed, None);
@@ -280,6 +285,7 @@ async fn outbound_voice_is_not_blocked_by_slow_actor_commands() {
             );
             client.mark_connected();
             let mut actor = audio_actor();
+            actor.active_server_id = Some("127.0.0.1:9987".into());
             actor.client = Some(Arc::new(client));
             actor.state = SessionState::Connected {
                 client_id: 1,
