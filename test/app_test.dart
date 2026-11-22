@@ -74,7 +74,11 @@ class _PttSession extends SessionController {
   }
 }
 
-class _PttCore extends Fake implements CoreSession {}
+class _PttCore extends Fake implements CoreSession {
+  @override
+  Future<AudioDevicesView> listAudioDevices() async =>
+      const AudioDevicesView(inputs: [], outputs: []);
+}
 
 Future<ProviderContainer> _mountPtt(
   WidgetTester tester,

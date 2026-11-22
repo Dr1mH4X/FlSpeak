@@ -342,6 +342,15 @@
   },
   "chatDestinationChanged": "发送目标已改变，草稿已保留，请确认后重试",
   "chatImageTooLarge": "图片不能超过 20 MiB",
+  "chatImageTooLargeWithLimit": "图片不能超过 {limit}。",
+  "@chatImageTooLargeWithLimit": {
+    "placeholders": {
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "chatImageUnsupportedFormat": "请选择 PNG、JPEG、GIF 或 WebP 图片。",
   "chatClipboardEmpty": "剪贴板中没有图片",
   "chatImageInputFailed": "无法读取图片，请重新选择",
   "chatAttachImage": "添加图片",

@@ -920,7 +920,11 @@ void main() {
       expect(secondPeer.disposed, isFalse);
       expect(secondRenderer.isDisposed, isFalse);
 
-      events.add(const CoreEvent.clientMoved(id: 1, channelId: 20));
+      events.add(
+        const CoreEvent.clientMoved(
+          client: ClientView(id: 1, nickname: 'Me', uid: 'self', channelId: 20),
+        ),
+      );
       await _pumpEventQueue();
 
       expect(secondPeer.closed, isTrue);

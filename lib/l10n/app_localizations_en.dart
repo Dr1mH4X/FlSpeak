@@ -687,6 +687,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatImageTooLarge => 'Images must be no larger than 20 MiB';
 
   @override
+  String chatImageTooLargeWithLimit(String limit) {
+    return 'Images must be no larger than $limit.';
+  }
+
+  @override
+  String get chatImageUnsupportedFormat =>
+      'Choose a PNG, JPEG, GIF, or WebP image.';
+
+  @override
   String get chatClipboardEmpty => 'No image in the clipboard';
 
   @override

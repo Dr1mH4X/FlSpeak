@@ -72,6 +72,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   bool dco_decode_box_autoadd_bool(dynamic raw);
 
   @protected
+  ClientView dco_decode_box_autoadd_client_view(dynamic raw);
+
+  @protected
   CoreSessionState dco_decode_box_autoadd_core_session_state(dynamic raw);
 
   @protected
@@ -207,9 +210,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int? dco_decode_opt_box_autoadd_u_32(dynamic raw);
 
   @protected
-  List<BotCommandView>? dco_decode_opt_list_bot_command_view(dynamic raw);
-
-  @protected
   Uint8List? dco_decode_opt_list_prim_u_8_strict(dynamic raw);
 
   @protected
@@ -297,6 +297,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   bool sse_decode_box_autoadd_bool(SseDeserializer deserializer);
+
+  @protected
+  ClientView sse_decode_box_autoadd_client_view(SseDeserializer deserializer);
 
   @protected
   CoreSessionState sse_decode_box_autoadd_core_session_state(
@@ -456,11 +459,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer);
 
   @protected
-  List<BotCommandView>? sse_decode_opt_list_bot_command_view(
-    SseDeserializer deserializer,
-  );
-
-  @protected
   Uint8List? sse_decode_opt_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
@@ -566,6 +564,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_box_autoadd_bool(bool self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_client_view(
+    ClientView self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_box_autoadd_core_session_state(
@@ -767,12 +771,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_opt_list_bot_command_view(
-    List<BotCommandView>? self,
-    SseSerializer serializer,
-  );
 
   @protected
   void sse_encode_opt_list_prim_u_8_strict(

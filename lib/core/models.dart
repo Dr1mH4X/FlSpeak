@@ -4,7 +4,6 @@ import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../l10n/app_localizations.dart';
 import 'byte_size.dart';
-import 'channel_display.dart';
 
 /// 文字消息的投递范围，由协议里的 `targetMode` 归一化而来。
 enum ChatScope {
@@ -35,6 +34,7 @@ class ChatMessage {
     required this.targetId,
     this.fromId = 0,
     this.peerUid = '',
+    this.fromSelf = false,
   });
 
   final String from;
@@ -52,6 +52,9 @@ class ChatMessage {
   /// 客户端 id 每次连接都会变，私聊列表与历史归类只认这个字段。
   final String peerUid;
 
+  /// 是否为自己发出的消息；由 Rust 按发送方与历史记录计算。
+  final bool fromSelf;
+
   factory ChatMessage.fromCore(CoreMessage message) => ChatMessage(
     from: message.from,
     fromUid: message.fromUid,
@@ -61,6 +64,7 @@ class ChatMessage {
     scope: ChatScope.fromProtocol(message.targetMode),
     targetId: message.targetId,
     peerUid: message.peerUid,
+    fromSelf: message.fromSelf,
   );
 }
 
@@ -153,17 +157,20 @@ class SessionView {
     return matches.length == 1 ? matches.first : null;
   }
 
-  bool isOwnMessage(ChatMessage message) {
-    if (message.fromId > 0 && selfClientId != null) {
-      return message.fromId == selfClientId;
+  /// 查找可作为踢人目标的同连接在线成员；自身与频道内已切换频道的成员返回 `null`。
+  ClientView? findKickablePeer(ClientView recipient, KickTarget target) {
+    for (final client in clients) {
+      if (client.id == recipient.id &&
+          client.uid == recipient.uid &&
+          client.id != selfClientId) {
+        if (target == KickTarget.server ||
+            client.channelId == recipient.channelId) {
+          return client;
+        }
+        return null;
+      }
     }
-    if (message.scope == ChatScope.direct &&
-        selfClientId != null &&
-        message.targetId > 0) {
-      return message.targetId != selfClientId;
-    }
-    final uid = selfUid;
-    return uid.isNotEmpty && message.fromUid == uid;
+    return null;
   }
 
   final bool busy;
@@ -222,20 +229,6 @@ class SessionView {
     _ => null,
   };
 
-  /// 自己的 UID：从在线列表里按客户端 id 反查，事件里的 `fromUid` 才能对上。
-  String get selfUid {
-    final id = selfClientId;
-    if (id == null) {
-      return '';
-    }
-    for (final client in clients) {
-      if (client.id == id) {
-        return client.uid;
-      }
-    }
-    return '';
-  }
-
   ServerProfileView? get activeServer {
     final id = activeServerId;
     if (id == null) {
@@ -266,11 +259,10 @@ class SessionView {
   List<ChannelView> childrenOf(int parentId) =>
       channels.where((channel) => channel.parentId == parentId).toList();
 
-  /// 同上两个查询，但按 `channel_order` 链表语义排成展示顺序。
-  List<ChannelView> orderedRootChannels() => orderSiblings(rootChannels());
+  /// 由 Rust 快照阶段按 `channel_order` 链表排序后的根频道列表。
+  List<ChannelView> orderedRootChannels() => rootChannels();
 
-  List<ChannelView> orderedChildrenOf(int parentId) =>
-      orderSiblings(childrenOf(parentId));
+  List<ChannelView> orderedChildrenOf(int parentId) => childrenOf(parentId);
 
   List<ClientView> clientsIn(int channelId) =>
       clients.where((client) => client.channelId == channelId).toList();
@@ -346,8 +338,7 @@ class SessionView {
               (message.peerUid.isNotEmpty
                   // 加字段前的历史记录没有 peer_uid，对方的发言仍能按 UID 认领。
                   ? message.peerUid == directRecipientUid
-                  : !isOwnMessage(message) &&
-                        message.fromUid == directRecipientUid),
+                  : !message.fromSelf && message.fromUid == directRecipientUid),
       };
     }).toList();
   }
@@ -445,6 +436,9 @@ String describeCoreError(CoreError error, AppLocalizations l10n) =>
       CoreError_AvatarPermissionDenied() => l10n.avatarPermissionDenied,
       CoreError_AvatarUnsupportedFormat() => l10n.avatarUnsupportedFormat,
       CoreError_AvatarUnavailable() => l10n.avatarUnavailable,
+      CoreError_ImageTooLarge(:final maxBytes) =>
+        l10n.chatImageTooLargeWithLimit(formatByteSize(maxBytes)),
+      CoreError_ImageUnsupportedFormat() => l10n.chatImageUnsupportedFormat,
       CoreError_Internal() => l10n.errorInternal,
     };
 

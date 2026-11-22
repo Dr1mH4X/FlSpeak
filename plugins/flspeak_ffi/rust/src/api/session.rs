@@ -88,10 +88,14 @@ pub struct ClientView {
     pub app_version: Option<String>,
     #[frb(default = "const []")]
     pub capabilities: Vec<String>,
-    pub bot_commands: Option<Vec<BotCommandView>>,
+    #[frb(default = "const []")]
+    pub bot_commands: Vec<BotCommandView>,
+    #[frb(default = "false")]
+    pub bot_commands_loaded: bool,
     pub bot_command_prefix: Option<String>,
 }
 
+#[frb]
 #[derive(Debug, Clone)]
 pub struct CoreMessage {
     pub from: String,
@@ -102,6 +106,8 @@ pub struct CoreMessage {
     pub target_id: u64,
     /// 私聊对话的另一方 UID；频道与服务器广播为空。
     pub peer_uid: String,
+    #[frb(default = "false")]
+    pub from_self: bool,
     pub at: u64,
 }
 
@@ -141,6 +147,8 @@ pub struct AudioDeviceView {
 pub struct AudioDevicesView {
     pub inputs: Vec<AudioDeviceView>,
     pub outputs: Vec<AudioDeviceView>,
+    pub current_input_id: Option<String>,
+    pub current_output_id: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -190,6 +198,7 @@ pub enum CoreSessionState {
 }
 
 /// 送往 Dart 的事件。语音帧不走这里，它在 Rust 侧直接进音频后端。
+#[frb]
 #[derive(Debug, Clone)]
 pub enum CoreEvent {
     Network {
@@ -225,6 +234,8 @@ pub enum CoreEvent {
         target_id: u64,
         /// 私聊对话的另一方 UID；频道与服务器广播为空。
         peer_uid: String,
+        #[frb(default = "false")]
+        from_self: bool,
         at: u64,
     },
     Poked {
@@ -232,18 +243,13 @@ pub enum CoreEvent {
         message: String,
     },
     ClientJoined {
-        id: i32,
-        nickname: String,
-        uid: String,
-        channel_id: u64,
-        is_streaming: bool,
+        client: ClientView,
     },
     ClientLeft {
         id: i32,
     },
     ClientMoved {
-        id: i32,
-        channel_id: u64,
+        client: ClientView,
     },
     /// 某个客户端（含自己）的服务器标志变化；null 表示本次事件没提到，
     /// 不是清除。
@@ -371,18 +377,31 @@ pub enum CoreError {
     AvatarUnsupportedFormat,
     /// 头像操作暂时不可用（未连接、传输失败或服务器未响应）。
     AvatarUnavailable,
+    /// 聊天图片超过大小上限。
+    ImageTooLarge {
+        max_bytes: u64,
+    },
+    /// 聊天图片不是受支持的 PNG / JPEG / GIF / WebP 格式。
+    ImageUnsupportedFormat,
     /// 桥自身的问题。
     Internal {
         message: String,
     },
 }
 
+#[frb]
 #[derive(Debug, Clone)]
 pub struct AccessView {
     pub member_add_power: Option<i32>,
     pub member_remove_power: Option<i32>,
     pub kick_channel_power: Option<i32>,
     pub kick_server_power: Option<i32>,
+    #[frb(default = "false")]
+    pub can_manage_members: bool,
+    #[frb(default = "false")]
+    pub can_kick_channel: bool,
+    #[frb(default = "false")]
+    pub can_kick_server: bool,
     pub connection_epoch: Option<u64>,
 }
 #[derive(Debug, Clone)]
@@ -417,6 +436,21 @@ pub struct ChannelFileView {
 #[frb(opaque)]
 pub struct CoreSession {
     handle: SessionHandle,
+}
+
+impl From<session::AccessView> for AccessView {
+    fn from(access: session::AccessView) -> Self {
+        Self {
+            member_add_power: access.member_add_power,
+            member_remove_power: access.member_remove_power,
+            kick_channel_power: access.kick_channel_power,
+            kick_server_power: access.kick_server_power,
+            can_manage_members: access.can_manage_members,
+            can_kick_channel: access.can_kick_channel,
+            can_kick_server: access.can_kick_server,
+            connection_epoch: access.connection_epoch,
+        }
+    }
 }
 
 impl CoreSession {
@@ -633,14 +667,7 @@ impl CoreSession {
     }
 
     pub async fn access(&self) -> Result<AccessView, CoreError> {
-        let access = self.handle.access().await?;
-        Ok(AccessView {
-            member_add_power: access.member_add_power,
-            member_remove_power: access.member_remove_power,
-            kick_channel_power: access.kick_channel_power,
-            kick_server_power: access.kick_server_power,
-            connection_epoch: access.connection_epoch,
-        })
+        Ok(self.handle.access().await?.into())
     }
     pub async fn kick(
         &self,
@@ -876,6 +903,10 @@ impl From<session::ImageError> for CoreError {
                     message: err.to_string(),
                 }
             }
+            session::ImageError::TooLarge => CoreError::ImageTooLarge {
+                max_bytes: session::MAX_IMAGE_BYTES as u64,
+            },
+            session::ImageError::UnsupportedContent(_) => CoreError::ImageUnsupportedFormat,
             _ => CoreError::Connection {
                 message: err.to_string(),
             },
@@ -977,7 +1008,10 @@ impl From<CoreClientView> for ClientView {
             capabilities: view.capabilities,
             bot_commands: view
                 .bot_commands
-                .map(|cmds| cmds.into_iter().map(BotCommandView::from).collect()),
+                .into_iter()
+                .map(BotCommandView::from)
+                .collect(),
+            bot_commands_loaded: view.bot_commands_loaded,
             bot_command_prefix: view.bot_command_prefix,
         }
     }
@@ -993,6 +1027,7 @@ impl From<CoreTextMessage> for CoreMessage {
             target_mode: message.target_mode,
             target_id: message.target_id,
             peer_uid: message.peer_uid,
+            from_self: message.from_self,
             at: message.at,
         }
     }
@@ -1093,6 +1128,8 @@ impl From<session::AudioDevicesView> for AudioDevicesView {
         Self {
             inputs: devices.inputs.into_iter().map(Into::into).collect(),
             outputs: devices.outputs.into_iter().map(Into::into).collect(),
+            current_input_id: devices.current_input_id,
+            current_output_id: devices.current_output_id,
         }
     }
 }
@@ -1139,20 +1176,17 @@ impl From<SessionEvent> for CoreEvent {
                 target_mode: message.target_mode,
                 target_id: message.target_id,
                 peer_uid: message.peer_uid,
+                from_self: message.from_self,
                 at: message.at,
             },
             SessionEvent::Poked { from, message } => CoreEvent::Poked { from, message },
             SessionEvent::ClientJoined(client) => CoreEvent::ClientJoined {
-                id: client.id,
-                nickname: client.nickname,
-                uid: client.uid,
-                channel_id: client.channel_id,
-                is_streaming: client.is_streaming,
+                client: client.into(),
             },
             SessionEvent::ClientLeft { id } => CoreEvent::ClientLeft { id },
-            SessionEvent::ClientMoved { id, channel_id } => {
-                CoreEvent::ClientMoved { id, channel_id }
-            }
+            SessionEvent::ClientMoved(client) => CoreEvent::ClientMoved {
+                client: client.into(),
+            },
             SessionEvent::ClientUpdated {
                 id,
                 input_muted,
@@ -1383,38 +1417,118 @@ pub fn set_android_dns_servers(servers: Vec<String>) {
     proto::set_android_dns_servers(&servers);
 }
 
+/// 计算字符串按 TeamSpeak 命令行转义后的字节长度。
+#[frb(sync)]
+pub fn ts_escaped_len(text: String) -> u64 {
+    session::ts_escaped_len(&text) as u64
+}
+
+/// 判断屏幕共享 SDP Offer 转义后是否可放入单条 TeamSpeak 命令（9150 字节预算）。
+#[frb(sync)]
+pub fn stream_offer_fits_command(sdp: String) -> bool {
+    session::stream_offer_fits_command(&sdp)
+}
+
+/// 客户端头像大小安全上限（字节）。
+#[frb(sync)]
+pub fn max_avatar_bytes() -> u64 {
+    session::MAX_AVATAR_BYTES as u64
+}
+
+/// 聊天图片大小安全上限（字节）。
+#[frb(sync)]
+pub fn max_chat_image_bytes() -> u64 {
+    session::MAX_IMAGE_BYTES as u64
+}
+
+/// 每个会话在内存与本地历史中保留的最大聊天消息条数。
+#[frb(sync)]
+pub fn history_limit() -> u64 {
+    session::HISTORY_LIMIT as u64
+}
+
+/// 屏幕共享发布端默认最大并发观众数。
+#[frb(sync)]
+pub fn default_max_stream_viewers() -> u32 {
+    session::DEFAULT_MAX_STREAM_VIEWERS
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn client_joined_mapping_preserves_is_streaming() {
-        let joined = SessionEvent::ClientJoined(session::ClientView {
+    fn client_joined_and_moved_mappings_preserve_full_client_view() {
+        let core_client = session::ClientView {
             id: 7,
             nickname: "Streamer".into(),
             uid: "uid-7".into(),
             channel_id: 5,
             is_streaming: true,
-            input_muted: None,
-            output_muted: None,
-            away: None,
-            away_message: None,
+            input_muted: Some(true),
+            output_muted: Some(false),
+            away: Some(true),
+            away_message: Some("BRB".into()),
             client_type: session::ClientType::Standard,
-            app_name: None,
-            app_version: None,
+            app_name: Some("FlSpeak".into()),
+            app_version: Some("1.0".into()),
             capabilities: Vec::new(),
-            bot_commands: None,
+            bot_commands: Vec::new(),
+            bot_commands_loaded: false,
             bot_command_prefix: None,
-        });
+        };
+        let joined = SessionEvent::ClientJoined(core_client.clone());
         assert!(matches!(
             CoreEvent::from(joined),
-            CoreEvent::ClientJoined {
-                id: 7,
-                channel_id: 5,
-                is_streaming: true,
+            CoreEvent::ClientJoined { client }
+                if client.id == 7
+                    && client.channel_id == 5
+                    && client.is_streaming
+                    && client.input_muted == Some(true)
+                    && client.away_message.as_deref() == Some("BRB")
+        ));
+
+        let moved = SessionEvent::ClientMoved(core_client);
+        assert!(matches!(
+            CoreEvent::from(moved),
+            CoreEvent::ClientMoved { client }
+                if client.id == 7
+                    && client.channel_id == 5
+                    && client.is_streaming
+                    && client.away == Some(true)
+        ));
+    }
+
+    #[test]
+    fn text_message_and_audio_devices_preserve_new_fields() {
+        let text = CoreTextMessage {
+            from: "Me".into(),
+            from_uid: "self-uid".into(),
+            from_id: 1,
+            message: "hi".into(),
+            target_mode: 2,
+            target_id: 3,
+            peer_uid: String::new(),
+            from_self: true,
+            at: 42,
+        };
+        assert!(CoreMessage::from(text.clone()).from_self);
+        assert!(matches!(
+            CoreEvent::from(SessionEvent::TextMessage(text)),
+            CoreEvent::TextMessage {
+                from_self: true,
                 ..
             }
         ));
+
+        let devices = AudioDevicesView::from(session::AudioDevicesView {
+            inputs: Vec::new(),
+            outputs: Vec::new(),
+            current_input_id: Some("mic-1".into()),
+            current_output_id: Some("spk-2".into()),
+        });
+        assert_eq!(devices.current_input_id.as_deref(), Some("mic-1"));
+        assert_eq!(devices.current_output_id.as_deref(), Some("spk-2"));
     }
 
     #[test]
@@ -1454,5 +1568,48 @@ mod tests {
             map_avatar_error(SessionError::NotConnected),
             CoreError::AvatarUnavailable
         ));
+    }
+
+    #[test]
+    fn access_view_mapping_preserves_precomputed_capabilities() {
+        let mapped = AccessView::from(session::AccessView {
+            member_add_power: Some(50),
+            member_remove_power: Some(0),
+            kick_channel_power: Some(25),
+            kick_server_power: Some(0),
+            can_manage_members: false,
+            can_kick_channel: true,
+            can_kick_server: false,
+            connection_epoch: Some(9),
+        });
+        assert!(!mapped.can_manage_members);
+        assert!(mapped.can_kick_channel);
+        assert!(!mapped.can_kick_server);
+        assert_eq!(mapped.connection_epoch, Some(9));
+    }
+
+    #[test]
+    fn image_errors_and_constants_map_to_dedicated_ffi_contracts() {
+        assert!(matches!(
+            CoreError::from(session::ImageError::TooLarge),
+            CoreError::ImageTooLarge { max_bytes } if max_bytes == max_chat_image_bytes()
+        ));
+        assert!(matches!(
+            CoreError::from(session::ImageError::UnsupportedContent(
+                "image/svg+xml".into()
+            )),
+            CoreError::ImageUnsupportedFormat
+        ));
+        assert_eq!(max_avatar_bytes(), session::MAX_AVATAR_BYTES as u64);
+        assert_eq!(max_chat_image_bytes(), session::MAX_IMAGE_BYTES as u64);
+        assert_eq!(history_limit(), session::HISTORY_LIMIT as u64);
+        assert_eq!(
+            default_max_stream_viewers(),
+            session::DEFAULT_MAX_STREAM_VIEWERS
+        );
+        assert_eq!(ts_escaped_len("a b\x07".into()), 5);
+        let budget = session::MAX_COMMAND_LINE_BYTES - session::STREAM_OFFER_COMMAND_OVERHEAD_BYTES;
+        assert!(stream_offer_fits_command("a".repeat(budget)));
+        assert!(!stream_offer_fits_command("a".repeat(budget + 1)));
     }
 }

@@ -114,23 +114,17 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     }
   }
 
-  Future<void> _pickAudioDevice({
-    required AudioDeviceSelection selection,
-    required bool output,
-  }) async {
+  Future<void> _pickAudioDevice({required bool output}) async {
     final l10n = AppLocalizations.of(context);
     final choice = await showAppModal<AudioDeviceChoice>(
       context,
       title: output ? l10n.settingsOutputDevice : l10n.settingsInputDevice,
-      builder: (context) => _AudioDevicePicker(
-        output: output,
-        selectedId: output ? selection.outputId : selection.inputId,
-      ),
+      builder: (context) => _AudioDevicePicker(output: output),
     );
     if (!mounted || choice == null) {
       return;
     }
-    final controller = ref.read(audioSelectionProvider.notifier);
+    final controller = ref.read(audioDevicesProvider.notifier);
     await _applyAudioChange(
       () => output
           ? controller.selectOutput(choice.device)
@@ -179,7 +173,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final view = ref.watch(sessionViewProvider);
     final update = ref.watch(updateProvider);
     final latestVersion = update.available ? update.latestVersion : null;
-    final audioSelection = ref.watch(audioSelectionProvider);
     final compact = context.isCompact;
 
     final pttHotkeyKey = preferences.pttHotkey == null
@@ -363,36 +356,36 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       ),
                     ],
                   ),
-                  generateSection(
-                    title: l10n.settingsVoiceDevices,
-                    items: [
-                      SettingsTile(
-                        icon: Icons.mic_rounded,
-                        title: l10n.settingsInputDevice,
-                        subtitle:
-                            audioSelection.inputName ??
-                            l10n.settingsDeviceDefault,
-                        onTap: () => unawaited(
-                          _pickAudioDevice(
-                            selection: audioSelection,
-                            output: false,
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final devicesView = ref
+                          .watch(audioDevicesProvider)
+                          .asData
+                          ?.value;
+                      return generateSection(
+                        title: l10n.settingsVoiceDevices,
+                        items: [
+                          SettingsTile(
+                            icon: Icons.mic_rounded,
+                            title: l10n.settingsInputDevice,
+                            subtitle:
+                                devicesView?.currentInputName ??
+                                l10n.settingsDeviceDefault,
+                            onTap: () =>
+                                unawaited(_pickAudioDevice(output: false)),
                           ),
-                        ),
-                      ),
-                      SettingsTile(
-                        icon: Icons.volume_up_rounded,
-                        title: l10n.settingsOutputDevice,
-                        subtitle:
-                            audioSelection.outputName ??
-                            l10n.settingsDeviceDefault,
-                        onTap: () => unawaited(
-                          _pickAudioDevice(
-                            selection: audioSelection,
-                            output: true,
+                          SettingsTile(
+                            icon: Icons.volume_up_rounded,
+                            title: l10n.settingsOutputDevice,
+                            subtitle:
+                                devicesView?.currentOutputName ??
+                                l10n.settingsDeviceDefault,
+                            onTap: () =>
+                                unawaited(_pickAudioDevice(output: true)),
                           ),
-                        ),
-                      ),
-                    ],
+                        ],
+                      );
+                    },
                   ),
                   generateSection(
                     items: [
@@ -583,10 +576,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 }
 
 class _AudioDevicePicker extends ConsumerWidget {
-  const _AudioDevicePicker({required this.output, required this.selectedId});
+  const _AudioDevicePicker({required this.output});
 
   final bool output;
-  final String? selectedId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -642,6 +634,9 @@ class _AudioDevicePicker extends ConsumerWidget {
       ),
       data: (available) {
         final list = output ? available.outputs : available.inputs;
+        final selectedId = output
+            ? available.currentOutputId
+            : available.currentInputId;
         return Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,

@@ -283,12 +283,14 @@ enum WatchPhase {
 struct StartingPublish {
     token: u64,
     abort: AbortSignal,
+    viewer_limit: u32,
 }
 
 struct PendingViewerRequest {
     token: u64,
     request: JoinRequestHandle,
     responding: bool,
+    accepting: bool,
     _task: PumpGuard,
 }
 
@@ -300,6 +302,7 @@ struct AcceptedViewer {
 
 struct ActivePublish {
     stream: PublishedStreamHandle,
+    viewer_limit: u32,
     requests: HashMap<i32, PendingViewerRequest>,
     viewers: HashMap<i32, AcceptedViewer>,
     _task: PumpGuard,
@@ -1148,6 +1151,7 @@ impl Actor {
         session.starting_publish = Some(StartingPublish {
             token: publish_token,
             abort,
+            viewer_limit,
         });
         let streams = session.streams.clone();
         let signals = self.signals.clone();
@@ -1191,11 +1195,12 @@ impl Actor {
             let _ = reply.send(Err(SessionError::NotConnected));
             return;
         };
-        let is_current = session
+        let starting_limit = session
             .starting_publish
             .as_ref()
-            .is_some_and(|starting| starting.token == publish_token);
-        if !is_current || session.publish.is_some() {
+            .filter(|starting| starting.token == publish_token)
+            .map(|starting| starting.viewer_limit);
+        let Some(viewer_limit) = starting_limit.filter(|_| session.publish.is_none()) else {
             if let Ok(published) = outcome {
                 spawn_best_effort_stop(PublishedStreamHandle::Live(published), self.events.clone());
             }
@@ -1203,7 +1208,7 @@ impl Actor {
                 "screen share start was cancelled".into(),
             )));
             return;
-        }
+        };
         session.starting_publish = None;
         match outcome {
             Ok(published) => {
@@ -1228,6 +1233,7 @@ impl Actor {
                 });
                 session.publish = Some(ActivePublish {
                     stream: PublishedStreamHandle::Live(published),
+                    viewer_limit,
                     requests: HashMap::new(),
                     viewers: HashMap::new(),
                     _task: PumpGuard(pub_task),
@@ -1320,7 +1326,18 @@ impl Actor {
             return;
         };
         let stream_id = publish.stream.id().to_string();
-        let Some(pending) = publish.requests.get_mut(&viewer_clid) else {
+        let active_viewers = publish
+            .viewers
+            .keys()
+            .filter(|&&clid| clid != viewer_clid)
+            .count()
+            + publish
+                .requests
+                .iter()
+                .filter(|(clid, req)| **clid != viewer_clid && req.accepting)
+                .count();
+        let viewer_limit = publish.viewer_limit;
+        if !publish.requests.contains_key(&viewer_clid) {
             let err = SessionError::Stream(
                 "this client has not requested to watch the screen share".into(),
             );
@@ -1332,8 +1349,12 @@ impl Actor {
             });
             let _ = reply.send(Err(err));
             return;
-        };
-        if pending.responding {
+        }
+        if publish
+            .requests
+            .get(&viewer_clid)
+            .is_some_and(|pending| pending.responding)
+        {
             let err =
                 SessionError::Stream("already responding to this viewer's join request".into());
             self.emit(SessionEvent::Log {
@@ -1345,7 +1366,30 @@ impl Actor {
             let _ = reply.send(Err(err));
             return;
         }
+        if accept && viewer_limit > 0 && active_viewers >= viewer_limit as usize {
+            let pending = publish
+                .requests
+                .remove(&viewer_clid)
+                .expect("checked pending request exists");
+            tokio::task::spawn_local(async move {
+                let _ = pending.request.deny("").await;
+            });
+            let err = SessionError::Stream("screen share viewer limit reached".into());
+            self.emit(SessionEvent::Log {
+                level: "warn".into(),
+                message: format!(
+                    "rejecting respondjoinstreamrequest: stream_id={stream_id}, viewer_clid={viewer_clid}, viewer_limit={viewer_limit}, error={err}"
+                ),
+            });
+            let _ = reply.send(Err(err));
+            return;
+        }
+        let pending = publish
+            .requests
+            .get_mut(&viewer_clid)
+            .expect("checked pending request exists");
         pending.responding = true;
+        pending.accepting = accept;
         let request = pending.request.clone();
         let request_token = pending.token;
         self.emit(SessionEvent::Log {
@@ -1546,6 +1590,7 @@ impl Actor {
                 {
                     if pending.request.state() == JoinRequestState::Pending {
                         pending.responding = false;
+                        pending.accepting = false;
                     } else {
                         publish.requests.remove(&viewer_clid);
                         removed_terminal = true;
@@ -2078,6 +2123,7 @@ impl Actor {
                     token,
                     request,
                     responding: false,
+                    accepting: false,
                     _task: PumpGuard(req_task),
                 },
             );
@@ -3083,6 +3129,7 @@ mod tests {
                 stream: PublishedStreamHandle::Test {
                     id: "pub-reconn".into(),
                 },
+                viewer_limit: crate::DEFAULT_MAX_STREAM_VIEWERS,
                 requests: HashMap::new(),
                 viewers: HashMap::new(),
                 _task: PumpGuard(pub_task),
@@ -3326,6 +3373,7 @@ mod tests {
                 stream: PublishedStreamHandle::Test {
                     id: "pub-logs".into(),
                 },
+                viewer_limit: crate::DEFAULT_MAX_STREAM_VIEWERS,
                 requests: HashMap::new(),
                 viewers: HashMap::new(),
                 _task: PumpGuard(pub_task),
@@ -3455,6 +3503,72 @@ mod tests {
             assert!(logs.iter().any(|(lvl, msg)| {
                 lvl == "warn" && msg.contains("Answer") && msg.contains("target_clid=55")
             }));
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn respond_stream_join_request_enforces_viewer_limit_and_denies_excess_viewer() {
+        run_local(async {
+            let mut actor = audio_actor();
+            let client = make_client();
+            client.mark_connected();
+            actor.client = Some(Arc::clone(&client));
+            actor.self_client_id = Some(1);
+            actor.self_channel_id = 5;
+            actor.init_stream_session(&client);
+
+            let (_pub_tx, pub_rx) = mpsc::unbounded_channel::<PublishedStreamEvent>();
+            let pub_task = tokio::task::spawn_local(async move {
+                let mut rx = pub_rx;
+                let _ = rx.recv().await;
+            });
+            actor.stream_session.as_mut().unwrap().publish = Some(ActivePublish {
+                stream: PublishedStreamHandle::Test {
+                    id: "pub-limit".into(),
+                },
+                viewer_limit: 2,
+                requests: HashMap::new(),
+                viewers: HashMap::new(),
+                _task: PumpGuard(pub_task),
+            });
+
+            // 1. Accept viewers up to viewer_limit = 2.
+            for clid in [101, 102] {
+                let (peer, _peer_tx) = make_test_peer("pub-limit");
+                let (req, _req_handle) = make_test_request(clid, Ok(peer));
+                actor.handle_published_stream_request("pub-limit".into(), req);
+                let (reply_tx, reply_rx) = oneshot::channel();
+                actor.respond_stream_join_request(
+                    clid,
+                    true,
+                    "v=0\r\nm=video 9\r\n".into(),
+                    reply_tx,
+                );
+                pump_actor_signals(&mut actor).await;
+                assert!(reply_rx.await.unwrap().is_ok());
+            }
+
+            // 2. 3rd viewer exceeds viewer_limit -> authoritatively rejected and denied.
+            let (peer3, _peer3_tx) = make_test_peer("pub-limit");
+            let (req3, req3_handle) = make_test_request(103, Ok(peer3));
+            actor.handle_published_stream_request("pub-limit".into(), req3);
+            let (reply_tx3, reply_rx3) = oneshot::channel();
+            actor.respond_stream_join_request(103, true, "v=0\r\nm=video 9\r\n".into(), reply_tx3);
+            pump_actor_signals(&mut actor).await;
+            let err = reply_rx3.await.unwrap().expect_err("3rd viewer must fail");
+            assert!(
+                matches!(err, SessionError::Stream(ref msg) if msg.contains("viewer limit")),
+                "unexpected error: {err:?}"
+            );
+            assert_eq!(*req3_handle.state.lock().unwrap(), JoinRequestState::Denied);
+            let publish = actor
+                .stream_session
+                .as_ref()
+                .and_then(|s| s.publish.as_ref())
+                .unwrap();
+            assert_eq!(publish.viewers.len(), 2);
+            assert!(!publish.requests.contains_key(&103));
         })
         .await;
     }

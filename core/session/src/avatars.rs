@@ -11,7 +11,8 @@ use tokio::sync::mpsc;
 
 use crate::media_cache::{self, MediaCacheSpec};
 
-pub(crate) const MAX_AVATAR_BYTES: usize = 1024 * 1024;
+/// 头像字节大小安全上限。
+pub const MAX_AVATAR_BYTES: usize = 1024 * 1024;
 pub(crate) const MAX_AVATARS_PER_SERVER: usize = 512;
 pub(crate) const MAX_BYTES_PER_SERVER: u64 = 32 * 1024 * 1024;
 const MAX_AVATAR_HASH_LEN: usize = 64;

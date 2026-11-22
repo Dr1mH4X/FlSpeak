@@ -45,9 +45,15 @@ use tokio::runtime::Builder;
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
 use tokio::task::LocalSet;
 
+pub use avatars::MAX_AVATAR_BYTES;
 pub use image_upload::{upload_image, validate_image_host};
-pub use images::{ImageError, fetch_image};
+pub use images::{ImageError, MAX_IMAGE_BYTES, fetch_image};
 pub use proto::ConnectError;
+pub use streams::DEFAULT_MAX_STREAM_VIEWERS;
+pub use text_format::{
+    MAX_COMMAND_LINE_BYTES, STREAM_OFFER_COMMAND_OVERHEAD_BYTES, stream_offer_fits_command,
+    ts_escaped_len,
+};
 pub use updates::{UpdateError, UpdateState, check_for_updates, force_check_for_updates};
 
 /// 事件广播通道容量，溢出时订阅者收到 Lagged 并跳过旧事件。
@@ -83,6 +89,9 @@ pub struct TextMessageView {
     ///
     /// 私聊按 UID 归类：客户端 id 每次连接都会变，历史消息也要能回到原对话。
     pub peer_uid: String,
+    /// 消息是否由本端自己发出。
+    #[serde(default)]
+    pub from_self: bool,
     /// Unix 毫秒。历史回放需要原始时间，不能由 UI 收到时再取 `now()`。
     pub at: u64,
 }
@@ -139,7 +148,8 @@ pub struct ClientView {
     pub app_name: Option<String>,
     pub app_version: Option<String>,
     pub capabilities: Vec<String>,
-    pub bot_commands: Option<Vec<BotCommandView>>,
+    pub bot_commands: Vec<BotCommandView>,
+    pub bot_commands_loaded: bool,
     pub bot_command_prefix: Option<String>,
 }
 
@@ -166,6 +176,8 @@ pub struct AudioDeviceView {
 pub struct AudioDevicesView {
     pub inputs: Vec<AudioDeviceView>,
     pub outputs: Vec<AudioDeviceView>,
+    pub current_input_id: Option<String>,
+    pub current_output_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -212,10 +224,7 @@ pub enum SessionEvent {
     ClientLeft {
         id: i32,
     },
-    ClientMoved {
-        id: i32,
-        channel_id: u64,
-    },
+    ClientMoved(ClientView),
     /// 某个客户端（含自己）的服务器标志变了；`notifyclientupdated` 只带
     /// 变化字段，`None` 表示「本次没提」，不是「清除」。
     ClientUpdated {

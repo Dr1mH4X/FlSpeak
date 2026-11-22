@@ -10,17 +10,6 @@ import 'preferences.dart';
 import 'providers.dart';
 import 'stream_viewer.dart';
 
-/// Default maximum concurrent viewers for 1-to-N WebRTC screen share publishing.
-const int defaultMaxStreamViewers = 5;
-
-/// A TeamSpeak command line longer than this is dropped without an answer, which
-/// used to surface as a 10 s `respondjoinstreamrequest` timeout.
-const int _maxCommandLineBytes = 9150;
-
-/// Bytes a `respondjoinstreamrequest` line spends on everything except the offer:
-/// command name, `id`, `clid`, `msg`, `decision` and the appended `return_code`.
-const int _commandOverheadBytes = 160;
-
 /// Lightweight, testable representation of a desktop screen or window source.
 class DesktopSourceEntry extends DesktopCapturerSource {
   DesktopSourceEntry({
@@ -73,7 +62,6 @@ class StreamPublisherState {
     this.isSharing = false,
     this.isPreviewExpanded = false,
     this.viewerIds = const <int>{},
-    this.maxViewers = defaultMaxStreamViewers,
     this.renderer,
   });
 
@@ -87,7 +75,6 @@ class StreamPublisherState {
   final bool isSharing;
   final bool isPreviewExpanded;
   final Set<int> viewerIds;
-  final int maxViewers;
   final RTCVideoRenderer? renderer;
 
   bool get isActive => isSharing || isStarting;
@@ -108,7 +95,6 @@ class StreamPublisherState {
     bool? isSharing,
     bool? isPreviewExpanded,
     Set<int>? viewerIds,
-    int? maxViewers,
     RTCVideoRenderer? renderer,
     bool clearRenderer = false,
   }) {
@@ -123,7 +109,6 @@ class StreamPublisherState {
       isSharing: isSharing ?? this.isSharing,
       isPreviewExpanded: isPreviewExpanded ?? this.isPreviewExpanded,
       viewerIds: viewerIds ?? this.viewerIds,
-      maxViewers: maxViewers ?? this.maxViewers,
       renderer: clearRenderer ? null : (renderer ?? this.renderer),
     );
   }
@@ -213,12 +198,13 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
     ScreenShareResolutionPreset? resolution,
     ScreenShareFrameRatePreset? frameRate,
     bool audio = false,
-    int maxViewers = defaultMaxStreamViewers,
+    int? maxViewers,
   }) async {
     await _disposeAllResources();
     final currentGeneration = ++_generation;
     _stopping = false;
 
+    final viewerLimit = maxViewers ?? defaultMaxStreamViewers();
     final prefs = ref.read(preferencesProvider);
     final selectedResolution = resolution ?? prefs.screenShareResolution;
     final selectedFrameRate = frameRate ?? prefs.screenShareFrameRate;
@@ -237,7 +223,6 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
       hasAudio: audio,
       isStarting: true,
       isSharing: false,
-      maxViewers: maxViewers,
     );
 
     try {
@@ -304,7 +289,7 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
         name: normalizedName,
         audio: hasAudioTrack,
         bitrate: selectedResolution.bitrateKbps,
-        viewerLimit: maxViewers,
+        viewerLimit: viewerLimit,
       );
       if (!_isCurrentGeneration(currentGeneration)) return false;
 
@@ -360,7 +345,6 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
   }
 
   /// Handles `CoreEvent_StreamViewerJoinRequested`:
-  /// - Rejects with `accept: false` if concurrent viewer count has reached `maxViewers`.
   /// - Creates a dedicated `RTCPeerConnection` for `viewerClid`.
   /// - Strictly adds video first (`MID 0 = video`) and audio or `SendOnly`
   ///   audio transceiver second (`MID 1 = audio`) for TS6 compatibility.
@@ -396,27 +380,6 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
           _localStream == null) {
         return;
       }
-    }
-    if (_viewerSessions.length >= state.maxViewers) {
-      logWarn(
-        'Rejecting join request for viewer $viewerClid: '
-        'maxViewers=${state.maxViewers} reached',
-        target: 'stream',
-      );
-      try {
-        await coreSession.respondStreamJoinRequest(
-          viewerClid: viewerClid,
-          accept: false,
-          offerSdp: '',
-        );
-      } catch (e) {
-        logWarn(
-          'Failed to reject join request for viewer $viewerClid',
-          target: 'stream',
-          error: e,
-        );
-      }
-      return;
     }
 
     final peerGeneration = ++_peerGenerationCounter;
@@ -620,7 +583,7 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
       // Both known-working TS6 implementations hand libwebrtc's own offer to the
       // viewer unchanged and only narrow codecs through `setCodecPreferences`.
       // Rewriting the SDP is a last resort for the server's command-line limit.
-      var appliedSdp = _offerFitsOneCommand(rawSdp)
+      var appliedSdp = streamOfferFitsCommand(sdp: rawSdp)
           ? rawSdp
           : normalizeSdpForTs6(
               rawSdp,
@@ -1254,23 +1217,3 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
     }
   }
 }
-
-/// Length of [value] after the TeamSpeak wire escaping, in bytes.
-int _escapedLength(String value) {
-  var length = 0;
-  for (final rune in value.runes) {
-    length += switch (rune) {
-      0x5C || 0x2F || 0x20 || 0x7C => 2,
-      0x07 || 0x08 || 0x0C || 0x0A || 0x0D || 0x09 || 0x0B => 2,
-      _ when rune < 0x80 => 1,
-      _ when rune < 0x800 => 2,
-      _ when rune < 0x10000 => 3,
-      _ => 4,
-    };
-  }
-  return length;
-}
-
-/// Whether [offerSdp] still fits one `respondjoinstreamrequest` line once escaped.
-bool _offerFitsOneCommand(String offerSdp) =>
-    _escapedLength(offerSdp) + _commandOverheadBytes <= _maxCommandLineBytes;

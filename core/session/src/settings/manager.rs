@@ -14,7 +14,7 @@ static AUDIO_LISTENERS: OnceLock<RwLock<Vec<AudioListener>>> = OnceLock::new();
 
 /// 设置管理器。
 pub struct SettingsManager {
-    path: PathBuf,
+    path: RwLock<PathBuf>,
     inner: RwLock<AppSettings>,
 }
 
@@ -44,6 +44,11 @@ impl SettingsManager {
 
         if let Some(existing) = SETTINGS_MANAGER.get() {
             {
+                let mut path_guard = existing
+                    .path
+                    .write()
+                    .map_err(|e| format!("failed to acquire the settings path lock: {e}"))?;
+                *path_guard = path;
                 let mut guard = existing
                     .inner
                     .write()
@@ -55,7 +60,7 @@ impl SettingsManager {
         }
 
         let manager = Self {
-            path,
+            path: RwLock::new(path),
             inner: RwLock::new(loaded.clone()),
         };
 
@@ -76,8 +81,11 @@ impl SettingsManager {
     /// 设置文件所在目录，供同级的更新缓存等旁路文件使用。
     pub(crate) fn data_dir() -> Result<PathBuf, String> {
         let manager = Self::global()?;
-        manager
+        let path_guard = manager
             .path
+            .read()
+            .map_err(|e| format!("failed to acquire the settings path lock: {e}"))?;
+        path_guard
             .parent()
             .map(Path::to_path_buf)
             .ok_or_else(|| "settings file has no parent directory".to_string())
@@ -100,8 +108,19 @@ impl SettingsManager {
 
     /// 修改设置并执行原子写盘保存。
     pub fn update<R, F: FnOnce(&mut AppSettings) -> R>(f: F) -> Result<R, String> {
+        Self::update_with_notify(f, true)
+    }
+
+    fn update_with_notify<R, F: FnOnce(&mut AppSettings) -> R>(
+        f: F,
+        notify_audio: bool,
+    ) -> Result<R, String> {
         let manager = Self::global()?;
         let (result, changed_audio) = {
+            let path_guard = manager
+                .path
+                .read()
+                .map_err(|e| format!("failed to acquire the settings path lock: {e}"))?;
             let mut guard = manager
                 .inner
                 .write()
@@ -109,8 +128,9 @@ impl SettingsManager {
 
             let prev_audio = guard.audio.clone();
             let result = f(&mut guard);
-            Self::save_atomic(&manager.path, &guard)?;
-            let changed_audio = (guard.audio != prev_audio).then(|| guard.audio.clone());
+            Self::save_atomic(&path_guard, &guard)?;
+            let changed_audio =
+                (notify_audio && guard.audio != prev_audio).then(|| guard.audio.clone());
             (result, changed_audio)
         };
         if let Some(audio) = changed_audio {
@@ -133,6 +153,20 @@ impl SettingsManager {
         Self::update(|settings| f(&mut settings.audio))
     }
 
+    /// 由会话 Actor 更新已生效的音频设备 ID 并原子写盘，不反向触发音频设置监听循环。
+    pub(crate) fn update_audio_devices(
+        input: Option<String>,
+        output: Option<String>,
+    ) -> Result<(), String> {
+        Self::update_with_notify(
+            |settings| {
+                settings.audio.input_device_id = input;
+                settings.audio.output_device_id = output;
+            },
+            false,
+        )
+    }
+
     /// 获取当前完整配置的 JSON 字符串（严格由 manager 内部序列化）。
     pub fn get_json() -> Result<String, String> {
         let settings = Self::get()?;
@@ -149,12 +183,16 @@ impl SettingsManager {
         })
     }
 
-    /// 从 JSON 字符串更新音频设置并原子写盘。
+    /// 从 JSON 字符串更新音频设置并原子写盘（保留 Actor 管理的设备 ID）。
     pub fn update_audio_from_json(json: &str) -> Result<(), String> {
         let audio: AudioSettings = serde_json::from_str(json)
             .map_err(|e| format!("failed to deserialize audio settings: {e}"))?;
         Self::update_audio(|current| {
+            let input_device_id = current.input_device_id.clone();
+            let output_device_id = current.output_device_id.clone();
             *current = audio;
+            current.input_device_id = input_device_id;
+            current.output_device_id = output_device_id;
         })
     }
 
@@ -283,6 +321,9 @@ impl SettingsManager {
 }
 
 #[cfg(test)]
+pub(crate) static TEST_SETTINGS_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -386,13 +427,14 @@ mod tests {
 
         // 模拟单独更新 UI
         let manager = SettingsManager {
-            path: path.clone(),
+            path: RwLock::new(path.clone()),
             inner: RwLock::new(initial),
         };
         {
             let mut guard = manager.inner.write().unwrap();
             guard.ui.nickname = "NewNickname".into();
-            SettingsManager::save_atomic(&manager.path, &guard).unwrap();
+            let manager_path = manager.path.read().unwrap();
+            SettingsManager::save_atomic(&manager_path, &guard).unwrap();
         }
 
         let reloaded = SettingsManager::load_and_migrate(&path).unwrap();
@@ -414,7 +456,7 @@ mod tests {
         SettingsManager::save_atomic(&path, &initial).unwrap();
 
         let manager = SettingsManager {
-            path: path.clone(),
+            path: RwLock::new(path.clone()),
             inner: RwLock::new(initial),
         };
 
@@ -423,7 +465,8 @@ mod tests {
             let mut guard = manager.inner.write().unwrap();
             guard.ui.nickname = "   ".into();
             guard.ui.normalize_nickname();
-            SettingsManager::save_atomic(&manager.path, &guard).unwrap();
+            let manager_path = manager.path.read().unwrap();
+            SettingsManager::save_atomic(&manager_path, &guard).unwrap();
         }
         let reloaded = SettingsManager::load_and_migrate(&path).unwrap();
         assert_eq!(reloaded.ui.nickname, UiSettings::DEFAULT_NICKNAME);
@@ -433,7 +476,8 @@ mod tests {
             let mut guard = manager.inner.write().unwrap();
             guard.ui.nickname = "  Bob  ".into();
             guard.ui.normalize_nickname();
-            SettingsManager::save_atomic(&manager.path, &guard).unwrap();
+            let manager_path = manager.path.read().unwrap();
+            SettingsManager::save_atomic(&manager_path, &guard).unwrap();
         }
         let reloaded = SettingsManager::load_and_migrate(&path).unwrap();
         assert_eq!(reloaded.ui.nickname, "Bob");
@@ -541,5 +585,42 @@ mod tests {
         };
         SettingsManager::notify_audio_listeners(&second);
         assert_eq!(seen.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn update_audio_from_json_preserves_actor_managed_device_ids() {
+        let _guard = TEST_SETTINGS_LOCK.blocking_lock();
+        let dir = std::env::temp_dir().join(format!(
+            "flspeak-settings-audio-{:x}",
+            rand::random::<u64>()
+        ));
+        let path = dir.join("preferences.json");
+        let _ = std::fs::create_dir_all(&dir);
+
+        SettingsManager::init(path.clone()).unwrap();
+        SettingsManager::update_audio_devices(Some("mic-1".into()), Some("out-1".into())).unwrap();
+        SettingsManager::update_audio_from_json(
+            r#"{"noiseSuppression":false,"inputDeviceId":"clobber","outputDeviceId":null}"#,
+        )
+        .unwrap();
+
+        let (ns, input, output) = SettingsManager::with(|s| {
+            (
+                s.audio.noise_suppression,
+                s.audio.input_device_id.clone(),
+                s.audio.output_device_id.clone(),
+            )
+        })
+        .unwrap();
+        assert!(!ns);
+        assert_eq!(input.as_deref(), Some("mic-1"));
+        assert_eq!(output.as_deref(), Some("out-1"));
+
+        let reloaded = SettingsManager::load_and_migrate(&path).unwrap();
+        assert!(!reloaded.audio.noise_suppression);
+        assert_eq!(reloaded.audio.input_device_id.as_deref(), Some("mic-1"));
+        assert_eq!(reloaded.audio.output_device_id.as_deref(), Some("out-1"));
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -122,6 +122,7 @@ mod tests {
                 target_mode: 2,
                 target_id: 5,
                 peer_uid: String::new(),
+                from_self: false,
                 at: 1,
             }))
             .unwrap();

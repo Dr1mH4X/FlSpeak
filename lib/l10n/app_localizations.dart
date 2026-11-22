@@ -1328,6 +1328,18 @@ abstract class AppLocalizations {
   /// **'Images must be no larger than 20 MiB'**
   String get chatImageTooLarge;
 
+  /// No description provided for @chatImageTooLargeWithLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'Images must be no larger than {limit}.'**
+  String chatImageTooLargeWithLimit(String limit);
+
+  /// No description provided for @chatImageUnsupportedFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a PNG, JPEG, GIF, or WebP image.'**
+  String get chatImageUnsupportedFormat;
+
   /// No description provided for @chatClipboardEmpty.
   ///
   /// In en, this message translates to:

@@ -125,7 +125,12 @@ class _Core extends Fake implements CoreSession {
   @override
   Future<AccessView> access() async {
     accessCalls++;
-    return const AccessView(kickChannelPower: 10, kickServerPower: 10);
+    return const AccessView(
+      kickChannelPower: 10,
+      kickServerPower: 10,
+      canKickChannel: true,
+      canKickServer: true,
+    );
   }
 
   @override
@@ -744,7 +749,11 @@ void main() {
       reason: 'reason | test',
       epoch: 42,
     ));
-    events.add(const CoreEvent.clientMoved(id: 2, channelId: 9));
+    events.add(
+      const CoreEvent.clientMoved(
+        client: ClientView(id: 2, nickname: 'Peer', uid: 'peer', channelId: 9),
+      ),
+    );
     expect(
       await controller.kickClient(peer, KickTarget.channel, '', 42),
       isFalse,
@@ -825,11 +834,13 @@ void main() {
       events.add(const CoreEvent.clientLeft(id: 3));
       events.add(
         const CoreEvent.clientJoined(
-          id: 3,
-          nickname: 'Other',
-          uid: 'other',
-          channelId: 9,
-          isStreaming: false,
+          client: ClientView(
+            id: 3,
+            nickname: 'Other',
+            uid: 'other',
+            channelId: 9,
+            isStreaming: false,
+          ),
         ),
       );
       expect(
@@ -907,11 +918,13 @@ void main() {
     core.eventsController.add(const CoreEvent.clientLeft(id: 2));
     core.eventsController.add(
       const CoreEvent.clientJoined(
-        id: 2,
-        nickname: 'Other',
-        uid: 'other',
-        channelId: 7,
-        isStreaming: false,
+        client: ClientView(
+          id: 2,
+          nickname: 'Other',
+          uid: 'other',
+          channelId: 7,
+          isStreaming: false,
+        ),
       ),
     );
     expect(await controller.sendMessage('must not reach Other'), isFalse);
@@ -920,11 +933,13 @@ void main() {
     expect(core.sent, hasLength(1));
     core.eventsController.add(
       const CoreEvent.clientJoined(
-        id: 3,
-        nickname: 'Peer',
-        uid: 'peer',
-        channelId: 7,
-        isStreaming: false,
+        client: ClientView(
+          id: 3,
+          nickname: 'Peer',
+          uid: 'peer',
+          channelId: 7,
+          isStreaming: false,
+        ),
       ),
     );
     expect(await controller.sendMessage('new client id'), isTrue);
@@ -1113,7 +1128,7 @@ void main() {
       expect(view.unreadPeers, isEmpty);
       expect(view.visibleMessages(channelId: 7).single.text, 'hi');
 
-      // 自己发出的回显不应把正在看的会话标成未读。
+      // Own echo marked by Rust via fromSelf must not mark unread.
       events.add(
         const CoreEvent.textMessage(
           from: 'Self',
@@ -1123,10 +1138,25 @@ void main() {
           targetMode: 1,
           targetId: 2,
           peerUid: 'peer',
+          fromSelf: true,
+          at: 11,
+        ),
+      );
+      events.add(
+        const CoreEvent.textMessage(
+          from: 'SelfElsewhere',
+          fromUid: 'unknown-self',
+          fromId: 0,
+          message: 'channel echo',
+          targetMode: 2,
+          targetId: 8,
+          peerUid: '',
+          fromSelf: true,
           at: 11,
         ),
       );
       view = container.read(sessionViewProvider);
+      expect(view.unreadScopes, isEmpty);
       expect(view.hasUnreadChat, isFalse);
       expect(view.visibleMessages(channelId: 7).map((item) => item.text), [
         'hi',
@@ -1211,13 +1241,13 @@ void main() {
       ),
     );
 
-    // 初次打开未识别节点的私信窗，自动发起单播 queryPeerIdentity。
+    // 切换到私聊或频道作用域时，Dart 侧不再主动触发 OpenProtocol 探测。
     controller.selectDirectRecipient('bot-uid', clientId: 9);
     await Future<void>.delayed(Duration.zero);
-    expect(core.queriedPeers, [9]);
+    expect(core.queriedPeers, isEmpty);
     expect(core.fetchedBotCommands, isEmpty);
 
-    // 收到包含 chat:slash_commands 能力的快照后，自动拉取命令列表。
+    // 收到包含 chat:slash_commands 能力的快照时，仍不从 UI 侧触发拉取。
     events.add(
       const CoreEvent.snapshot(
         channels: [
@@ -1239,9 +1269,17 @@ void main() {
       ),
     );
     await Future<void>.delayed(Duration.zero);
-    expect(core.fetchedBotCommands, [(targetClid: 9, targetUid: 'bot-uid')]);
+    expect(core.fetchedBotCommands, isEmpty);
+    expect(
+      container
+          .read(sessionViewProvider)
+          .clients
+          .singleWhere((c) => c.id == 9)
+          .botCommandsLoaded,
+      isFalse,
+    );
 
-    // 命令列表就绪后，ClientMoved 与 ClientUpdated 不丢失身份与命令缓存。
+    // Rust 自动拉取命令就绪后，ClientMoved 与 ClientUpdated 保留命令与 loaded 标记。
     const playCmd = BotCommandView(
       name: 'play',
       args: '<song>',
@@ -1264,12 +1302,29 @@ void main() {
             appVersion: '1.2.0',
             capabilities: ['chat:slash_commands'],
             botCommands: [playCmd],
+            botCommandsLoaded: true,
             botCommandPrefix: '!',
           ),
         ],
       ),
     );
-    events.add(const CoreEvent.clientMoved(id: 9, channelId: 8));
+    events.add(
+      const CoreEvent.clientMoved(
+        client: ClientView(
+          id: 9,
+          nickname: 'MusicBot',
+          uid: 'bot-uid',
+          channelId: 8,
+          clientType: ClientType.bot,
+          appName: 'MusicBot',
+          appVersion: '1.2.0',
+          capabilities: ['chat:slash_commands'],
+          botCommands: [playCmd],
+          botCommandsLoaded: true,
+          botCommandPrefix: '!',
+        ),
+      ),
+    );
     events.add(const CoreEvent.clientUpdated(id: 9, inputMuted: true));
 
     final bot = container
@@ -1283,11 +1338,12 @@ void main() {
     expect(bot.appVersion, '1.2.0');
     expect(bot.capabilities, ['chat:slash_commands']);
     expect(bot.botCommands, [playCmd]);
+    expect(bot.botCommandsLoaded, isTrue);
     expect(bot.botCommandPrefix, '!');
   });
 
   test(
-    'channel scope auto-fetches commands for bots in current channel only',
+    'channel scope renders Rust-synced botCommandsLoaded without UI probing',
     () async {
       final events = StreamController<CoreEvent>.broadcast(sync: true);
       final core = _Core(events);
@@ -1320,6 +1376,7 @@ void main() {
               channelId: 5,
               clientType: ClientType.bot,
               capabilities: ['chat:slash_commands'],
+              botCommandsLoaded: true,
             ),
             ClientView(
               id: 10,
@@ -1337,7 +1394,15 @@ void main() {
 
       controller.selectChatScope(ChatScope.channel);
       await Future<void>.delayed(Duration.zero);
-      expect(core.fetchedBotCommands, [(targetClid: 9, targetUid: 'bot-uid')]);
+      expect(core.fetchedBotCommands, isEmpty);
+      expect(
+        container
+            .read(sessionViewProvider)
+            .clients
+            .singleWhere((c) => c.id == 9)
+            .botCommandsLoaded,
+        isTrue,
+      );
     },
   );
 
@@ -1435,128 +1500,95 @@ void main() {
     expect(view.visibleMessages(channelId: 7).single.from, 'My Server');
   });
 
-  test(
-    'voice state keeps self row in sync across snapshots and client updates',
-    () async {
-      final events = StreamController<CoreEvent>.broadcast(sync: true);
-      final core = _Core(events);
-      final container = ProviderContainer(
-        overrides: [coreSessionProvider.overrideWithValue(core)],
-      );
-      addTearDown(() async {
-        container.dispose();
-        await events.close();
-      });
+  test('session consumes Rust self and peer flags verbatim across snapshots and client updates', () async {
+    final events = StreamController<CoreEvent>.broadcast(sync: true);
+    final core = _Core(events);
+    final container = ProviderContainer(
+      overrides: [coreSessionProvider.overrideWithValue(core)],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await events.close();
+    });
 
-      container.read(sessionViewProvider);
-      events.add(
-        const CoreEvent.state(
-          state: CoreSessionState.connected(clientId: 1, channelId: 5),
-        ),
-      );
-      events.add(
-        const CoreEvent.snapshot(
-          channels: [
-            ChannelView(id: 5, parentId: 0, name: 'Lobby', description: ''),
-          ],
-          clients: [
-            ClientView(
-              id: 1,
-              nickname: 'Self',
-              uid: 'self-uid',
-              channelId: 5,
-              inputMuted: false,
-              outputMuted: false,
-              away: false,
-              clientType: ClientType.flSpeak,
-              capabilities: [],
-            ),
-            ClientView(
-              id: 2,
-              nickname: 'Peer',
-              uid: 'peer-uid',
-              channelId: 5,
-              inputMuted: false,
-              outputMuted: false,
-              away: false,
-              clientType: ClientType.standard,
-              capabilities: [],
-            ),
-          ],
-        ),
-      );
-
-      events.add(
-        const CoreEvent.voice(
-          state: CoreVoiceState(
-            muted: true,
-            deafened: false,
+    container.read(sessionViewProvider);
+    events.add(
+      const CoreEvent.state(
+        state: CoreSessionState.connected(clientId: 1, channelId: 5),
+      ),
+    );
+    events.add(
+      const CoreEvent.snapshot(
+        channels: [
+          ChannelView(id: 5, parentId: 0, name: 'Lobby', description: ''),
+        ],
+        clients: [
+          ClientView(
+            id: 1,
+            nickname: 'Self',
+            uid: 'self-uid',
+            channelId: 5,
+            inputMuted: true,
+            outputMuted: false,
             away: true,
-            pttMode: false,
-            pttActive: false,
-            inputReady: true,
-            outputReady: true,
+            clientType: ClientType.flSpeak,
+            capabilities: [],
           ),
-        ),
-      );
+          ClientView(
+            id: 2,
+            nickname: 'Peer',
+            uid: 'peer-uid',
+            channelId: 5,
+            inputMuted: false,
+            outputMuted: false,
+            away: false,
+            clientType: ClientType.standard,
+            capabilities: [],
+          ),
+        ],
+      ),
+    );
 
-      var view = container.read(sessionViewProvider);
-      var self = view.clients.singleWhere((c) => c.id == 1);
-      expect(self.inputMuted, isTrue);
-      expect(self.outputMuted, isFalse);
-      expect(self.away, isTrue);
-
-      // 服务器滞后快照与旧回显不会把自身行改回旧值，同时其他成员照常更新。
-      events.add(
-        const CoreEvent.snapshot(
-          channels: [
-            ChannelView(id: 5, parentId: 0, name: 'Lobby', description: ''),
-          ],
-          clients: [
-            ClientView(
-              id: 1,
-              nickname: 'Self',
-              uid: 'self-uid',
-              channelId: 5,
-              inputMuted: false,
-              outputMuted: false,
-              away: false,
-              clientType: ClientType.flSpeak,
-              capabilities: [],
-            ),
-            ClientView(
-              id: 2,
-              nickname: 'Peer',
-              uid: 'peer-uid',
-              channelId: 5,
-              inputMuted: false,
-              outputMuted: false,
-              away: false,
-              clientType: ClientType.standard,
-              capabilities: [],
-            ),
-          ],
-        ),
-      );
-      events.add(
-        const CoreEvent.clientUpdated(
-          id: 1,
-          inputMuted: false,
-          outputMuted: false,
+    events.add(
+      const CoreEvent.voice(
+        state: CoreVoiceState(
+          muted: false,
+          deafened: false,
           away: false,
+          pttMode: false,
+          pttActive: false,
+          inputReady: true,
+          outputReady: true,
         ),
-      );
-      events.add(const CoreEvent.clientUpdated(id: 2, inputMuted: true));
+      ),
+    );
 
-      view = container.read(sessionViewProvider);
-      self = view.clients.singleWhere((c) => c.id == 1);
-      final peer = view.clients.singleWhere((c) => c.id == 2);
-      expect(self.inputMuted, isTrue);
-      expect(self.outputMuted, isFalse);
-      expect(self.away, isTrue);
-      expect(peer.inputMuted, isTrue);
-    },
-  );
+    // Voice event no longer overwrites Rust-supplied client row flags in Dart.
+    var view = container.read(sessionViewProvider);
+    var self = view.clients.singleWhere((c) => c.id == 1);
+    expect(view.muted, isFalse);
+    expect(self.inputMuted, isTrue);
+    expect(self.outputMuted, isFalse);
+    expect(self.away, isTrue);
+
+    events.add(
+      const CoreEvent.clientUpdated(
+        id: 1,
+        inputMuted: false,
+        outputMuted: false,
+        away: false,
+      ),
+    );
+    events.add(const CoreEvent.clientUpdated(id: 2, inputMuted: true));
+
+    view = container.read(sessionViewProvider);
+    self = view.clients.singleWhere((c) => c.id == 1);
+    final peer = view.clients.singleWhere((c) => c.id == 2);
+    expect(self.inputMuted, isFalse);
+    expect(self.outputMuted, isFalse);
+    expect(self.away, isFalse);
+    expect(peer.inputMuted, isTrue);
+  });
 
   test('Android mic permission denial falls back to muted listen-only and unmute handles permanent denial', () async {
     final events = StreamController<CoreEvent>.broadcast();
@@ -1599,7 +1631,7 @@ void main() {
     expect(core.calls, ['micPermitted:true', 'muted:false']);
   });
 
-  test('audioDevicesReset event clears only the fallen-back device side in audioSelectionProvider', () async {
+  test('audioDevicesReset event clears only the fallen-back device side in audioDevicesProvider', () async {
     final events = StreamController<CoreEvent>.broadcast();
     final core = _PermissionCore(events);
     final container = ProviderContainer(
@@ -1611,7 +1643,10 @@ void main() {
     });
 
     container.read(sessionViewProvider);
-    final selection = container.read(audioSelectionProvider.notifier);
+    final sub = container.listen(audioDevicesProvider, (_, _) {});
+    addTearDown(sub.close);
+    await container.read(audioDevicesProvider.future);
+    final selection = container.read(audioDevicesProvider.notifier);
     await selection.selectInput(
       const AudioDeviceView(id: 'mic-1', name: 'Mic 1', isDefault: false),
     );
@@ -1622,14 +1657,14 @@ void main() {
     events.add(const CoreEvent.audioDevicesReset(input: false, output: true));
     await pumpEventQueue();
 
-    final current = container.read(audioSelectionProvider);
-    expect(current.inputId, 'mic-1');
-    expect(current.inputName, 'Mic 1');
-    expect(current.outputId, isNull);
-    expect(current.outputName, isNull);
+    final current = container.read(audioDevicesProvider).asData!.value;
+    expect(current.currentInputId, 'mic-1');
+    expect(current.currentInputName, 'Mic 1');
+    expect(current.currentOutputId, isNull);
+    expect(current.currentOutputName, isNull);
   });
 
-  test('clientJoined sets isStreaming and preserves same-id streaming state until left', () async {
+  test('clientJoined consumes full ClientView payload from Rust', () async {
     final events = StreamController<CoreEvent>.broadcast(sync: true);
     final core = _Core(events);
     final container = ProviderContainer(
@@ -1649,76 +1684,50 @@ void main() {
 
     events.add(
       const CoreEvent.clientJoined(
-        id: 9,
-        nickname: 'Streamer',
-        uid: 'uid-9',
-        channelId: 5,
-        isStreaming: true,
+        client: ClientView(
+          id: 9,
+          nickname: 'Streamer',
+          uid: 'uid-9',
+          channelId: 5,
+          isStreaming: true,
+          inputMuted: true,
+          outputMuted: false,
+          away: true,
+          awayMessage: 'BRB',
+          clientType: ClientType.flSpeak,
+          appName: 'FlSpeak',
+          appVersion: '0.1.0',
+          capabilities: ['stream:vp8'],
+        ),
       ),
     );
-    expect(
-      container
-          .read(sessionViewProvider)
-          .clients
-          .singleWhere((c) => c.id == 9)
-          .isStreaming,
-      isTrue,
-    );
+    final joined = container
+        .read(sessionViewProvider)
+        .clients
+        .singleWhere((c) => c.id == 9);
+    expect(joined.isStreaming, isTrue);
+    expect(joined.inputMuted, isTrue);
+    expect(joined.awayMessage, 'BRB');
+    expect(joined.clientType, ClientType.flSpeak);
+    expect(joined.capabilities, ['stream:vp8']);
 
     events.add(
       const CoreEvent.clientJoined(
-        id: 9,
-        nickname: 'Streamer',
-        uid: 'uid-9',
-        channelId: 5,
-        isStreaming: false,
+        client: ClientView(
+          id: 9,
+          nickname: 'Streamer',
+          uid: 'uid-9',
+          channelId: 6,
+          isStreaming: false,
+        ),
       ),
     );
-    expect(
-      container
-          .read(sessionViewProvider)
-          .clients
-          .singleWhere((c) => c.id == 9)
-          .isStreaming,
-      isTrue,
-    );
-
-    events.add(
-      const CoreEvent.clientJoined(
-        id: 10,
-        nickname: 'Clone',
-        uid: 'uid-9',
-        channelId: 5,
-        isStreaming: false,
-      ),
-    );
-    expect(
-      container
-          .read(sessionViewProvider)
-          .clients
-          .singleWhere((c) => c.id == 10)
-          .isStreaming,
-      isFalse,
-    );
-
-    events.add(const CoreEvent.clientLeft(id: 9));
-    events.add(
-      const CoreEvent.clientJoined(
-        id: 9,
-        nickname: 'Streamer',
-        uid: 'uid-9',
-        channelId: 5,
-        isStreaming: false,
-      ),
-    );
-    expect(
-      container
-          .read(sessionViewProvider)
-          .clients
-          .singleWhere((c) => c.id == 9)
-          .isStreaming,
-      isFalse,
-    );
+    final updated = container
+        .read(sessionViewProvider)
+        .clients
+        .singleWhere((c) => c.id == 9);
+    expect(updated.channelId, 6);
+    expect(updated.isStreaming, isFalse);
   });
 }
 
@@ -1726,6 +1735,14 @@ class _PermissionCore extends _Core {
   _PermissionCore(super.eventsController);
 
   final calls = <String>[];
+
+  @override
+  Future<AudioDevicesView> listAudioDevices() async => const AudioDevicesView(
+    inputs: [AudioDeviceView(id: 'mic-1', name: 'Mic 1', isDefault: false)],
+    outputs: [
+      AudioDeviceView(id: 'spk-1', name: 'Speaker 1', isDefault: false),
+    ],
+  );
 
   @override
   Future<void> setMicrophonePermission({required bool granted}) async {

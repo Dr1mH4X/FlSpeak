@@ -17,7 +17,7 @@ proto        SRV/IPv4 解析 + 最终连接边界 + deny-all 解析器 + 建连
 tsclient-rs           协议实现（版本见 Cargo.toml）
 ```
 
-Flutter 负责界面，Rust 负责协议、连接边界与音频。Dart 不持有身份私钥，也不把音频帧带过 FFI。
+Flutter 负责界面，Rust 负责协议、连接边界与音频。Dart 不持有身份私钥，也不把音频帧带过 FFI。Dart 仅负责 UI、纯 UI 偏好、OS 文件/剪贴板/热键桥接与 WebRTC；业务协议、媒体缓存、重试/权限/业务常量与非 UI 持久化一律归 Rust + FFI。
 
 音频是旁路：capture/playback 两条线程各自独占 cpal 流，cpal 回调只搬 `ArrayQueue`；编码后的包回到 actor，由 actor 串行 `send_voice`。详见 [audio.md](audio.md)。
 

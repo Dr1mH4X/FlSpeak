@@ -56,7 +56,7 @@ extension CoreErrorPatterns on CoreError {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( CoreError_InvalidAddress value)?  invalidAddress,TResult Function( CoreError_BlockedAddress value)?  blockedAddress,TResult Function( CoreError_Connection value)?  connection,TResult Function( CoreError_ChannelPasswordRequired value)?  channelPasswordRequired,TResult Function( CoreError_AvatarTooLarge value)?  avatarTooLarge,TResult Function( CoreError_AvatarPermissionDenied value)?  avatarPermissionDenied,TResult Function( CoreError_AvatarUnsupportedFormat value)?  avatarUnsupportedFormat,TResult Function( CoreError_AvatarUnavailable value)?  avatarUnavailable,TResult Function( CoreError_Internal value)?  internal,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( CoreError_InvalidAddress value)?  invalidAddress,TResult Function( CoreError_BlockedAddress value)?  blockedAddress,TResult Function( CoreError_Connection value)?  connection,TResult Function( CoreError_ChannelPasswordRequired value)?  channelPasswordRequired,TResult Function( CoreError_AvatarTooLarge value)?  avatarTooLarge,TResult Function( CoreError_AvatarPermissionDenied value)?  avatarPermissionDenied,TResult Function( CoreError_AvatarUnsupportedFormat value)?  avatarUnsupportedFormat,TResult Function( CoreError_AvatarUnavailable value)?  avatarUnavailable,TResult Function( CoreError_ImageTooLarge value)?  imageTooLarge,TResult Function( CoreError_ImageUnsupportedFormat value)?  imageUnsupportedFormat,TResult Function( CoreError_Internal value)?  internal,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case CoreError_InvalidAddress() when invalidAddress != null:
@@ -67,7 +67,9 @@ return channelPasswordRequired(_that);case CoreError_AvatarTooLarge() when avata
 return avatarTooLarge(_that);case CoreError_AvatarPermissionDenied() when avatarPermissionDenied != null:
 return avatarPermissionDenied(_that);case CoreError_AvatarUnsupportedFormat() when avatarUnsupportedFormat != null:
 return avatarUnsupportedFormat(_that);case CoreError_AvatarUnavailable() when avatarUnavailable != null:
-return avatarUnavailable(_that);case CoreError_Internal() when internal != null:
+return avatarUnavailable(_that);case CoreError_ImageTooLarge() when imageTooLarge != null:
+return imageTooLarge(_that);case CoreError_ImageUnsupportedFormat() when imageUnsupportedFormat != null:
+return imageUnsupportedFormat(_that);case CoreError_Internal() when internal != null:
 return internal(_that);case _:
   return orElse();
 
@@ -86,7 +88,7 @@ return internal(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( CoreError_InvalidAddress value)  invalidAddress,required TResult Function( CoreError_BlockedAddress value)  blockedAddress,required TResult Function( CoreError_Connection value)  connection,required TResult Function( CoreError_ChannelPasswordRequired value)  channelPasswordRequired,required TResult Function( CoreError_AvatarTooLarge value)  avatarTooLarge,required TResult Function( CoreError_AvatarPermissionDenied value)  avatarPermissionDenied,required TResult Function( CoreError_AvatarUnsupportedFormat value)  avatarUnsupportedFormat,required TResult Function( CoreError_AvatarUnavailable value)  avatarUnavailable,required TResult Function( CoreError_Internal value)  internal,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( CoreError_InvalidAddress value)  invalidAddress,required TResult Function( CoreError_BlockedAddress value)  blockedAddress,required TResult Function( CoreError_Connection value)  connection,required TResult Function( CoreError_ChannelPasswordRequired value)  channelPasswordRequired,required TResult Function( CoreError_AvatarTooLarge value)  avatarTooLarge,required TResult Function( CoreError_AvatarPermissionDenied value)  avatarPermissionDenied,required TResult Function( CoreError_AvatarUnsupportedFormat value)  avatarUnsupportedFormat,required TResult Function( CoreError_AvatarUnavailable value)  avatarUnavailable,required TResult Function( CoreError_ImageTooLarge value)  imageTooLarge,required TResult Function( CoreError_ImageUnsupportedFormat value)  imageUnsupportedFormat,required TResult Function( CoreError_Internal value)  internal,}){
 final _that = this;
 switch (_that) {
 case CoreError_InvalidAddress():
@@ -97,7 +99,9 @@ return channelPasswordRequired(_that);case CoreError_AvatarTooLarge():
 return avatarTooLarge(_that);case CoreError_AvatarPermissionDenied():
 return avatarPermissionDenied(_that);case CoreError_AvatarUnsupportedFormat():
 return avatarUnsupportedFormat(_that);case CoreError_AvatarUnavailable():
-return avatarUnavailable(_that);case CoreError_Internal():
+return avatarUnavailable(_that);case CoreError_ImageTooLarge():
+return imageTooLarge(_that);case CoreError_ImageUnsupportedFormat():
+return imageUnsupportedFormat(_that);case CoreError_Internal():
 return internal(_that);}
 }
 /// A variant of `map` that fallback to returning `null`.
@@ -112,7 +116,7 @@ return internal(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( CoreError_InvalidAddress value)?  invalidAddress,TResult? Function( CoreError_BlockedAddress value)?  blockedAddress,TResult? Function( CoreError_Connection value)?  connection,TResult? Function( CoreError_ChannelPasswordRequired value)?  channelPasswordRequired,TResult? Function( CoreError_AvatarTooLarge value)?  avatarTooLarge,TResult? Function( CoreError_AvatarPermissionDenied value)?  avatarPermissionDenied,TResult? Function( CoreError_AvatarUnsupportedFormat value)?  avatarUnsupportedFormat,TResult? Function( CoreError_AvatarUnavailable value)?  avatarUnavailable,TResult? Function( CoreError_Internal value)?  internal,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( CoreError_InvalidAddress value)?  invalidAddress,TResult? Function( CoreError_BlockedAddress value)?  blockedAddress,TResult? Function( CoreError_Connection value)?  connection,TResult? Function( CoreError_ChannelPasswordRequired value)?  channelPasswordRequired,TResult? Function( CoreError_AvatarTooLarge value)?  avatarTooLarge,TResult? Function( CoreError_AvatarPermissionDenied value)?  avatarPermissionDenied,TResult? Function( CoreError_AvatarUnsupportedFormat value)?  avatarUnsupportedFormat,TResult? Function( CoreError_AvatarUnavailable value)?  avatarUnavailable,TResult? Function( CoreError_ImageTooLarge value)?  imageTooLarge,TResult? Function( CoreError_ImageUnsupportedFormat value)?  imageUnsupportedFormat,TResult? Function( CoreError_Internal value)?  internal,}){
 final _that = this;
 switch (_that) {
 case CoreError_InvalidAddress() when invalidAddress != null:
@@ -123,7 +127,9 @@ return channelPasswordRequired(_that);case CoreError_AvatarTooLarge() when avata
 return avatarTooLarge(_that);case CoreError_AvatarPermissionDenied() when avatarPermissionDenied != null:
 return avatarPermissionDenied(_that);case CoreError_AvatarUnsupportedFormat() when avatarUnsupportedFormat != null:
 return avatarUnsupportedFormat(_that);case CoreError_AvatarUnavailable() when avatarUnavailable != null:
-return avatarUnavailable(_that);case CoreError_Internal() when internal != null:
+return avatarUnavailable(_that);case CoreError_ImageTooLarge() when imageTooLarge != null:
+return imageTooLarge(_that);case CoreError_ImageUnsupportedFormat() when imageUnsupportedFormat != null:
+return imageUnsupportedFormat(_that);case CoreError_Internal() when internal != null:
 return internal(_that);case _:
   return null;
 
@@ -141,7 +147,7 @@ return internal(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String message)?  invalidAddress,TResult Function( String message)?  blockedAddress,TResult Function( String message)?  connection,TResult Function( String message)?  channelPasswordRequired,TResult Function( int? maxBytes)?  avatarTooLarge,TResult Function()?  avatarPermissionDenied,TResult Function()?  avatarUnsupportedFormat,TResult Function()?  avatarUnavailable,TResult Function( String message)?  internal,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( String message)?  invalidAddress,TResult Function( String message)?  blockedAddress,TResult Function( String message)?  connection,TResult Function( String message)?  channelPasswordRequired,TResult Function( int? maxBytes)?  avatarTooLarge,TResult Function()?  avatarPermissionDenied,TResult Function()?  avatarUnsupportedFormat,TResult Function()?  avatarUnavailable,TResult Function( int maxBytes)?  imageTooLarge,TResult Function()?  imageUnsupportedFormat,TResult Function( String message)?  internal,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case CoreError_InvalidAddress() when invalidAddress != null:
 return invalidAddress(_that.message);case CoreError_BlockedAddress() when blockedAddress != null:
@@ -151,7 +157,9 @@ return channelPasswordRequired(_that.message);case CoreError_AvatarTooLarge() wh
 return avatarTooLarge(_that.maxBytes);case CoreError_AvatarPermissionDenied() when avatarPermissionDenied != null:
 return avatarPermissionDenied();case CoreError_AvatarUnsupportedFormat() when avatarUnsupportedFormat != null:
 return avatarUnsupportedFormat();case CoreError_AvatarUnavailable() when avatarUnavailable != null:
-return avatarUnavailable();case CoreError_Internal() when internal != null:
+return avatarUnavailable();case CoreError_ImageTooLarge() when imageTooLarge != null:
+return imageTooLarge(_that.maxBytes);case CoreError_ImageUnsupportedFormat() when imageUnsupportedFormat != null:
+return imageUnsupportedFormat();case CoreError_Internal() when internal != null:
 return internal(_that.message);case _:
   return orElse();
 
@@ -170,7 +178,7 @@ return internal(_that.message);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String message)  invalidAddress,required TResult Function( String message)  blockedAddress,required TResult Function( String message)  connection,required TResult Function( String message)  channelPasswordRequired,required TResult Function( int? maxBytes)  avatarTooLarge,required TResult Function()  avatarPermissionDenied,required TResult Function()  avatarUnsupportedFormat,required TResult Function()  avatarUnavailable,required TResult Function( String message)  internal,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( String message)  invalidAddress,required TResult Function( String message)  blockedAddress,required TResult Function( String message)  connection,required TResult Function( String message)  channelPasswordRequired,required TResult Function( int? maxBytes)  avatarTooLarge,required TResult Function()  avatarPermissionDenied,required TResult Function()  avatarUnsupportedFormat,required TResult Function()  avatarUnavailable,required TResult Function( int maxBytes)  imageTooLarge,required TResult Function()  imageUnsupportedFormat,required TResult Function( String message)  internal,}) {final _that = this;
 switch (_that) {
 case CoreError_InvalidAddress():
 return invalidAddress(_that.message);case CoreError_BlockedAddress():
@@ -180,7 +188,9 @@ return channelPasswordRequired(_that.message);case CoreError_AvatarTooLarge():
 return avatarTooLarge(_that.maxBytes);case CoreError_AvatarPermissionDenied():
 return avatarPermissionDenied();case CoreError_AvatarUnsupportedFormat():
 return avatarUnsupportedFormat();case CoreError_AvatarUnavailable():
-return avatarUnavailable();case CoreError_Internal():
+return avatarUnavailable();case CoreError_ImageTooLarge():
+return imageTooLarge(_that.maxBytes);case CoreError_ImageUnsupportedFormat():
+return imageUnsupportedFormat();case CoreError_Internal():
 return internal(_that.message);}
 }
 /// A variant of `when` that fallback to returning `null`
@@ -195,7 +205,7 @@ return internal(_that.message);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String message)?  invalidAddress,TResult? Function( String message)?  blockedAddress,TResult? Function( String message)?  connection,TResult? Function( String message)?  channelPasswordRequired,TResult? Function( int? maxBytes)?  avatarTooLarge,TResult? Function()?  avatarPermissionDenied,TResult? Function()?  avatarUnsupportedFormat,TResult? Function()?  avatarUnavailable,TResult? Function( String message)?  internal,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( String message)?  invalidAddress,TResult? Function( String message)?  blockedAddress,TResult? Function( String message)?  connection,TResult? Function( String message)?  channelPasswordRequired,TResult? Function( int? maxBytes)?  avatarTooLarge,TResult? Function()?  avatarPermissionDenied,TResult? Function()?  avatarUnsupportedFormat,TResult? Function()?  avatarUnavailable,TResult? Function( int maxBytes)?  imageTooLarge,TResult? Function()?  imageUnsupportedFormat,TResult? Function( String message)?  internal,}) {final _that = this;
 switch (_that) {
 case CoreError_InvalidAddress() when invalidAddress != null:
 return invalidAddress(_that.message);case CoreError_BlockedAddress() when blockedAddress != null:
@@ -205,7 +215,9 @@ return channelPasswordRequired(_that.message);case CoreError_AvatarTooLarge() wh
 return avatarTooLarge(_that.maxBytes);case CoreError_AvatarPermissionDenied() when avatarPermissionDenied != null:
 return avatarPermissionDenied();case CoreError_AvatarUnsupportedFormat() when avatarUnsupportedFormat != null:
 return avatarUnsupportedFormat();case CoreError_AvatarUnavailable() when avatarUnavailable != null:
-return avatarUnavailable();case CoreError_Internal() when internal != null:
+return avatarUnavailable();case CoreError_ImageTooLarge() when imageTooLarge != null:
+return imageTooLarge(_that.maxBytes);case CoreError_ImageUnsupportedFormat() when imageUnsupportedFormat != null:
+return imageUnsupportedFormat();case CoreError_Internal() when internal != null:
 return internal(_that.message);case _:
   return null;
 
@@ -653,6 +665,106 @@ String toString() {
 /// @nodoc
 
 
+class CoreError_ImageTooLarge extends CoreError {
+  const CoreError_ImageTooLarge({required this.maxBytes}): super._();
+  
+
+ final  int maxBytes;
+
+/// Create a copy of CoreError
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$CoreError_ImageTooLargeCopyWith<CoreError_ImageTooLarge> get copyWith => _$CoreError_ImageTooLargeCopyWithImpl<CoreError_ImageTooLarge>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is CoreError_ImageTooLarge&&(identical(other.maxBytes, maxBytes) || other.maxBytes == maxBytes));
+}
+
+
+@override
+int get hashCode {
+    return Object.hash(runtimeType,maxBytes);
+}
+
+@override
+String toString() {
+    return 'CoreError.imageTooLarge(maxBytes: $maxBytes)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $CoreError_ImageTooLargeCopyWith<$Res> implements $CoreErrorCopyWith<$Res> {
+  factory $CoreError_ImageTooLargeCopyWith(CoreError_ImageTooLarge value, $Res Function(CoreError_ImageTooLarge) _then) = _$CoreError_ImageTooLargeCopyWithImpl;
+@useResult
+$Res call({
+ int maxBytes
+});
+
+
+
+
+}
+/// @nodoc
+class _$CoreError_ImageTooLargeCopyWithImpl<$Res>
+    implements $CoreError_ImageTooLargeCopyWith<$Res> {
+  _$CoreError_ImageTooLargeCopyWithImpl(this._self, this._then);
+
+  final CoreError_ImageTooLarge _self;
+  final $Res Function(CoreError_ImageTooLarge) _then;
+
+/// Create a copy of CoreError
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? maxBytes = null,}) {
+  return _then(CoreError_ImageTooLarge(
+maxBytes: null == maxBytes ? _self.maxBytes : maxBytes // ignore: cast_nullable_to_non_nullable
+as int,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class CoreError_ImageUnsupportedFormat extends CoreError {
+  const CoreError_ImageUnsupportedFormat(): super._();
+  
+
+
+
+
+
+
+@override
+bool operator ==(Object other) {
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is CoreError_ImageUnsupportedFormat);
+}
+
+
+@override
+int get hashCode => runtimeType.hashCode;
+
+@override
+String toString() {
+    return 'CoreError.imageUnsupportedFormat()';
+}
+
+
+}
+
+
+
+
+/// @nodoc
+
+
 class CoreError_Internal extends CoreError {
   const CoreError_Internal({required this.message}): super._();
   
@@ -928,7 +1040,7 @@ return failed(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( NetworkTelemetry telemetry)?  network,TResult Function()?  accessChanged,TResult Function( CoreSessionState state)?  state,TResult Function( List<ServerProfileView> profiles)?  servers,TResult Function( String serverId,  Uint8List? bytes)?  serverIconUpdated,TResult Function( String uid)?  avatarUpdated,TResult Function( List<ChannelView> channels,  List<ClientView> clients)?  snapshot,TResult Function( List<CoreMessage> messages)?  history,TResult Function( String from,  String fromUid,  int fromId,  String message,  int targetMode,  int targetId,  String peerUid,  int at)?  textMessage,TResult Function( String from,  String message)?  poked,TResult Function( int id,  String nickname,  String uid,  int channelId,  bool isStreaming)?  clientJoined,TResult Function( int id)?  clientLeft,TResult Function( int id,  int channelId)?  clientMoved,TResult Function( int id,  bool? inputMuted,  bool? outputMuted,  bool? away,  String? awayMessage)?  clientUpdated,TResult Function( CoreVoiceState state)?  voice,TResult Function( bool input,  bool output)?  audioDevicesReset,TResult Function( Int32List clientIds)?  speaking,TResult Function( bool speaking)?  selfSpeaking,TResult Function( double mic,  double received)?  levels,TResult Function( int from,  int to)?  identityUpgrade,TResult Function( int level)?  identityUpgraded,TResult Function( int id,  CoreTransferDirection direction,  String remotePath,  int total)?  transferStarted,TResult Function( int id,  int transferred,  int total)?  transferProgress,TResult Function( int id,  String? error)?  transferFinished,TResult Function( List<StreamView> streams,  String? watching)?  streams,TResult Function( String streamId,  int sourceClientId,  String sdp)?  streamOffer,TResult Function( String streamId,  int sourceClientId,  String sdp,  String? mid,  int? mLine)?  streamIceCandidate,TResult Function( String streamId,  StreamEndReason reason)?  streamEnded,TResult Function( String streamId)?  screenSharePublished,TResult Function()?  screenShareStopped,TResult Function( String streamId,  int viewerClid)?  streamViewerJoinRequested,TResult Function( String streamId,  int viewerClid,  PublisherSignal signal)?  publisherSignalReceived,TResult Function( String streamId,  int viewerClid)?  streamViewerLeft,TResult Function( String level,  String message)?  log,TResult Function( String message)?  denied,TResult Function( String message)?  failed,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function( NetworkTelemetry telemetry)?  network,TResult Function()?  accessChanged,TResult Function( CoreSessionState state)?  state,TResult Function( List<ServerProfileView> profiles)?  servers,TResult Function( String serverId,  Uint8List? bytes)?  serverIconUpdated,TResult Function( String uid)?  avatarUpdated,TResult Function( List<ChannelView> channels,  List<ClientView> clients)?  snapshot,TResult Function( List<CoreMessage> messages)?  history,TResult Function( String from,  String fromUid,  int fromId,  String message,  int targetMode,  int targetId,  String peerUid,  bool fromSelf,  int at)?  textMessage,TResult Function( String from,  String message)?  poked,TResult Function( ClientView client)?  clientJoined,TResult Function( int id)?  clientLeft,TResult Function( ClientView client)?  clientMoved,TResult Function( int id,  bool? inputMuted,  bool? outputMuted,  bool? away,  String? awayMessage)?  clientUpdated,TResult Function( CoreVoiceState state)?  voice,TResult Function( bool input,  bool output)?  audioDevicesReset,TResult Function( Int32List clientIds)?  speaking,TResult Function( bool speaking)?  selfSpeaking,TResult Function( double mic,  double received)?  levels,TResult Function( int from,  int to)?  identityUpgrade,TResult Function( int level)?  identityUpgraded,TResult Function( int id,  CoreTransferDirection direction,  String remotePath,  int total)?  transferStarted,TResult Function( int id,  int transferred,  int total)?  transferProgress,TResult Function( int id,  String? error)?  transferFinished,TResult Function( List<StreamView> streams,  String? watching)?  streams,TResult Function( String streamId,  int sourceClientId,  String sdp)?  streamOffer,TResult Function( String streamId,  int sourceClientId,  String sdp,  String? mid,  int? mLine)?  streamIceCandidate,TResult Function( String streamId,  StreamEndReason reason)?  streamEnded,TResult Function( String streamId)?  screenSharePublished,TResult Function()?  screenShareStopped,TResult Function( String streamId,  int viewerClid)?  streamViewerJoinRequested,TResult Function( String streamId,  int viewerClid,  PublisherSignal signal)?  publisherSignalReceived,TResult Function( String streamId,  int viewerClid)?  streamViewerLeft,TResult Function( String level,  String message)?  log,TResult Function( String message)?  denied,TResult Function( String message)?  failed,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case CoreEvent_Network() when network != null:
 return network(_that.telemetry);case CoreEvent_AccessChanged() when accessChanged != null:
@@ -939,11 +1051,11 @@ return serverIconUpdated(_that.serverId,_that.bytes);case CoreEvent_AvatarUpdate
 return avatarUpdated(_that.uid);case CoreEvent_Snapshot() when snapshot != null:
 return snapshot(_that.channels,_that.clients);case CoreEvent_History() when history != null:
 return history(_that.messages);case CoreEvent_TextMessage() when textMessage != null:
-return textMessage(_that.from,_that.fromUid,_that.fromId,_that.message,_that.targetMode,_that.targetId,_that.peerUid,_that.at);case CoreEvent_Poked() when poked != null:
+return textMessage(_that.from,_that.fromUid,_that.fromId,_that.message,_that.targetMode,_that.targetId,_that.peerUid,_that.fromSelf,_that.at);case CoreEvent_Poked() when poked != null:
 return poked(_that.from,_that.message);case CoreEvent_ClientJoined() when clientJoined != null:
-return clientJoined(_that.id,_that.nickname,_that.uid,_that.channelId,_that.isStreaming);case CoreEvent_ClientLeft() when clientLeft != null:
+return clientJoined(_that.client);case CoreEvent_ClientLeft() when clientLeft != null:
 return clientLeft(_that.id);case CoreEvent_ClientMoved() when clientMoved != null:
-return clientMoved(_that.id,_that.channelId);case CoreEvent_ClientUpdated() when clientUpdated != null:
+return clientMoved(_that.client);case CoreEvent_ClientUpdated() when clientUpdated != null:
 return clientUpdated(_that.id,_that.inputMuted,_that.outputMuted,_that.away,_that.awayMessage);case CoreEvent_Voice() when voice != null:
 return voice(_that.state);case CoreEvent_AudioDevicesReset() when audioDevicesReset != null:
 return audioDevicesReset(_that.input,_that.output);case CoreEvent_Speaking() when speaking != null:
@@ -984,7 +1096,7 @@ return failed(_that.message);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( NetworkTelemetry telemetry)  network,required TResult Function()  accessChanged,required TResult Function( CoreSessionState state)  state,required TResult Function( List<ServerProfileView> profiles)  servers,required TResult Function( String serverId,  Uint8List? bytes)  serverIconUpdated,required TResult Function( String uid)  avatarUpdated,required TResult Function( List<ChannelView> channels,  List<ClientView> clients)  snapshot,required TResult Function( List<CoreMessage> messages)  history,required TResult Function( String from,  String fromUid,  int fromId,  String message,  int targetMode,  int targetId,  String peerUid,  int at)  textMessage,required TResult Function( String from,  String message)  poked,required TResult Function( int id,  String nickname,  String uid,  int channelId,  bool isStreaming)  clientJoined,required TResult Function( int id)  clientLeft,required TResult Function( int id,  int channelId)  clientMoved,required TResult Function( int id,  bool? inputMuted,  bool? outputMuted,  bool? away,  String? awayMessage)  clientUpdated,required TResult Function( CoreVoiceState state)  voice,required TResult Function( bool input,  bool output)  audioDevicesReset,required TResult Function( Int32List clientIds)  speaking,required TResult Function( bool speaking)  selfSpeaking,required TResult Function( double mic,  double received)  levels,required TResult Function( int from,  int to)  identityUpgrade,required TResult Function( int level)  identityUpgraded,required TResult Function( int id,  CoreTransferDirection direction,  String remotePath,  int total)  transferStarted,required TResult Function( int id,  int transferred,  int total)  transferProgress,required TResult Function( int id,  String? error)  transferFinished,required TResult Function( List<StreamView> streams,  String? watching)  streams,required TResult Function( String streamId,  int sourceClientId,  String sdp)  streamOffer,required TResult Function( String streamId,  int sourceClientId,  String sdp,  String? mid,  int? mLine)  streamIceCandidate,required TResult Function( String streamId,  StreamEndReason reason)  streamEnded,required TResult Function( String streamId)  screenSharePublished,required TResult Function()  screenShareStopped,required TResult Function( String streamId,  int viewerClid)  streamViewerJoinRequested,required TResult Function( String streamId,  int viewerClid,  PublisherSignal signal)  publisherSignalReceived,required TResult Function( String streamId,  int viewerClid)  streamViewerLeft,required TResult Function( String level,  String message)  log,required TResult Function( String message)  denied,required TResult Function( String message)  failed,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function( NetworkTelemetry telemetry)  network,required TResult Function()  accessChanged,required TResult Function( CoreSessionState state)  state,required TResult Function( List<ServerProfileView> profiles)  servers,required TResult Function( String serverId,  Uint8List? bytes)  serverIconUpdated,required TResult Function( String uid)  avatarUpdated,required TResult Function( List<ChannelView> channels,  List<ClientView> clients)  snapshot,required TResult Function( List<CoreMessage> messages)  history,required TResult Function( String from,  String fromUid,  int fromId,  String message,  int targetMode,  int targetId,  String peerUid,  bool fromSelf,  int at)  textMessage,required TResult Function( String from,  String message)  poked,required TResult Function( ClientView client)  clientJoined,required TResult Function( int id)  clientLeft,required TResult Function( ClientView client)  clientMoved,required TResult Function( int id,  bool? inputMuted,  bool? outputMuted,  bool? away,  String? awayMessage)  clientUpdated,required TResult Function( CoreVoiceState state)  voice,required TResult Function( bool input,  bool output)  audioDevicesReset,required TResult Function( Int32List clientIds)  speaking,required TResult Function( bool speaking)  selfSpeaking,required TResult Function( double mic,  double received)  levels,required TResult Function( int from,  int to)  identityUpgrade,required TResult Function( int level)  identityUpgraded,required TResult Function( int id,  CoreTransferDirection direction,  String remotePath,  int total)  transferStarted,required TResult Function( int id,  int transferred,  int total)  transferProgress,required TResult Function( int id,  String? error)  transferFinished,required TResult Function( List<StreamView> streams,  String? watching)  streams,required TResult Function( String streamId,  int sourceClientId,  String sdp)  streamOffer,required TResult Function( String streamId,  int sourceClientId,  String sdp,  String? mid,  int? mLine)  streamIceCandidate,required TResult Function( String streamId,  StreamEndReason reason)  streamEnded,required TResult Function( String streamId)  screenSharePublished,required TResult Function()  screenShareStopped,required TResult Function( String streamId,  int viewerClid)  streamViewerJoinRequested,required TResult Function( String streamId,  int viewerClid,  PublisherSignal signal)  publisherSignalReceived,required TResult Function( String streamId,  int viewerClid)  streamViewerLeft,required TResult Function( String level,  String message)  log,required TResult Function( String message)  denied,required TResult Function( String message)  failed,}) {final _that = this;
 switch (_that) {
 case CoreEvent_Network():
 return network(_that.telemetry);case CoreEvent_AccessChanged():
@@ -995,11 +1107,11 @@ return serverIconUpdated(_that.serverId,_that.bytes);case CoreEvent_AvatarUpdate
 return avatarUpdated(_that.uid);case CoreEvent_Snapshot():
 return snapshot(_that.channels,_that.clients);case CoreEvent_History():
 return history(_that.messages);case CoreEvent_TextMessage():
-return textMessage(_that.from,_that.fromUid,_that.fromId,_that.message,_that.targetMode,_that.targetId,_that.peerUid,_that.at);case CoreEvent_Poked():
+return textMessage(_that.from,_that.fromUid,_that.fromId,_that.message,_that.targetMode,_that.targetId,_that.peerUid,_that.fromSelf,_that.at);case CoreEvent_Poked():
 return poked(_that.from,_that.message);case CoreEvent_ClientJoined():
-return clientJoined(_that.id,_that.nickname,_that.uid,_that.channelId,_that.isStreaming);case CoreEvent_ClientLeft():
+return clientJoined(_that.client);case CoreEvent_ClientLeft():
 return clientLeft(_that.id);case CoreEvent_ClientMoved():
-return clientMoved(_that.id,_that.channelId);case CoreEvent_ClientUpdated():
+return clientMoved(_that.client);case CoreEvent_ClientUpdated():
 return clientUpdated(_that.id,_that.inputMuted,_that.outputMuted,_that.away,_that.awayMessage);case CoreEvent_Voice():
 return voice(_that.state);case CoreEvent_AudioDevicesReset():
 return audioDevicesReset(_that.input,_that.output);case CoreEvent_Speaking():
@@ -1036,7 +1148,7 @@ return failed(_that.message);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( NetworkTelemetry telemetry)?  network,TResult? Function()?  accessChanged,TResult? Function( CoreSessionState state)?  state,TResult? Function( List<ServerProfileView> profiles)?  servers,TResult? Function( String serverId,  Uint8List? bytes)?  serverIconUpdated,TResult? Function( String uid)?  avatarUpdated,TResult? Function( List<ChannelView> channels,  List<ClientView> clients)?  snapshot,TResult? Function( List<CoreMessage> messages)?  history,TResult? Function( String from,  String fromUid,  int fromId,  String message,  int targetMode,  int targetId,  String peerUid,  int at)?  textMessage,TResult? Function( String from,  String message)?  poked,TResult? Function( int id,  String nickname,  String uid,  int channelId,  bool isStreaming)?  clientJoined,TResult? Function( int id)?  clientLeft,TResult? Function( int id,  int channelId)?  clientMoved,TResult? Function( int id,  bool? inputMuted,  bool? outputMuted,  bool? away,  String? awayMessage)?  clientUpdated,TResult? Function( CoreVoiceState state)?  voice,TResult? Function( bool input,  bool output)?  audioDevicesReset,TResult? Function( Int32List clientIds)?  speaking,TResult? Function( bool speaking)?  selfSpeaking,TResult? Function( double mic,  double received)?  levels,TResult? Function( int from,  int to)?  identityUpgrade,TResult? Function( int level)?  identityUpgraded,TResult? Function( int id,  CoreTransferDirection direction,  String remotePath,  int total)?  transferStarted,TResult? Function( int id,  int transferred,  int total)?  transferProgress,TResult? Function( int id,  String? error)?  transferFinished,TResult? Function( List<StreamView> streams,  String? watching)?  streams,TResult? Function( String streamId,  int sourceClientId,  String sdp)?  streamOffer,TResult? Function( String streamId,  int sourceClientId,  String sdp,  String? mid,  int? mLine)?  streamIceCandidate,TResult? Function( String streamId,  StreamEndReason reason)?  streamEnded,TResult? Function( String streamId)?  screenSharePublished,TResult? Function()?  screenShareStopped,TResult? Function( String streamId,  int viewerClid)?  streamViewerJoinRequested,TResult? Function( String streamId,  int viewerClid,  PublisherSignal signal)?  publisherSignalReceived,TResult? Function( String streamId,  int viewerClid)?  streamViewerLeft,TResult? Function( String level,  String message)?  log,TResult? Function( String message)?  denied,TResult? Function( String message)?  failed,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function( NetworkTelemetry telemetry)?  network,TResult? Function()?  accessChanged,TResult? Function( CoreSessionState state)?  state,TResult? Function( List<ServerProfileView> profiles)?  servers,TResult? Function( String serverId,  Uint8List? bytes)?  serverIconUpdated,TResult? Function( String uid)?  avatarUpdated,TResult? Function( List<ChannelView> channels,  List<ClientView> clients)?  snapshot,TResult? Function( List<CoreMessage> messages)?  history,TResult? Function( String from,  String fromUid,  int fromId,  String message,  int targetMode,  int targetId,  String peerUid,  bool fromSelf,  int at)?  textMessage,TResult? Function( String from,  String message)?  poked,TResult? Function( ClientView client)?  clientJoined,TResult? Function( int id)?  clientLeft,TResult? Function( ClientView client)?  clientMoved,TResult? Function( int id,  bool? inputMuted,  bool? outputMuted,  bool? away,  String? awayMessage)?  clientUpdated,TResult? Function( CoreVoiceState state)?  voice,TResult? Function( bool input,  bool output)?  audioDevicesReset,TResult? Function( Int32List clientIds)?  speaking,TResult? Function( bool speaking)?  selfSpeaking,TResult? Function( double mic,  double received)?  levels,TResult? Function( int from,  int to)?  identityUpgrade,TResult? Function( int level)?  identityUpgraded,TResult? Function( int id,  CoreTransferDirection direction,  String remotePath,  int total)?  transferStarted,TResult? Function( int id,  int transferred,  int total)?  transferProgress,TResult? Function( int id,  String? error)?  transferFinished,TResult? Function( List<StreamView> streams,  String? watching)?  streams,TResult? Function( String streamId,  int sourceClientId,  String sdp)?  streamOffer,TResult? Function( String streamId,  int sourceClientId,  String sdp,  String? mid,  int? mLine)?  streamIceCandidate,TResult? Function( String streamId,  StreamEndReason reason)?  streamEnded,TResult? Function( String streamId)?  screenSharePublished,TResult? Function()?  screenShareStopped,TResult? Function( String streamId,  int viewerClid)?  streamViewerJoinRequested,TResult? Function( String streamId,  int viewerClid,  PublisherSignal signal)?  publisherSignalReceived,TResult? Function( String streamId,  int viewerClid)?  streamViewerLeft,TResult? Function( String level,  String message)?  log,TResult? Function( String message)?  denied,TResult? Function( String message)?  failed,}) {final _that = this;
 switch (_that) {
 case CoreEvent_Network() when network != null:
 return network(_that.telemetry);case CoreEvent_AccessChanged() when accessChanged != null:
@@ -1047,11 +1159,11 @@ return serverIconUpdated(_that.serverId,_that.bytes);case CoreEvent_AvatarUpdate
 return avatarUpdated(_that.uid);case CoreEvent_Snapshot() when snapshot != null:
 return snapshot(_that.channels,_that.clients);case CoreEvent_History() when history != null:
 return history(_that.messages);case CoreEvent_TextMessage() when textMessage != null:
-return textMessage(_that.from,_that.fromUid,_that.fromId,_that.message,_that.targetMode,_that.targetId,_that.peerUid,_that.at);case CoreEvent_Poked() when poked != null:
+return textMessage(_that.from,_that.fromUid,_that.fromId,_that.message,_that.targetMode,_that.targetId,_that.peerUid,_that.fromSelf,_that.at);case CoreEvent_Poked() when poked != null:
 return poked(_that.from,_that.message);case CoreEvent_ClientJoined() when clientJoined != null:
-return clientJoined(_that.id,_that.nickname,_that.uid,_that.channelId,_that.isStreaming);case CoreEvent_ClientLeft() when clientLeft != null:
+return clientJoined(_that.client);case CoreEvent_ClientLeft() when clientLeft != null:
 return clientLeft(_that.id);case CoreEvent_ClientMoved() when clientMoved != null:
-return clientMoved(_that.id,_that.channelId);case CoreEvent_ClientUpdated() when clientUpdated != null:
+return clientMoved(_that.client);case CoreEvent_ClientUpdated() when clientUpdated != null:
 return clientUpdated(_that.id,_that.inputMuted,_that.outputMuted,_that.away,_that.awayMessage);case CoreEvent_Voice() when voice != null:
 return voice(_that.state);case CoreEvent_AudioDevicesReset() when audioDevicesReset != null:
 return audioDevicesReset(_that.input,_that.output);case CoreEvent_Speaking() when speaking != null:
@@ -1631,7 +1743,7 @@ as List<CoreMessage>,
 
 
 class CoreEvent_TextMessage extends CoreEvent {
-  const CoreEvent_TextMessage({required this.from, required this.fromUid, required this.fromId, required this.message, required this.targetMode, required this.targetId, required this.peerUid, required this.at}): super._();
+  const CoreEvent_TextMessage({required this.from, required this.fromUid, required this.fromId, required this.message, required this.targetMode, required this.targetId, required this.peerUid, this.fromSelf = false, required this.at}): super._();
   
 
  final  String from;
@@ -1642,6 +1754,7 @@ class CoreEvent_TextMessage extends CoreEvent {
  final  int targetId;
 /// 私聊对话的另一方 UID；频道与服务器广播为空。
  final  String peerUid;
+@JsonKey() final  bool fromSelf;
  final  int at;
 
 /// Create a copy of CoreEvent
@@ -1654,18 +1767,18 @@ $CoreEvent_TextMessageCopyWith<CoreEvent_TextMessage> get copyWith => _$CoreEven
 
 @override
 bool operator ==(Object other) {
-    return identical(this, other) || (other.runtimeType == runtimeType&&other is CoreEvent_TextMessage&&(identical(other.from, from) || other.from == from)&&(identical(other.fromUid, fromUid) || other.fromUid == fromUid)&&(identical(other.fromId, fromId) || other.fromId == fromId)&&(identical(other.message, message) || other.message == message)&&(identical(other.targetMode, targetMode) || other.targetMode == targetMode)&&(identical(other.targetId, targetId) || other.targetId == targetId)&&(identical(other.peerUid, peerUid) || other.peerUid == peerUid)&&(identical(other.at, at) || other.at == at));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is CoreEvent_TextMessage&&(identical(other.from, from) || other.from == from)&&(identical(other.fromUid, fromUid) || other.fromUid == fromUid)&&(identical(other.fromId, fromId) || other.fromId == fromId)&&(identical(other.message, message) || other.message == message)&&(identical(other.targetMode, targetMode) || other.targetMode == targetMode)&&(identical(other.targetId, targetId) || other.targetId == targetId)&&(identical(other.peerUid, peerUid) || other.peerUid == peerUid)&&(identical(other.fromSelf, fromSelf) || other.fromSelf == fromSelf)&&(identical(other.at, at) || other.at == at));
 }
 
 
 @override
 int get hashCode {
-    return Object.hash(runtimeType,from,fromUid,fromId,message,targetMode,targetId,peerUid,at);
+    return Object.hash(runtimeType,from,fromUid,fromId,message,targetMode,targetId,peerUid,fromSelf,at);
 }
 
 @override
 String toString() {
-    return 'CoreEvent.textMessage(from: $from, fromUid: $fromUid, fromId: $fromId, message: $message, targetMode: $targetMode, targetId: $targetId, peerUid: $peerUid, at: $at)';
+    return 'CoreEvent.textMessage(from: $from, fromUid: $fromUid, fromId: $fromId, message: $message, targetMode: $targetMode, targetId: $targetId, peerUid: $peerUid, fromSelf: $fromSelf, at: $at)';
 }
 
 
@@ -1676,7 +1789,7 @@ abstract mixin class $CoreEvent_TextMessageCopyWith<$Res> implements $CoreEventC
   factory $CoreEvent_TextMessageCopyWith(CoreEvent_TextMessage value, $Res Function(CoreEvent_TextMessage) _then) = _$CoreEvent_TextMessageCopyWithImpl;
 @useResult
 $Res call({
- String from, String fromUid, int fromId, String message, int targetMode, int targetId, String peerUid, int at
+ String from, String fromUid, int fromId, String message, int targetMode, int targetId, String peerUid, bool fromSelf, int at
 });
 
 
@@ -1693,7 +1806,7 @@ class _$CoreEvent_TextMessageCopyWithImpl<$Res>
 
 /// Create a copy of CoreEvent
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') $Res call({Object? from = null,Object? fromUid = null,Object? fromId = null,Object? message = null,Object? targetMode = null,Object? targetId = null,Object? peerUid = null,Object? at = null,}) {
+@pragma('vm:prefer-inline') $Res call({Object? from = null,Object? fromUid = null,Object? fromId = null,Object? message = null,Object? targetMode = null,Object? targetId = null,Object? peerUid = null,Object? fromSelf = null,Object? at = null,}) {
   return _then(CoreEvent_TextMessage(
 from: null == from ? _self.from : from // ignore: cast_nullable_to_non_nullable
 as String,fromUid: null == fromUid ? _self.fromUid : fromUid // ignore: cast_nullable_to_non_nullable
@@ -1702,7 +1815,8 @@ as int,message: null == message ? _self.message : message // ignore: cast_nullab
 as String,targetMode: null == targetMode ? _self.targetMode : targetMode // ignore: cast_nullable_to_non_nullable
 as int,targetId: null == targetId ? _self.targetId : targetId // ignore: cast_nullable_to_non_nullable
 as int,peerUid: null == peerUid ? _self.peerUid : peerUid // ignore: cast_nullable_to_non_nullable
-as String,at: null == at ? _self.at : at // ignore: cast_nullable_to_non_nullable
+as String,fromSelf: null == fromSelf ? _self.fromSelf : fromSelf // ignore: cast_nullable_to_non_nullable
+as bool,at: null == at ? _self.at : at // ignore: cast_nullable_to_non_nullable
 as int,
   ));
 }
@@ -1784,14 +1898,10 @@ as String,
 
 
 class CoreEvent_ClientJoined extends CoreEvent {
-  const CoreEvent_ClientJoined({required this.id, required this.nickname, required this.uid, required this.channelId, required this.isStreaming}): super._();
+  const CoreEvent_ClientJoined({required this.client}): super._();
   
 
- final  int id;
- final  String nickname;
- final  String uid;
- final  int channelId;
- final  bool isStreaming;
+ final  ClientView client;
 
 /// Create a copy of CoreEvent
 /// with the given fields replaced by the non-null parameter values.
@@ -1803,18 +1913,18 @@ $CoreEvent_ClientJoinedCopyWith<CoreEvent_ClientJoined> get copyWith => _$CoreEv
 
 @override
 bool operator ==(Object other) {
-    return identical(this, other) || (other.runtimeType == runtimeType&&other is CoreEvent_ClientJoined&&(identical(other.id, id) || other.id == id)&&(identical(other.nickname, nickname) || other.nickname == nickname)&&(identical(other.uid, uid) || other.uid == uid)&&(identical(other.channelId, channelId) || other.channelId == channelId)&&(identical(other.isStreaming, isStreaming) || other.isStreaming == isStreaming));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is CoreEvent_ClientJoined&&(identical(other.client, client) || other.client == client));
 }
 
 
 @override
 int get hashCode {
-    return Object.hash(runtimeType,id,nickname,uid,channelId,isStreaming);
+    return Object.hash(runtimeType,client);
 }
 
 @override
 String toString() {
-    return 'CoreEvent.clientJoined(id: $id, nickname: $nickname, uid: $uid, channelId: $channelId, isStreaming: $isStreaming)';
+    return 'CoreEvent.clientJoined(client: $client)';
 }
 
 
@@ -1825,7 +1935,7 @@ abstract mixin class $CoreEvent_ClientJoinedCopyWith<$Res> implements $CoreEvent
   factory $CoreEvent_ClientJoinedCopyWith(CoreEvent_ClientJoined value, $Res Function(CoreEvent_ClientJoined) _then) = _$CoreEvent_ClientJoinedCopyWithImpl;
 @useResult
 $Res call({
- int id, String nickname, String uid, int channelId, bool isStreaming
+ ClientView client
 });
 
 
@@ -1842,14 +1952,10 @@ class _$CoreEvent_ClientJoinedCopyWithImpl<$Res>
 
 /// Create a copy of CoreEvent
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') $Res call({Object? id = null,Object? nickname = null,Object? uid = null,Object? channelId = null,Object? isStreaming = null,}) {
+@pragma('vm:prefer-inline') $Res call({Object? client = null,}) {
   return _then(CoreEvent_ClientJoined(
-id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
-as int,nickname: null == nickname ? _self.nickname : nickname // ignore: cast_nullable_to_non_nullable
-as String,uid: null == uid ? _self.uid : uid // ignore: cast_nullable_to_non_nullable
-as String,channelId: null == channelId ? _self.channelId : channelId // ignore: cast_nullable_to_non_nullable
-as int,isStreaming: null == isStreaming ? _self.isStreaming : isStreaming // ignore: cast_nullable_to_non_nullable
-as bool,
+client: null == client ? _self.client : client // ignore: cast_nullable_to_non_nullable
+as ClientView,
   ));
 }
 
@@ -1928,11 +2034,10 @@ as int,
 
 
 class CoreEvent_ClientMoved extends CoreEvent {
-  const CoreEvent_ClientMoved({required this.id, required this.channelId}): super._();
+  const CoreEvent_ClientMoved({required this.client}): super._();
   
 
- final  int id;
- final  int channelId;
+ final  ClientView client;
 
 /// Create a copy of CoreEvent
 /// with the given fields replaced by the non-null parameter values.
@@ -1944,18 +2049,18 @@ $CoreEvent_ClientMovedCopyWith<CoreEvent_ClientMoved> get copyWith => _$CoreEven
 
 @override
 bool operator ==(Object other) {
-    return identical(this, other) || (other.runtimeType == runtimeType&&other is CoreEvent_ClientMoved&&(identical(other.id, id) || other.id == id)&&(identical(other.channelId, channelId) || other.channelId == channelId));
+    return identical(this, other) || (other.runtimeType == runtimeType&&other is CoreEvent_ClientMoved&&(identical(other.client, client) || other.client == client));
 }
 
 
 @override
 int get hashCode {
-    return Object.hash(runtimeType,id,channelId);
+    return Object.hash(runtimeType,client);
 }
 
 @override
 String toString() {
-    return 'CoreEvent.clientMoved(id: $id, channelId: $channelId)';
+    return 'CoreEvent.clientMoved(client: $client)';
 }
 
 
@@ -1966,7 +2071,7 @@ abstract mixin class $CoreEvent_ClientMovedCopyWith<$Res> implements $CoreEventC
   factory $CoreEvent_ClientMovedCopyWith(CoreEvent_ClientMoved value, $Res Function(CoreEvent_ClientMoved) _then) = _$CoreEvent_ClientMovedCopyWithImpl;
 @useResult
 $Res call({
- int id, int channelId
+ ClientView client
 });
 
 
@@ -1983,11 +2088,10 @@ class _$CoreEvent_ClientMovedCopyWithImpl<$Res>
 
 /// Create a copy of CoreEvent
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') $Res call({Object? id = null,Object? channelId = null,}) {
+@pragma('vm:prefer-inline') $Res call({Object? client = null,}) {
   return _then(CoreEvent_ClientMoved(
-id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
-as int,channelId: null == channelId ? _self.channelId : channelId // ignore: cast_nullable_to_non_nullable
-as int,
+client: null == client ? _self.client : client // ignore: cast_nullable_to_non_nullable
+as ClientView,
   ));
 }
 

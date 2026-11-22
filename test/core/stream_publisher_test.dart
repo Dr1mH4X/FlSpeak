@@ -24,6 +24,8 @@ class _FakeCoreSession extends Fake implements CoreSession {
   Completer<void>? sendPublisherCandidateGate;
   Exception? sendPublisherCandidateError;
   final List<int> kickedViewers = [];
+  int? _activeViewerLimit;
+  final Set<int> _acceptedViewers = {};
 
   @override
   Stream<CoreEvent> events() => eventsController.stream;
@@ -41,6 +43,8 @@ class _FakeCoreSession extends Fake implements CoreSession {
     required int bitrate,
     required int viewerLimit,
   }) async {
+    _activeViewerLimit = viewerLimit;
+    _acceptedViewers.clear();
     startedShares.add((
       name: name,
       audio: audio,
@@ -52,6 +56,8 @@ class _FakeCoreSession extends Fake implements CoreSession {
   @override
   Future<void> stopScreenShare() async {
     stopShareCalls++;
+    _acceptedViewers.clear();
+    _activeViewerLimit = null;
   }
 
   @override
@@ -68,6 +74,18 @@ class _FakeCoreSession extends Fake implements CoreSession {
       accept: accept,
       offerSdp: offerSdp,
     ));
+    if (accept) {
+      final limit = _activeViewerLimit;
+      if (limit != null &&
+          limit > 0 &&
+          !_acceptedViewers.contains(viewerClid) &&
+          _acceptedViewers.length >= limit) {
+        throw const CoreError.connection(
+          message: 'screen share viewer limit reached',
+        );
+      }
+      _acceptedViewers.add(viewerClid);
+    }
   }
 
   @override
@@ -93,6 +111,7 @@ class _FakeCoreSession extends Fake implements CoreSession {
 
   @override
   Future<void> kickStreamViewer({required int viewerClid}) async {
+    _acceptedViewers.remove(viewerClid);
     kickedViewers.add(viewerClid);
   }
 }
@@ -587,7 +606,7 @@ void main() {
           name: 'Code Editor',
           audio: false,
           bitrate: 5000,
-          viewerLimit: defaultMaxStreamViewers,
+          viewerLimit: defaultMaxStreamViewers(),
         ),
       ]);
 
@@ -764,7 +783,8 @@ void main() {
       });
       expect(bindings.createdPeers, hasLength(5));
 
-      // 4. 6th viewer (106) requests to join -> rejected with accept: false!
+      // 4. 6th viewer (106) requests to join -> Rust respondStreamJoinRequest rejects at limit,
+      // and publisher cleans up the tentative PeerConnection for viewer 106.
       events.add(
         const CoreEvent.streamViewerJoinRequested(
           streamId: 'pub-stream-2',
@@ -773,12 +793,18 @@ void main() {
       );
       await _pumpEventQueue();
 
-      expect(bindings.createdPeers, hasLength(5));
-      expect(core.joinResponses.last, (
-        viewerClid: 106,
-        accept: false,
-        offerSdp: '',
-      ));
+      expect(bindings.createdPeers, hasLength(6));
+      expect(bindings.createdPeers[5].closed, isTrue);
+      expect(bindings.createdPeers[5].disposed, isTrue);
+      expect(container.read(streamPublisherProvider).viewerCount, 5);
+      expect(container.read(streamPublisherProvider).viewerIds, {
+        101,
+        102,
+        103,
+        104,
+        105,
+      });
+      expect(core.kickedViewers, contains(106));
 
       // 5. Viewer 102 leaves and viewer 103 ICE fails -> only 102 & 103 are closed; 101, 104, 105 stay active.
       final peer102 = bindings.createdPeers[1];
@@ -804,7 +830,11 @@ void main() {
       });
 
       // 6. Channel move stops screen share and disposes all remaining viewer peers and local stream.
-      events.add(const CoreEvent.clientMoved(id: 1, channelId: 9));
+      events.add(
+        const CoreEvent.clientMoved(
+          client: ClientView(id: 1, nickname: 'Me', uid: 'self', channelId: 9),
+        ),
+      );
       await _pumpEventQueue();
 
       expect(container.read(streamPublisherProvider).isActive, isFalse);

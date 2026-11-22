@@ -9,7 +9,7 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'session.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `map_avatar_error`, `runtime`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 /// 抓取第三方图片 URL。myTS 的 `ts.file.myts` 附件不经过这里。
 Future<Uint8List> fetchImage({required String url}) =>
@@ -66,6 +66,28 @@ void updateAudioSettingsJson({required String json}) =>
 /// 同步 Android 当前活跃网络的 DNS 服务器 IP 列表（用于 SRV 与 A 记录解析）。
 void setAndroidDnsServers({required List<String> servers}) =>
     RustLib.instance.api.crateApiSessionSetAndroidDnsServers(servers: servers);
+
+/// 计算字符串按 TeamSpeak 命令行转义后的字节长度。
+int tsEscapedLen({required String text}) =>
+    RustLib.instance.api.crateApiSessionTsEscapedLen(text: text);
+
+/// 判断屏幕共享 SDP Offer 转义后是否可放入单条 TeamSpeak 命令（9150 字节预算）。
+bool streamOfferFitsCommand({required String sdp}) =>
+    RustLib.instance.api.crateApiSessionStreamOfferFitsCommand(sdp: sdp);
+
+/// 客户端头像大小安全上限（字节）。
+int maxAvatarBytes() => RustLib.instance.api.crateApiSessionMaxAvatarBytes();
+
+/// 聊天图片大小安全上限（字节）。
+int maxChatImageBytes() =>
+    RustLib.instance.api.crateApiSessionMaxChatImageBytes();
+
+/// 每个会话在内存与本地历史中保留的最大聊天消息条数。
+int historyLimit() => RustLib.instance.api.crateApiSessionHistoryLimit();
+
+/// 屏幕共享发布端默认最大并发观众数。
+int defaultMaxStreamViewers() =>
+    RustLib.instance.api.crateApiSessionDefaultMaxStreamViewers();
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<CoreSession>>
 abstract class CoreSession implements RustOpaqueInterface {
@@ -264,6 +286,9 @@ class AccessView {
   final int? memberRemovePower;
   final int? kickChannelPower;
   final int? kickServerPower;
+  final bool canManageMembers;
+  final bool canKickChannel;
+  final bool canKickServer;
   final int? connectionEpoch;
 
   const AccessView({
@@ -271,6 +296,9 @@ class AccessView {
     this.memberRemovePower,
     this.kickChannelPower,
     this.kickServerPower,
+    this.canManageMembers = false,
+    this.canKickChannel = false,
+    this.canKickServer = false,
     this.connectionEpoch,
   });
 
@@ -280,6 +308,9 @@ class AccessView {
       memberRemovePower.hashCode ^
       kickChannelPower.hashCode ^
       kickServerPower.hashCode ^
+      canManageMembers.hashCode ^
+      canKickChannel.hashCode ^
+      canKickServer.hashCode ^
       connectionEpoch.hashCode;
 
   @override
@@ -291,6 +322,9 @@ class AccessView {
           memberRemovePower == other.memberRemovePower &&
           kickChannelPower == other.kickChannelPower &&
           kickServerPower == other.kickServerPower &&
+          canManageMembers == other.canManageMembers &&
+          canKickChannel == other.canKickChannel &&
+          canKickServer == other.canKickServer &&
           connectionEpoch == other.connectionEpoch;
 }
 
@@ -321,11 +355,22 @@ class AudioDeviceView {
 class AudioDevicesView {
   final List<AudioDeviceView> inputs;
   final List<AudioDeviceView> outputs;
+  final String? currentInputId;
+  final String? currentOutputId;
 
-  const AudioDevicesView({required this.inputs, required this.outputs});
+  const AudioDevicesView({
+    required this.inputs,
+    required this.outputs,
+    this.currentInputId,
+    this.currentOutputId,
+  });
 
   @override
-  int get hashCode => inputs.hashCode ^ outputs.hashCode;
+  int get hashCode =>
+      inputs.hashCode ^
+      outputs.hashCode ^
+      currentInputId.hashCode ^
+      currentOutputId.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -333,7 +378,9 @@ class AudioDevicesView {
       other is AudioDevicesView &&
           runtimeType == other.runtimeType &&
           inputs == other.inputs &&
-          outputs == other.outputs;
+          outputs == other.outputs &&
+          currentInputId == other.currentInputId &&
+          currentOutputId == other.currentOutputId;
 }
 
 class BotCommandView {
@@ -471,7 +518,8 @@ class ClientView {
   final String? appName;
   final String? appVersion;
   final List<String> capabilities;
-  final List<BotCommandView>? botCommands;
+  final List<BotCommandView> botCommands;
+  final bool botCommandsLoaded;
   final String? botCommandPrefix;
 
   const ClientView({
@@ -488,7 +536,8 @@ class ClientView {
     this.appName,
     this.appVersion,
     this.capabilities = const [],
-    this.botCommands,
+    this.botCommands = const [],
+    this.botCommandsLoaded = false,
     this.botCommandPrefix,
   });
 
@@ -508,6 +557,7 @@ class ClientView {
       appVersion.hashCode ^
       capabilities.hashCode ^
       botCommands.hashCode ^
+      botCommandsLoaded.hashCode ^
       botCommandPrefix.hashCode;
 
   @override
@@ -529,6 +579,7 @@ class ClientView {
           appVersion == other.appVersion &&
           capabilities == other.capabilities &&
           botCommands == other.botCommands &&
+          botCommandsLoaded == other.botCommandsLoaded &&
           botCommandPrefix == other.botCommandPrefix;
 }
 
@@ -564,6 +615,14 @@ sealed class CoreError with _$CoreError implements FrbException {
 
   /// 头像操作暂时不可用（未连接、传输失败或服务器未响应）。
   const factory CoreError.avatarUnavailable() = CoreError_AvatarUnavailable;
+
+  /// 聊天图片超过大小上限。
+  const factory CoreError.imageTooLarge({required int maxBytes}) =
+      CoreError_ImageTooLarge;
+
+  /// 聊天图片不是受支持的 PNG / JPEG / GIF / WebP 格式。
+  const factory CoreError.imageUnsupportedFormat() =
+      CoreError_ImageUnsupportedFormat;
 
   /// 桥自身的问题。
   const factory CoreError.internal({required String message}) =
@@ -603,24 +662,18 @@ sealed class CoreEvent with _$CoreEvent {
 
     /// 私聊对话的另一方 UID；频道与服务器广播为空。
     required String peerUid,
+    @Default(false) bool fromSelf,
     required int at,
   }) = CoreEvent_TextMessage;
   const factory CoreEvent.poked({
     required String from,
     required String message,
   }) = CoreEvent_Poked;
-  const factory CoreEvent.clientJoined({
-    required int id,
-    required String nickname,
-    required String uid,
-    required int channelId,
-    required bool isStreaming,
-  }) = CoreEvent_ClientJoined;
+  const factory CoreEvent.clientJoined({required ClientView client}) =
+      CoreEvent_ClientJoined;
   const factory CoreEvent.clientLeft({required int id}) = CoreEvent_ClientLeft;
-  const factory CoreEvent.clientMoved({
-    required int id,
-    required int channelId,
-  }) = CoreEvent_ClientMoved;
+  const factory CoreEvent.clientMoved({required ClientView client}) =
+      CoreEvent_ClientMoved;
 
   /// 某个客户端（含自己）的服务器标志变化；null 表示本次事件没提到，
   /// 不是清除。
@@ -722,6 +775,7 @@ class CoreMessage {
 
   /// 私聊对话的另一方 UID；频道与服务器广播为空。
   final String peerUid;
+  final bool fromSelf;
   final int at;
 
   const CoreMessage({
@@ -732,6 +786,7 @@ class CoreMessage {
     required this.targetMode,
     required this.targetId,
     required this.peerUid,
+    this.fromSelf = false,
     required this.at,
   });
 
@@ -744,6 +799,7 @@ class CoreMessage {
       targetMode.hashCode ^
       targetId.hashCode ^
       peerUid.hashCode ^
+      fromSelf.hashCode ^
       at.hashCode;
 
   @override
@@ -758,6 +814,7 @@ class CoreMessage {
           targetMode == other.targetMode &&
           targetId == other.targetId &&
           peerUid == other.peerUid &&
+          fromSelf == other.fromSelf &&
           at == other.at;
 }
 

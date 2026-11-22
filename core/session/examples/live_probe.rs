@@ -39,8 +39,8 @@ async fn main() {
                         client.id, client.nickname, client.channel_id
                     );
                 }
-                Ok(SessionEvent::ClientMoved { id, channel_id }) => {
-                    println!("[moved] {id} -> {channel_id}");
+                Ok(SessionEvent::ClientMoved(client)) => {
+                    println!("[moved] {} -> {}", client.id, client.channel_id);
                 }
                 Ok(SessionEvent::Log { level, message }) => println!("[log/{level}] {message}"),
                 Ok(SessionEvent::TextMessage(message)) => {

@@ -164,7 +164,8 @@ impl Actor {
             app_name: Some("FlSpeak".into()),
             app_version: Some(env!("CARGO_PKG_VERSION").into()),
             capabilities: self.open_protocol.effective_identity().capabilities,
-            bot_commands: None,
+            bot_commands: Vec::new(),
+            bot_commands_loaded: false,
             bot_command_prefix: None,
         };
         match rows.iter_mut().find(|row| row.id == self_id) {
@@ -214,7 +215,8 @@ impl Actor {
                 app_name: Some("FlSpeak".into()),
                 app_version: Some(env!("CARGO_PKG_VERSION").into()),
                 capabilities: self.open_protocol.effective_identity().capabilities,
-                bot_commands: None,
+                bot_commands: Vec::new(),
+                bot_commands_loaded: false,
                 bot_command_prefix: None,
             }),
         }
@@ -390,13 +392,15 @@ impl Actor {
                         .filter_map(|channel| channel.codec.map(|codec| (channel.id, codec))),
                 );
                 Ok(ChannelDirectory {
-                    channels: channels
-                        .into_iter()
-                        .map(|channel| {
-                            let id = channel.id;
-                            channel_view(channel, metadata.get(&id))
-                        })
-                        .collect(),
+                    channels: order_channels(
+                        channels
+                            .into_iter()
+                            .map(|channel| {
+                                let id = channel.id;
+                                channel_view(channel, metadata.get(&id))
+                            })
+                            .collect(),
+                    ),
                     codecs: (!codecs.is_empty()).then_some(codecs),
                     metadata_error: None,
                 })
@@ -573,6 +577,7 @@ impl Actor {
     ) {
         self.open_protocol_sync_peers(&clients);
         self.sync_client_channels_from_snapshot(&clients);
+        self.sync_clients_cache(&clients);
         let changed = force
             || self
                 .last_snapshot
@@ -703,7 +708,8 @@ mod tests {
                     app_name: Some("FlSpeak".into()),
                     app_version: Some(env!("CARGO_PKG_VERSION").into()),
                     capabilities: Vec::new(),
-                    bot_commands: None,
+                    bot_commands: Vec::new(),
+                    bot_commands_loaded: false,
                     bot_command_prefix: None,
                 },
                 ClientView {
@@ -720,7 +726,8 @@ mod tests {
                     app_name: Some("FlSpeak".into()),
                     app_version: Some("0.1.12".into()),
                     capabilities: vec!["chat".into()],
-                    bot_commands: None,
+                    bot_commands: Vec::new(),
+                    bot_commands_loaded: false,
                     bot_command_prefix: None,
                 },
             ],

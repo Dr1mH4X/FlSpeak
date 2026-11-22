@@ -2,6 +2,13 @@ use super::*;
 
 const TRANSFER_PROGRESS_BYTES: u64 = 256 * 1024;
 const TRANSFER_PROGRESS_INTERVAL: Duration = Duration::from_millis(200);
+pub(crate) const MAX_CHANNEL_ICON_RETRIES: u8 = 5;
+pub(crate) const CHANNEL_ICON_RETRY_STEP: Duration = Duration::from_millis(300);
+pub(crate) const MAX_AVATAR_TRANSIENT_RETRIES: u8 = 5;
+pub(crate) const AVATAR_TRANSIENT_RETRY_DELAY: Duration = Duration::from_millis(500);
+pub(crate) const AVATAR_FAILURE_COOLDOWN: Duration = Duration::from_secs(30);
+pub(crate) const MAX_AVATAR_FAILURE_ATTEMPTS: u8 = 3;
+
 type ImageNegotiation =
     Pin<Box<dyn std::future::Future<Output = Result<(String, FileDownloadInfo), ImageFetchError>>>>;
 pub(super) type ChannelIconKey = (u64, String, u32);
@@ -9,11 +16,38 @@ pub(super) type ChannelIconWaiters = Vec<oneshot::Sender<Result<Vec<u8>, Session
 pub(super) type AvatarFetchKey = (u64, String, String, u64);
 pub(super) type AvatarWaiters = Vec<oneshot::Sender<Result<Option<Vec<u8>>, SessionError>>>;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ImageTransientReason {
+    QueueFull,
+    Interrupted,
+    ServerBusy(String),
+    Timeout,
+}
+
+impl ImageTransientReason {
+    pub(crate) fn is_prompt_retryable(&self) -> bool {
+        matches!(
+            self,
+            Self::QueueFull | Self::Interrupted | Self::ServerBusy(_)
+        )
+    }
+
+    pub(crate) fn into_session_error(self) -> SessionError {
+        match self {
+            Self::QueueFull => SessionError::Transfer("image request queue is full".into()),
+            Self::Interrupted => SessionError::Transfer("image negotiation interrupted".into()),
+            Self::ServerBusy(message) => SessionError::Protocol(message),
+            Self::Timeout => SessionError::Timeout,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(crate) enum ImageFetchError {
     NotFound(String),
     PermissionDenied(String),
-    Session(SessionError),
+    Transient(ImageTransientReason),
+    Permanent(SessionError),
 }
 
 impl ImageFetchError {
@@ -22,7 +56,8 @@ impl ImageFetchError {
             Self::NotFound(message) | Self::PermissionDenied(message) => {
                 SessionError::Protocol(message)
             }
-            Self::Session(err) => err,
+            Self::Transient(reason) => reason.into_session_error(),
+            Self::Permanent(err) => err,
         }
     }
 }
@@ -38,8 +73,23 @@ fn classify_image_protocol_error(err: tsclient_rs::Error) -> ImageFetchError {
         || err.is_server_error_code(ErrorCode::Permissions)
     {
         ImageFetchError::PermissionDenied(err.to_string())
+    } else if matches!(err, tsclient_rs::Error::CommandTimeout { .. }) {
+        ImageFetchError::Transient(ImageTransientReason::Timeout)
+    } else if matches!(err, tsclient_rs::Error::ServerError { ref id, .. } if id == "524") {
+        ImageFetchError::Transient(ImageTransientReason::ServerBusy(err.to_string()))
     } else {
-        ImageFetchError::Session(protocol_error(err))
+        ImageFetchError::Permanent(protocol_error(err))
+    }
+}
+
+pub(crate) fn channel_icon_retry_delay(attempt: u8, error: &ImageFetchError) -> Option<Duration> {
+    match error {
+        ImageFetchError::Transient(reason)
+            if attempt < MAX_CHANNEL_ICON_RETRIES && reason.is_prompt_retryable() =>
+        {
+            Some(CHANNEL_ICON_RETRY_STEP * u32::from(attempt + 1))
+        }
+        _ => None,
     }
 }
 
@@ -61,7 +111,27 @@ pub(crate) struct AvatarFetchOutcome {
     pub(super) uid: String,
     pub(super) revision: u64,
     pub(super) avatar_hash: Option<String>,
+    pub(super) remote_path: String,
+    pub(super) attempt: u8,
     pub(super) result: Result<Vec<u8>, ImageFetchError>,
+}
+
+#[derive(Debug)]
+pub(crate) struct AvatarRetry {
+    pub(super) epoch: u64,
+    pub(super) server_id: String,
+    pub(super) uid: String,
+    pub(super) revision: u64,
+    pub(super) avatar_hash: Option<String>,
+    pub(super) remote_path: String,
+    pub(super) attempt: u8,
+}
+
+#[derive(Debug)]
+pub(crate) struct AvatarCooldown {
+    pub(super) attempts: u8,
+    pub(super) retry_not_before: Option<tokio::time::Instant>,
+    pub(super) last_error: SessionError,
 }
 
 pub(super) struct PendingImage {
@@ -132,21 +202,129 @@ impl Actor {
             return;
         }
         self.in_flight_channel_icons.insert(key, vec![reply]);
+        self.dispatch_channel_icon_attempt(epoch, server_id, icon_id, 0);
+    }
+
+    pub(super) fn dispatch_channel_icon_attempt(
+        &mut self,
+        epoch: u64,
+        server_id: String,
+        icon_id: u32,
+        attempt: u8,
+    ) {
         let (tx, rx) = oneshot::channel();
-        self.fetch_remote_icon(icon_id, tx);
+        self.enqueue_server_image(
+            &tsclient_rs::icon_file_name(icon_id),
+            tx,
+            ICON_PREEMPT_RETRIES,
+        );
         let signals = self.signals.clone();
         tokio::task::spawn_local(async move {
             let result = match rx.await {
                 Ok(result) => result,
-                Err(_) => Err(SessionError::NotConnected),
+                Err(_) => Err(ImageFetchError::Permanent(SessionError::NotConnected)),
             };
             let _ = signals.send(SessionSignal::ChannelIconFetched {
                 epoch,
                 server_id,
                 icon_id,
+                attempt,
                 result,
             });
         });
+    }
+
+    pub(super) fn handle_channel_icon_fetched(
+        &mut self,
+        epoch: u64,
+        server_id: String,
+        icon_id: u32,
+        attempt: u8,
+        result: Result<Vec<u8>, ImageFetchError>,
+    ) {
+        let key = (epoch, server_id.clone(), icon_id);
+        if !self.in_flight_channel_icons.contains_key(&key) {
+            return;
+        }
+        if epoch != self.connection_epoch
+            || self.active_server_id.as_deref() != Some(server_id.as_str())
+        {
+            if let Some(waiters) = self.in_flight_channel_icons.remove(&key) {
+                for reply in waiters {
+                    let _ = reply.send(Err(SessionError::NotConnected));
+                }
+            }
+            return;
+        }
+        if let Err(ref err) = result
+            && let Some(delay) = channel_icon_retry_delay(attempt, err)
+        {
+            let signals = self.signals.clone();
+            tokio::task::spawn_local(async move {
+                tokio::time::sleep(delay).await;
+                let _ = signals.send(SessionSignal::RetryChannelIcon {
+                    epoch,
+                    server_id,
+                    icon_id,
+                    attempt: attempt + 1,
+                });
+            });
+            return;
+        }
+        let Some(waiters) = self.in_flight_channel_icons.remove(&key) else {
+            return;
+        };
+        match result {
+            Ok(bytes) => {
+                if let Err(error) =
+                    crate::channel_icons::save(&self.store_path, &server_id, icon_id, &bytes)
+                {
+                    self.emit(SessionEvent::Log {
+                        level: "warn".into(),
+                        message: format!("failed to save the channel icon cache: {error}"),
+                    });
+                }
+                for reply in waiters {
+                    let _ = reply.send(Ok(bytes.clone()));
+                }
+            }
+            Err(error) => {
+                let error = error.into_session_error();
+                if !matches!(error, SessionError::NotConnected) {
+                    self.emit(SessionEvent::Log {
+                        level: "warn".into(),
+                        message: format!("failed to fetch channel icon {icon_id}: {error}"),
+                    });
+                }
+                for reply in waiters {
+                    let _ = reply.send(Err(Self::clone_image_error(&error)));
+                }
+            }
+        }
+    }
+
+    pub(super) fn handle_retry_channel_icon(
+        &mut self,
+        epoch: u64,
+        server_id: String,
+        icon_id: u32,
+        attempt: u8,
+    ) {
+        let key = (epoch, server_id.clone(), icon_id);
+        if !self.in_flight_channel_icons.contains_key(&key) {
+            return;
+        }
+        if epoch != self.connection_epoch
+            || self.active_server_id.as_deref() != Some(server_id.as_str())
+        {
+            if let Some(waiters) = self.in_flight_channel_icons.remove(&key) {
+                for reply in waiters {
+                    let _ = reply.send(Err(SessionError::NotConnected));
+                }
+            }
+            return;
+        }
+        self.dispatch_channel_icon_attempt(epoch, server_id, icon_id, attempt);
     }
 
     pub(super) fn clone_image_error(error: &SessionError) -> SessionError {
@@ -233,6 +411,7 @@ impl Actor {
         }
         self.avatar_hashes.clear();
         self.avatar_negative_cache.clear();
+        self.avatar_cooldowns.clear();
         self.avatar_revisions.clear();
         self.avatars_fetched_without_hash.clear();
     }
@@ -299,6 +478,7 @@ impl Actor {
             let next_revision = self.avatar_revisions.get(uid).copied().unwrap_or(0) + 1;
             self.avatar_revisions.insert(uid.to_owned(), next_revision);
             self.avatar_negative_cache.remove(uid);
+            self.avatar_cooldowns.remove(uid);
             if let Some(server_id) = self.active_server_id.clone() {
                 self.avatar_disk
                     .remove_uid(self.store_path.clone(), server_id, uid.to_owned());
@@ -328,6 +508,14 @@ impl Actor {
         };
         if self.avatar_negative_cache.contains(&uid) {
             let _ = reply.send(Ok(None));
+            return;
+        }
+        if let Some(cooldown) = self.avatar_cooldowns.get(&uid)
+            && cooldown
+                .retry_not_before
+                .is_none_or(|deadline| tokio::time::Instant::now() < deadline)
+        {
+            let _ = reply.send(Err(Self::clone_image_error(&cooldown.last_error)));
             return;
         }
         let remote_path = match tsclient_rs::avatar_file_name(&uid) {
@@ -398,6 +586,7 @@ impl Actor {
             return;
         }
         if let Some(bytes) = bytes {
+            self.avatar_cooldowns.remove(&uid);
             if self.self_uid_from_snapshot().as_deref() == Some(uid.as_str()) {
                 self.avatar_disk
                     .save_self_snapshot(self.store_path.clone(), bytes.clone());
@@ -412,13 +601,35 @@ impl Actor {
         if !self.in_flight_avatars.contains_key(&key) {
             return;
         }
+        self.dispatch_avatar_remote_attempt(
+            epoch,
+            server_id,
+            uid,
+            revision,
+            avatar_hash,
+            remote_path,
+            0,
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn dispatch_avatar_remote_attempt(
+        &mut self,
+        epoch: u64,
+        server_id: String,
+        uid: String,
+        revision: u64,
+        avatar_hash: Option<String>,
+        remote_path: String,
+        attempt: u8,
+    ) {
         let (tx, rx) = oneshot::channel();
         self.enqueue_server_image(&remote_path, tx, 0);
         let signals = self.signals.clone();
         tokio::task::spawn_local(async move {
             let result = match rx.await {
                 Ok(result) => result,
-                Err(_) => Err(ImageFetchError::Session(SessionError::NotConnected)),
+                Err(_) => Err(ImageFetchError::Permanent(SessionError::NotConnected)),
             };
             let _ = signals.send(SessionSignal::AvatarFetched(AvatarFetchOutcome {
                 epoch,
@@ -426,6 +637,8 @@ impl Actor {
                 uid,
                 revision,
                 avatar_hash,
+                remote_path,
+                attempt,
                 result,
             }));
         });
@@ -438,28 +651,57 @@ impl Actor {
             uid,
             revision,
             avatar_hash,
+            remote_path,
+            attempt,
             result,
         } = outcome;
         let key = (epoch, server_id.clone(), uid.clone(), revision);
-        let Some(waiters) = self.in_flight_avatars.remove(&key) else {
+        if !self.in_flight_avatars.contains_key(&key) {
             return;
-        };
+        }
         if epoch != self.connection_epoch
             || self.active_server_id.as_deref() != Some(server_id.as_str())
         {
-            for reply in waiters {
-                let _ = reply.send(Err(SessionError::NotConnected));
+            if let Some(waiters) = self.in_flight_avatars.remove(&key) {
+                for reply in waiters {
+                    let _ = reply.send(Err(SessionError::NotConnected));
+                }
             }
             return;
         }
         if self.avatar_revisions.get(&uid).copied().unwrap_or(0) != revision {
-            for reply in waiters {
-                self.fetch_avatar(uid.clone(), reply);
+            if let Some(waiters) = self.in_flight_avatars.remove(&key) {
+                for reply in waiters {
+                    self.fetch_avatar(uid.clone(), reply);
+                }
             }
             return;
         }
+        if let Err(ImageFetchError::Transient(ref reason)) = result
+            && reason.is_prompt_retryable()
+            && attempt < MAX_AVATAR_TRANSIENT_RETRIES
+        {
+            let signals = self.signals.clone();
+            tokio::task::spawn_local(async move {
+                tokio::time::sleep(AVATAR_TRANSIENT_RETRY_DELAY).await;
+                let _ = signals.send(SessionSignal::RetryAvatarFetch(AvatarRetry {
+                    epoch,
+                    server_id,
+                    uid,
+                    revision,
+                    avatar_hash,
+                    remote_path,
+                    attempt: attempt + 1,
+                }));
+            });
+            return;
+        }
+        let Some(waiters) = self.in_flight_avatars.remove(&key) else {
+            return;
+        };
         match result {
             Ok(bytes) => {
+                self.avatar_cooldowns.remove(&uid);
                 if self.self_uid_from_snapshot().as_deref() == Some(uid.as_str()) {
                     self.avatar_disk
                         .save_self_snapshot(self.store_path.clone(), bytes.clone());
@@ -476,13 +718,30 @@ impl Actor {
                 }
             }
             Err(ImageFetchError::NotFound(_) | ImageFetchError::PermissionDenied(_)) => {
+                self.avatar_cooldowns.remove(&uid);
                 self.avatar_negative_cache.insert(uid);
                 for reply in waiters {
                     let _ = reply.send(Ok(None));
                 }
             }
-            Err(ImageFetchError::Session(error)) => {
+            Err(error @ (ImageFetchError::Transient(_) | ImageFetchError::Permanent(_))) => {
+                let error = error.into_session_error();
                 if !matches!(error, SessionError::NotConnected) {
+                    let attempts = self
+                        .avatar_cooldowns
+                        .get(&uid)
+                        .map_or(0, |existing| existing.attempts)
+                        .saturating_add(1);
+                    let retry_not_before = (attempts < MAX_AVATAR_FAILURE_ATTEMPTS)
+                        .then(|| tokio::time::Instant::now() + AVATAR_FAILURE_COOLDOWN);
+                    self.avatar_cooldowns.insert(
+                        uid.clone(),
+                        AvatarCooldown {
+                            attempts,
+                            retry_not_before,
+                            last_error: Self::clone_image_error(&error),
+                        },
+                    );
                     self.emit(SessionEvent::Log {
                         level: "warn".into(),
                         message: format!("failed to fetch avatar for {uid}: {error}"),
@@ -495,6 +754,49 @@ impl Actor {
         }
     }
 
+    pub(super) fn handle_retry_avatar_fetch(&mut self, retry: AvatarRetry) {
+        let AvatarRetry {
+            epoch,
+            server_id,
+            uid,
+            revision,
+            avatar_hash,
+            remote_path,
+            attempt,
+        } = retry;
+        let key = (epoch, server_id.clone(), uid.clone(), revision);
+        if !self.in_flight_avatars.contains_key(&key) {
+            return;
+        }
+        if epoch != self.connection_epoch
+            || self.active_server_id.as_deref() != Some(server_id.as_str())
+        {
+            if let Some(waiters) = self.in_flight_avatars.remove(&key) {
+                for reply in waiters {
+                    let _ = reply.send(Err(SessionError::NotConnected));
+                }
+            }
+            return;
+        }
+        if self.avatar_revisions.get(&uid).copied().unwrap_or(0) != revision {
+            if let Some(waiters) = self.in_flight_avatars.remove(&key) {
+                for reply in waiters {
+                    self.fetch_avatar(uid.clone(), reply);
+                }
+            }
+            return;
+        }
+        self.dispatch_avatar_remote_attempt(
+            epoch,
+            server_id,
+            uid,
+            revision,
+            avatar_hash,
+            remote_path,
+            attempt,
+        );
+    }
+
     pub(super) fn enqueue_server_image(
         &mut self,
         remote_path: &str,
@@ -502,9 +804,9 @@ impl Actor {
         preempt_retries: u8,
     ) {
         if self.pending_images.len() >= 32 {
-            let _ = reply.send(Err(ImageFetchError::Session(SessionError::Transfer(
-                "image request queue is full".into(),
-            ))));
+            let _ = reply.send(Err(ImageFetchError::Transient(
+                ImageTransientReason::QueueFull,
+            )));
             return;
         }
         self.pending_images.push_back(PendingImage {
@@ -533,7 +835,7 @@ impl Actor {
         let (client, host) = match target {
             Ok(target) => target,
             Err(error) => {
-                let _ = pending.reply.send(Err(ImageFetchError::Session(error)));
+                let _ = pending.reply.send(Err(ImageFetchError::Permanent(error)));
                 return;
             }
         };
@@ -549,11 +851,11 @@ impl Actor {
                     client.file_transfer_init_download(0, &path, ""),
                 )
                 .await
-                .map_err(|_| ImageFetchError::Session(SessionError::Timeout))?
+                .map_err(|_| ImageFetchError::Transient(ImageTransientReason::Timeout))?
                 .map_err(classify_image_protocol_error)?;
-                validate_port(info.port).map_err(ImageFetchError::Session)?;
+                validate_port(info.port).map_err(ImageFetchError::Permanent)?;
                 if info.size == 0 || info.size > 1024 * 1024 {
-                    return Err(ImageFetchError::Session(SessionError::Transfer(
+                    return Err(ImageFetchError::Permanent(SessionError::Transfer(
                         "image size must be between 1 byte and 1 MiB".into(),
                     )));
                 }
@@ -571,11 +873,9 @@ impl Actor {
                     preempt_retries: active.preempt_retries - 1,
                 });
             } else {
-                let _ = active
-                    .reply
-                    .send(Err(ImageFetchError::Session(SessionError::Transfer(
-                        "image negotiation interrupted".into(),
-                    ))));
+                let _ = active.reply.send(Err(ImageFetchError::Transient(
+                    ImageTransientReason::Interrupted,
+                )));
             }
         }
     }
@@ -584,7 +884,7 @@ impl Actor {
         if let Some(active) = self.active_image.take() {
             let _ = active
                 .reply
-                .send(Err(ImageFetchError::Session(SessionError::NotConnected)));
+                .send(Err(ImageFetchError::Permanent(SessionError::NotConnected)));
         }
     }
 
@@ -613,7 +913,7 @@ impl Actor {
             };
             let outcome = tokio::select! {
                 res = tokio::time::timeout(Duration::from_secs(20), download) => {
-                    res.unwrap_or(Err(ImageFetchError::Session(SessionError::Timeout)))
+                    res.unwrap_or(Err(ImageFetchError::Transient(ImageTransientReason::Timeout)))
                 }
                 _ = async {
                     while disconnect_rx.changed().await.is_ok() {
@@ -622,7 +922,7 @@ impl Actor {
                         }
                     }
                 } => {
-                    Err(ImageFetchError::Session(SessionError::NotConnected))
+                    Err(ImageFetchError::Permanent(SessionError::NotConnected))
                 }
             };
             let _ = reply.send(outcome);
@@ -841,8 +1141,9 @@ impl Actor {
     }
 
     fn apply_avatar_upload(&mut self, uid: &str, md5: String, bytes: Vec<u8>) {
-        // 上传已确认成功，负缓存不应再阻止读取。
+        // 上传已确认成功，负缓存与冷却不应再阻止读取。
         self.avatar_negative_cache.remove(uid);
+        self.avatar_cooldowns.remove(uid);
         let unchanged = matches!(self.avatar_hashes.get(uid), Some(Some(hash)) if hash == &md5);
         if unchanged {
             // 同图重传时 hash 不变，仍要清旧缓存并广播一次让 UI 重新读取新写入的缓存。
@@ -874,8 +1175,9 @@ impl Actor {
     }
 
     fn apply_avatar_delete(&mut self, uid: &str) {
-        // 删除结果已由服务器确认，负缓存不应再阻止后续读取。
+        // 删除结果已由服务器确认，负缓存与冷却不应再阻止后续读取。
         self.avatar_negative_cache.remove(uid);
+        self.avatar_cooldowns.remove(uid);
         self.avatar_disk
             .clear_self_snapshot(self.store_path.clone());
         self.record_avatar_hash(uid, None, true);
@@ -1011,7 +1313,7 @@ mod tests {
                     .expect("channel not dropped");
                 assert!(matches!(
                     outcome,
-                    Err(ImageFetchError::Session(SessionError::NotConnected))
+                    Err(ImageFetchError::Permanent(SessionError::NotConnected))
                 ));
             })
             .await;
@@ -1041,14 +1343,14 @@ mod tests {
         actor.enqueue_server_image("/avatar_test", reply, 0);
         assert!(matches!(
             result.await.unwrap(),
-            Err(ImageFetchError::Session(SessionError::Transfer(_)))
+            Err(ImageFetchError::Transient(ImageTransientReason::QueueFull))
         ));
         actor.invalidate_handlers();
         assert!(actor.pending_images.is_empty());
         for result in replies {
             assert!(matches!(
                 result.await.unwrap(),
-                Err(ImageFetchError::Session(SessionError::NotConnected))
+                Err(ImageFetchError::Permanent(SessionError::NotConnected))
             ));
         }
     }
@@ -1787,6 +2089,8 @@ mod tests {
                     uid: uid.into(),
                     revision: 0,
                     avatar_hash: Some("h1".into()),
+                    remote_path: "/avatar_self".into(),
+                    attempt: 0,
                     result: Ok(SELF_AVATAR_PNG.to_vec()),
                 });
                 actor.avatar_disk.flush().await;
@@ -1865,6 +2169,8 @@ mod tests {
                     uid: uid.into(),
                     revision: 0,
                     avatar_hash: Some("h1".into()),
+                    remote_path: "/avatar_self".into(),
+                    attempt: 0,
                     result: Err(ImageFetchError::NotFound("gone".into())),
                 });
                 actor.avatar_disk.flush().await;
@@ -2055,7 +2361,7 @@ mod tests {
                 assert_eq!(res.await.unwrap().unwrap(), None);
                 assert_eq!(calls.load(Ordering::SeqCst), 5);
 
-                // 瞬态超时错误不进入负缓存，仍向调用方返回 Err
+                // 瞬态超时错误不进入负缓存，向调用方返回 Err 并受服务端/Actor 30 秒冷却保护。
                 *code.lock().unwrap() = None;
                 let (reply, res) = oneshot::channel();
                 commands
@@ -2075,7 +2381,7 @@ mod tests {
                     })
                     .unwrap();
                 assert!(matches!(res.await.unwrap(), Err(SessionError::Timeout)));
-                assert_eq!(calls.load(Ordering::SeqCst), 7);
+                assert_eq!(calls.load(Ordering::SeqCst), 6);
 
                 // 不应落盘任何负缓存文件
                 assert!(!temp.join("avatars").exists());
@@ -2115,7 +2421,295 @@ mod tests {
                 // 重连失效清理全部会话级负缓存与状态
                 actor.invalidate_handlers();
                 assert!(actor.avatar_negative_cache.is_empty());
+                assert!(actor.avatar_cooldowns.is_empty());
                 assert!(actor.avatar_hashes.is_empty());
+
+                let _ = std::fs::remove_dir_all(&temp);
+            })
+            .await;
+    }
+
+    #[test]
+    fn channel_icon_retry_delay_classifies_transient_vs_permanent_and_enforces_cap() {
+        for attempt in 0..MAX_CHANNEL_ICON_RETRIES {
+            let expected = CHANNEL_ICON_RETRY_STEP * u32::from(attempt + 1);
+            assert_eq!(
+                channel_icon_retry_delay(
+                    attempt,
+                    &ImageFetchError::Transient(ImageTransientReason::QueueFull)
+                ),
+                Some(expected)
+            );
+            assert_eq!(
+                channel_icon_retry_delay(
+                    attempt,
+                    &ImageFetchError::Transient(ImageTransientReason::Interrupted)
+                ),
+                Some(expected)
+            );
+            assert_eq!(
+                channel_icon_retry_delay(
+                    attempt,
+                    &ImageFetchError::Transient(ImageTransientReason::ServerBusy("flood".into()))
+                ),
+                Some(expected)
+            );
+        }
+        assert_eq!(
+            channel_icon_retry_delay(
+                MAX_CHANNEL_ICON_RETRIES,
+                &ImageFetchError::Transient(ImageTransientReason::QueueFull)
+            ),
+            None
+        );
+        assert_eq!(
+            channel_icon_retry_delay(
+                0,
+                &ImageFetchError::Transient(ImageTransientReason::Timeout)
+            ),
+            None
+        );
+        assert_eq!(
+            channel_icon_retry_delay(0, &ImageFetchError::NotFound("missing".into())),
+            None
+        );
+        assert_eq!(
+            channel_icon_retry_delay(0, &ImageFetchError::PermissionDenied("denied".into())),
+            None
+        );
+        assert_eq!(
+            channel_icon_retry_delay(
+                0,
+                &ImageFetchError::Permanent(SessionError::Transfer("truncated".into()))
+            ),
+            None
+        );
+    }
+
+    #[tokio::test]
+    async fn channel_icon_retries_transient_errors_with_linear_backoff_and_stops_on_permanent_or_cap()
+     {
+        tokio::task::LocalSet::new()
+            .run_until(async {
+                let temp = std::env::temp_dir().join(format!(
+                    "flspeak-actor-icon-backoff-{:x}",
+                    rand::random::<u64>()
+                ));
+                let _ = std::fs::create_dir_all(&temp);
+                let mut actor = audio_actor();
+                actor.store_path = temp.join("preferences.json");
+                actor.active_server_id = Some("a.example:9987".into());
+
+                // 1. Transient queue-full error schedules attempt 1 after 300ms backoff and then succeeds.
+                let (reply, mut rx) = oneshot::channel();
+                actor.fetch_channel_icon(101, reply);
+                let pending = actor.pending_images.pop_front().unwrap();
+                let _ = pending.reply.send(Err(ImageFetchError::Transient(
+                    ImageTransientReason::QueueFull,
+                )));
+                let signal = actor.signal_rx.recv().await.unwrap();
+                actor.handle_signal(signal).await;
+                assert!(actor.pending_images.is_empty());
+                assert!(rx.try_recv().is_err());
+
+                let retry_signal =
+                    tokio::time::timeout(Duration::from_millis(800), actor.signal_rx.recv())
+                        .await
+                        .unwrap()
+                        .unwrap();
+                assert!(matches!(
+                    retry_signal,
+                    SessionSignal::RetryChannelIcon {
+                        icon_id: 101,
+                        attempt: 1,
+                        ..
+                    }
+                ));
+                actor.handle_signal(retry_signal).await;
+                let pending = actor.pending_images.pop_front().unwrap();
+                let _ = pending.reply.send(Ok(vec![7, 7, 7]));
+                let signal = actor.signal_rx.recv().await.unwrap();
+                actor.handle_signal(signal).await;
+                assert_eq!(rx.await.unwrap().unwrap(), vec![7, 7, 7]);
+
+                // 2. Permanent errors fail immediately without scheduling retries.
+                let (reply_perm, rx_perm) = oneshot::channel();
+                actor.fetch_channel_icon(202, reply_perm);
+                let pending = actor.pending_images.pop_front().unwrap();
+                let _ = pending
+                    .reply
+                    .send(Err(ImageFetchError::PermissionDenied("denied".into())));
+                let signal = actor.signal_rx.recv().await.unwrap();
+                actor.handle_signal(signal).await;
+                assert!(rx_perm.await.unwrap().is_err());
+                assert!(actor.signal_rx.try_recv().is_err());
+
+                // 3. Reaching MAX_CHANNEL_ICON_RETRIES surfaces the failure instead of scheduling another retry.
+                let (reply_cap, rx_cap) = oneshot::channel();
+                actor.in_flight_channel_icons.insert(
+                    (actor.connection_epoch, "a.example:9987".into(), 303),
+                    vec![reply_cap],
+                );
+                actor.handle_channel_icon_fetched(
+                    actor.connection_epoch,
+                    "a.example:9987".into(),
+                    303,
+                    MAX_CHANNEL_ICON_RETRIES,
+                    Err(ImageFetchError::Transient(
+                        ImageTransientReason::ServerBusy("524 flood".into()),
+                    )),
+                );
+                assert!(matches!(
+                    rx_cap.await.unwrap(),
+                    Err(SessionError::Protocol(msg)) if msg.contains("524 flood")
+                ));
+
+                let _ = std::fs::remove_dir_all(&temp);
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn avatar_retries_transient_queue_errors_and_enforces_30s_three_attempt_cooldown_cleared_by_update_or_reconnect()
+     {
+        tokio::task::LocalSet::new()
+            .run_until(async {
+                let temp = std::env::temp_dir().join(format!(
+                    "flspeak-actor-avatar-cooldown-{:x}",
+                    rand::random::<u64>()
+                ));
+                let _ = std::fs::create_dir_all(&temp);
+                let mut actor = audio_actor();
+                actor.store_path = temp.join("preferences.json");
+                actor.active_server_id = Some("a.example:9987".into());
+
+                let uid_transient = base64::engine::general_purpose::STANDARD.encode([21u8; 20]);
+                let uid_cooldown = base64::engine::general_purpose::STANDARD.encode([22u8; 20]);
+
+                // 1. Prompt 500ms retry recovers from QueueFull without recording cooldown failures.
+                let (reply, mut rx) = oneshot::channel();
+                actor.fetch_avatar(uid_transient.clone(), reply);
+                actor.avatar_disk.flush().await;
+                let disk_signal = actor.signal_rx.recv().await.unwrap();
+                actor.handle_signal(disk_signal).await;
+
+                let pending = actor.pending_images.pop_front().unwrap();
+                let _ = pending.reply.send(Err(ImageFetchError::Transient(
+                    ImageTransientReason::QueueFull,
+                )));
+                let fetched = actor.signal_rx.recv().await.unwrap();
+                actor.handle_signal(fetched).await;
+                assert!(rx.try_recv().is_err());
+
+                let retry_signal =
+                    tokio::time::timeout(Duration::from_secs(1), actor.signal_rx.recv())
+                        .await
+                        .unwrap()
+                        .unwrap();
+                actor.handle_signal(retry_signal).await;
+                let pending = actor.pending_images.pop_front().unwrap();
+                let _ = pending.reply.send(Ok(vec![11, 22, 33]));
+                let fetched = actor.signal_rx.recv().await.unwrap();
+                actor.handle_signal(fetched).await;
+                assert_eq!(rx.await.unwrap().unwrap(), Some(vec![11, 22, 33]));
+                assert!(!actor.avatar_cooldowns.contains_key(&uid_transient));
+
+                // 2. Three failure attempts trigger ~30s cooldowns and then stop until AvatarUpdated or reconnect.
+                for attempt in 1..=MAX_AVATAR_FAILURE_ATTEMPTS {
+                    let (reply, rx) = oneshot::channel();
+                    actor.fetch_avatar(uid_cooldown.clone(), reply);
+                    actor.avatar_disk.flush().await;
+                    let disk_signal = actor.signal_rx.recv().await.unwrap();
+                    actor.handle_signal(disk_signal).await;
+                    let pending = actor.pending_images.pop_front().unwrap();
+                    let _ = pending.reply.send(Err(ImageFetchError::Transient(
+                        ImageTransientReason::Timeout,
+                    )));
+                    let fetched = actor.signal_rx.recv().await.unwrap();
+                    actor.handle_signal(fetched).await;
+                    assert!(matches!(rx.await.unwrap(), Err(SessionError::Timeout)));
+
+                    {
+                        let cooldown = actor.avatar_cooldowns.get(&uid_cooldown).unwrap();
+                        assert_eq!(cooldown.attempts, attempt);
+                        if attempt < MAX_AVATAR_FAILURE_ATTEMPTS {
+                            let remaining = cooldown
+                                .retry_not_before
+                                .unwrap()
+                                .saturating_duration_since(tokio::time::Instant::now());
+                            assert!(remaining > Duration::from_secs(20));
+                        } else {
+                            assert!(cooldown.retry_not_before.is_none());
+                        }
+                    }
+
+                    // During cooldown (or after attempt 3), immediate fetch returns error without disk/network IO.
+                    let (reply_blocked, rx_blocked) = oneshot::channel();
+                    actor.fetch_avatar(uid_cooldown.clone(), reply_blocked);
+                    assert!(actor.pending_images.is_empty());
+                    assert!(matches!(
+                        rx_blocked.await.unwrap(),
+                        Err(SessionError::Timeout)
+                    ));
+
+                    if attempt < MAX_AVATAR_FAILURE_ATTEMPTS {
+                        actor
+                            .avatar_cooldowns
+                            .get_mut(&uid_cooldown)
+                            .unwrap()
+                            .retry_not_before =
+                            Some(tokio::time::Instant::now() - Duration::from_millis(1));
+                    }
+                }
+
+                // After 3 attempts, cooldown stays locked permanently until update or reconnect.
+                let (reply_locked, rx_locked) = oneshot::channel();
+                actor.fetch_avatar(uid_cooldown.clone(), reply_locked);
+                assert!(actor.pending_images.is_empty());
+                assert!(matches!(
+                    rx_locked.await.unwrap(),
+                    Err(SessionError::Timeout)
+                ));
+
+                // AvatarUpdated clears cooldown so the next fetch proceeds cleanly.
+                actor
+                    .handle_signal(SessionSignal::ClientUpdated {
+                        epoch: actor.connection_epoch,
+                        id: 4,
+                        uid: uid_cooldown.clone(),
+                        channel_id: 5,
+                        input_muted: None,
+                        output_muted: None,
+                        away: None,
+                        away_message: None,
+                        server_groups: Vec::new(),
+                        avatar_hash: Some("fresh_after_cooldown".into()),
+                    })
+                    .await;
+                assert!(!actor.avatar_cooldowns.contains_key(&uid_cooldown));
+
+                let (reply_after_update, rx_after_update) = oneshot::channel();
+                actor.fetch_avatar(uid_cooldown.clone(), reply_after_update);
+                actor.avatar_disk.flush().await;
+                let disk_signal = actor.signal_rx.recv().await.unwrap();
+                actor.handle_signal(disk_signal).await;
+                let pending = actor.pending_images.pop_front().unwrap();
+                let _ = pending.reply.send(Ok(vec![55]));
+                let fetched = actor.signal_rx.recv().await.unwrap();
+                actor.handle_signal(fetched).await;
+                assert_eq!(rx_after_update.await.unwrap().unwrap(), Some(vec![55]));
+
+                // Reconnect / invalidate_handlers also clears cooldowns.
+                actor.avatar_cooldowns.insert(
+                    uid_cooldown.clone(),
+                    AvatarCooldown {
+                        attempts: 3,
+                        retry_not_before: None,
+                        last_error: SessionError::Timeout,
+                    },
+                );
+                actor.invalidate_handlers();
+                assert!(actor.avatar_cooldowns.is_empty());
 
                 let _ = std::fs::remove_dir_all(&temp);
             })

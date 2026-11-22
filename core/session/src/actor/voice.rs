@@ -284,16 +284,8 @@ impl VoiceReportState {
             self.notified_unconfirmed = false;
         }
         VoiceFlagsSnapshot {
-            input_muted: if (self.dirty_mask & DIRTY_INPUT_MUTED) != 0 {
-                local.input_muted
-            } else {
-                self.server_confirmed.input_muted
-            },
-            output_muted: if (self.dirty_mask & DIRTY_OUTPUT_MUTED) != 0 {
-                local.output_muted
-            } else {
-                self.server_confirmed.output_muted
-            },
+            input_muted: local.input_muted,
+            output_muted: local.output_muted,
             away: if (self.dirty_mask & DIRTY_AWAY) != 0 {
                 local.away
             } else {
@@ -394,6 +386,11 @@ impl Actor {
             return;
         };
         let flags = VoiceFlagsSnapshot::from_voice_state(&self.voice_state);
+        if let Some(row) = self.known_clients.get_mut(&self_id) {
+            row.input_muted = Some(flags.input_muted);
+            row.output_muted = Some(flags.output_muted);
+            row.away = Some(flags.away);
+        }
         if let Some((_, clients)) = &mut self.last_snapshot
             && let Some(row) = clients.iter_mut().find(|client| client.id == self_id)
         {
@@ -584,19 +581,107 @@ impl Actor {
         input: Option<String>,
         output: Option<String>,
     ) -> Result<(), SessionError> {
-        if !self.audio_enabled {
-            return Ok(());
-        }
+        let input = normalize_device_id(input);
+        let output = normalize_device_id(output);
         if self.input_device == input && self.output_device == output {
             return Ok(());
         }
+        let prev_input = self.input_device.clone();
+        let prev_output = self.output_device.clone();
         self.input_device = input;
         self.output_device = output;
-        if self.client.is_some() {
-            self.voice.set_input_device(self.input_device.clone())?;
-            self.voice.set_output_device(self.output_device.clone())?;
+        if let Err(err) = self.persist_audio_devices() {
+            self.input_device = prev_input;
+            self.output_device = prev_output;
+            return Err(err);
+        }
+        if self.audio_enabled && self.client.is_some() {
+            if self.input_device != prev_input {
+                self.voice.set_input_device(self.input_device.clone())?;
+            }
+            if self.output_device != prev_output {
+                self.voice.set_output_device(self.output_device.clone())?;
+            }
         }
         Ok(())
+    }
+
+    fn persist_audio_devices(&self) -> Result<(), SessionError> {
+        if self.store_path.as_os_str().is_empty() {
+            return Ok(());
+        }
+        SettingsManager::update_audio_devices(self.input_device.clone(), self.output_device.clone())
+            .map_err(SessionError::Storage)
+    }
+
+    pub(super) fn reconcile_audio_devices(
+        &mut self,
+        inputs: &[AudioDeviceView],
+        outputs: &[AudioDeviceView],
+    ) {
+        let reset_input = self
+            .input_device
+            .as_ref()
+            .is_some_and(|id| !inputs.iter().any(|device| &device.id == id));
+        let reset_output = self
+            .output_device
+            .as_ref()
+            .is_some_and(|id| !outputs.iter().any(|device| &device.id == id));
+        if !reset_input && !reset_output {
+            return;
+        }
+        if reset_input {
+            self.input_device = None;
+        }
+        if reset_output {
+            self.output_device = None;
+        }
+        if let Err(err) = self.persist_audio_devices() {
+            crate::log_warn!(
+                error = err.to_string();
+                "failed to persist fallback audio devices"
+            );
+        }
+        if self.audio_enabled && self.client.is_some() {
+            if reset_input {
+                let _ = self.voice.set_input_device(None);
+            }
+            if reset_output {
+                let _ = self.voice.set_output_device(None);
+            }
+        }
+        self.emit(SessionEvent::AudioDevicesReset {
+            input: reset_input,
+            output: reset_output,
+        });
+    }
+
+    pub(super) fn finish_list_audio_devices(
+        &mut self,
+        inputs: Vec<AudioDeviceView>,
+        outputs: Vec<AudioDeviceView>,
+    ) -> AudioDevicesView {
+        self.reconcile_audio_devices(&inputs, &outputs);
+        AudioDevicesView {
+            inputs,
+            outputs,
+            current_input_id: self.input_device.clone(),
+            current_output_id: self.output_device.clone(),
+        }
+    }
+
+    pub(super) fn list_audio_devices(&mut self) -> Result<AudioDevicesView, SessionError> {
+        let inputs: Vec<AudioDeviceView> = audio::device::input_devices()
+            .map_err(SessionError::Audio)?
+            .into_iter()
+            .map(AudioDeviceView::from)
+            .collect();
+        let outputs: Vec<AudioDeviceView> = audio::device::output_devices()
+            .map_err(SessionError::Audio)?
+            .into_iter()
+            .map(AudioDeviceView::from)
+            .collect();
+        Ok(self.finish_list_audio_devices(inputs, outputs))
     }
 
     pub(super) fn apply_self_channel(&mut self, channel_id: u64, codec: Option<i32>) {
@@ -738,6 +823,12 @@ impl Actor {
             AudioEvent::DeviceFallback { stage } => match stage {
                 AudioStage::Capture => {
                     self.input_device = None;
+                    if let Err(err) = self.persist_audio_devices() {
+                        crate::log_warn!(
+                            error = err.to_string();
+                            "failed to persist fallback input device"
+                        );
+                    }
                     self.emit(SessionEvent::AudioDevicesReset {
                         input: true,
                         output: false,
@@ -745,6 +836,12 @@ impl Actor {
                 }
                 AudioStage::Playback => {
                     self.output_device = None;
+                    if let Err(err) = self.persist_audio_devices() {
+                        crate::log_warn!(
+                            error = err.to_string();
+                            "failed to persist fallback output device"
+                        );
+                    }
                     self.emit(SessionEvent::AudioDevicesReset {
                         input: false,
                         output: true,
@@ -807,11 +904,17 @@ impl Actor {
             .voice
             .set_vad_config(audio.vad_threshold, audio.vad_hangover_frames);
         let _ = self.voice.set_noise_suppression(audio.noise_suppression);
+        self.input_device = normalize_device_id(audio.input_device_id.clone());
+        self.output_device = normalize_device_id(audio.output_device_id.clone());
     }
 
     pub(super) fn sync_persisted_vad(&mut self) {
-        let audio = SettingsManager::with(|s| s.audio.clone()).unwrap_or_default();
-        self.apply_audio_settings(&audio);
+        if self.store_path.as_os_str().is_empty() {
+            return;
+        }
+        if let Ok(audio) = SettingsManager::with(|s| s.audio.clone()) {
+            self.apply_audio_settings(&audio);
+        }
     }
 
     pub(super) fn start_voice(&mut self) {
@@ -1022,19 +1125,10 @@ impl VoiceTxGate {
     }
 }
 
-pub(super) fn list_audio_devices() -> Result<AudioDevicesView, SessionError> {
-    let inputs = audio::device::input_devices()
-        .map_err(SessionError::Audio)?
-        .into_iter()
-        .map(AudioDeviceView::from)
-        .collect();
-    let outputs = audio::device::output_devices()
-        .map_err(SessionError::Audio)?
-        .into_iter()
-        .map(AudioDeviceView::from)
-        .collect();
-    Ok(AudioDevicesView { inputs, outputs })
+pub(super) fn normalize_device_id(id: Option<String>) -> Option<String> {
+    id.filter(|value| !value.trim().is_empty())
 }
+
 impl From<audio::device::DeviceInfo> for AudioDeviceView {
     fn from(info: audio::device::DeviceInfo) -> Self {
         Self {
@@ -1780,5 +1874,224 @@ mod tests {
             actor.audio_since,
             Instant::now(),
         ));
+    }
+
+    fn sample_client(id: i32, uid: &str, channel_id: u64) -> ClientView {
+        ClientView {
+            id,
+            nickname: format!("User-{id}"),
+            uid: uid.into(),
+            channel_id,
+            input_muted: None,
+            output_muted: None,
+            away: None,
+            away_message: None,
+            is_streaming: false,
+            client_type: ClientType::Standard,
+            app_name: None,
+            app_version: None,
+            capabilities: Vec::new(),
+            bot_commands: Vec::new(),
+            bot_commands_loaded: false,
+            bot_command_prefix: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn resolve_self_flags_and_client_events_maintain_authoritative_state() {
+        let mut report = VoiceReportState::new();
+        report.mark_dirty(DIRTY_ALL, ReportInstant::now());
+        let local = VoiceFlagsSnapshot {
+            input_muted: true,
+            output_muted: true,
+            away: true,
+        };
+        let lagged = report.resolve_self_flags(local, Some(false), Some(false), Some(false));
+        assert_eq!(lagged, local);
+        assert_eq!(report.dirty_mask, DIRTY_ALL);
+
+        let confirmed = report.resolve_self_flags(local, Some(true), Some(true), Some(true));
+        assert_eq!(confirmed, local);
+        assert_eq!(report.dirty_mask, 0);
+
+        let server_cleared_away =
+            report.resolve_self_flags(local, Some(false), Some(false), Some(false));
+        assert!(server_cleared_away.input_muted);
+        assert!(server_cleared_away.output_muted);
+        assert!(!server_cleared_away.away);
+
+        let mut actor = audio_actor();
+        let mut events = actor.events.subscribe();
+        actor.connection_epoch = 4;
+        actor.self_client_id = Some(1);
+        actor.self_channel_id = 5;
+        actor.voice_state.muted = true;
+        actor.voice_state.away = true;
+        actor
+            .voice_report
+            .mark_dirty(DIRTY_INPUT_MUTED | DIRTY_AWAY, ReportInstant::now());
+
+        let mut self_row = sample_client(1, "self-uid", 5);
+        self_row.input_muted = Some(false);
+        self_row.away = Some(false);
+        actor.apply_self_voice_flags_to_row(&mut self_row);
+        assert_eq!(self_row.input_muted, Some(true));
+        assert_eq!(self_row.output_muted, Some(false));
+        assert_eq!(self_row.away, Some(true));
+
+        let mut peer_bot = sample_client(2, "bot-uid", 5);
+        peer_bot.input_muted = Some(true);
+        peer_bot.client_type = ClientType::Bot;
+        peer_bot.app_name = Some("MusicBot".into());
+        peer_bot.bot_command_prefix = Some("!".into());
+        peer_bot.capabilities = vec!["chat:slash_commands".into()];
+        actor.upsert_client_in_cache(peer_bot);
+
+        actor
+            .handle_signal(SessionSignal::ClientMoved {
+                epoch: 4,
+                id: 2,
+                channel_id: 9,
+            })
+            .await;
+        let moved = events.try_recv().unwrap();
+        match moved {
+            SessionEvent::ClientMoved(client) => {
+                assert_eq!(client.id, 2);
+                assert_eq!(client.channel_id, 9);
+                assert_eq!(client.input_muted, Some(true));
+                assert_eq!(client.client_type, ClientType::Bot);
+                assert_eq!(client.app_name.as_deref(), Some("MusicBot"));
+                assert_eq!(client.bot_command_prefix.as_deref(), Some("!"));
+                assert_eq!(client.capabilities, vec!["chat:slash_commands"]);
+            }
+            other => panic!("expected ClientMoved, got {other:?}"),
+        }
+
+        let mut streamer = sample_client(9, "uid-9", 5);
+        streamer.is_streaming = true;
+        actor
+            .handle_signal(SessionSignal::ClientJoined {
+                epoch: 4,
+                client: streamer,
+                avatar_hash: None,
+            })
+            .await;
+        assert!(matches!(
+            events.try_recv().unwrap(),
+            SessionEvent::ClientJoined(c) if c.id == 9 && c.is_streaming
+        ));
+
+        let stale_join = sample_client(9, "uid-9", 5);
+        actor
+            .handle_signal(SessionSignal::ClientJoined {
+                epoch: 4,
+                client: stale_join,
+                avatar_hash: None,
+            })
+            .await;
+        assert!(matches!(
+            events.try_recv().unwrap(),
+            SessionEvent::ClientJoined(c) if c.id == 9 && c.is_streaming
+        ));
+
+        actor
+            .handle_signal(SessionSignal::ClientLeft { epoch: 4, id: 9 })
+            .await;
+        let rejoin = sample_client(9, "uid-9", 5);
+        actor
+            .handle_signal(SessionSignal::ClientJoined {
+                epoch: 4,
+                client: rejoin,
+                avatar_hash: None,
+            })
+            .await;
+        assert!(matches!(
+            events.try_recv().unwrap(),
+            SessionEvent::ClientJoined(c) if c.id == 9 && !c.is_streaming
+        ));
+    }
+
+    #[test]
+    fn audio_device_persistence_restores_on_restart_and_reconciles_missing_devices() {
+        let _guard = crate::settings::manager::TEST_SETTINGS_LOCK.blocking_lock();
+        let dir =
+            std::env::temp_dir().join(format!("flspeak-audio-persist-{:x}", rand::random::<u64>()));
+        let store_path = dir.join("preferences.json");
+        let _ = std::fs::create_dir_all(&dir);
+
+        SettingsManager::init(store_path.clone()).unwrap();
+
+        let make_actor = |path: PathBuf| {
+            let (events, _) = broadcast::channel(64);
+            let (commands, cmd_rx) = mpsc::unbounded_channel();
+            let (_audio_tx, audio_rx) = mpsc::channel(16);
+            let voice = VoiceEngine::spawn(|_| {}, |_| {}).unwrap();
+            let (levels, _) = crate::events::level_channel();
+            let actor = Actor::new(
+                path,
+                ServerRegistry::new(),
+                events,
+                commands,
+                SessionAudio {
+                    voice,
+                    events: audio_rx,
+                    levels,
+                    enabled: false,
+                },
+            );
+            (actor, cmd_rx)
+        };
+
+        let (mut actor, _rx1) = make_actor(store_path.clone());
+        actor
+            .set_audio_devices(Some("mic-1".into()), Some("out-1".into()))
+            .unwrap();
+        let saved = SettingsManager::with(|s| {
+            (
+                s.audio.input_device_id.clone(),
+                s.audio.output_device_id.clone(),
+            )
+        })
+        .unwrap();
+        assert_eq!(saved, (Some("mic-1".into()), Some("out-1".into())));
+        drop(actor);
+
+        let (mut restarted, _rx2) = make_actor(store_path.clone());
+        assert_eq!(restarted.input_device.as_deref(), Some("mic-1"));
+        assert_eq!(restarted.output_device.as_deref(), Some("out-1"));
+
+        let mut events = restarted.events.subscribe();
+        let view = restarted.finish_list_audio_devices(
+            vec![AudioDeviceView {
+                id: "mic-1".into(),
+                name: "Studio Mic".into(),
+                is_default: true,
+            }],
+            vec![AudioDeviceView {
+                id: "other-out".into(),
+                name: "Other Out".into(),
+                is_default: true,
+            }],
+        );
+        assert_eq!(view.current_input_id.as_deref(), Some("mic-1"));
+        assert_eq!(view.current_output_id, None);
+        assert!(matches!(
+            events.try_recv().unwrap(),
+            SessionEvent::AudioDevicesReset {
+                input: false,
+                output: true,
+            }
+        ));
+        let reconciled = SettingsManager::with(|s| {
+            (
+                s.audio.input_device_id.clone(),
+                s.audio.output_device_id.clone(),
+            )
+        })
+        .unwrap();
+        assert_eq!(reconciled, (Some("mic-1".into()), None));
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

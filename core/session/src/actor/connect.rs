@@ -262,7 +262,12 @@ impl Actor {
                 self.consecutive_timeouts = 0;
                 self.ever_connected = true;
                 self.last_snapshot = None;
+                self.known_clients.clear();
+                self.self_uid = None;
                 self.channel_codecs.clear();
+                self.voice_report.reset();
+                self.voice_report
+                    .mark_dirty(DIRTY_ALL, ReportInstant::now());
                 self.set_state(SessionState::Connected {
                     client_id,
                     channel_id,
@@ -303,10 +308,7 @@ impl Actor {
                 }
                 self.open_protocol_connected(client_id, self.self_channel_id);
                 self.start_voice();
-                // 服务器端自己的标志在（重）连后是重置过的，重置节流状态并把本地状态重新同步。
-                self.voice_report.reset();
-                self.voice_report
-                    .mark_dirty(DIRTY_ALL, ReportInstant::now());
+                // 服务器端自己的标志在（重）连后是重置过的，将本地权威语音状态上报。
                 self.request_state_update().await;
                 self.emit_voice_state();
                 self.emit_history().await;
@@ -382,7 +384,9 @@ impl Actor {
         let Some(client) = self.client.take() else {
             self.active_server_id = None;
             self.self_client_id = None;
+            self.self_uid = None;
             self.self_channel_id = 0;
+            self.known_clients.clear();
             self.stop_voice();
             self.set_state(SessionState::Disconnected);
             return Ok(());
@@ -391,9 +395,11 @@ impl Actor {
         let outcome = tokio::time::timeout(DISCONNECT_TIMEOUT, client.disconnect()).await;
         self.active_server_id = None;
         self.self_client_id = None;
+        self.self_uid = None;
         self.self_channel_id = 0;
         self.stop_voice();
         self.last_snapshot = None;
+        self.known_clients.clear();
         self.set_state(SessionState::Disconnected);
         match outcome {
             Ok(Ok(())) => Ok(()),
@@ -416,7 +422,10 @@ impl Actor {
         self.sync_voice_gate();
         self.active_server_id = None;
         self.self_client_id = None;
+        self.self_uid = None;
         self.self_channel_id = 0;
+        self.last_snapshot = None;
+        self.known_clients.clear();
         self.channel_codecs.clear();
         self.current_codec = VOICE_CODEC;
         self.stop_voice();
@@ -549,7 +558,7 @@ impl Actor {
         for request in self.pending_images.drain(..) {
             let _ = request
                 .reply
-                .send(Err(ImageFetchError::Session(SessionError::NotConnected)));
+                .send(Err(ImageFetchError::Permanent(SessionError::NotConnected)));
         }
         for (_, waiters) in self.in_flight_channel_icons.drain() {
             for reply in waiters {
@@ -566,10 +575,13 @@ impl Actor {
         self.transfer_target = None;
         self.last_network_sample_error = None;
         self.open_protocol.reset(Instant::now());
+        self.open_protocol_flood_halted = false;
         self.voice_report.reset();
         self.reset_directory_permissions();
         self.subscribed_all_channels = false;
         self.self_server_groups.clear();
+        self.known_clients.clear();
+        self.self_uid = None;
         self.reset_streams(StreamEndReason::Disconnected);
         self.connection_epoch = self.connection_epoch.wrapping_add(1);
         self.epoch.store(self.connection_epoch, Ordering::SeqCst);
@@ -624,6 +636,7 @@ fn register_handlers(
                     target_mode: message.target_mode,
                     target_id: message.target_id,
                     peer_uid: String::new(),
+                    from_self: false,
                     at: now_millis(),
                 },
             });
@@ -717,7 +730,6 @@ fn register_handlers(
         }
     }));
 
-    let channel = events.clone();
     let moved = signals.clone();
     let live = Arc::clone(&current);
     client.on_client_moved(Arc::new(move |event: ProtocolEvent| {
@@ -725,13 +737,6 @@ fn register_handlers(
             return;
         }
         if let ProtocolEvent::ClientMoved(info) = event {
-            emit(
-                &channel,
-                SessionEvent::ClientMoved {
-                    id: info.id,
-                    channel_id: info.target_channel_id,
-                },
-            );
             let _ = moved.send(SessionSignal::ClientMoved {
                 epoch,
                 id: info.id,
@@ -850,6 +855,7 @@ mod tests {
 
     #[tokio::test]
     async fn failed_registry_writes_reject_the_operation_and_preserve_memory() {
+        let _guard = crate::settings::manager::TEST_SETTINGS_LOCK.lock().await;
         for operation in ["add", "remove", "edit"] {
             let root = std::env::temp_dir().join(format!(
                 "flspeak-registry-operation-{:x}",

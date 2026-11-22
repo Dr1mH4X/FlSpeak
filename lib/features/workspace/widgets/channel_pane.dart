@@ -229,13 +229,13 @@ class _ChannelTreeState extends ConsumerState<_ChannelTree> {
       }
       final children = childrenByParent[channel.id];
       if (children != null) {
-        for (final child in orderSiblings(children)) {
+        for (final child in children) {
           walk(child, depth + 1);
         }
       }
     }
 
-    for (final root in orderSiblings(roots)) {
+    for (final root in roots) {
       walk(root, 0);
     }
     _cachedChannels = channels;

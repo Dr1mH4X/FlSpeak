@@ -53,48 +53,62 @@ class _Controller extends SessionController {
 }
 
 void main() {
-  testWidgets('timeouts retry with a cooldown and stop after three attempts', (
-    tester,
-  ) async {
-    final core = _Core();
-    final container = ProviderContainer(
-      overrides: [
-        coreSessionProvider.overrideWithValue(core),
-        sessionViewProvider.overrideWith(_Controller.new),
-      ],
-    );
-    final provider = memberAvatarProvider('uid');
-    final subscription = container.listen(provider, (_, _) {});
-    for (var attempt = 1; attempt <= 3; attempt++) {
-      expect(core.requests, hasLength(attempt));
-      final failure = expectLater(
+  testWidgets(
+    'failures surface directly without Dart timers and evict failed futures for reload',
+    (tester) async {
+      final core = _Core();
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(core),
+          sessionViewProvider.overrideWith(_Controller.new),
+        ],
+      );
+      final provider = memberAvatarProvider('uid');
+      final subscription = container.listen(provider, (_, _) {});
+
+      expect(core.requests, hasLength(1));
+      final firstFailure = expectLater(
         container.read(provider.future),
         throwsA(isA<TimeoutException>()),
       );
       core.requests.last.completeError(TimeoutException('temporary'));
       await tester.pump();
-      await failure;
-      await tester.pump(const Duration(seconds: 29));
-      expect(core.requests, hasLength(attempt));
-      await tester.pump(const Duration(seconds: 1));
+      await firstFailure;
+
+      // No Dart-side 500ms or 30s retry timer is scheduled.
+      await tester.pump(const Duration(seconds: 35));
+      expect(core.requests, hasLength(1));
+
+      // Invalidating asks Rust again (even for transient-looking error text).
+      container.invalidate(provider);
+      final secondFailure = expectLater(
+        container.read(provider.future),
+        throwsA(isA<StateError>()),
+      );
+      expect(core.requests, hasLength(2));
+      core.requests.last.completeError(
+        StateError('image request queue is full'),
+      );
       await tester.pump();
-    }
-    expect(core.requests, hasLength(3));
-    await tester.pump(const Duration(minutes: 2));
-    expect(core.requests, hasLength(3));
-    container.invalidate(provider);
-    final refreshed = container.read(provider.future);
-    expect(core.requests, hasLength(4));
-    core.requests.last.complete(Uint8List.fromList([9]));
-    await tester.pump();
-    expect(await refreshed, [9]);
-    subscription.close();
-    container.dispose();
-    await tester.pump();
-  });
+      await secondFailure;
+
+      await tester.pump(const Duration(seconds: 5));
+      expect(core.requests, hasLength(2));
+
+      container.invalidate(provider);
+      final refreshed = container.read(provider.future);
+      expect(core.requests, hasLength(3));
+      core.requests.last.complete(Uint8List.fromList([9]));
+      await tester.pump();
+      expect(await refreshed, [9]);
+      subscription.close();
+      container.dispose();
+      await tester.pump();
+    },
+  );
 
   testWidgets(
-    'missing avatar or negative cache resolves to null and does not trigger 30s retry',
+    'missing avatar or negative cache resolves to null without automatic retry',
     (tester) async {
       final core = _Core();
       final container = ProviderContainer(
@@ -134,88 +148,7 @@ void main() {
   );
 
   testWidgets(
-    'transient queue-full and interrupted errors retry promptly within 500ms without consuming attempt count',
-    (tester) async {
-      final core = _Core();
-      final container = ProviderContainer(
-        overrides: [
-          coreSessionProvider.overrideWithValue(core),
-          sessionViewProvider.overrideWith(_Controller.new),
-        ],
-      );
-      final provider = memberAvatarProvider('uid-transient');
-      final subscription = container.listen(provider, (_, _) {});
-
-      // 1. 模拟队列满错误（transient）
-      expect(core.requests, hasLength(1));
-      final failure1 = expectLater(
-        container.read(provider.future),
-        throwsA(isA<StateError>()),
-      );
-      core.requests.last.completeError(
-        StateError('image request queue is full'),
-      );
-      await tester.pump();
-      await failure1;
-
-      // 400ms 时尚未重试
-      await tester.pump(const Duration(milliseconds: 400));
-      expect(core.requests, hasLength(1));
-
-      // 500ms 时触发快速重试
-      await tester.pump(const Duration(milliseconds: 100));
-      await tester.pump();
-      expect(core.requests, hasLength(2));
-
-      // 2. 模拟被控制操作打断（transient）
-      final failure2 = expectLater(
-        container.read(provider.future),
-        throwsA(isA<StateError>()),
-      );
-      core.requests.last.completeError(
-        StateError('image negotiation interrupted'),
-      );
-      await tester.pump();
-      await failure2;
-
-      await tester.pump(const Duration(milliseconds: 500));
-      await tester.pump();
-      expect(core.requests, hasLength(3));
-
-      // 3. 此时发生一次真实超时（attempt 1），应当进入 30s 冷却而非 500ms
-      final failure3 = expectLater(
-        container.read(provider.future),
-        throwsA(isA<TimeoutException>()),
-      );
-      core.requests.last.completeError(
-        TimeoutException('real network timeout'),
-      );
-      await tester.pump();
-      await failure3;
-
-      // 500ms 时不应重试
-      await tester.pump(const Duration(milliseconds: 500));
-      expect(core.requests, hasLength(3));
-
-      // 29s 后仍未重试，30s 后重试
-      await tester.pump(const Duration(seconds: 29));
-      expect(core.requests, hasLength(3));
-      await tester.pump(const Duration(seconds: 1));
-      await tester.pump();
-      expect(core.requests, hasLength(4));
-
-      core.requests.last.complete(Uint8List.fromList([42]));
-      await tester.pump();
-      expect(await container.read(provider.future), [42]);
-
-      subscription.close();
-      container.dispose();
-      await tester.pump();
-    },
-  );
-
-  testWidgets(
-    'avatarUpdated event clears cache, cooldowns, and attempts and refetches only mounted target uid',
+    'avatarUpdated event clears cache and refetches only mounted target uid',
     (tester) async {
       final events = StreamController<CoreEvent>.broadcast(sync: true);
       final core = _Core(events.stream);
@@ -241,43 +174,25 @@ void main() {
       expect(await container.read(providerA.future), isNull);
       expect(await container.read(providerB.future), [2]);
 
-      // 未挂载的 uid 收到 avatarUpdated 时仅记录 revision，不主动发起拉取
+      // Unmounted uid records revision on avatarUpdated without eagerly fetching.
       events.add(const CoreEvent.avatarUpdated(uid: 'uid-unmounted'));
       await tester.pump();
       await tester.pump(Duration.zero);
       expect(core.requestedUids, ['uid-a', 'uid-b']);
 
-      // uid-a 从缓存 null 收到 avatarUpdated：立刻重拉且不影响 uid-b
+      // uid-a clears cached null and refetches without affecting uid-b.
       events.add(const CoreEvent.avatarUpdated(uid: 'uid-a'));
       await tester.pump();
       await tester.pump(Duration.zero);
       expect(core.requestedUids, ['uid-a', 'uid-b', 'uid-a']);
       expect(await container.read(providerB.future), [2]);
 
-      // 让 uid-a 本次请求失败进入 30s 冷却，10s 时未重试；再收 avatarUpdated 应清掉冷却并立刻重拉
-      final failure = expectLater(
-        container.read(providerA.future),
-        throwsA(isA<TimeoutException>()),
-      );
-      core.requests.last.completeError(TimeoutException('temporary'));
-      await tester.pump();
-      await tester.pump(Duration.zero);
-      await failure;
-
-      await tester.pump(const Duration(seconds: 10));
-      expect(core.requestedUids, hasLength(3));
-
-      events.add(const CoreEvent.avatarUpdated(uid: 'uid-a'));
-      await tester.pump();
-      await tester.pump(Duration.zero);
-      expect(core.requestedUids, ['uid-a', 'uid-b', 'uid-a', 'uid-a']);
-
-      // 在途旧请求失效后失败，不应把新请求推进 30s 冷却或覆盖结果
+      // Stale in-flight failure invalidated by avatarUpdated cannot overwrite newer fetch result.
       final staleRequest = core.requests.last;
       events.add(const CoreEvent.avatarUpdated(uid: 'uid-a'));
       await tester.pump();
       await tester.pump(Duration.zero);
-      expect(core.requestedUids, hasLength(5));
+      expect(core.requestedUids, ['uid-a', 'uid-b', 'uid-a', 'uid-a']);
 
       staleRequest.completeError(TimeoutException('stale'));
       core.requests.last.complete(Uint8List.fromList([7, 7]));
@@ -285,11 +200,11 @@ void main() {
       await tester.pump(Duration.zero);
       expect(await container.read(providerA.future), [7, 7]);
 
-      // 等到原先 30s 冷却时间点后仍无多余重拉
+      // No extra background requests after any delay.
       await tester.pump(const Duration(seconds: 35));
-      expect(core.requestedUids, hasLength(5));
+      expect(core.requestedUids, hasLength(4));
 
-      // 稍后挂载 uid-unmounted 时才按需请求
+      // Mounting uid-unmounted later fetches on demand.
       final subUnmounted = container.listen(
         memberAvatarProvider('uid-unmounted'),
         (_, _) {},

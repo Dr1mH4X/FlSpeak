@@ -44,7 +44,6 @@ class ChatPane extends StatefulWidget {
     required this.onScopeChanged,
     required this.onSend,
     required this.recipients,
-    required this.selfUid,
     required this.recipientUid,
     required this.onRecipientChanged,
     this.selfClientId,
@@ -58,7 +57,6 @@ class ChatPane extends StatefulWidget {
     this.onPasteImage,
     this.onUploadImage,
     this.onConfigureImageHost,
-    this.onFetchBotCommands,
     this.avatarBuilder,
     super.key,
   });
@@ -70,7 +68,6 @@ class ChatPane extends StatefulWidget {
   final bool busy;
   final ValueChanged<ChatScope> onScopeChanged;
   final Future<bool> Function(String) onSend;
-  final String selfUid;
   final int? selfClientId;
   final int? selfChannelId;
   final List<ClientView> recipients;
@@ -87,7 +84,6 @@ class ChatPane extends StatefulWidget {
   final Future<PickedChatImage?> Function()? onPasteImage;
   final Future<String?> Function(Uint8List)? onUploadImage;
   final VoidCallback? onConfigureImageHost;
-  final ValueChanged<ClientView>? onFetchBotCommands;
   final Widget Function(ChatMessage message)? avatarBuilder;
 
   @override
@@ -164,18 +160,6 @@ class _ChatPaneState extends State<ChatPane> {
     return matches.length == 1 ? matches.first : null;
   }
 
-  bool _isOwnMessage(ChatMessage message) {
-    if (message.fromId > 0 && widget.selfClientId != null) {
-      return message.fromId == widget.selfClientId;
-    }
-    if (message.scope == ChatScope.direct &&
-        widget.selfClientId != null &&
-        message.targetId > 0) {
-      return message.targetId != widget.selfClientId;
-    }
-    return widget.selfUid.isNotEmpty && message.fromUid == widget.selfUid;
-  }
-
   bool get _canSend => switch (widget.scope) {
     ChatScope.server => true,
     ChatScope.channel => widget.canSendChannel,
@@ -186,7 +170,6 @@ class _ChatPaneState extends State<ChatPane> {
   void initState() {
     super.initState();
     _recipientName = _selectedRecipient?.nickname;
-    _input.addListener(_onInputChanged);
     _scheduleScrollToEnd();
   }
 
@@ -202,8 +185,7 @@ class _ChatPaneState extends State<ChatPane> {
     switch (widget.scope) {
       case ChatScope.direct:
         final recipient = _selectedRecipient;
-        if (recipient == null ||
-            !recipient.capabilities.contains('chat:slash_commands')) {
+        if (recipient == null || recipient.botCommands.isEmpty) {
           return const [];
         }
         return [recipient];
@@ -216,23 +198,11 @@ class _ChatPaneState extends State<ChatPane> {
               (peer) =>
                   peer.channelId == widget.selfChannelId &&
                   peer.id != widget.selfClientId &&
-                  peer.capabilities.contains('chat:slash_commands'),
+                  peer.botCommands.isNotEmpty,
             )
             .toList();
       case ChatScope.server:
         return const [];
-    }
-  }
-
-  void _onInputChanged() {
-    final text = _input.text;
-    if (text.isEmpty || text.contains(' ')) {
-      return;
-    }
-    for (final bot in _commandBots) {
-      if (bot.botCommands == null) {
-        widget.onFetchBotCommands?.call(bot);
-      }
     }
   }
 
@@ -269,14 +239,13 @@ class _ChatPaneState extends State<ChatPane> {
         _followingMessages &&
         (!_scroll.hasClients ||
             _scroll.position.userScrollDirection == ScrollDirection.idle);
-    if (changed || (newMessage && (following || _isOwnMessage(latest)))) {
+    if (changed || (newMessage && (following || latest.fromSelf))) {
       _scheduleScrollToEnd();
     }
   }
 
   @override
   void dispose() {
-    _input.removeListener(_onInputChanged);
     _input.dispose();
     _focus.dispose();
     _scroll.dispose();
@@ -678,7 +647,7 @@ class _ChatPaneState extends State<ChatPane> {
         <({ClientView bot, String prefix, BotCommandView command})>[];
     for (final bot in bots) {
       final commands = bot.botCommands;
-      if (commands == null || commands.isEmpty) continue;
+      if (commands.isEmpty) continue;
       final prefix = _commandPrefixFor(bot);
       if (!text.startsWith(prefix)) continue;
       final query = text.substring(prefix.length).toLowerCase();

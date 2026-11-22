@@ -14,6 +14,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:flspeak/core/audio_selection.dart';
 import 'package:flspeak/core/models.dart';
 import 'package:flspeak/core/preferences.dart';
 import 'package:flspeak/core/providers.dart';
@@ -27,7 +28,15 @@ import 'package:flspeak/widgets/app_navigation_sidebar.dart';
 import 'package:flspeak/widgets/prism.dart';
 import 'package:flspeak/widgets/update_dot.dart';
 
-class _Core extends Fake implements CoreSession {}
+class _Core extends Fake implements CoreSession {
+  _Core({AudioDevicesView? devices})
+    : devices = devices ?? const AudioDevicesView(inputs: [], outputs: []);
+
+  final AudioDevicesView devices;
+
+  @override
+  Future<AudioDevicesView> listAudioDevices() async => devices;
+}
 
 class _Session extends SessionController {
   @override
@@ -1006,6 +1015,85 @@ void main() {
       await tester.pumpAndSettle();
       expect(container.read(preferencesProvider).noiseSuppression, isTrue);
       expect(find.byType(Tooltip), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'voice settings shows saved audio device names from Rust and updates on fallback reset',
+    (tester) async {
+      const mic = AudioDeviceView(
+        id: 'mic-saved',
+        name: 'Studio Mic',
+        isDefault: false,
+      );
+      const speaker = AudioDeviceView(
+        id: 'out-saved',
+        name: 'Monitor Speakers',
+        isDefault: false,
+      );
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(
+            _Core(
+              devices: const AudioDevicesView(
+                inputs: [mic],
+                outputs: [speaker],
+                currentInputId: 'mic-saved',
+                currentOutputId: 'out-saved',
+              ),
+            ),
+          ),
+          sessionViewProvider.overrideWith(_Session.new),
+          updateProvider.overrideWith(_Update.new),
+          appVersionProvider.overrideWithValue('0.1.0'),
+          storePathProvider.overrideWithValue(
+            '/tmp/flspeak-test/preferences.json',
+          ),
+          preferencesStoreProvider.overrideWithValue(
+            PreferencesStore.inMemory(
+              preferences: const SessionPreferences(
+                nickname: 'Test',
+                locale: 'zh',
+              ),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            locale: const Locale('zh'),
+            localizationsDelegates: appLocalizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) =>
+                PrismRootScope(brightness: Brightness.light, child: child!),
+            home: const SettingsPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(SettingsTile, '通用'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(SettingsTile, '语音'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Studio Mic'), findsOneWidget);
+      expect(find.text('Monitor Speakers'), findsOneWidget);
+
+      container
+          .read(audioDevicesProvider.notifier)
+          .resetFallback(input: true, output: false);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Studio Mic'), findsNothing);
+      expect(find.text('Monitor Speakers'), findsOneWidget);
+      expect(find.text('系统默认'), findsOneWidget);
     },
   );
 }

@@ -92,24 +92,11 @@ class _KickFormState extends ConsumerState<_KickForm> {
         view.connected &&
         _connection == (view.activeServerId, view.connectionEpoch);
     final access = ref.watch(sessionAccessProvider).asData?.value;
-    final peer = view.clients
-        .where(
-          (client) =>
-              client.id == widget.client.id &&
-              client.uid == widget.client.uid &&
-              client.id != view.selfClientId,
-        )
-        .firstOrNull;
     final targetAvailable =
-        peer != null &&
-        (widget.target == KickTarget.server ||
-            peer.channelId == widget.client.channelId);
+        view.findKickablePeer(widget.client, widget.target) != null;
     final allowed =
         access?.connectionEpoch == widget.connectionEpoch &&
-        (widget.target == KickTarget.channel
-                ? access?.kickChannelPower ?? 0
-                : access?.kickServerPower ?? 0) >
-            0;
+        (access?.canKick(widget.target) ?? false);
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,

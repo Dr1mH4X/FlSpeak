@@ -1,52 +1,5 @@
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
-/// TeamSpeak 的兄弟频道顺序由 `channel_order` 链表决定：它指向前一个兄弟的
-/// 频道 id（0 表示第一个），不是可比较的排序键。沿链表恢复展示顺序；链不完整
-/// 的部分（前驱缺失、重复、成环）按服务器给到的输入顺序兜底追加。
-List<ChannelView> orderSiblings(List<ChannelView> siblings) {
-  final ids = <int>{for (final channel in siblings) channel.id};
-  final starts = <ChannelView>[];
-  final successors = <int, List<ChannelView>>{};
-  for (final channel in siblings) {
-    final order = channel.order;
-    if (order != null && order != 0 && ids.contains(order)) {
-      successors.putIfAbsent(order, () => []).add(channel);
-    } else {
-      starts.add(channel);
-    }
-  }
-
-  final out = <ChannelView>[];
-  final seen = <int>{};
-  // 显式栈代替递归：兄弟上千个的长链不能靠调用栈。
-  void emitChain(ChannelView first) {
-    final stack = <ChannelView>[first];
-    while (stack.isNotEmpty) {
-      final channel = stack.removeLast();
-      if (!seen.add(channel.id)) {
-        continue;
-      }
-      out.add(channel);
-      final followers = successors[channel.id];
-      if (followers != null) {
-        for (final follower in followers.reversed) {
-          stack.add(follower);
-        }
-      }
-    }
-  }
-
-  for (final start in starts) {
-    emitChain(start);
-  }
-  for (final channel in siblings) {
-    if (!seen.contains(channel.id)) {
-      emitChain(channel);
-    }
-  }
-  return out;
-}
-
 /// 官方 spacer 频道命名：`[?spacer#]文本`，`?` 是对齐标记 l/c/r/*，
 /// `#` 只为保证频道名唯一，可省略；前缀可以叠加。大小写不敏感。
 final RegExp _spacerPrefix = RegExp(

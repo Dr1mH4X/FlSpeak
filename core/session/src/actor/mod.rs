@@ -210,12 +210,22 @@ pub(crate) enum SessionSignal {
         epoch: u64,
         server_id: String,
         icon_id: u32,
-        result: Result<Vec<u8>, SessionError>,
+        attempt: u8,
+        result: Result<Vec<u8>, ImageFetchError>,
+    },
+    /// 频道图标瞬态失败退避到期，准备重新入队尝试。
+    RetryChannelIcon {
+        epoch: u64,
+        server_id: String,
+        icon_id: u32,
+        attempt: u8,
     },
     /// 头像磁盘缓存异步读取完成。
     AvatarDiskLoaded(AvatarDiskLoad),
     /// 当前连接的头像远程拉取完成。
     AvatarFetched(AvatarFetchOutcome),
+    /// 头像瞬态失败退避到期，准备重新入队尝试。
+    RetryAvatarFetch(AvatarRetry),
     /// 开放协议延迟定时器触发（去抖尾随广播或失败单次重试）。
     OpenProtocolTimer {
         epoch: u64,
@@ -260,6 +270,7 @@ pub(crate) struct Actor {
     state: SessionState,
     client: Option<Arc<Client>>,
     self_client_id: Option<i32>,
+    self_uid: Option<String>,
     self_channel_id: u64,
     active_server_id: Option<String>,
     transfer_target: Option<ServerTarget>,
@@ -277,6 +288,7 @@ pub(crate) struct Actor {
     audio_enabled: bool,
     voice_tx_gate: Rc<RefCell<VoiceTxGate>>,
     last_snapshot: Option<(Vec<ChannelView>, Vec<ClientView>)>,
+    known_clients: HashMap<i32, ClientView>,
     channel_codecs: HashMap<u64, i32>,
     channel_list_allowed: Option<bool>,
     channel_meta_allowed: Option<bool>,
@@ -301,6 +313,9 @@ pub(crate) struct Actor {
     network_monitor: Option<crate::network::NetworkMonitor>,
     last_network_sample_error: Option<Instant>,
     open_protocol: OpenProtocolEngine,
+    open_protocol_flood_halted: bool,
+    #[cfg(test)]
+    open_protocol_outbound_log: Vec<(&'static str, Option<i32>, String)>,
     voice_report: VoiceReportState,
     pending_images: VecDeque<PendingImage>,
     active_image: Option<ActiveImage>,
@@ -310,6 +325,7 @@ pub(crate) struct Actor {
     in_flight_channel_icons: HashMap<ChannelIconKey, ChannelIconWaiters>,
     avatar_hashes: HashMap<String, Option<String>>,
     avatar_negative_cache: HashSet<String>,
+    avatar_cooldowns: HashMap<String, AvatarCooldown>,
     avatar_revisions: HashMap<String, u64>,
     avatars_fetched_without_hash: HashSet<String>,
     in_flight_avatars: HashMap<AvatarFetchKey, AvatarWaiters>,
@@ -352,7 +368,13 @@ impl Actor {
                 .map(|id| (*id).to_owned())
                 .collect(),
         );
-        let initial_audio = SettingsManager::with(|s| s.audio.clone()).unwrap_or_default();
+        let initial_audio = if store_path.as_os_str().is_empty() {
+            AudioSettings::default()
+        } else {
+            SettingsManager::with(|s| s.audio.clone()).unwrap_or_default()
+        };
+        let initial_input_device = normalize_device_id(initial_audio.input_device_id.clone());
+        let initial_output_device = normalize_device_id(initial_audio.output_device_id.clone());
         let _ = voice.set_vad_config(
             initial_audio.vad_threshold,
             initial_audio.vad_hangover_frames,
@@ -378,6 +400,7 @@ impl Actor {
             state: SessionState::Disconnected,
             client: None,
             self_client_id: None,
+            self_uid: None,
             self_channel_id: 0,
             active_server_id: None,
             transfer_target: None,
@@ -387,14 +410,15 @@ impl Actor {
             reconnect_attempt: 0,
             auto_reconnect: true,
             voice_state: VoiceStateView::default(),
-            input_device: None,
-            output_device: None,
+            input_device: initial_input_device,
+            output_device: initial_output_device,
             capture_active: false,
             mic_permitted: true,
             audio_since: Instant::now(),
             audio_enabled,
             voice_tx_gate: Rc::new(RefCell::new(VoiceTxGate::default())),
             last_snapshot: None,
+            known_clients: HashMap::new(),
             channel_codecs: HashMap::new(),
             channel_list_allowed: None,
             channel_meta_allowed: None,
@@ -419,6 +443,9 @@ impl Actor {
             network_monitor: None,
             last_network_sample_error: None,
             open_protocol: new_open_protocol_engine(),
+            open_protocol_flood_halted: false,
+            #[cfg(test)]
+            open_protocol_outbound_log: Vec::new(),
             voice_report: VoiceReportState::default(),
             pending_images: VecDeque::new(),
             active_image: None,
@@ -428,6 +455,7 @@ impl Actor {
             in_flight_channel_icons: HashMap::new(),
             avatar_hashes: HashMap::new(),
             avatar_negative_cache: HashSet::new(),
+            avatar_cooldowns: HashMap::new(),
             avatar_revisions: HashMap::new(),
             avatars_fetched_without_hash: HashSet::new(),
             in_flight_avatars: HashMap::new(),
@@ -444,6 +472,19 @@ impl Actor {
         snapshots.tick().await;
 
         self.sync_voice_gate();
+        if self.audio_enabled
+            && (self.input_device.is_some() || self.output_device.is_some())
+            && let (Ok(inputs), Ok(outputs)) = (
+                audio::device::input_devices(),
+                audio::device::output_devices(),
+            )
+        {
+            let inputs: Vec<AudioDeviceView> =
+                inputs.into_iter().map(AudioDeviceView::from).collect();
+            let outputs: Vec<AudioDeviceView> =
+                outputs.into_iter().map(AudioDeviceView::from).collect();
+            self.reconcile_audio_devices(&inputs, &outputs);
+        }
         let (_, dummy_rx) = mpsc::channel(1);
         let mut audio_rx = std::mem::replace(&mut self.audio_events, dummy_rx);
         let (stop_audio_tx, mut stop_audio_rx) = oneshot::channel::<()>();
@@ -834,7 +875,7 @@ impl Actor {
                 let _ = reply.send(Ok(()));
             }
             SessionCommand::ListAudioDevices { reply } => {
-                let _ = reply.send(list_audio_devices());
+                let _ = reply.send(self.list_audio_devices());
             }
             SessionCommand::SetAudioDevices {
                 input,
@@ -953,7 +994,18 @@ impl Actor {
             } => {
                 let _ = reply.send(self.fetch_bot_commands(target_clid, &target_uid));
             }
-            SessionCommand::SyncAudioSettings(audio) => {
+            SessionCommand::SyncAudioSettings(mut audio) => {
+                if !self.store_path.as_os_str().is_empty()
+                    && let Ok((input, output)) = SettingsManager::with(|s| {
+                        (
+                            s.audio.input_device_id.clone(),
+                            s.audio.output_device_id.clone(),
+                        )
+                    })
+                {
+                    audio.input_device_id = input;
+                    audio.output_device_id = output;
+                }
                 self.apply_audio_settings(&audio);
             }
         }
@@ -988,11 +1040,39 @@ impl Actor {
                 if epoch != self.connection_epoch {
                     return;
                 }
+                if let Some(prev) = self.known_client_row(client.id) {
+                    if client.nickname.is_empty() && !prev.nickname.is_empty() {
+                        client.nickname = prev.nickname;
+                    }
+                    if client.uid.is_empty() && !prev.uid.is_empty() {
+                        client.uid = prev.uid;
+                    }
+                    if client.channel_id == 0 && prev.channel_id != 0 {
+                        client.channel_id = prev.channel_id;
+                    }
+                    client.input_muted = client.input_muted.or(prev.input_muted);
+                    client.output_muted = client.output_muted.or(prev.output_muted);
+                    client.away = client.away.or(prev.away);
+                    if client.away != Some(false) {
+                        client.away_message = client.away_message.or(prev.away_message);
+                    }
+                    client.is_streaming = client.is_streaming || prev.is_streaming;
+                }
                 self.sync_avatar_hash_from_join(&client.uid, avatar_hash);
+                if Some(client.id) == self.self_client_id {
+                    if client.channel_id == 0 && self.self_channel_id != 0 {
+                        client.channel_id = self.self_channel_id;
+                    }
+                    if !client.uid.is_empty() {
+                        self.self_uid = Some(client.uid.clone());
+                    }
+                    self.apply_self_voice_flags_to_row(&mut client);
+                }
                 let client_id = client.id;
                 let client_channel_id = client.channel_id;
                 self.open_protocol_peer_joined(client.id, &client.uid);
                 self.enrich_client(&mut client);
+                self.upsert_client_in_cache(client.clone());
                 self.emit(SessionEvent::ClientJoined(client));
                 self.record_client_channel(client_id, client_channel_id);
                 self.sync_streams_view();
@@ -1010,9 +1090,13 @@ impl Actor {
                 } else {
                     self.on_stream_peer_moved(id, channel_id);
                 }
+                let moved_client = self.build_moved_client_view(id, channel_id);
+                self.upsert_client_in_cache(moved_client.clone());
+                self.emit(SessionEvent::ClientMoved(moved_client));
             }
             SessionSignal::ClientLeft { epoch, id } => {
                 if epoch == self.connection_epoch {
+                    self.remove_client_from_cache(id);
                     self.open_protocol_peer_left(id);
                     self.on_stream_peer_left(id);
                 }
@@ -1184,6 +1268,9 @@ impl Actor {
                     self.on_stream_peer_moved(id, channel_id);
                 }
                 if self.self_client_id == Some(id) {
+                    if !resolved_uid.is_empty() {
+                        self.self_uid = Some(resolved_uid.clone());
+                    }
                     self.sync_self_server_groups(&server_groups);
                     let local = VoiceFlagsSnapshot::from_voice_state(&self.voice_state);
                     let resolved = self.voice_report.resolve_self_flags(
@@ -1192,12 +1279,8 @@ impl Actor {
                         output_muted,
                         away,
                     );
-                    if input_muted.is_some() {
-                        input_muted = Some(resolved.input_muted);
-                    }
-                    if output_muted.is_some() {
-                        output_muted = Some(resolved.output_muted);
-                    }
+                    input_muted = Some(resolved.input_muted);
+                    output_muted = Some(resolved.output_muted);
                     if away.is_some() {
                         away = Some(resolved.away);
                         if (self.voice_report.dirty_mask & DIRTY_AWAY) == 0
@@ -1208,6 +1291,14 @@ impl Actor {
                         }
                     }
                 }
+                self.update_client_flags_in_cache(
+                    id,
+                    channel_id,
+                    input_muted,
+                    output_muted,
+                    away,
+                    away_message.as_ref(),
+                );
                 self.emit(SessionEvent::ClientUpdated {
                     id,
                     input_muted,
@@ -1282,57 +1373,27 @@ impl Actor {
                 epoch,
                 server_id,
                 icon_id,
+                attempt,
                 result,
             } => {
-                let Some(waiters) =
-                    self.in_flight_channel_icons
-                        .remove(&(epoch, server_id.clone(), icon_id))
-                else {
-                    return;
-                };
-                if epoch != self.connection_epoch
-                    || self.active_server_id.as_deref() != Some(server_id.as_str())
-                {
-                    for reply in waiters {
-                        let _ = reply.send(Err(SessionError::NotConnected));
-                    }
-                    return;
-                }
-                match result {
-                    Ok(bytes) => {
-                        if let Err(error) = crate::channel_icons::save(
-                            &self.store_path,
-                            &server_id,
-                            icon_id,
-                            &bytes,
-                        ) {
-                            self.emit(SessionEvent::Log {
-                                level: "warn".into(),
-                                message: format!("failed to save the channel icon cache: {error}"),
-                            });
-                        }
-                        for reply in waiters {
-                            let _ = reply.send(Ok(bytes.clone()));
-                        }
-                    }
-                    Err(error) => {
-                        if !matches!(error, SessionError::NotConnected) {
-                            self.emit(SessionEvent::Log {
-                                level: "warn".into(),
-                                message: format!("failed to fetch channel icon {icon_id}: {error}"),
-                            });
-                        }
-                        for reply in waiters {
-                            let _ = reply.send(Err(Self::clone_image_error(&error)));
-                        }
-                    }
-                }
+                self.handle_channel_icon_fetched(epoch, server_id, icon_id, attempt, result);
+            }
+            SessionSignal::RetryChannelIcon {
+                epoch,
+                server_id,
+                icon_id,
+                attempt,
+            } => {
+                self.handle_retry_channel_icon(epoch, server_id, icon_id, attempt);
             }
             SessionSignal::AvatarDiskLoaded(load) => {
                 self.handle_avatar_disk_loaded(load);
             }
             SessionSignal::AvatarFetched(outcome) => {
                 self.handle_avatar_fetched(outcome);
+            }
+            SessionSignal::RetryAvatarFetch(retry) => {
+                self.handle_retry_avatar_fetch(retry);
             }
             SessionSignal::OpenProtocolTimer { epoch, token } => {
                 if epoch != self.connection_epoch {
@@ -1390,6 +1451,148 @@ impl Actor {
 
     pub(super) fn emit(&self, event: SessionEvent) {
         emit(&self.events, event);
+    }
+
+    pub(super) fn sync_clients_cache(&mut self, clients: &[ClientView]) {
+        self.known_clients = clients
+            .iter()
+            .map(|client| (client.id, client.clone()))
+            .collect();
+        if let Some(self_id) = self.self_client_id
+            && let Some(me) = self.known_clients.get(&self_id)
+            && !me.uid.is_empty()
+        {
+            self.self_uid = Some(me.uid.clone());
+        }
+    }
+
+    fn known_client_row(&self, id: i32) -> Option<ClientView> {
+        self.known_clients.get(&id).cloned().or_else(|| {
+            self.last_snapshot
+                .as_ref()
+                .and_then(|(_, clients)| clients.iter().find(|client| client.id == id).cloned())
+        })
+    }
+
+    fn upsert_client_in_cache(&mut self, client: ClientView) {
+        self.known_clients.insert(client.id, client.clone());
+        if let Some((_, clients)) = &mut self.last_snapshot {
+            match clients.iter_mut().find(|existing| existing.id == client.id) {
+                Some(existing) => *existing = client,
+                None => {
+                    clients.push(client);
+                    clients.sort_by_key(|existing| existing.id);
+                }
+            }
+        }
+    }
+
+    fn remove_client_from_cache(&mut self, id: i32) {
+        self.known_clients.remove(&id);
+        if let Some((_, clients)) = &mut self.last_snapshot {
+            clients.retain(|client| client.id != id);
+        }
+    }
+
+    fn update_client_flags_in_cache(
+        &mut self,
+        id: i32,
+        channel_id: u64,
+        input_muted: Option<bool>,
+        output_muted: Option<bool>,
+        away: Option<bool>,
+        away_message: Option<&String>,
+    ) {
+        let apply = |row: &mut ClientView| {
+            if channel_id != 0 && (Some(id) != self.self_client_id || row.channel_id == 0) {
+                row.channel_id = channel_id;
+            }
+            if let Some(value) = input_muted {
+                row.input_muted = Some(value);
+            }
+            if let Some(value) = output_muted {
+                row.output_muted = Some(value);
+            }
+            if let Some(value) = away {
+                row.away = Some(value);
+            }
+            if let Some(value) = away_message {
+                row.away_message = Some(value.clone());
+            }
+        };
+        if let Some(row) = self.known_clients.get_mut(&id) {
+            apply(row);
+        }
+        if let Some((_, clients)) = &mut self.last_snapshot
+            && let Some(row) = clients.iter_mut().find(|client| client.id == id)
+        {
+            apply(row);
+        }
+    }
+
+    fn apply_self_voice_flags_to_row(&mut self, row: &mut ClientView) {
+        let local = VoiceFlagsSnapshot::from_voice_state(&self.voice_state);
+        let resolved = self.voice_report.resolve_self_flags(
+            local,
+            row.input_muted,
+            row.output_muted,
+            row.away,
+        );
+        row.input_muted = Some(resolved.input_muted);
+        row.output_muted = Some(resolved.output_muted);
+        row.away = Some(resolved.away);
+    }
+
+    fn build_moved_client_view(&mut self, id: i32, channel_id: u64) -> ClientView {
+        let mut client = self
+            .known_client_row(id)
+            .or_else(|| {
+                self.client
+                    .as_ref()
+                    .and_then(|client| client.directory_snapshot())
+                    .and_then(|snapshot| {
+                        snapshot
+                            .clients
+                            .into_iter()
+                            .find(|existing| existing.id == id)
+                            .map(ClientView::from)
+                    })
+            })
+            .unwrap_or_else(|| ClientView {
+                id,
+                nickname: if Some(id) == self.self_client_id {
+                    self.last_target
+                        .as_ref()
+                        .map(|target| target.nickname.clone())
+                        .unwrap_or_default()
+                } else {
+                    String::new()
+                },
+                uid: if Some(id) == self.self_client_id {
+                    self.self_uid.clone().unwrap_or_default()
+                } else {
+                    String::new()
+                },
+                channel_id,
+                input_muted: None,
+                output_muted: None,
+                away: None,
+                away_message: None,
+                is_streaming: false,
+                client_type: ClientType::Standard,
+                app_name: None,
+                app_version: None,
+                capabilities: Vec::new(),
+                bot_commands: Vec::new(),
+                bot_commands_loaded: false,
+                bot_command_prefix: None,
+            });
+        client.channel_id = channel_id;
+        if Some(id) == self.self_client_id {
+            self.apply_self_voice_flags_to_row(&mut client);
+        }
+        self.enrich_client(&mut client);
+        client
     }
 }
 pub(super) fn protocol_error(err: tsclient_rs::Error) -> SessionError {

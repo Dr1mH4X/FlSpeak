@@ -1,6 +1,7 @@
 // ignore_for_file: depend_on_referenced_packages
 
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,10 +9,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/services.dart';
 
 import 'package:flspeak/core/image_host.dart';
+import 'package:flspeak/core/models.dart';
+import 'package:flspeak/l10n/app_localizations.dart';
 
 class _Api extends Fake implements RustLibApi {
   bool reject = false;
   Completer<void>? validation;
+  @override
+  int crateApiSessionMaxChatImageBytes() => 20 * 1024 * 1024;
+
   @override
   Future<void> crateApiSessionValidateImageHost({
     required String uploadBase,
@@ -147,7 +153,7 @@ void main() {
       );
       content = Uint8List.fromList([1, 2, 3]);
       expect((await input.paste()).bytes, [1, 2, 3]);
-      content = Uint8List(maxChatImageBytes + 1);
+      content = Uint8List(maxChatImageBytes() + 1);
       await expectLater(
         input.paste(),
         throwsA(
@@ -158,6 +164,22 @@ void main() {
           ),
         ),
       );
+    },
+  );
+
+  test(
+    'describeCoreError maps typed chat image errors in Chinese and English',
+    () {
+      final en = lookupAppLocalizations(const Locale('en'));
+      final zh = lookupAppLocalizations(const Locale('zh'));
+
+      final tooLarge = CoreError.imageTooLarge(maxBytes: maxChatImageBytes());
+      expect(describeCoreError(tooLarge, en), contains('20.0 MiB'));
+      expect(describeCoreError(tooLarge, zh), contains('20.0 MiB'));
+
+      const unsupported = CoreError.imageUnsupportedFormat();
+      expect(describeCoreError(unsupported, en), en.chatImageUnsupportedFormat);
+      expect(describeCoreError(unsupported, zh), zh.chatImageUnsupportedFormat);
     },
   );
 }

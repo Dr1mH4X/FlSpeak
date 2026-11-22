@@ -857,14 +857,11 @@ class _ChannelChatBodyState extends ConsumerState<_ChannelChatBody> {
       recipientId: directRecipientId,
       unreadScopes: unreadScopes,
       unreadPeers: unreadPeers,
-      selfUid: scopedView.selfUid,
       selfClientId: selfClientId,
       selfChannelId: selfChannelId,
       onRecipientChanged: controller.selectDirectRecipient,
       onRecipientSelected: (peer) =>
           controller.selectDirectRecipient(peer.uid, clientId: peer.id),
-      onFetchBotCommands: (peer) =>
-          controller.fetchBotCommands(peer.id, peer.uid),
     );
   }
 }

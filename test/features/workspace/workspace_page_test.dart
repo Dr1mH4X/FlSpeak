@@ -845,7 +845,7 @@ void main() {
           name: 'Display 1',
           audio: false,
           bitrate: 5000,
-          viewerLimit: defaultMaxStreamViewers,
+          viewerLimit: defaultMaxStreamViewers(),
         ),
       ]);
       expect(container.read(streamPublisherProvider).isActive, isTrue);

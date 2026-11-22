@@ -1,6 +1,6 @@
 use tsclient_rs::open_protocol::{
-    ClientKind, EngineEffects, OpenProtocolConfig, OpenProtocolEngine, OpenProtocolEvent,
-    PeerIdentity, SendOutcome, SendReceipt, TimerToken,
+    CAP_CHAT_SLASH_COMMANDS, ClientKind, EngineEffects, OpenProtocolConfig, OpenProtocolEngine,
+    OpenProtocolEvent, PeerIdentity, SendOutcome, SendReceipt, TimerToken,
 };
 
 use super::*;
@@ -35,7 +35,8 @@ impl Actor {
             client.app_name = Some(self_id.app_name);
             client.app_version = Some(self_id.app_version);
             client.capabilities = self_id.capabilities;
-            client.bot_commands = None;
+            client.bot_commands.clear();
+            client.bot_commands_loaded = false;
             client.bot_command_prefix = None;
             return;
         }
@@ -49,17 +50,21 @@ impl Actor {
             client.capabilities = identity.capabilities.clone();
         }
         if let Some(list) = self.open_protocol.peer_commands(&client.uid) {
-            client.bot_commands = Some(
-                list.commands
-                    .iter()
-                    .map(|cmd| BotCommandView {
-                        name: cmd.name.clone(),
-                        args: cmd.args.clone().unwrap_or_default(),
-                        desc: cmd.desc.clone(),
-                    })
-                    .collect(),
-            );
+            client.bot_commands = list
+                .commands
+                .iter()
+                .map(|cmd| BotCommandView {
+                    name: cmd.name.clone(),
+                    args: cmd.args.clone().unwrap_or_default(),
+                    desc: cmd.desc.clone(),
+                })
+                .collect();
+            client.bot_commands_loaded = true;
             client.bot_command_prefix = list.command_prefix.clone();
+        } else if self.open_protocol.peer_identity(&client.uid).is_some() {
+            client.bot_commands.clear();
+            client.bot_commands_loaded = false;
+            client.bot_command_prefix = None;
         }
     }
 
@@ -75,6 +80,7 @@ impl Actor {
         {
             return;
         }
+        self.sync_clients_cache(&clients);
         self.last_snapshot = Some((channels.clone(), clients.clone()));
         self.emit(SessionEvent::Snapshot { channels, clients });
     }
@@ -103,25 +109,67 @@ impl Actor {
             .unwrap_or_default()
     }
 
-    fn apply_open_protocol_effects(&mut self, effects: EngineEffects) {
+    fn maybe_enqueue_bot_commands_fetch(
+        &mut self,
+        clid: i32,
+        uid: &str,
+        now: Instant,
+        effects: &mut EngineEffects,
+    ) {
+        if self.open_protocol_flood_halted
+            || clid <= 0
+            || uid.is_empty()
+            || self.self_client_id == Some(clid)
+        {
+            return;
+        }
+        let has_cmd_cap = self
+            .open_protocol
+            .peer_identity(uid)
+            .is_some_and(|identity| identity.has_capability(CAP_CHAT_SLASH_COMMANDS));
+        if !has_cmd_cap || self.open_protocol.peer_commands(uid).is_some() {
+            return;
+        }
+        let fetched = self.open_protocol.request_fetch_commands(clid, uid, now);
+        effects.outbound.extend(fetched.outbound);
+        effects.timers.extend(fetched.timers);
+        effects.events.extend(fetched.events);
+    }
+
+    fn apply_open_protocol_effects(&mut self, mut effects: EngineEffects) {
         let mut metadata_changed = false;
         let mut flood_halted = false;
+        let mut peers_to_fetch = Vec::new();
         for event in &effects.events {
             match event {
-                OpenProtocolEvent::PeerIdentityUpdated { .. }
-                | OpenProtocolEvent::PeerCommandsUpdated { .. } => metadata_changed = true,
+                OpenProtocolEvent::PeerIdentityUpdated {
+                    peer_uid,
+                    clid,
+                    identity,
+                } => {
+                    metadata_changed = true;
+                    if identity.has_capability(CAP_CHAT_SLASH_COMMANDS) {
+                        peers_to_fetch.push((*clid, peer_uid.clone()));
+                    }
+                }
+                OpenProtocolEvent::PeerCommandsUpdated { .. } => metadata_changed = true,
                 OpenProtocolEvent::ProbeHaltedByFlood => flood_halted = true,
                 OpenProtocolEvent::SendFailed { .. } => {}
             }
         }
-        if metadata_changed {
-            self.sync_peer_metadata_to_snapshot();
-        }
         if flood_halted {
+            self.open_protocol_flood_halted = true;
             self.emit(SessionEvent::Log {
                 level: "warn".into(),
                 message: "server flood control triggered; paused automatic cross-channel member discovery".into(),
             });
+        }
+        if metadata_changed {
+            self.sync_peer_metadata_to_snapshot();
+        }
+        let now = Instant::now();
+        for (clid, uid) in peers_to_fetch {
+            self.maybe_enqueue_bot_commands_fetch(clid, &uid, now, &mut effects);
         }
 
         let epoch = self.connection_epoch;
@@ -143,6 +191,9 @@ impl Actor {
                     .on_send_outcome(cmd.receipt, SendOutcome::Failed { flood: false });
                 continue;
             };
+            #[cfg(test)]
+            self.open_protocol_outbound_log
+                .push((cmd.plugin, cmd.target_id, cmd.data.clone()));
             let signals = self.signals.clone();
             tokio::task::spawn_local(async move {
                 let result = tsclient_rs::send_plugin_command(
@@ -183,13 +234,15 @@ impl Actor {
         if self.client.is_none() {
             return;
         }
+        let now = Instant::now();
         let peers: Vec<(i32, &str, u64)> = clients
             .iter()
             .map(|c| (c.id, c.uid.as_str(), c.channel_id))
             .collect();
-        let effects = self
-            .open_protocol
-            .sync_directory_peers(&peers, Instant::now());
+        let mut effects = self.open_protocol.sync_directory_peers(&peers, now);
+        for client in clients {
+            self.maybe_enqueue_bot_commands_fetch(client.id, &client.uid, now, &mut effects);
+        }
         self.apply_open_protocol_effects(effects);
     }
 
@@ -197,7 +250,9 @@ impl Actor {
         if self.client.is_none() {
             return;
         }
-        let effects = self.open_protocol.on_peer_joined(clid, uid, Instant::now());
+        let now = Instant::now();
+        let mut effects = self.open_protocol.on_peer_joined(clid, uid, now);
+        self.maybe_enqueue_bot_commands_fetch(clid, uid, now, &mut effects);
         self.apply_open_protocol_effects(effects);
     }
 
@@ -467,7 +522,8 @@ mod tests {
             panic!("expected Snapshot event after commands update");
         };
         let bot = clients.iter().find(|c| c.id == 12).expect("bot row");
-        assert_eq!(bot.bot_commands.as_ref().map(Vec::len), Some(16));
+        assert!(bot.bot_commands_loaded);
+        assert_eq!(bot.bot_commands.len(), 16);
         assert_eq!(bot.bot_command_prefix.as_deref(), Some("!"));
 
         // 命中本地缓存时 fetch_bot_commands 直接返回 Ok(())，跳过网络请求。
@@ -499,6 +555,7 @@ mod tests {
             Some("TeamSpeak server error: flooding (id=524)".into()),
         );
 
+        assert!(actor.open_protocol_flood_halted);
         let drained: Vec<SessionEvent> = std::iter::from_fn(|| events.try_recv().ok()).collect();
         assert!(drained.iter().any(|ev| {
             matches!(
@@ -513,5 +570,185 @@ mod tests {
             .on_timer(TimerToken::ProbeNext, now + Duration::from_millis(2400));
         assert!(after_halt.outbound.is_empty());
         assert!(after_halt.timers.is_empty());
+    }
+
+    #[tokio::test]
+    async fn auto_fetches_bot_commands_on_capability_announce_invalidation_and_rejoin() {
+        use tsclient_rs::{Client, ClientOptions};
+
+        tokio::task::LocalSet::new()
+            .run_until(async {
+                let mut actor = audio_actor();
+                let client = Arc::new(Client::new(
+                    tsclient_rs::generateIdentity(0),
+                    "127.0.0.1:9987".into(),
+                    "Self".into(),
+                    ClientOptions::default(),
+                ));
+                client.mark_connected();
+                actor.client = Some(client);
+                actor.self_client_id = Some(7);
+                actor.open_protocol.on_connected(7, 5, Instant::now());
+                actor.last_snapshot = Some((
+                    Vec::new(),
+                    vec![ClientView::from(ClientInfo {
+                        id: 12,
+                        nickname: "MusicBot".into(),
+                        uid: "bot-uid".into(),
+                        ..client_info(12, 5, "MusicBot")
+                    })],
+                ));
+                let mut events = actor.events.subscribe();
+
+                // 1. Peer announces slash-commands capability -> Actor automatically dispatches COMMANDS_PLUGIN list_req.
+                let announce_v1 = serde_json::json!({
+                    "v": 1,
+                    "action": "announce_ack",
+                    "client_type": "bot",
+                    "app_name": "MusicBot",
+                    "app_version": "1.0.0",
+                    "capabilities": [CAP_CHAT_SLASH_COMMANDS],
+                })
+                .to_string();
+                actor.handle_open_protocol_command(PluginCommandEvent {
+                    name: IDENTITY_PLUGIN.into(),
+                    data: announce_v1.clone(),
+                    invoker_id: 12,
+                    invoker_name: "MusicBot".into(),
+                    invoker_uid: "bot-uid".into(),
+                });
+                let cmd_fetches: Vec<_> = actor
+                    .open_protocol_outbound_log
+                    .iter()
+                    .filter(|(plugin, _, _)| *plugin == COMMANDS_PLUGIN)
+                    .collect();
+                assert_eq!(cmd_fetches.len(), 1);
+                assert_eq!(cmd_fetches[0].1, Some(12));
+
+                // Deduplicate in-flight command fetches for the same bot.
+                actor.handle_open_protocol_command(PluginCommandEvent {
+                    name: IDENTITY_PLUGIN.into(),
+                    data: announce_v1.clone(),
+                    invoker_id: 12,
+                    invoker_name: "MusicBot".into(),
+                    invoker_uid: "bot-uid".into(),
+                });
+                assert_eq!(
+                    actor
+                        .open_protocol_outbound_log
+                        .iter()
+                        .filter(|(plugin, _, _)| *plugin == COMMANDS_PLUGIN)
+                        .count(),
+                    1
+                );
+
+                // Before list_ack arrives, snapshot shows bot_commands_loaded = false.
+                let snap_before = std::iter::from_fn(|| events.try_recv().ok())
+                    .filter_map(|ev| match ev {
+                        SessionEvent::Snapshot { clients, .. } => Some(clients),
+                        _ => None,
+                    })
+                    .last()
+                    .expect("snapshot after identity");
+                let bot_before = snap_before.iter().find(|c| c.id == 12).unwrap();
+                assert!(!bot_before.bot_commands_loaded);
+                assert!(bot_before.bot_commands.is_empty());
+
+                // 2. Empty command list response marks bot_commands_loaded = true with empty Vec.
+                actor.handle_open_protocol_command(PluginCommandEvent {
+                    name: COMMANDS_PLUGIN.into(),
+                    data: serde_json::json!({
+                        "v": 1,
+                        "action": "list_ack",
+                        "commands": [],
+                    })
+                    .to_string(),
+                    invoker_id: 12,
+                    invoker_name: "MusicBot".into(),
+                    invoker_uid: "bot-uid".into(),
+                });
+                let snap_empty = std::iter::from_fn(|| events.try_recv().ok())
+                    .filter_map(|ev| match ev {
+                        SessionEvent::Snapshot { clients, .. } => Some(clients),
+                        _ => None,
+                    })
+                    .last()
+                    .expect("snapshot after empty list_ack");
+                let bot_empty = snap_empty.iter().find(|c| c.id == 12).unwrap();
+                assert!(bot_empty.bot_commands_loaded);
+                assert!(bot_empty.bot_commands.is_empty());
+
+                // Re-joining while cache is valid does not duplicate fetch.
+                actor.open_protocol_peer_joined(12, "bot-uid");
+                assert_eq!(
+                    actor
+                        .open_protocol_outbound_log
+                        .iter()
+                        .filter(|(plugin, _, _)| *plugin == COMMANDS_PLUGIN)
+                        .count(),
+                    1
+                );
+
+                // 3. Peer announces a version change (invalidating cached peer_commands) -> auto re-fetches!
+                let announce_v2 = serde_json::json!({
+                    "v": 1,
+                    "action": "announce",
+                    "client_type": "bot",
+                    "app_name": "MusicBot",
+                    "app_version": "2.0.0",
+                    "capabilities": [CAP_CHAT_SLASH_COMMANDS],
+                    "noreply": true,
+                })
+                .to_string();
+                actor.handle_open_protocol_command(PluginCommandEvent {
+                    name: IDENTITY_PLUGIN.into(),
+                    data: announce_v2,
+                    invoker_id: 12,
+                    invoker_name: "MusicBot".into(),
+                    invoker_uid: "bot-uid".into(),
+                });
+                assert_eq!(
+                    actor
+                        .open_protocol_outbound_log
+                        .iter()
+                        .filter(|(plugin, _, _)| *plugin == COMMANDS_PLUGIN)
+                        .count(),
+                    2
+                );
+
+                // 4. Flood halt blocks subsequent auto command fetches.
+                actor.handle_open_protocol_send_result(
+                    IDENTITY_PLUGIN,
+                    None,
+                    SendReceipt::ServerBeacon,
+                    SendOutcome::Failed { flood: true },
+                    Some("flood".into()),
+                );
+                assert!(actor.open_protocol_flood_halted);
+                actor.handle_open_protocol_command(PluginCommandEvent {
+                    name: IDENTITY_PLUGIN.into(),
+                    data: serde_json::json!({
+                        "v": 1,
+                        "action": "announce_ack",
+                        "client_type": "bot",
+                        "app_name": "BotTwo",
+                        "app_version": "1.0.0",
+                        "capabilities": [CAP_CHAT_SLASH_COMMANDS],
+                    })
+                    .to_string(),
+                    invoker_id: 13,
+                    invoker_name: "BotTwo".into(),
+                    invoker_uid: "bot2-uid".into(),
+                });
+                assert_eq!(
+                    actor
+                        .open_protocol_outbound_log
+                        .iter()
+                        .filter(|(plugin, _, _)| *plugin == COMMANDS_PLUGIN)
+                        .count(),
+                    2
+                );
+            })
+            .await;
     }
 }

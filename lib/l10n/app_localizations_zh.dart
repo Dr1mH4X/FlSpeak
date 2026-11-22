@@ -672,6 +672,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatImageTooLarge => '图片不能超过 20 MiB';
 
   @override
+  String chatImageTooLargeWithLimit(String limit) {
+    return '图片不能超过 $limit。';
+  }
+
+  @override
+  String get chatImageUnsupportedFormat => '请选择 PNG、JPEG、GIF 或 WebP 图片。';
+
+  @override
   String get chatClipboardEmpty => '剪贴板中没有图片';
 
   @override

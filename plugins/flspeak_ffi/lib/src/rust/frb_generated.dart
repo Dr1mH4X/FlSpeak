@@ -65,7 +65,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => -1790181177;
+  int get rustContentHash => 1303152489;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -371,21 +371,33 @@ abstract class RustLibApi extends BaseApi {
 
   Future<ClientType> crateApiSessionClientTypeDefault();
 
+  int crateApiSessionDefaultMaxStreamViewers();
+
   Future<Uint8List> crateApiSessionFetchImage({required String url});
 
   Future<UpdateStateView> crateApiUpdateForceCheckForUpdates();
 
   String crateApiSessionGetSettingsJson();
 
+  int crateApiSessionHistoryLimit();
+
   Future<void> crateApiSessionInitLogging({required String logDir});
 
   void crateApiSessionInitSettings({required String storePath});
+
+  int crateApiSessionMaxAvatarBytes();
+
+  int crateApiSessionMaxChatImageBytes();
 
   void crateApiSessionSetAndroidDnsServers({required List<String> servers});
 
   Future<void> crateApiSessionSetLogLevel({required String level});
 
   Future<void> crateApiSessionShutdownLogging();
+
+  bool crateApiSessionStreamOfferFitsCommand({required String sdp});
+
+  int crateApiSessionTsEscapedLen({required String text});
 
   void crateApiSessionUpdateAudioSettingsJson({required String json});
 
@@ -2567,6 +2579,31 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "client_type_default", argNames: []);
 
   @override
+  int crateApiSessionDefaultMaxStreamViewers() {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 56)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_u_32,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSessionDefaultMaxStreamViewersConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSessionDefaultMaxStreamViewersConstMeta =>
+      const TaskConstMeta(
+        debugName: "default_max_stream_viewers",
+        argNames: [],
+      );
+
+  @override
   Future<Uint8List> crateApiSessionFetchImage({required String url}) {
     return handler.executeNormal(
       NormalTask(
@@ -2576,7 +2613,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 56,
+            funcId: 57,
             port: port_,
           );
         },
@@ -2603,7 +2640,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 57,
+            funcId: 58,
             port: port_,
           );
         },
@@ -2627,7 +2664,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 58)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 59)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -2644,6 +2681,28 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "get_settings_json", argNames: []);
 
   @override
+  int crateApiSessionHistoryLimit() {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 60)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_CastedPrimitive_u_64,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSessionHistoryLimitConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSessionHistoryLimitConstMeta =>
+      const TaskConstMeta(debugName: "history_limit", argNames: []);
+
+  @override
   Future<void> crateApiSessionInitLogging({required String logDir}) {
     return handler.executeNormal(
       NormalTask(
@@ -2653,7 +2712,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 59,
+            funcId: 61,
             port: port_,
           );
         },
@@ -2678,7 +2737,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(storePath, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 60)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 62)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -2695,13 +2754,57 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "init_settings", argNames: ["storePath"]);
 
   @override
+  int crateApiSessionMaxAvatarBytes() {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 63)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_CastedPrimitive_u_64,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSessionMaxAvatarBytesConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSessionMaxAvatarBytesConstMeta =>
+      const TaskConstMeta(debugName: "max_avatar_bytes", argNames: []);
+
+  @override
+  int crateApiSessionMaxChatImageBytes() {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 64)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_CastedPrimitive_u_64,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSessionMaxChatImageBytesConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSessionMaxChatImageBytesConstMeta =>
+      const TaskConstMeta(debugName: "max_chat_image_bytes", argNames: []);
+
+  @override
   void crateApiSessionSetAndroidDnsServers({required List<String> servers}) {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_list_String(servers, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 61)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 65)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -2730,7 +2833,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 62,
+            funcId: 66,
             port: port_,
           );
         },
@@ -2757,7 +2860,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 63,
+            funcId: 67,
             port: port_,
           );
         },
@@ -2776,13 +2879,62 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "shutdown_logging", argNames: []);
 
   @override
+  bool crateApiSessionStreamOfferFitsCommand({required String sdp}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(sdp, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 68)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSessionStreamOfferFitsCommandConstMeta,
+        argValues: [sdp],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSessionStreamOfferFitsCommandConstMeta =>
+      const TaskConstMeta(
+        debugName: "stream_offer_fits_command",
+        argNames: ["sdp"],
+      );
+
+  @override
+  int crateApiSessionTsEscapedLen({required String text}) {
+    return handler.executeSync(
+      SyncTask(
+        callFfi: () {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(text, serializer);
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 69)!;
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_CastedPrimitive_u_64,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiSessionTsEscapedLenConstMeta,
+        argValues: [text],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSessionTsEscapedLenConstMeta =>
+      const TaskConstMeta(debugName: "ts_escaped_len", argNames: ["text"]);
+
+  @override
   void crateApiSessionUpdateAudioSettingsJson({required String json}) {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(json, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 64)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 70)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -2808,7 +2960,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
           sse_encode_String(json, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 65)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 71)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
@@ -2845,7 +2997,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 66,
+            funcId: 72,
             port: port_,
           );
         },
@@ -2879,7 +3031,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 67,
+            funcId: 73,
             port: port_,
           );
         },
@@ -2965,14 +3117,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AccessView dco_decode_access_view(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 5)
-      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
     return AccessView(
       memberAddPower: dco_decode_opt_box_autoadd_i_32(arr[0]),
       memberRemovePower: dco_decode_opt_box_autoadd_i_32(arr[1]),
       kickChannelPower: dco_decode_opt_box_autoadd_i_32(arr[2]),
       kickServerPower: dco_decode_opt_box_autoadd_i_32(arr[3]),
-      connectionEpoch: dco_decode_opt_CastedPrimitive_u_64(arr[4]),
+      canManageMembers: dco_decode_bool(arr[4]),
+      canKickChannel: dco_decode_bool(arr[5]),
+      canKickServer: dco_decode_bool(arr[6]),
+      connectionEpoch: dco_decode_opt_CastedPrimitive_u_64(arr[7]),
     );
   }
 
@@ -2993,11 +3148,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AudioDevicesView dco_decode_audio_devices_view(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return AudioDevicesView(
       inputs: dco_decode_list_audio_device_view(arr[0]),
       outputs: dco_decode_list_audio_device_view(arr[1]),
+      currentInputId: dco_decode_opt_String(arr[2]),
+      currentOutputId: dco_decode_opt_String(arr[3]),
     );
   }
 
@@ -3024,6 +3181,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   bool dco_decode_box_autoadd_bool(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as bool;
+  }
+
+  @protected
+  ClientView dco_decode_box_autoadd_client_view(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_client_view(raw);
   }
 
   @protected
@@ -3117,8 +3280,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ClientView dco_decode_client_view(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 15)
-      throw Exception('unexpected arr length: expect 15 but see ${arr.length}');
+    if (arr.length != 16)
+      throw Exception('unexpected arr length: expect 16 but see ${arr.length}');
     return ClientView(
       id: dco_decode_i_32(arr[0]),
       nickname: dco_decode_String(arr[1]),
@@ -3133,8 +3296,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       appName: dco_decode_opt_String(arr[10]),
       appVersion: dco_decode_opt_String(arr[11]),
       capabilities: dco_decode_list_String(arr[12]),
-      botCommands: dco_decode_opt_list_bot_command_view(arr[13]),
-      botCommandPrefix: dco_decode_opt_String(arr[14]),
+      botCommands: dco_decode_list_bot_command_view(arr[13]),
+      botCommandsLoaded: dco_decode_bool(arr[14]),
+      botCommandPrefix: dco_decode_opt_String(arr[15]),
     );
   }
 
@@ -3163,6 +3327,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case 7:
         return CoreError_AvatarUnavailable();
       case 8:
+        return CoreError_ImageTooLarge(
+          maxBytes: dco_decode_CastedPrimitive_u_64(raw[1]),
+        );
+      case 9:
+        return CoreError_ImageUnsupportedFormat();
+      case 10:
         return CoreError_Internal(message: dco_decode_String(raw[1]));
       default:
         throw Exception("unreachable");
@@ -3212,7 +3382,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           targetMode: dco_decode_i_32(raw[5]),
           targetId: dco_decode_CastedPrimitive_u_64(raw[6]),
           peerUid: dco_decode_String(raw[7]),
-          at: dco_decode_CastedPrimitive_u_64(raw[8]),
+          fromSelf: dco_decode_bool(raw[8]),
+          at: dco_decode_CastedPrimitive_u_64(raw[9]),
         );
       case 9:
         return CoreEvent_Poked(
@@ -3221,18 +3392,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         );
       case 10:
         return CoreEvent_ClientJoined(
-          id: dco_decode_i_32(raw[1]),
-          nickname: dco_decode_String(raw[2]),
-          uid: dco_decode_String(raw[3]),
-          channelId: dco_decode_CastedPrimitive_u_64(raw[4]),
-          isStreaming: dco_decode_bool(raw[5]),
+          client: dco_decode_box_autoadd_client_view(raw[1]),
         );
       case 11:
         return CoreEvent_ClientLeft(id: dco_decode_i_32(raw[1]));
       case 12:
         return CoreEvent_ClientMoved(
-          id: dco_decode_i_32(raw[1]),
-          channelId: dco_decode_CastedPrimitive_u_64(raw[2]),
+          client: dco_decode_box_autoadd_client_view(raw[1]),
         );
       case 13:
         return CoreEvent_ClientUpdated(
@@ -3351,8 +3517,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   CoreMessage dco_decode_core_message(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 8)
-      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
     return CoreMessage(
       from: dco_decode_String(arr[0]),
       fromUid: dco_decode_String(arr[1]),
@@ -3361,7 +3527,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       targetMode: dco_decode_i_32(arr[4]),
       targetId: dco_decode_CastedPrimitive_u_64(arr[5]),
       peerUid: dco_decode_String(arr[6]),
-      at: dco_decode_CastedPrimitive_u_64(arr[7]),
+      fromSelf: dco_decode_bool(arr[7]),
+      at: dco_decode_CastedPrimitive_u_64(arr[8]),
     );
   }
 
@@ -3599,12 +3766,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  List<BotCommandView>? dco_decode_opt_list_bot_command_view(dynamic raw) {
-    // Codec=Dco (DartCObject based), see doc to use other codecs
-    return raw == null ? null : dco_decode_list_bot_command_view(raw);
-  }
-
-  @protected
   Uint8List? dco_decode_opt_list_prim_u_8_strict(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_list_prim_u_8_strict(raw);
@@ -3795,12 +3956,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_memberRemovePower = sse_decode_opt_box_autoadd_i_32(deserializer);
     var var_kickChannelPower = sse_decode_opt_box_autoadd_i_32(deserializer);
     var var_kickServerPower = sse_decode_opt_box_autoadd_i_32(deserializer);
+    var var_canManageMembers = sse_decode_bool(deserializer);
+    var var_canKickChannel = sse_decode_bool(deserializer);
+    var var_canKickServer = sse_decode_bool(deserializer);
     var var_connectionEpoch = sse_decode_opt_CastedPrimitive_u_64(deserializer);
     return AccessView(
       memberAddPower: var_memberAddPower,
       memberRemovePower: var_memberRemovePower,
       kickChannelPower: var_kickChannelPower,
       kickServerPower: var_kickServerPower,
+      canManageMembers: var_canManageMembers,
+      canKickChannel: var_canKickChannel,
+      canKickServer: var_canKickServer,
       connectionEpoch: var_connectionEpoch,
     );
   }
@@ -3823,7 +3990,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_inputs = sse_decode_list_audio_device_view(deserializer);
     var var_outputs = sse_decode_list_audio_device_view(deserializer);
-    return AudioDevicesView(inputs: var_inputs, outputs: var_outputs);
+    var var_currentInputId = sse_decode_opt_String(deserializer);
+    var var_currentOutputId = sse_decode_opt_String(deserializer);
+    return AudioDevicesView(
+      inputs: var_inputs,
+      outputs: var_outputs,
+      currentInputId: var_currentInputId,
+      currentOutputId: var_currentOutputId,
+    );
   }
 
   @protected
@@ -3845,6 +4019,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   bool sse_decode_box_autoadd_bool(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_bool(deserializer));
+  }
+
+  @protected
+  ClientView sse_decode_box_autoadd_client_view(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_client_view(deserializer));
   }
 
   @protected
@@ -3966,7 +4146,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_appName = sse_decode_opt_String(deserializer);
     var var_appVersion = sse_decode_opt_String(deserializer);
     var var_capabilities = sse_decode_list_String(deserializer);
-    var var_botCommands = sse_decode_opt_list_bot_command_view(deserializer);
+    var var_botCommands = sse_decode_list_bot_command_view(deserializer);
+    var var_botCommandsLoaded = sse_decode_bool(deserializer);
     var var_botCommandPrefix = sse_decode_opt_String(deserializer);
     return ClientView(
       id: var_id,
@@ -3983,6 +4164,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       appVersion: var_appVersion,
       capabilities: var_capabilities,
       botCommands: var_botCommands,
+      botCommandsLoaded: var_botCommandsLoaded,
       botCommandPrefix: var_botCommandPrefix,
     );
   }
@@ -4015,6 +4197,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case 7:
         return CoreError_AvatarUnavailable();
       case 8:
+        var var_maxBytes = sse_decode_CastedPrimitive_u_64(deserializer);
+        return CoreError_ImageTooLarge(maxBytes: var_maxBytes);
+      case 9:
+        return CoreError_ImageUnsupportedFormat();
+      case 10:
         var var_message = sse_decode_String(deserializer);
         return CoreError_Internal(message: var_message);
       default:
@@ -4066,6 +4253,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         var var_targetMode = sse_decode_i_32(deserializer);
         var var_targetId = sse_decode_CastedPrimitive_u_64(deserializer);
         var var_peerUid = sse_decode_String(deserializer);
+        var var_fromSelf = sse_decode_bool(deserializer);
         var var_at = sse_decode_CastedPrimitive_u_64(deserializer);
         return CoreEvent_TextMessage(
           from: var_from,
@@ -4075,6 +4263,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           targetMode: var_targetMode,
           targetId: var_targetId,
           peerUid: var_peerUid,
+          fromSelf: var_fromSelf,
           at: var_at,
         );
       case 9:
@@ -4082,25 +4271,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         var var_message = sse_decode_String(deserializer);
         return CoreEvent_Poked(from: var_from, message: var_message);
       case 10:
-        var var_id = sse_decode_i_32(deserializer);
-        var var_nickname = sse_decode_String(deserializer);
-        var var_uid = sse_decode_String(deserializer);
-        var var_channelId = sse_decode_CastedPrimitive_u_64(deserializer);
-        var var_isStreaming = sse_decode_bool(deserializer);
-        return CoreEvent_ClientJoined(
-          id: var_id,
-          nickname: var_nickname,
-          uid: var_uid,
-          channelId: var_channelId,
-          isStreaming: var_isStreaming,
-        );
+        var var_client = sse_decode_box_autoadd_client_view(deserializer);
+        return CoreEvent_ClientJoined(client: var_client);
       case 11:
         var var_id = sse_decode_i_32(deserializer);
         return CoreEvent_ClientLeft(id: var_id);
       case 12:
-        var var_id = sse_decode_i_32(deserializer);
-        var var_channelId = sse_decode_CastedPrimitive_u_64(deserializer);
-        return CoreEvent_ClientMoved(id: var_id, channelId: var_channelId);
+        var var_client = sse_decode_box_autoadd_client_view(deserializer);
+        return CoreEvent_ClientMoved(client: var_client);
       case 13:
         var var_id = sse_decode_i_32(deserializer);
         var var_inputMuted = sse_decode_opt_box_autoadd_bool(deserializer);
@@ -4251,6 +4429,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_targetMode = sse_decode_i_32(deserializer);
     var var_targetId = sse_decode_CastedPrimitive_u_64(deserializer);
     var var_peerUid = sse_decode_String(deserializer);
+    var var_fromSelf = sse_decode_bool(deserializer);
     var var_at = sse_decode_CastedPrimitive_u_64(deserializer);
     return CoreMessage(
       from: var_from,
@@ -4260,6 +4439,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       targetMode: var_targetMode,
       targetId: var_targetId,
       peerUid: var_peerUid,
+      fromSelf: var_fromSelf,
       at: var_at,
     );
   }
@@ -4640,19 +4820,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  List<BotCommandView>? sse_decode_opt_list_bot_command_view(
-    SseDeserializer deserializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    if (sse_decode_bool(deserializer)) {
-      return (sse_decode_list_bot_command_view(deserializer));
-    } else {
-      return null;
-    }
-  }
-
-  @protected
   Uint8List? sse_decode_opt_list_prim_u_8_strict(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -4867,6 +5034,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_box_autoadd_i_32(self.memberRemovePower, serializer);
     sse_encode_opt_box_autoadd_i_32(self.kickChannelPower, serializer);
     sse_encode_opt_box_autoadd_i_32(self.kickServerPower, serializer);
+    sse_encode_bool(self.canManageMembers, serializer);
+    sse_encode_bool(self.canKickChannel, serializer);
+    sse_encode_bool(self.canKickServer, serializer);
     sse_encode_opt_CastedPrimitive_u_64(self.connectionEpoch, serializer);
   }
 
@@ -4889,6 +5059,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_list_audio_device_view(self.inputs, serializer);
     sse_encode_list_audio_device_view(self.outputs, serializer);
+    sse_encode_opt_String(self.currentInputId, serializer);
+    sse_encode_opt_String(self.currentOutputId, serializer);
   }
 
   @protected
@@ -4912,6 +5084,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_box_autoadd_bool(bool self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_bool(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_client_view(
+    ClientView self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_client_view(self, serializer);
   }
 
   @protected
@@ -5022,7 +5203,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_String(self.appName, serializer);
     sse_encode_opt_String(self.appVersion, serializer);
     sse_encode_list_String(self.capabilities, serializer);
-    sse_encode_opt_list_bot_command_view(self.botCommands, serializer);
+    sse_encode_list_bot_command_view(self.botCommands, serializer);
+    sse_encode_bool(self.botCommandsLoaded, serializer);
     sse_encode_opt_String(self.botCommandPrefix, serializer);
   }
 
@@ -5051,8 +5233,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_i_32(6, serializer);
       case CoreError_AvatarUnavailable():
         sse_encode_i_32(7, serializer);
-      case CoreError_Internal(message: final message):
+      case CoreError_ImageTooLarge(maxBytes: final maxBytes):
         sse_encode_i_32(8, serializer);
+        sse_encode_CastedPrimitive_u_64(maxBytes, serializer);
+      case CoreError_ImageUnsupportedFormat():
+        sse_encode_i_32(9, serializer);
+      case CoreError_Internal(message: final message):
+        sse_encode_i_32(10, serializer);
         sse_encode_String(message, serializer);
     }
   }
@@ -5097,6 +5284,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         targetMode: final targetMode,
         targetId: final targetId,
         peerUid: final peerUid,
+        fromSelf: final fromSelf,
         at: final at,
       ):
         sse_encode_i_32(8, serializer);
@@ -5107,31 +5295,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_i_32(targetMode, serializer);
         sse_encode_CastedPrimitive_u_64(targetId, serializer);
         sse_encode_String(peerUid, serializer);
+        sse_encode_bool(fromSelf, serializer);
         sse_encode_CastedPrimitive_u_64(at, serializer);
       case CoreEvent_Poked(from: final from, message: final message):
         sse_encode_i_32(9, serializer);
         sse_encode_String(from, serializer);
         sse_encode_String(message, serializer);
-      case CoreEvent_ClientJoined(
-        id: final id,
-        nickname: final nickname,
-        uid: final uid,
-        channelId: final channelId,
-        isStreaming: final isStreaming,
-      ):
+      case CoreEvent_ClientJoined(client: final client):
         sse_encode_i_32(10, serializer);
-        sse_encode_i_32(id, serializer);
-        sse_encode_String(nickname, serializer);
-        sse_encode_String(uid, serializer);
-        sse_encode_CastedPrimitive_u_64(channelId, serializer);
-        sse_encode_bool(isStreaming, serializer);
+        sse_encode_box_autoadd_client_view(client, serializer);
       case CoreEvent_ClientLeft(id: final id):
         sse_encode_i_32(11, serializer);
         sse_encode_i_32(id, serializer);
-      case CoreEvent_ClientMoved(id: final id, channelId: final channelId):
+      case CoreEvent_ClientMoved(client: final client):
         sse_encode_i_32(12, serializer);
-        sse_encode_i_32(id, serializer);
-        sse_encode_CastedPrimitive_u_64(channelId, serializer);
+        sse_encode_box_autoadd_client_view(client, serializer);
       case CoreEvent_ClientUpdated(
         id: final id,
         inputMuted: final inputMuted,
@@ -5280,6 +5458,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.targetMode, serializer);
     sse_encode_CastedPrimitive_u_64(self.targetId, serializer);
     sse_encode_String(self.peerUid, serializer);
+    sse_encode_bool(self.fromSelf, serializer);
     sse_encode_CastedPrimitive_u_64(self.at, serializer);
   }
 
@@ -5623,19 +5802,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_u_32(self, serializer);
-    }
-  }
-
-  @protected
-  void sse_encode_opt_list_bot_command_view(
-    List<BotCommandView>? self,
-    SseSerializer serializer,
-  ) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-
-    sse_encode_bool(self != null, serializer);
-    if (self != null) {
-      sse_encode_list_bot_command_view(self, serializer);
     }
   }
 

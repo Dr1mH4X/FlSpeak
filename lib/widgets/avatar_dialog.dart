@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:material_ui/material_ui.dart'
     hide FilledButton, IconButton, TextButton;
+import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/avatar_input.dart';
@@ -54,7 +55,7 @@ class _AvatarDialogContentState extends ConsumerState<_AvatarDialogContent> {
           .read(noticeCenterProvider.notifier)
           .show(
             error.failure == AvatarInputFailure.tooLarge
-                ? l10n.avatarTooLargeWithLimit(formatByteSize(maxAvatarBytes))
+                ? l10n.avatarTooLargeWithLimit(formatByteSize(maxAvatarBytes()))
                 : l10n.avatarUnavailable,
           );
     } on Object {

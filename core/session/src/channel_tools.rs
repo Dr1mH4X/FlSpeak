@@ -11,12 +11,15 @@ use crate::SessionError;
 
 type Row = HashMap<String, String>;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct AccessView {
     pub member_add_power: Option<i32>,
     pub member_remove_power: Option<i32>,
     pub kick_channel_power: Option<i32>,
     pub kick_server_power: Option<i32>,
+    pub can_manage_members: bool,
+    pub can_kick_channel: bool,
+    pub can_kick_server: bool,
     pub connection_epoch: Option<u64>,
 }
 
@@ -57,7 +60,8 @@ pub(crate) struct ChannelTools {
     definitions: Option<(Instant, Vec<GroupDefinition>)>,
 }
 
-struct GroupDefinition {
+#[derive(Debug, Clone)]
+pub(crate) struct GroupDefinition {
     id: u64,
     name: String,
     kind: GroupKind,
@@ -119,19 +123,131 @@ impl ChannelTools {
             .as_ref()
             .ok_or_else(|| SessionError::Protocol("permission list unavailable".into()))
     }
+    async fn ensure_definitions(
+        &mut self,
+        client: &Client,
+    ) -> Result<&[GroupDefinition], SessionError> {
+        let fresh = matches!(&self.definitions, Some((loaded, _)) if loaded.elapsed() < Duration::from_secs(30));
+        if !fresh {
+            let mut definitions = Vec::new();
+            for (kind, prefix, key) in [
+                (GroupKind::Server, "servergroup", "sgid"),
+                (GroupKind::Channel, "channelgroup", "cgid"),
+            ] {
+                let rows = match client
+                    .exec_command_with_response(&format!("{prefix}list"), 15_000)
+                    .await
+                {
+                    Ok(rows) => rows,
+                    Err(tsclient_rs::Error::ServerError { id, .. }) if id == "2568" => Vec::new(),
+                    Err(error) => return Err(protocol_error(error)),
+                };
+                for row in rows {
+                    if row.get("type").map(String::as_str) != Some("1") {
+                        continue;
+                    }
+                    definitions.push(GroupDefinition {
+                        id: number(&row, key)?,
+                        name: row.get("name").cloned().unwrap_or_default(),
+                        kind,
+                        needed_add: row.get("n_member_addp").and_then(|v| v.parse().ok()),
+                        needed_remove: row.get("n_member_removep").and_then(|v| v.parse().ok()),
+                        persistent: kind == GroupKind::Channel
+                            || row.get("savedb").map(String::as_str) == Some("1"),
+                    });
+                }
+            }
+            self.definitions = Some((Instant::now(), definitions));
+        }
+        Ok(self
+            .definitions
+            .as_ref()
+            .expect("definitions loaded")
+            .1
+            .as_slice())
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct AccessPowers {
+    member_add: Option<i32>,
+    member_remove: Option<i32>,
+    kick_channel: Option<i32>,
+    kick_server: Option<i32>,
+}
+
+async fn access_powers(
+    client: &Client,
+    tools: &mut ChannelTools,
+) -> Result<AccessPowers, SessionError> {
+    let ids = tools.ensure_permission_ids(client).await?;
+    let value = |name: &str| ids.get(name).and_then(|id| client.permission_value(*id));
+    Ok(AccessPowers {
+        member_add: value("i_group_member_add_power"),
+        member_remove: value("i_group_member_remove_power"),
+        kick_channel: value("i_client_kick_from_channel_power"),
+        kick_server: value("i_client_kick_from_server_power"),
+    })
+}
+
+pub(crate) fn kick_power_permitted(power: Option<i32>) -> bool {
+    power.is_some_and(|power| power > 0)
+}
+
+pub(crate) fn can_manage_any_group(
+    member_add_power: Option<i32>,
+    member_remove_power: Option<i32>,
+    definitions: &[GroupDefinition],
+) -> bool {
+    let server_manageable = definitions.iter().any(|definition| {
+        definition.kind == GroupKind::Server
+            && definition.persistent
+            && (permitted(member_add_power, definition.needed_add)
+                || permitted(member_remove_power, definition.needed_remove))
+    });
+    if server_manageable {
+        return true;
+    }
+    let channel_add = definitions.iter().any(|definition| {
+        definition.kind == GroupKind::Channel
+            && definition.persistent
+            && permitted(member_add_power, definition.needed_add)
+    });
+    let channel_remove = definitions.iter().any(|definition| {
+        definition.kind == GroupKind::Channel
+            && definition.persistent
+            && permitted(member_remove_power, definition.needed_remove)
+    });
+    channel_add && channel_remove
 }
 
 pub(crate) async fn access(
     client: &Client,
     tools: &mut ChannelTools,
 ) -> Result<AccessView, SessionError> {
-    let ids = tools.ensure_permission_ids(client).await?;
-    let value = |name: &str| ids.get(name).and_then(|id| client.permission_value(*id));
+    let powers = access_powers(client, tools).await?;
+    let can_kick_channel = kick_power_permitted(powers.kick_channel);
+    let can_kick_server = kick_power_permitted(powers.kick_server);
+    let has_any_group_power = powers.member_add.is_some_and(|power| power > 0)
+        || powers.member_remove.is_some_and(|power| power > 0);
+    let can_manage_members = if has_any_group_power {
+        match tools.ensure_definitions(client).await {
+            Ok(definitions) => {
+                can_manage_any_group(powers.member_add, powers.member_remove, definitions)
+            }
+            Err(_) => false,
+        }
+    } else {
+        false
+    };
     Ok(AccessView {
-        member_add_power: value("i_group_member_add_power"),
-        member_remove_power: value("i_group_member_remove_power"),
-        kick_channel_power: value("i_client_kick_from_channel_power"),
-        kick_server_power: value("i_client_kick_from_server_power"),
+        member_add_power: powers.member_add,
+        member_remove_power: powers.member_remove,
+        kick_channel_power: powers.kick_channel,
+        kick_server_power: powers.kick_server,
+        can_manage_members,
+        can_kick_channel,
+        can_kick_server,
         connection_epoch: None,
     })
 }
@@ -180,7 +296,7 @@ fn validate_kick(
     {
         return Err(SessionError::Protocol("member changed channel".into()));
     }
-    if power.is_none_or(|power| power <= 0) {
+    if !kick_power_permitted(power) {
         return Err(SessionError::Protocol("insufficient kick power".into()));
     }
     Ok(())
@@ -209,14 +325,14 @@ pub(crate) async fn kick(
     if reason.contains('\0') {
         return Err(SessionError::Protocol("invalid kick reason".into()));
     }
-    let own = access(client, tools).await?;
+    let own = access_powers(client, tools).await?;
     let directory = client
         .directory_snapshot()
         .ok_or(SessionError::NotConnected)?;
     let peer = kick_target(&directory.clients, uid, client_id)?;
     let power = match target {
-        KickTarget::Channel => own.kick_channel_power,
-        KickTarget::Server => own.kick_server_power,
+        KickTarget::Channel => own.kick_channel,
+        KickTarget::Server => own.kick_server,
     };
     validate_kick(
         target,
@@ -243,41 +359,8 @@ async fn groups(
     info: &Row,
     tools: &mut ChannelTools,
 ) -> Result<Vec<MemberGroupView>, SessionError> {
-    let own = access(client, tools).await?;
-    let definitions = match &tools.definitions {
-        Some((loaded, definitions)) if loaded.elapsed() < Duration::from_secs(30) => definitions,
-        _ => {
-            let mut definitions = Vec::new();
-            for (kind, prefix, key) in [
-                (GroupKind::Server, "servergroup", "sgid"),
-                (GroupKind::Channel, "channelgroup", "cgid"),
-            ] {
-                let rows = match client
-                    .exec_command_with_response(&format!("{prefix}list"), 15_000)
-                    .await
-                {
-                    Ok(rows) => rows,
-                    Err(tsclient_rs::Error::ServerError { id, .. }) if id == "2568" => Vec::new(),
-                    Err(error) => return Err(protocol_error(error)),
-                };
-                for row in rows {
-                    if row.get("type").map(String::as_str) != Some("1") {
-                        continue;
-                    }
-                    definitions.push(GroupDefinition {
-                        id: number(&row, key)?,
-                        name: row.get("name").cloned().unwrap_or_default(),
-                        kind,
-                        needed_add: row.get("n_member_addp").and_then(|v| v.parse().ok()),
-                        needed_remove: row.get("n_member_removep").and_then(|v| v.parse().ok()),
-                        persistent: kind == GroupKind::Channel
-                            || row.get("savedb").map(String::as_str) == Some("1"),
-                    });
-                }
-            }
-            &tools.definitions.insert((Instant::now(), definitions)).1
-        }
-    };
+    let own = access_powers(client, tools).await?;
+    let definitions = tools.ensure_definitions(client).await?;
     let server_groups = info
         .get("client_servergroups")
         .map(|v| v.split(',').collect::<Vec<_>>())
@@ -297,10 +380,9 @@ async fn groups(
             } else {
                 current_channel == Some(definition.id)
             },
-            can_add: definition.persistent
-                && permitted(own.member_add_power, definition.needed_add),
+            can_add: definition.persistent && permitted(own.member_add, definition.needed_add),
             can_remove: definition.persistent
-                && permitted(own.member_remove_power, definition.needed_remove),
+                && permitted(own.member_remove, definition.needed_remove),
         });
     }
     let can_remove_current = result
@@ -484,5 +566,63 @@ mod tests {
         for path in ["file", "/../file", "/a/./b", "/a\\b", "/a\0b"] {
             assert!(remote_path(path).is_err());
         }
+    }
+
+    #[test]
+    fn access_capabilities_check_needed_powers_and_group_persistence() {
+        assert!(!kick_power_permitted(None));
+        assert!(!kick_power_permitted(Some(0)));
+        assert!(!kick_power_permitted(Some(-5)));
+        assert!(kick_power_permitted(Some(1)));
+        assert!(kick_power_permitted(Some(75)));
+
+        let temp_group = GroupDefinition {
+            id: 1,
+            name: "Temp".into(),
+            kind: GroupKind::Server,
+            needed_add: Some(10),
+            needed_remove: Some(10),
+            persistent: false,
+        };
+        let admin_server_group = GroupDefinition {
+            id: 6,
+            name: "Admin".into(),
+            kind: GroupKind::Server,
+            needed_add: Some(75),
+            needed_remove: Some(75),
+            persistent: true,
+        };
+        let mod_channel_group = GroupDefinition {
+            id: 9,
+            name: "Channel Mod".into(),
+            kind: GroupKind::Channel,
+            needed_add: Some(50),
+            needed_remove: Some(50),
+            persistent: true,
+        };
+
+        // Positive raw power below needed_add/needed_remove or only non-persistent groups -> false
+        assert!(!can_manage_any_group(
+            Some(40),
+            Some(40),
+            &[temp_group.clone(), admin_server_group.clone()]
+        ));
+        // Channel group requires both add and remove capability
+        assert!(!can_manage_any_group(
+            Some(60),
+            Some(0),
+            std::slice::from_ref(&mod_channel_group)
+        ));
+        assert!(can_manage_any_group(
+            Some(50),
+            Some(50),
+            std::slice::from_ref(&mod_channel_group)
+        ));
+        // Persistent server group matching add or remove power -> true
+        assert!(can_manage_any_group(
+            Some(75),
+            Some(0),
+            &[temp_group, admin_server_group]
+        ));
     }
 }

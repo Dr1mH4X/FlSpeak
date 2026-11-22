@@ -67,35 +67,41 @@ void main() {
     expect(await container.read(channelIconProvider(42).future), [2]);
   });
 
-  test('retries transient queue-full and interrupted errors without retrying permanent failures', () {
-    expect(
-      isTransientChannelIconError(StateError('image request queue is full')),
-      isTrue,
-    );
-    expect(
-      isTransientChannelIconError(StateError('image negotiation interrupted')),
-      isTrue,
-    );
-    expect(
-      isTransientChannelIconError(
-        StateError('download ended with 2078 bytes missing'),
-      ),
-      isFalse,
-    );
-    expect(
-      channelIconRetryDelay(0, StateError('image request queue is full')),
-      const Duration(milliseconds: 300),
-    );
-    expect(
-      channelIconRetryDelay(5, StateError('image request queue is full')),
-      isNull,
-    );
-    expect(
-      channelIconRetryDelay(
-        0,
-        StateError('download ended with 2078 bytes missing'),
-      ),
-      isNull,
-    );
-  });
+  testWidgets(
+    'surfaces Rust failures directly without Dart retry timers and reloads on explicit invalidation',
+    (tester) async {
+      final core = _Core();
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(core),
+          sessionViewProvider.overrideWith(_Controller.new),
+        ],
+      );
+      addTearDown(container.dispose);
+      final provider = channelIconProvider(42);
+      final subscription = container.listen(provider, (_, _) {});
+      addTearDown(subscription.close);
+
+      expect(core.requests, hasLength(1));
+      final failure = expectLater(
+        container.read(provider.future),
+        throwsA(isA<CoreError>()),
+      );
+      core.requests.single.completeError(
+        const CoreError.connection(message: 'image request queue is full'),
+      );
+      await tester.pump();
+      await failure;
+
+      await tester.pump(const Duration(seconds: 5));
+      expect(core.requests, hasLength(1));
+
+      container.invalidate(provider);
+      final reloaded = container.read(provider.future);
+      expect(core.requests, hasLength(2));
+      core.requests.last.complete(Uint8List.fromList([7, 8]));
+      await tester.pump();
+      expect(await reloaded, [7, 8]);
+    },
+  );
 }

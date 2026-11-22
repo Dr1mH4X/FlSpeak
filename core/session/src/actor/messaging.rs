@@ -90,6 +90,7 @@ impl Actor {
             target_mode: 3,
             target_id: 0,
             peer_uid: String::new(),
+            from_self: false,
             at,
         })
     }
@@ -100,11 +101,89 @@ impl Actor {
         };
         let path = store::history_path(&self.store_path);
         match store::load_history(&path, server_id, crate::HISTORY_LIMIT).await {
-            Ok(messages) => self.emit(SessionEvent::History { messages }),
+            Ok(mut messages) => {
+                self.resolve_history_messages(&mut messages);
+                self.emit(SessionEvent::History { messages });
+            }
             Err(message) => self.emit(SessionEvent::Log {
                 level: "warn".into(),
                 message: format!("failed to read message history: {message}"),
             }),
+        }
+    }
+
+    pub(super) fn resolve_self_uid(&self) -> String {
+        if let Some(uid) = &self.self_uid
+            && !uid.is_empty()
+        {
+            return uid.clone();
+        }
+        let Some(self_id) = self.self_client_id else {
+            return String::new();
+        };
+        self.last_snapshot
+            .as_ref()
+            .and_then(|(_, clients)| {
+                clients
+                    .iter()
+                    .find(|client| client.id == self_id && !client.uid.is_empty())
+                    .map(|client| client.uid.clone())
+            })
+            .or_else(|| {
+                self.known_clients
+                    .get(&self_id)
+                    .filter(|client| !client.uid.is_empty())
+                    .map(|client| client.uid.clone())
+            })
+            .or_else(|| {
+                let snapshot = self.client.as_ref()?.directory_snapshot()?;
+                snapshot
+                    .clients
+                    .into_iter()
+                    .find(|client| client.id == self_id && !client.uid.is_empty())
+                    .map(|client| client.uid)
+            })
+            .unwrap_or_default()
+    }
+
+    pub(super) fn is_own_text_message(&self, message: &TextMessageView) -> bool {
+        if message.from_self {
+            return true;
+        }
+        if message.from_id > 0
+            && let Some(self_id) = self.self_client_id
+        {
+            return message.from_id == self_id;
+        }
+        if message.target_mode == 1
+            && message.target_id > 0
+            && let Some(self_id) = self.self_client_id
+        {
+            return message.target_id != self_id as u64;
+        }
+        let self_uid = self.resolve_self_uid();
+        !self_uid.is_empty() && message.from_uid == self_uid
+    }
+
+    pub(super) fn resolve_history_messages(&self, messages: &mut [TextMessageView]) {
+        let self_uid = self.resolve_self_uid();
+        for message in messages {
+            if message.from_self {
+                continue;
+            }
+            if message.target_mode == 1
+                && !message.peer_uid.is_empty()
+                && !message.from_uid.is_empty()
+                && message.peer_uid != message.from_uid
+            {
+                message.from_self = true;
+                continue;
+            }
+            if !self_uid.is_empty() {
+                message.from_self = message.from_uid == self_uid;
+            } else {
+                message.from_self = self.is_own_text_message(message);
+            }
         }
     }
 
@@ -115,6 +194,7 @@ impl Actor {
         if message.target_mode == 2 && message.target_id == 0 && self.self_channel_id != 0 {
             message.target_id = self.self_channel_id;
         }
+        message.from_self = self.is_own_text_message(message);
         message.peer_uid = self.direct_peer_uid(message);
     }
 
@@ -124,8 +204,7 @@ impl Actor {
         if message.target_mode != 1 {
             return String::new();
         }
-        let own = self.self_client_id == Some(message.from_id);
-        if !own {
+        if !self.is_own_text_message(message) {
             return message.from_uid.clone();
         }
         self.last_snapshot
@@ -134,6 +213,12 @@ impl Actor {
                 clients
                     .iter()
                     .find(|client| client.id as u64 == message.target_id)
+                    .map(|client| client.uid.clone())
+            })
+            .or_else(|| {
+                i32::try_from(message.target_id)
+                    .ok()
+                    .and_then(|id| self.known_clients.get(&id))
                     .map(|client| client.uid.clone())
             })
             .or_else(|| {
@@ -231,7 +316,8 @@ mod tests {
                     app_name: Some("FlSpeak".into()),
                     app_version: Some("0.1.12".into()),
                     capabilities: Vec::new(),
-                    bot_commands: None,
+                    bot_commands: Vec::new(),
+                    bot_commands_loaded: false,
                     bot_command_prefix: None,
                 },
                 ClientView {
@@ -248,7 +334,8 @@ mod tests {
                     app_name: None,
                     app_version: None,
                     capabilities: Vec::new(),
-                    bot_commands: None,
+                    bot_commands: Vec::new(),
+                    bot_commands_loaded: false,
                     bot_command_prefix: None,
                 },
             ],
@@ -262,6 +349,7 @@ mod tests {
             target_mode: 1,
             target_id: 7,
             peer_uid: String::new(),
+            from_self: false,
             at: 1,
         };
         assert_eq!(actor.direct_peer_uid(&incoming), "peer");
@@ -274,6 +362,7 @@ mod tests {
             target_mode: 1,
             target_id: 9,
             peer_uid: String::new(),
+            from_self: false,
             at: 2,
         };
         assert_eq!(actor.direct_peer_uid(&echo), "peer");
@@ -299,6 +388,7 @@ mod tests {
             target_mode: 2,
             target_id: 0,
             peer_uid: String::new(),
+            from_self: false,
             at: 10,
         };
         actor.resolve_text_message_routing(&mut channel_msg);
@@ -343,6 +433,7 @@ mod tests {
                     target_mode: 2,
                     target_id: 0,
                     peer_uid: String::new(),
+                    from_self: false,
                     at: 100,
                 },
             })
@@ -455,5 +546,121 @@ mod tests {
                 "[Open guide ](https://docs.example.com/guide)</color>",
             )
         );
+        assert!(!converted.from_self);
+    }
+
+    #[test]
+    fn resolve_routing_and_history_compute_from_self_for_live_dm_and_legacy_records() {
+        let mut actor = audio_actor();
+        actor.self_client_id = Some(7);
+        actor.self_channel_id = 42;
+        actor.self_uid = Some("self-uid".into());
+        actor.known_clients.insert(
+            9,
+            ClientView {
+                id: 9,
+                nickname: "Peer".into(),
+                uid: "peer-uid".into(),
+                channel_id: 42,
+                input_muted: None,
+                output_muted: None,
+                away: None,
+                away_message: None,
+                is_streaming: false,
+                client_type: ClientType::Standard,
+                app_name: None,
+                app_version: None,
+                capabilities: Vec::new(),
+                bot_commands: Vec::new(),
+                bot_commands_loaded: false,
+                bot_command_prefix: None,
+            },
+        );
+
+        let mut own_channel = TextMessageView {
+            from: "Self".into(),
+            from_uid: "self-uid".into(),
+            from_id: 7,
+            message: "my channel msg".into(),
+            target_mode: 2,
+            target_id: 0,
+            peer_uid: String::new(),
+            from_self: false,
+            at: 1,
+        };
+        actor.resolve_text_message_routing(&mut own_channel);
+        assert!(own_channel.from_self);
+        assert_eq!(own_channel.target_id, 42);
+        assert_eq!(own_channel.peer_uid, "");
+
+        let mut incoming_dm = TextMessageView {
+            from: "Peer".into(),
+            from_uid: "peer-uid".into(),
+            from_id: 9,
+            message: "hi".into(),
+            target_mode: 1,
+            target_id: 7,
+            peer_uid: String::new(),
+            from_self: false,
+            at: 2,
+        };
+        actor.resolve_text_message_routing(&mut incoming_dm);
+        assert!(!incoming_dm.from_self);
+        assert_eq!(incoming_dm.peer_uid, "peer-uid");
+
+        let mut dm_echo = TextMessageView {
+            from: "Self".into(),
+            from_uid: "self-uid".into(),
+            from_id: 7,
+            message: "echo".into(),
+            target_mode: 1,
+            target_id: 9,
+            peer_uid: String::new(),
+            from_self: false,
+            at: 3,
+        };
+        actor.resolve_text_message_routing(&mut dm_echo);
+        assert!(dm_echo.from_self);
+        assert_eq!(dm_echo.peer_uid, "peer-uid");
+
+        let mut history = vec![
+            TextMessageView {
+                from: "Peer".into(),
+                from_uid: "peer-uid".into(),
+                from_id: 0,
+                message: "legacy incoming dm".into(),
+                target_mode: 1,
+                target_id: 7,
+                peer_uid: String::new(),
+                from_self: false,
+                at: 4,
+            },
+            TextMessageView {
+                from: "Self".into(),
+                from_uid: "self-uid".into(),
+                from_id: 0,
+                message: "legacy own channel".into(),
+                target_mode: 2,
+                target_id: 42,
+                peer_uid: String::new(),
+                from_self: false,
+                at: 5,
+            },
+            TextMessageView {
+                from: "Self".into(),
+                from_uid: "other-slot".into(),
+                from_id: 0,
+                message: "outgoing dm history".into(),
+                target_mode: 1,
+                target_id: 9,
+                peer_uid: "peer-uid".into(),
+                from_self: false,
+                at: 6,
+            },
+        ];
+        actor.resolve_history_messages(&mut history);
+        assert!(!history[0].from_self);
+        assert!(history[1].from_self);
+        assert!(history[2].from_self);
     }
 }

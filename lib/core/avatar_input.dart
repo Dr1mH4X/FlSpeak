@@ -1,10 +1,8 @@
 import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
+import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-/// 与 Rust 侧 `avatars::MAX_AVATAR_BYTES` 对齐的客户端安全上限。
-const maxAvatarBytes = 1024 * 1024;
 
 const _avatarTypeGroup = XTypeGroup(
   extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'],
@@ -28,7 +26,7 @@ class AvatarInputException implements Exception {
 final avatarInputProvider = Provider<AvatarInput>((ref) => const AvatarInput());
 
 void ensureAvatarSize(int length) {
-  if (length > maxAvatarBytes) {
+  if (length > maxAvatarBytes()) {
     throw const AvatarInputException(AvatarInputFailure.tooLarge);
   }
 }

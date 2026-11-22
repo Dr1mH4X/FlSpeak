@@ -342,6 +342,15 @@
   },
   "chatDestinationChanged": "The destination changed. Your draft was kept; confirm the recipient and retry.",
   "chatImageTooLarge": "Images must be no larger than 20 MiB",
+  "chatImageTooLargeWithLimit": "Images must be no larger than {limit}.",
+  "@chatImageTooLargeWithLimit": {
+    "placeholders": {
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "chatImageUnsupportedFormat": "Choose a PNG, JPEG, GIF, or WebP image.",
   "chatClipboardEmpty": "No image in the clipboard",
   "chatImageInputFailed": "Could not read the image. Please choose it again.",
   "chatAttachImage": "Attach image",

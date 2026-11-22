@@ -1,6 +1,12 @@
 use pulldown_cmark::{Event, HeadingLevel, Parser, Tag, TagEnd};
 use std::borrow::Cow;
 
+/// TeamSpeak 命令行转义后的单条命令字节预算上限。
+pub const MAX_COMMAND_LINE_BYTES: usize = 9150;
+
+/// 屏幕共享 `respondjoinstreamrequest` 命令除 `sdp` 外的固定字段与参数前缀开销估算（字节）。
+pub const STREAM_OFFER_COMMAND_OVERHEAD_BYTES: usize = 160;
+
 /// 计算字符串在 TS3 ServerQuery 转义后的实际字节长度。
 ///
 /// TS3 协议中，空格转为 `\s`，`/` 转为 `\/`，`|` 转为 `\p`，换行转为 `\n` 等，
@@ -16,6 +22,12 @@ pub fn ts_escaped_len(s: &str) -> usize {
         }
     }
     len
+}
+
+/// 判断屏幕共享 SDP Offer 经 TeamSpeak 命令行转义后是否可放入单条命令预算。
+pub fn stream_offer_fits_command(offer_sdp: &str) -> bool {
+    ts_escaped_len(offer_sdp).saturating_add(STREAM_OFFER_COMMAND_OVERHEAD_BYTES)
+        <= MAX_COMMAND_LINE_BYTES
 }
 
 /// 将 Markdown 文本按 Block 转换为 BBCode，并在转义膨胀预算内完成分包。
@@ -822,6 +834,19 @@ mod tests {
     fn escaped_len_accounts_for_expansion() {
         assert_eq!(ts_escaped_len("a b"), 4); // 'a' (1) + '\s' (2) + 'b' (1)
         assert_eq!(ts_escaped_len("a/b|c"), 7); // 'a'(1) + '\/'(2) + 'b'(1) + '\p'(2) + 'c'(1)
+        assert_eq!(ts_escaped_len("\x07"), 1);
+        assert_eq!(ts_escaped_len("\x08\x0b\x0c\n\r\t\\"), 14);
+    }
+
+    #[test]
+    fn stream_offer_fits_command_respects_budget_boundary() {
+        let max_escaped_sdp = MAX_COMMAND_LINE_BYTES - STREAM_OFFER_COMMAND_OVERHEAD_BYTES;
+        assert!(stream_offer_fits_command(&"a".repeat(max_escaped_sdp)));
+        assert!(!stream_offer_fits_command(&"a".repeat(max_escaped_sdp + 1)));
+        // Spaces expand 1 -> 2 bytes after TeamSpeak command-line escaping.
+        assert!(!stream_offer_fits_command(
+            &" ".repeat(max_escaped_sdp / 2 + 1)
+        ));
     }
 
     #[test]

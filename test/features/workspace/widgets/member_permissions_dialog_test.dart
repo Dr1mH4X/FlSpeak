@@ -84,8 +84,9 @@ Future<ProviderContainer> _mount(
       sessionViewProvider.overrideWith(_Controller.new),
       sessionAccessProvider.overrideWith(
         (ref) async => AccessView(
-          memberAddPower: allowed ? 50 : 0,
-          memberRemovePower: allowed ? 50 : 0,
+          memberAddPower: 50,
+          memberRemovePower: 50,
+          canManageMembers: allowed,
         ),
       ),
       memberGroupsProvider((clientId: 2, uid: 'peer'))

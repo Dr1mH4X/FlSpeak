@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart'
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
+import '../../../core/byte_size.dart';
 import '../../../core/image_host.dart';
 import '../../../core/notices.dart';
 import '../../../l10n/app_localizations.dart';
@@ -32,6 +33,9 @@ String _describeImageHostError(CoreError error, AppLocalizations l10n) =>
       CoreError_AvatarPermissionDenied() ||
       CoreError_AvatarUnsupportedFormat() ||
       CoreError_AvatarUnavailable() => l10n.imageHostErrorInternal,
+      CoreError_ImageTooLarge(:final maxBytes) =>
+        l10n.chatImageTooLargeWithLimit(formatByteSize(maxBytes)),
+      CoreError_ImageUnsupportedFormat() => l10n.chatImageUnsupportedFormat,
       CoreError_Internal() => l10n.imageHostErrorInternal,
     };
 

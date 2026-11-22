@@ -25,14 +25,128 @@ pub(super) fn directory_from_channels(
         .iter()
         .filter_map(|channel| channel.codec.map(|codec| (channel.id, codec)))
         .collect();
+    let channels: Vec<ChannelView> = channels
+        .into_iter()
+        .map(|channel| channel_view(channel, None))
+        .collect();
     ChannelDirectory {
-        channels: channels
-            .into_iter()
-            .map(|channel| channel_view(channel, None))
-            .collect(),
+        channels: order_channels(channels),
         codecs: (!codecs.is_empty()).then_some(codecs),
         metadata_error,
     }
+}
+
+/// 按 TeamSpeak `channel_order` 前驱链表语义排序同级频道。
+///
+/// 链不完整（前驱缺失、重复、缺失值或成环）的频道按输入顺序兜底追加。
+pub(super) fn order_siblings(siblings: Vec<ChannelView>) -> Vec<ChannelView> {
+    if siblings.len() < 2 || siblings.iter().all(|c| c.order.is_none()) {
+        return siblings;
+    }
+    let ids: HashSet<u64> = siblings.iter().map(|c| c.id).collect();
+    let mut after: HashMap<u64, Vec<usize>> = HashMap::new();
+    let mut unlinked = Vec::new();
+    for (idx, channel) in siblings.iter().enumerate() {
+        match channel.order {
+            Some(predecessor) => {
+                let key = if predecessor == 0 || !ids.contains(&predecessor) {
+                    0
+                } else {
+                    predecessor
+                };
+                after.entry(key).or_default().push(idx);
+            }
+            None => unlinked.push(idx),
+        }
+    }
+
+    let mut slots: Vec<Option<ChannelView>> = siblings.into_iter().map(Some).collect();
+    let mut visited = HashSet::with_capacity(slots.len());
+    let mut ordered = Vec::with_capacity(slots.len());
+
+    let push_chain = |start_indices: &[usize],
+                      slots: &mut [Option<ChannelView>],
+                      after: &HashMap<u64, Vec<usize>>,
+                      visited: &mut HashSet<u64>,
+                      ordered: &mut Vec<ChannelView>| {
+        let mut stack: Vec<usize> = start_indices.iter().copied().rev().collect();
+        while let Some(idx) = stack.pop() {
+            let Some(channel) = slots[idx].take() else {
+                continue;
+            };
+            if !visited.insert(channel.id) {
+                continue;
+            }
+            let id = channel.id;
+            ordered.push(channel);
+            if let Some(followers) = after.get(&id) {
+                for &next_idx in followers.iter().rev() {
+                    stack.push(next_idx);
+                }
+            }
+        }
+    };
+
+    if let Some(roots) = after.get(&0) {
+        push_chain(roots, &mut slots, &after, &mut visited, &mut ordered);
+    }
+    push_chain(&unlinked, &mut slots, &after, &mut visited, &mut ordered);
+    for idx in 0..slots.len() {
+        if slots[idx].is_some() {
+            push_chain(&[idx], &mut slots, &after, &mut visited, &mut ordered);
+        }
+    }
+    ordered
+}
+
+/// 按树层级与同级 `channel_order` 前驱链表将频道整理为前序展示顺序。
+pub(super) fn order_channels(channels: Vec<ChannelView>) -> Vec<ChannelView> {
+    if channels.len() < 2 {
+        return channels;
+    }
+    let channel_ids: HashSet<u64> = channels.iter().map(|c| c.id).collect();
+    let mut roots = Vec::new();
+    let mut children_by_parent: HashMap<u64, Vec<ChannelView>> = HashMap::new();
+    for channel in channels {
+        if channel_ids.contains(&channel.parent_id) {
+            children_by_parent
+                .entry(channel.parent_id)
+                .or_default()
+                .push(channel);
+        } else {
+            roots.push(channel);
+        }
+    }
+    let ordered_roots = order_siblings(roots);
+    for siblings in children_by_parent.values_mut() {
+        let taken = std::mem::take(siblings);
+        *siblings = order_siblings(taken);
+    }
+
+    let mut ordered = Vec::with_capacity(channel_ids.len());
+    let mut visited = HashSet::with_capacity(channel_ids.len());
+    let mut stack: Vec<ChannelView> = ordered_roots.into_iter().rev().collect();
+    while let Some(channel) = stack.pop() {
+        if !visited.insert(channel.id) {
+            continue;
+        }
+        let id = channel.id;
+        ordered.push(channel);
+        if let Some(children) = children_by_parent.remove(&id) {
+            for child in children.into_iter().rev() {
+                stack.push(child);
+            }
+        }
+    }
+    // 兜底保留父子成环的孤立子图，避免频道丢失。
+    let mut remaining: Vec<ChannelView> = children_by_parent.into_values().flatten().collect();
+    remaining.sort_by_key(|c| c.id);
+    for channel in remaining {
+        if visited.insert(channel.id) {
+            ordered.push(channel);
+        }
+    }
+    ordered
 }
 
 pub(super) fn merge_channels(
@@ -66,7 +180,7 @@ pub(super) fn merge_channels(
         merged_channels.push(channel);
     }
 
-    (merged_channels, merged_codecs)
+    (order_channels(merged_channels), merged_codecs)
 }
 
 pub(super) fn merge_clients(
@@ -263,7 +377,8 @@ impl From<ClientInfo> for ClientView {
             app_name: None,
             app_version: None,
             capabilities: Vec::new(),
-            bot_commands: None,
+            bot_commands: Vec::new(),
+            bot_commands_loaded: false,
             bot_command_prefix: None,
         }
     }
@@ -393,5 +508,52 @@ mod tests {
         let fallback = channel_view(channel, None);
         assert_eq!(fallback.order, Some(1));
         assert_eq!(fallback.password_protected, None);
+    }
+
+    fn channel_stub(id: u64, parent_id: u64, order: Option<u64>, name: &str) -> ChannelView {
+        ChannelView {
+            icon_id: None,
+            id,
+            parent_id,
+            order,
+            name: name.to_string(),
+            description: String::new(),
+            max_clients: None,
+            max_clients_limited: None,
+            password_protected: None,
+        }
+    }
+
+    #[test]
+    fn order_channels_follows_predecessor_links_and_handles_edge_cases() {
+        // Predecessor chain: 10 (order=0) -> 30 (order=10) -> 20 (order=30),
+        // with nested children: under 30: 32 (order=0) -> 31 (order=32);
+        // orphan parent_id=999 treated as root (40, order=20).
+        let input = vec![
+            channel_stub(20, 0, Some(30), "Third"),
+            channel_stub(31, 30, Some(32), "Sub-2"),
+            channel_stub(30, 0, Some(10), "Second"),
+            channel_stub(32, 30, Some(0), "Sub-1"),
+            channel_stub(40, 999, Some(20), "OrphanRoot"),
+            channel_stub(10, 0, Some(0), "First"),
+        ];
+        let ids: Vec<u64> = order_channels(input).into_iter().map(|c| c.id).collect();
+        assert_eq!(ids, vec![10, 30, 32, 31, 20, 40]);
+
+        // Missing predecessor, unlinked (order=None), duplicate predecessor, and cycle fallback.
+        let malformed = vec![
+            channel_stub(5, 0, Some(6), "CycleB"),
+            channel_stub(6, 0, Some(5), "CycleA"),
+            channel_stub(4, 0, None, "Unlinked"),
+            channel_stub(3, 0, Some(999), "MissingPred"),
+            channel_stub(2, 0, Some(1), "Dup1"),
+            channel_stub(7, 0, Some(1), "Dup2"),
+            channel_stub(1, 0, Some(0), "Head"),
+        ];
+        let malformed_ids: Vec<u64> = order_channels(malformed)
+            .into_iter()
+            .map(|c| c.id)
+            .collect();
+        assert_eq!(malformed_ids, vec![3, 1, 2, 7, 4, 5, 6]);
     }
 }

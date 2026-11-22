@@ -109,9 +109,7 @@ class ClientActionsButton extends ConsumerWidget {
     final access = ref.watch(
       sessionAccessProvider.select((value) => value.asData?.value),
     );
-    final canManage =
-        (access?.memberAddPower ?? 0) > 0 ||
-        (access?.memberRemovePower ?? 0) > 0;
+    final canManage = access?.canManageMembers ?? false;
     final (:connected, :busy, :stream, :isWatchingStream) = ref.watch(
       sessionViewProvider.select((view) {
         final stream = view.streamForClient(client.id);
@@ -196,10 +194,7 @@ class ClientActionsButton extends ConsumerWidget {
               connected &&
                   !busy &&
                   access?.connectionEpoch != null &&
-                  (target == KickTarget.channel
-                          ? access?.kickChannelPower ?? 0
-                          : access?.kickServerPower ?? 0) >
-                      0
+                  (access?.canKick(target) ?? false)
               ? () => showKickClient(
                   context,
                   client,

@@ -81,9 +81,16 @@ class _Controller extends SessionController {
 }
 
 class _Access {
-  _Access(this.channel, this.server);
-  int channel;
-  int server;
+  _Access({
+    required this.channel,
+    required this.server,
+    this.channelPower = 50,
+    this.serverPower = 50,
+  });
+  bool channel;
+  bool server;
+  int channelPower;
+  int serverPower;
 }
 
 Future<void> _openActionsMenu(WidgetTester tester) async {
@@ -104,20 +111,29 @@ Future<void> _openActionsMenu(WidgetTester tester) async {
 Future<({ProviderContainer container, _Controller controller, _Access access})>
 _mount(
   WidgetTester tester, {
-  int channel = 50,
-  int server = 50,
+  bool channel = true,
+  bool server = true,
+  int channelPower = 50,
+  int serverPower = 50,
   Locale locale = const Locale('zh'),
   TextScaler textScaler = TextScaler.noScaling,
 }) async {
   final controller = _Controller();
-  final access = _Access(channel, server);
+  final access = _Access(
+    channel: channel,
+    server: server,
+    channelPower: channelPower,
+    serverPower: serverPower,
+  );
   final container = ProviderContainer(
     overrides: [
       sessionViewProvider.overrideWith(() => controller),
       sessionAccessProvider.overrideWith(
         (ref) async => AccessView(
-          kickChannelPower: access.channel,
-          kickServerPower: access.server,
+          kickChannelPower: access.channelPower,
+          kickServerPower: access.serverPower,
+          canKickChannel: access.channel,
+          canKickServer: access.server,
           connectionEpoch: 42,
         ),
       ),
@@ -170,16 +186,22 @@ void main() {
   });
 
   testWidgets(
-    'ordinary users have both kick actions disabled; channel permission does not grant server kicks',
+    'ordinary users have both kick actions disabled; channel permission does not grant server kicks; raw power alone cannot enable kicks',
     (tester) async {
-      final context = await _mount(tester, channel: 0, server: 0);
+      final context = await _mount(
+        tester,
+        channel: false,
+        server: false,
+        channelPower: 75,
+        serverPower: 75,
+      );
       PopupMenuItem menu(String label) => tester
           .widget<PopupMenu>(find.byType(PopupMenu))
           .items
           .firstWhere((item) => item.label == label);
       expect(menu('踢出频道').onPressed, isNull);
       expect(menu('踢出服务器').onPressed, isNull);
-      context.access.channel = 50;
+      context.access.channel = true;
       context.container.invalidate(sessionAccessProvider);
       await tester.pumpAndSettle();
       // 菜单弹窗已按旧权限快照打开；关闭并重开以验证最新权限生效。
@@ -273,7 +295,7 @@ void main() {
       final context = await _mount(tester);
       await tester.tap(find.text('踢出频道'));
       await tester.pumpAndSettle();
-      context.access.channel = 0;
+      context.access.channel = false;
       context.container.invalidate(sessionAccessProvider);
       await tester.pumpAndSettle();
       expect(
@@ -282,7 +304,7 @@ void main() {
             .onPressed,
         isNull,
       );
-      context.access.channel = 50;
+      context.access.channel = true;
       context.container.invalidate(sessionAccessProvider);
       await tester.pumpAndSettle();
       expect(

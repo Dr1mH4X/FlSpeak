@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,27 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'providers.dart';
 
 class _AvatarCache {
-  final refreshers = <String, void Function()>{};
   bool alive = true;
   final requests = <String, Future<Uint8List?>>{};
-  final attempts = <String, int>{};
-  final timers = <String, Timer>{};
-  final cooldowns = <String, ({DateTime expiresAt, bool isTransient})>{};
-  final generations = <String, int>{};
   final revisions = <String, int>{};
 
-  int generationOf(String uid) => generations[uid] ?? 0;
-
-  void cancelTimer(String uid) {
-    timers.remove(uid)?.cancel();
-  }
-
   void invalidate(String uid, {int? revision}) {
-    generations[uid] = (generations[uid] ?? 0) + 1;
-    cancelTimer(uid);
     requests.remove(uid);
-    cooldowns.remove(uid);
-    attempts.remove(uid);
     if (revision != null) {
       revisions[uid] = revision;
     }
@@ -38,40 +22,9 @@ class _AvatarCache {
     }
   }
 
-  void scheduleCooldown({
-    required String uid,
-    required Duration duration,
-    required bool isTransient,
-    required int attempt,
-  }) {
-    if (!alive) return;
-    cancelTimer(uid);
-    final expiresAt = DateTime.now().add(duration);
-    cooldowns[uid] = (expiresAt: expiresAt, isTransient: isTransient);
-
-    final timer = Timer(duration, () {
-      timers.remove(uid);
-      cooldowns.remove(uid);
-      requests.remove(uid);
-      if (!isTransient && attempt >= 3) {
-        attempts.remove(uid);
-      } else {
-        refreshers[uid]?.call();
-      }
-    });
-    timers[uid] = timer;
-  }
-
   void dispose() {
     alive = false;
-    for (final timer in timers.values) {
-      timer.cancel();
-    }
-    timers.clear();
-    cooldowns.clear();
-    attempts.clear();
     requests.clear();
-    generations.clear();
     revisions.clear();
   }
 }
@@ -91,7 +44,7 @@ final Provider<_AvatarCache?> _memberAvatarCacheProvider =
           .listen((uid) {
             final currentRev =
                 ref.read(memberAvatarRevisionsProvider)[uid] ?? 0;
-            // 在通知订阅组件重建前先清掉缓存与冷却，避免重建瞬间命中旧 Future。
+            // 在通知订阅组件重建前先清掉缓存，避免重建瞬间命中旧 Future。
             cache.invalidate(uid, revision: currentRev + 1);
             ref.read(memberAvatarRevisionsProvider.notifier).bump(uid);
           });
@@ -118,13 +71,6 @@ final memberAvatarRevisionsProvider =
       MemberAvatarRevisionsController.new,
     );
 
-bool _isTransientAvatarError(Object error) {
-  final message = error.toString().toLowerCase();
-  return message.contains('queue is full') ||
-      message.contains('interrupted') ||
-      message.contains('busy');
-}
-
 final memberAvatarProvider = FutureProvider.autoDispose
     .family<Uint8List?, String>((ref, uid) {
       final cache = ref.watch(_memberAvatarCacheProvider);
@@ -136,73 +82,22 @@ final memberAvatarProvider = FutureProvider.autoDispose
       );
       cache.syncRevision(uid, revision);
 
-      void refresh() => ref.invalidateSelf();
-      cache.refreshers[uid] = refresh;
-      ref.onDispose(() {
-        if (identical(cache.refreshers[uid], refresh)) {
-          cache.refreshers.remove(uid);
-        }
-        cache.cancelTimer(uid);
-      });
-      final cooldown = cache.cooldowns[uid];
-      if (cooldown != null) {
-        final remaining = cooldown.expiresAt.difference(DateTime.now());
-        if (remaining <= Duration.zero) {
-          cache.cooldowns.remove(uid);
-          cache.requests.remove(uid);
-          if (!cooldown.isTransient && (cache.attempts[uid] ?? 0) >= 3) {
-            cache.attempts.remove(uid);
-          }
-        } else if (!cache.timers.containsKey(uid)) {
-          cache.scheduleCooldown(
-            uid: uid,
-            duration: remaining,
-            isTransient: cooldown.isTransient,
-            attempt: cache.attempts[uid] ?? 1,
-          );
-        }
-      }
       return cache.requests.putIfAbsent(uid, () {
-        final generation = cache.generationOf(uid);
-        return Future.sync(
-          () => ref.read(coreSessionProvider).fetchAvatar(uid: uid),
-        ).then(
-          (bytes) {
-            final normalized = (bytes == null || bytes.isEmpty) ? null : bytes;
-            if (cache.alive && cache.generationOf(uid) == generation) {
-              cache.cancelTimer(uid);
-              cache.cooldowns.remove(uid);
-              cache.attempts.remove(uid);
-            }
-            return normalized;
-          },
-          onError: (Object error, StackTrace stack) {
-            if (cache.alive && cache.generationOf(uid) == generation) {
-              final isTransient = _isTransientAvatarError(error);
-              if (isTransient) {
-                cache.scheduleCooldown(
-                  uid: uid,
-                  duration: const Duration(milliseconds: 500),
-                  isTransient: true,
-                  attempt: 0,
-                );
-              } else {
-                final attempt = cache.attempts.update(
-                  uid,
-                  (n) => n + 1,
-                  ifAbsent: () => 1,
-                );
-                cache.scheduleCooldown(
-                  uid: uid,
-                  duration: const Duration(seconds: 30),
-                  isTransient: false,
-                  attempt: attempt,
-                );
-              }
-            }
-            Error.throwWithStackTrace(error, stack);
-          },
-        );
+        late final Future<Uint8List?> request;
+        request =
+            Future.sync(
+              () => ref.read(coreSessionProvider).fetchAvatar(uid: uid),
+            ).then(
+              (bytes) => (bytes == null || bytes.isEmpty) ? null : bytes,
+              onError: (Object error, StackTrace stack) {
+                // 失败后释放本地占位，下次挂载或失效时重新向 Rust 询问（冷却由 Rust 裁决）。
+                if (cache.alive && identical(cache.requests[uid], request)) {
+                  cache.requests.remove(uid);
+                }
+                Error.throwWithStackTrace(error, stack);
+              },
+            );
+        return request;
       });
     }, retry: (retryCount, error) => null);
 

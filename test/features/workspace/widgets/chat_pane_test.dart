@@ -56,7 +56,6 @@ class _ChatHarnessState extends State<_ChatHarness> {
           scope: ChatScope.direct,
           canSendChannel: true,
           busy: false,
-          selfUid: 'self',
           selfClientId: 1,
           recipients: const [
             ClientView(id: 2, nickname: 'Alice', uid: 'alice', channelId: 5),
@@ -241,6 +240,23 @@ void main() {
       await tester.drag(find.byType(PrismListView), const Offset(0, 300));
       await tester.pumpAndSettle();
       expect(scroll.position.extentAfter, greaterThan(72));
+
+      key.currentState!.replaceMessages([
+        ...messages,
+        ChatMessage(
+          from: 'Self',
+          fromUid: 'self',
+          fromId: 1,
+          text: List.filled(16, 'own message').join('\n'),
+          at: DateTime.utc(2026, 1, 2),
+          scope: ChatScope.direct,
+          targetId: 2,
+          peerUid: 'alice',
+          fromSelf: true,
+        ),
+      ]);
+      await tester.pumpAndSettle();
+      expect(scroll.position.extentAfter, lessThan(1));
     },
   );
 
@@ -264,7 +280,6 @@ void main() {
               scope: ChatScope.channel,
               canSendChannel: true,
               busy: false,
-              selfUid: 'self',
               recipients: const [],
               recipientUid: null,
               onRecipientChanged: (_) {},
@@ -334,7 +349,6 @@ void main() {
               scope: ChatScope.direct,
               canSendChannel: false,
               busy: false,
-              selfUid: 'self',
               recipients: const [
                 ClientView(id: 2, nickname: 'Peer', uid: 'peer', channelId: 1),
               ],
@@ -375,7 +389,6 @@ void main() {
             scope: ChatScope.channel,
             canSendChannel: true,
             busy: false,
-            selfUid: 'self',
             recipients: const [
               ClientView(id: 2, nickname: 'Alice', uid: 'alice', channelId: 1),
             ],
@@ -413,7 +426,6 @@ void main() {
             scope: ChatScope.channel,
             canSendChannel: true,
             busy: false,
-            selfUid: 'self',
             recipients: const [
               ClientView(id: 2, nickname: 'Alice', uid: 'alice', channelId: 1),
             ],
@@ -461,7 +473,6 @@ void main() {
               scope: ChatScope.channel,
               canSendChannel: true,
               busy: false,
-              selfUid: 'self',
               recipients: const [],
               recipientUid: null,
               onRecipientChanged: (_) {},
@@ -528,7 +539,6 @@ void main() {
               scope: ChatScope.channel,
               canSendChannel: true,
               busy: false,
-              selfUid: 'self',
               recipients: const [],
               recipientUid: null,
               onRecipientChanged: (_) {},
@@ -573,7 +583,6 @@ void main() {
               scope: ChatScope.channel,
               canSendChannel: true,
               busy: false,
-              selfUid: 'self',
               recipients: const [],
               recipientUid: null,
               onRecipientChanged: (_) {},
@@ -596,9 +605,8 @@ void main() {
   });
 
   testWidgets(
-    'slash command autocomplete fetches lazily, filters by prefix, completes with space, and auto-dismisses',
+    'slash command autocomplete renders Rust-provided commands, filters by prefix, completes with space, and auto-dismisses',
     (tester) async {
-      final fetched = <ClientView>[];
       var botRecipient = const ClientView(
         id: 9,
         nickname: 'MusicBot',
@@ -628,13 +636,11 @@ void main() {
                     scope: ChatScope.direct,
                     canSendChannel: true,
                     busy: false,
-                    selfUid: 'self',
                     selfClientId: 1,
                     recipients: [botRecipient],
                     recipientUid: 'bot-uid',
                     recipientId: 9,
                     onRecipientChanged: (_) {},
-                    onFetchBotCommands: fetched.add,
                     onScopeChanged: (_) {},
                     onSend: (_) async => true,
                   ),
@@ -645,11 +651,25 @@ void main() {
         ),
       );
 
-      // 首次键入 "/" 且本地尚未缓存命令列表时，触发按需拉取回调。
+      // 命令未加载或为空列表时，输入 "/" 不渲染浮层。
       await tester.enterText(find.byType(TextField), '/');
       await tester.pump();
-      expect(fetched, hasLength(1));
-      expect(fetched.single.uid, 'bot-uid');
+      expect(find.text('/play'), findsNothing);
+
+      // 明确已加载但命令列表为空时，同样不渲染浮层。
+      updateState(() {
+        botRecipient = const ClientView(
+          id: 9,
+          nickname: 'MusicBot',
+          uid: 'bot-uid',
+          channelId: 5,
+          clientType: ClientType.bot,
+          capabilities: ['chat:slash_commands'],
+          botCommandsLoaded: true,
+        );
+      });
+      await tester.pump();
+      expect(find.text('/play'), findsNothing);
 
       // 回包填入 botCommands 后，浮层展示匹配的命令项。
       updateState(() {
@@ -660,6 +680,7 @@ void main() {
           channelId: 5,
           clientType: ClientType.bot,
           capabilities: ['chat:slash_commands'],
+          botCommandsLoaded: true,
           botCommands: [
             BotCommandView(name: 'play', args: '<url|歌名>', desc: '点播指定歌曲或音频流'),
             BotCommandView(name: 'skip', args: '', desc: '跳过当前播放曲目'),
@@ -722,7 +743,6 @@ void main() {
                 scope: ChatScope.direct,
                 canSendChannel: true,
                 busy: false,
-                selfUid: 'self',
                 selfClientId: 1,
                 selfChannelId: 5,
                 recipients: const [botRecipient],
@@ -817,7 +837,6 @@ void main() {
                 scope: ChatScope.channel,
                 canSendChannel: true,
                 busy: false,
-                selfUid: 'self',
                 selfClientId: 1,
                 selfChannelId: 5,
                 recipients: const [musicBot, clawBot, remoteBot],
@@ -873,7 +892,6 @@ void main() {
                   scope: ChatScope.channel,
                   canSendChannel: true,
                   busy: busy,
-                  selfUid: 'self',
                   recipients: const [],
                   recipientUid: null,
                   onRecipientChanged: (_) {},
@@ -942,7 +960,6 @@ void main() {
               scope: ChatScope.channel,
               canSendChannel: true,
               busy: false,
-              selfUid: 'self',
               recipients: const [],
               recipientUid: null,
               onRecipientChanged: (_) {},
@@ -1003,7 +1020,6 @@ void main() {
               scope: ChatScope.channel,
               canSendChannel: true,
               busy: false,
-              selfUid: 'self',
               recipients: const [],
               recipientUid: null,
               onRecipientChanged: (_) {},
@@ -1090,7 +1106,6 @@ void main() {
                   scope: ChatScope.channel,
                   canSendChannel: true,
                   busy: false,
-                  selfUid: 'self',
                   selfClientId: 1,
                   selfChannelId: 5,
                   recipients: const [bot],

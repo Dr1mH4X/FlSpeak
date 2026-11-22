@@ -11,6 +11,9 @@ use tsclient_rs::stream::{
 
 use crate::SessionError;
 
+/// 屏幕共享发布端默认最大并发观众数。
+pub const DEFAULT_MAX_STREAM_VIEWERS: u32 = 5;
+
 /// 当前频道内一路可观看的屏幕共享。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StreamView {

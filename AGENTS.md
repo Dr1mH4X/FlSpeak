@@ -48,6 +48,7 @@ FlSpeak 是 TeamSpeak 第三方客户端：Flutter 负责界面，Rust 负责协
 4. `Client` 的一切协议调用都经过 `core/session` 的 actor 串行执行，不要在别处并发调用 tsclient-rs。
 5. 生成代码（`frb_generated.*`、`plugins/flspeak_ffi/lib/src/rust/**`、`lib/l10n/**`）不手改，改输入后重跑生成。
 6. **全仓不使用悬停提示**：遵守 [Flutter 界面文案与操作按钮约束](docs/defensive-patterns/ui.md)。
+7. **前后端职责边界**：Dart 仅负责 UI、纯 UI 偏好、OS 文件/剪贴板/热键桥接与 WebRTC；业务协议、媒体缓存、重试/权限/业务常量与非 UI 持久化一律归 Rust + FFI。
 
 ## 验证
 

@@ -33,6 +33,8 @@ struct HistoryEntry {
     target_id: u64,
     #[serde(default)]
     peer_uid: String,
+    #[serde(default)]
+    from_self: bool,
 }
 
 impl HistoryEntry {
@@ -47,6 +49,7 @@ impl HistoryEntry {
             target_mode: message.target_mode,
             target_id: message.target_id,
             peer_uid: message.peer_uid.clone(),
+            from_self: message.from_self,
         }
     }
 
@@ -59,6 +62,7 @@ impl HistoryEntry {
             target_mode: self.target_mode,
             target_id: self.target_id,
             peer_uid: self.peer_uid,
+            from_self: self.from_self,
             at: self.at,
         }
     }
@@ -328,6 +332,7 @@ mod tests {
             target_mode: 2,
             target_id: 7,
             peer_uid: String::new(),
+            from_self: false,
             at,
         }
     }

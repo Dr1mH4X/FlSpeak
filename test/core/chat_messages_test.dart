@@ -7,15 +7,17 @@ ChatMessage message({
   required int targetId,
   String fromUid = 'peer',
   String peerUid = '',
+  bool fromSelf = false,
   String text = 'message',
 }) => ChatMessage(
-  from: fromUid == 'self' ? 'Self' : 'Peer',
+  from: fromSelf ? 'Self' : 'Peer',
   fromUid: fromUid,
   text: text,
   at: DateTime(2026),
   scope: scope,
   targetId: targetId,
   peerUid: peerUid,
+  fromSelf: fromSelf,
 );
 
 void main() {
@@ -29,6 +31,7 @@ void main() {
       targetId: 2,
       fromUid: 'self',
       peerUid: 'alice',
+      fromSelf: true,
       text: 'hello',
     ),
     message(scope: ChatScope.direct, targetId: 1, peerUid: 'bob', text: 'psst'),
@@ -56,7 +59,7 @@ void main() {
     expect(visible.map((item) => item.text), ['hi', 'hello']);
   });
 
-  test('legacy direct records without peer_uid stay with the sender', () {
+  test('legacy direct records without peer_uid stay with the sender and exclude fromSelf', () {
     final legacy = ChatMessage(
       from: 'Alice',
       fromUid: 'alice',
@@ -66,8 +69,18 @@ void main() {
       scope: ChatScope.direct,
       targetId: 1,
     );
+    final ownLegacy = ChatMessage(
+      from: 'Self',
+      fromUid: 'alice',
+      fromId: 1,
+      text: 'own record',
+      at: DateTime(2025),
+      scope: ChatScope.direct,
+      targetId: 2,
+      fromSelf: true,
+    );
     final view = SessionView(
-      messages: [legacy],
+      messages: [legacy, ownLegacy],
       chatScope: ChatScope.direct,
       directRecipientUid: 'alice',
     );

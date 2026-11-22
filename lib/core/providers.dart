@@ -11,6 +11,7 @@ import '../l10n/app_localizations.dart';
 import 'android_app_lifecycle.dart';
 import 'android_audio_permission.dart';
 import 'audio_selection.dart';
+import 'byte_size.dart';
 import 'logging/logger.dart';
 import 'models.dart';
 import 'global_hotkey.dart';
@@ -95,6 +96,13 @@ final sessionAccessProvider = FutureProvider.autoDispose<AccessView>((
   return ref.read(coreSessionProvider).access();
 });
 
+extension AccessViewCapabilities on AccessView {
+  bool canKick(KickTarget target) => switch (target) {
+    KickTarget.channel => canKickChannel,
+    KickTarget.server => canKickServer,
+  };
+}
+
 typedef MemberGroupTarget = ({int clientId, String uid});
 
 final memberGroupsProvider = FutureProvider.autoDispose
@@ -131,9 +139,6 @@ final channelDescriptionProvider = FutureProvider.autoDispose
     }, retry: (retryCount, error) => null);
 
 class SessionController extends Notifier<SessionView> {
-  /// 只保留本次会话的消息；上限防止长时间挂着时无限增长。
-  static const _messageLimit = 500;
-
   final _transferReplies = <int, Completer<bool>>{};
   final _levels = StreamController<VoiceLevels>.broadcast();
   final _avatarUpdates = StreamController<String>.broadcast(sync: true);
@@ -301,9 +306,6 @@ class SessionController extends Notifier<SessionView> {
           ? _clearPeerUnread(state.unreadPeers, state.directRecipientUid)
           : state.unreadPeers,
     );
-    if (scope == ChatScope.channel) {
-      _probeChannelBots();
-    }
   }
 
   void selectDirectRecipient(String uid, {int? clientId}) {
@@ -313,36 +315,6 @@ class SessionController extends Notifier<SessionView> {
       directRecipientId: clientId,
       unreadPeers: _clearPeerUnread(state.unreadPeers, uid),
     );
-    _probeDirectRecipient();
-  }
-
-  void _probeDirectRecipient() {
-    if (!state.connected || state.chatScope != ChatScope.direct) return;
-    final recipient = state.directRecipient;
-    if (recipient == null) return;
-    if (recipient.clientType == ClientType.standard) {
-      unawaited(queryPeerIdentity(recipient.id));
-    } else if (recipient.capabilities.contains('chat:slash_commands') &&
-        recipient.botCommands == null) {
-      unawaited(fetchBotCommands(recipient.id, recipient.uid));
-    }
-  }
-
-  void _probeChannelBots() {
-    if (!state.connected || state.chatScope != ChatScope.channel) return;
-    final channelId = state.selfChannelId;
-    if (channelId == null) return;
-    for (final client in state.clients) {
-      if (client.channelId != channelId ||
-          client.id == state.selfClientId ||
-          client.uid.isEmpty) {
-        continue;
-      }
-      if (client.capabilities.contains('chat:slash_commands') &&
-          client.botCommands == null) {
-        unawaited(fetchBotCommands(client.id, client.uid));
-      }
-    }
   }
 
   static Set<String> _clearPeerUnread(Set<String> peers, String? uid) {
@@ -355,7 +327,7 @@ class SessionController extends Notifier<SessionView> {
     SessionView view,
     ChatMessage message,
   ) {
-    if (view.isOwnMessage(message)) {
+    if (message.fromSelf) {
       return (scopes: view.unreadScopes, peers: view.unreadPeers);
     }
     switch (message.scope) {
@@ -420,18 +392,9 @@ class SessionController extends Notifier<SessionView> {
     int connectionEpoch,
   ) async {
     if (!state.connected || state.busy) return false;
-    final peer = state.clients
-        .where(
-          (client) =>
-              client.id == recipient.id &&
-              client.uid == recipient.uid &&
-              client.id != state.selfClientId,
-        )
-        .firstOrNull;
+    final peer = state.findKickablePeer(recipient, target);
     final l10n = ref.read(appLocalizationsProvider);
-    if (peer == null ||
-        (target == KickTarget.channel &&
-            peer.channelId != recipient.channelId)) {
+    if (peer == null) {
       _notify(l10n.kickTargetUnavailable);
       return false;
     }
@@ -701,7 +664,9 @@ class SessionController extends Notifier<SessionView> {
     } on ImageInputException catch (error) {
       if (ref.mounted) {
         _notify(switch (error.failure) {
-          ImageInputFailure.tooLarge => l10n.chatImageTooLarge,
+          ImageInputFailure.tooLarge => l10n.chatImageTooLargeWithLimit(
+            formatByteSize(maxChatImageBytes()),
+          ),
           ImageInputFailure.clipboardEmpty => l10n.chatClipboardEmpty,
         });
       }
@@ -1092,24 +1057,9 @@ class SessionController extends Notifier<SessionView> {
       case CoreEvent_Snapshot(:final channels, :final clients):
         state = current.copyWith(
           channels: channels,
-          clients: _syncSelfClientFlags(
-            clients,
-            selfClientId: current.selfClientId,
-            muted: current.muted,
-            deafened: current.deafened,
-            away: current.away,
-          ),
+          clients: clients,
           accessRevision: current.accessRevision + 1,
         );
-        final recipient = state.directRecipient;
-        if (state.chatScope == ChatScope.direct &&
-            recipient != null &&
-            recipient.capabilities.contains('chat:slash_commands') &&
-            recipient.botCommands == null) {
-          unawaited(fetchBotCommands(recipient.id, recipient.uid));
-        } else if (state.chatScope == ChatScope.channel) {
-          _probeChannelBots();
-        }
       case CoreEvent_History(:final messages):
         state = current.copyWith(
           messages: messages.map(ChatMessage.fromCore).toList(),
@@ -1124,6 +1074,7 @@ class SessionController extends Notifier<SessionView> {
         :final targetMode,
         :final targetId,
         :final peerUid,
+        :final fromSelf,
         :final at,
       ):
         final received = ChatMessage(
@@ -1135,12 +1086,14 @@ class SessionController extends Notifier<SessionView> {
           scope: ChatScope.fromProtocol(targetMode),
           targetId: targetId,
           peerUid: peerUid,
+          fromSelf: fromSelf,
         );
         final unread = _unreadFor(current, received);
         final appended = [...current.messages, received];
+        final limit = historyLimit();
         state = current.copyWith(
-          messages: appended.length > _messageLimit
-              ? appended.sublist(appended.length - _messageLimit)
+          messages: appended.length > limit
+              ? appended.sublist(appended.length - limit)
               : appended,
           unreadScopes: unread.scopes,
           unreadPeers: unread.peers,
@@ -1150,51 +1103,20 @@ class SessionController extends Notifier<SessionView> {
           ref.read(appLocalizationsProvider).pokeReceived(from, message),
           tone: NoticeTone.info,
         );
-      case CoreEvent_ClientJoined(
-        :final id,
-        :final nickname,
-        :final uid,
-        :final channelId,
-        :final isStreaming,
-      ):
-        final sameIdExisting = current.clients
-            .where((client) => client.id == id)
-            .firstOrNull;
-        final existing =
-            sameIdExisting ??
-            current.clients
-                .where((client) => uid.isNotEmpty && client.uid == uid)
-                .firstOrNull;
-        final others = current.clients.where((client) => client.id != id);
-        final isSelf = id == current.selfClientId;
+      case CoreEvent_ClientJoined(:final client):
         state = current.copyWith(
           clients: [
-            ...others,
-            ClientView(
-              id: id,
-              nickname: nickname,
-              uid: uid,
-              channelId: channelId,
-              inputMuted: isSelf ? (current.muted || current.deafened) : null,
-              outputMuted: isSelf ? current.deafened : null,
-              away: isSelf ? current.away : null,
-              isStreaming:
-                  isStreaming || (sameIdExisting?.isStreaming ?? false),
-              clientType: existing?.clientType ?? ClientType.standard,
-              appName: existing?.appName,
-              appVersion: existing?.appVersion,
-              capabilities: existing?.capabilities ?? const [],
-              botCommands: existing?.botCommands,
-              botCommandPrefix: existing?.botCommandPrefix,
-            ),
+            ...current.clients.where((existing) => existing.id != client.id),
+            client,
           ],
         );
       case CoreEvent_ClientLeft(:final id):
         state = current.copyWith(
           clients: current.clients.where((client) => client.id != id).toList(),
         );
-      case CoreEvent_ClientMoved(:final id, :final channelId):
-        if (id == current.selfClientId && channelId != current.selfChannelId) {
+      case CoreEvent_ClientMoved(:final client):
+        if (client.id == current.selfClientId &&
+            client.channelId != current.selfChannelId) {
           unawaited(ref.read(streamViewerProvider.notifier).closeSession());
           unawaited(
             ref
@@ -1204,34 +1126,10 @@ class SessionController extends Notifier<SessionView> {
         }
         state = current.copyWith(
           clients: [
-            for (final client in current.clients)
-              if (client.id == id)
-                ClientView(
-                  id: client.id,
-                  nickname: client.nickname,
-                  uid: client.uid,
-                  channelId: channelId,
-                  // 移动事件不带任何标志，沿用移动前的已知值。
-                  inputMuted: client.inputMuted,
-                  outputMuted: client.outputMuted,
-                  away: client.away,
-                  awayMessage: client.awayMessage,
-                  isStreaming: client.isStreaming,
-                  clientType: client.clientType,
-                  appName: client.appName,
-                  appVersion: client.appVersion,
-                  capabilities: client.capabilities,
-                  botCommands: client.botCommands,
-                  botCommandPrefix: client.botCommandPrefix,
-                )
-              else
-                client,
+            for (final existing in current.clients)
+              if (existing.id == client.id) client else existing,
           ],
         );
-        if (state.chatScope == ChatScope.channel &&
-            channelId == state.selfChannelId) {
-          _probeChannelBots();
-        }
       case CoreEvent_ClientUpdated(
         :final id,
         :final inputMuted,
@@ -1239,38 +1137,32 @@ class SessionController extends Notifier<SessionView> {
         :final away,
         :final awayMessage,
       ):
-        // 事件只带变化字段，null 表示本次没提，不清除已知值；自身行以本地语音意图为准。
-        final updatedClients = [
-          for (final client in current.clients)
-            if (client.id == id)
-              ClientView(
-                id: client.id,
-                nickname: client.nickname,
-                uid: client.uid,
-                channelId: client.channelId,
-                inputMuted: inputMuted ?? client.inputMuted,
-                outputMuted: outputMuted ?? client.outputMuted,
-                away: away ?? client.away,
-                awayMessage: awayMessage ?? client.awayMessage,
-                isStreaming: client.isStreaming,
-                clientType: client.clientType,
-                appName: client.appName,
-                appVersion: client.appVersion,
-                capabilities: client.capabilities,
-                botCommands: client.botCommands,
-                botCommandPrefix: client.botCommandPrefix,
-              )
-            else
-              client,
-        ];
+        // 事件只带变化字段，null 表示本次没提，不清除已知值；自身标志由 Rust 在事件里算好。
         state = current.copyWith(
-          clients: _syncSelfClientFlags(
-            updatedClients,
-            selfClientId: current.selfClientId,
-            muted: current.muted,
-            deafened: current.deafened,
-            away: current.away,
-          ),
+          clients: [
+            for (final client in current.clients)
+              if (client.id == id)
+                ClientView(
+                  id: client.id,
+                  nickname: client.nickname,
+                  uid: client.uid,
+                  channelId: client.channelId,
+                  inputMuted: inputMuted ?? client.inputMuted,
+                  outputMuted: outputMuted ?? client.outputMuted,
+                  away: away ?? client.away,
+                  awayMessage: awayMessage ?? client.awayMessage,
+                  isStreaming: client.isStreaming,
+                  clientType: client.clientType,
+                  appName: client.appName,
+                  appVersion: client.appVersion,
+                  capabilities: client.capabilities,
+                  botCommands: client.botCommands,
+                  botCommandsLoaded: client.botCommandsLoaded,
+                  botCommandPrefix: client.botCommandPrefix,
+                )
+              else
+                client,
+          ],
         );
       case CoreEvent_Voice(state: final voice):
         state = current.copyWith(
@@ -1280,13 +1172,6 @@ class SessionController extends Notifier<SessionView> {
           pttMode: voice.pttMode,
           voiceInputReady: voice.inputReady,
           voiceOutputReady: voice.outputReady,
-          clients: _syncSelfClientFlags(
-            current.clients,
-            selfClientId: current.selfClientId,
-            muted: voice.muted,
-            deafened: voice.deafened,
-            away: voice.away,
-          ),
         );
         final message = voice.message;
         if (message == null) {
@@ -1298,9 +1183,10 @@ class SessionController extends Notifier<SessionView> {
           );
         }
       case CoreEvent_AudioDevicesReset(:final input, :final output):
-        ref
-            .read(audioSelectionProvider.notifier)
-            .resetFallback(input: input, output: output);
+        ref.read(audioDeviceResetBusProvider).add((
+          input: input,
+          output: output,
+        ));
       case CoreEvent_Speaking(:final clientIds):
         state = current.copyWith(speaking: clientIds.toSet());
       case CoreEvent_SelfSpeaking(:final speaking):
@@ -1496,42 +1382,6 @@ class SessionController extends Notifier<SessionView> {
           _notifyFailure(text);
         }
     }
-  }
-
-  List<ClientView> _syncSelfClientFlags(
-    List<ClientView> clients, {
-    required int? selfClientId,
-    required bool muted,
-    required bool deafened,
-    required bool away,
-  }) {
-    if (selfClientId == null) {
-      return clients;
-    }
-    final inputMuted = muted || deafened;
-    return [
-      for (final client in clients)
-        if (client.id == selfClientId)
-          ClientView(
-            id: client.id,
-            nickname: client.nickname,
-            uid: client.uid,
-            channelId: client.channelId,
-            inputMuted: inputMuted,
-            outputMuted: deafened,
-            away: away,
-            awayMessage: client.awayMessage,
-            isStreaming: client.isStreaming,
-            clientType: client.clientType,
-            appName: client.appName,
-            appVersion: client.appVersion,
-            capabilities: client.capabilities,
-            botCommands: client.botCommands,
-            botCommandPrefix: client.botCommandPrefix,
-          )
-        else
-          client,
-    ];
   }
 }
 

@@ -1,104 +1,138 @@
 import 'dart:async';
 
 import 'package:flspeak_ffi/flspeak_ffi.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'providers.dart';
 
-/// 已选的音频设备。FFI 只返回设备列表、不返回当前选择，所以选择结果由界面记住。
-@immutable
-class AudioDeviceSelection {
-  const AudioDeviceSelection({
-    this.inputId,
-    this.inputName,
-    this.outputId,
-    this.outputName,
-  });
-
-  final String? inputId;
-  final String? inputName;
-  final String? outputId;
-  final String? outputName;
-
-  AudioDeviceSelection withInput(AudioDeviceView? device) =>
-      AudioDeviceSelection(
-        inputId: device?.id,
-        inputName: device?.name,
-        outputId: outputId,
-        outputName: outputName,
-      );
-
-  AudioDeviceSelection withOutput(AudioDeviceView? device) =>
-      AudioDeviceSelection(
-        inputId: inputId,
-        inputName: inputName,
-        outputId: device?.id,
-        outputName: device?.name,
-      );
-}
-
-/// 选择器里「系统默认」也是合法结果，必须和「用户直接关掉对话框」区分开，
-/// 因此用一个包装类型表示系统默认，而不是复用 null。
-@immutable
+/// 设置页选择音频设备弹窗的返回值；`device == null` 代表跟随系统默认。
 class AudioDeviceChoice {
   const AudioDeviceChoice(this.device);
 
   final AudioDeviceView? device;
 }
 
-final audioSelectionProvider =
-    NotifierProvider<AudioSelectionController, AudioDeviceSelection>(
-      AudioSelectionController.new,
-    );
+/// 从 Rust 返回的音频设备列表中解析当前生效的输入/输出设备。
+extension AudioDevicesViewSelection on AudioDevicesView {
+  AudioDeviceView? get currentInput => _findDevice(inputs, currentInputId);
 
-class AudioSelectionController extends Notifier<AudioDeviceSelection> {
-  Future<void> _selectionCompleted = Future.value();
+  AudioDeviceView? get currentOutput => _findDevice(outputs, currentOutputId);
 
-  @override
-  AudioDeviceSelection build() => const AudioDeviceSelection();
+  String? get currentInputName => currentInput?.name;
 
-  Future<void> selectInput(AudioDeviceView? device) =>
-      _apply((current) => current.withInput(device));
+  String? get currentOutputName => currentOutput?.name;
 
-  Future<void> selectOutput(AudioDeviceView? device) =>
-      _apply((current) => current.withOutput(device));
-
-  void resetFallback({bool input = false, bool output = false}) {
-    if (!input && !output) return;
-    var next = state;
-    if (input) next = next.withInput(null);
-    if (output) next = next.withOutput(null);
-    state = next;
-  }
-
-  Future<void> _apply(
-    AudioDeviceSelection Function(AudioDeviceSelection) update,
-  ) async {
-    final previous = _selectionCompleted;
-    final completed = Completer<void>();
-    _selectionCompleted = completed.future;
-    try {
-      await previous;
-      if (!ref.mounted) return;
-      // 两个设备一起提交；排到本次操作时再合并最近一次成功的选择。
-      final next = update(state);
-      await ref
-          .read(coreSessionProvider)
-          .setAudioDevices(input: next.inputId, output: next.outputId);
-      if (ref.mounted) state = next;
-    } finally {
-      completed.complete();
-    }
-  }
+  AudioDevicesView copyWithSelection({
+    String? currentInputId,
+    String? currentOutputId,
+  }) => AudioDevicesView(
+    inputs: inputs,
+    outputs: outputs,
+    currentInputId: currentInputId,
+    currentOutputId: currentOutputId,
+  );
 }
 
-/// 设备列表。只在打开设备选择器时枚举：页面进场就调 FFI 没有意义，也避免设置页
-/// 仅仅因为渲染就把原生会话拉起来。
-///
-/// 关闭 Riverpod 3 的自动重试：设备不可用通常是稳定状态（没有声卡、权限被拒），
-/// 自动重试只会反复打 FFI；重新打开选择器会得到新的 autoDispose 实例，等于重试。
-final audioDevicesProvider = FutureProvider.autoDispose<AudioDevicesView>(
-  (ref) => ref.watch(coreSessionProvider).listAudioDevices(),
-  retry: (retryCount, error) => null,
-);
+AudioDeviceView? _findDevice(List<AudioDeviceView> devices, String? id) {
+  if (id == null) {
+    return null;
+  }
+  for (final device in devices) {
+    if (device.id == id) {
+      return device;
+    }
+  }
+  return null;
+}
+
+/// 向当前挂载的音频设备控制器广播后端回退通知，避免在未打开语音设置时提前加载设备列表。
+final audioDeviceResetBusProvider =
+    Provider<StreamController<({bool input, bool output})>>((ref) {
+      final controller =
+          StreamController<({bool input, bool output})>.broadcast(sync: true);
+      ref.onDispose(controller.close);
+      return controller;
+    });
+
+/// 由 Rust 提供并持久化的音频设备列表与当前选择。
+final audioDevicesProvider =
+    AsyncNotifierProvider.autoDispose<AudioDevicesController, AudioDevicesView>(
+      AudioDevicesController.new,
+      retry: (retryCount, error) => null,
+    );
+
+class AudioDevicesController extends AsyncNotifier<AudioDevicesView> {
+  Future<void> _pending = Future<void>.value();
+
+  @override
+  Future<AudioDevicesView> build() {
+    final subscription = ref
+        .read(audioDeviceResetBusProvider)
+        .stream
+        .listen(
+          (event) => resetFallback(input: event.input, output: event.output),
+        );
+    ref.onDispose(subscription.cancel);
+    return ref.read(coreSessionProvider).listAudioDevices();
+  }
+
+  Future<void> selectInput(AudioDeviceView? device) =>
+      _update(updateInput: true, input: device);
+
+  Future<void> selectOutput(AudioDeviceView? device) =>
+      _update(updateOutput: true, output: device);
+
+  /// 音频后端因设备失效回退系统默认时，清除对应的本地展示 ID。
+  void resetFallback({required bool input, required bool output}) {
+    if (!input && !output) {
+      return;
+    }
+    final current = state.asData?.value;
+    if (current == null) {
+      ref.invalidateSelf();
+      return;
+    }
+    state = AsyncData(
+      current.copyWithSelection(
+        currentInputId: input ? null : current.currentInputId,
+        currentOutputId: output ? null : current.currentOutputId,
+      ),
+    );
+  }
+
+  Future<void> _serialized(Future<void> Function() action) {
+    final next = _pending.then((_) => action());
+    _pending = next.catchError((_) {});
+    return next;
+  }
+
+  Future<void> _update({
+    bool updateInput = false,
+    AudioDeviceView? input,
+    bool updateOutput = false,
+    AudioDeviceView? output,
+  }) => _serialized(() async {
+    if (!ref.mounted) {
+      return;
+    }
+    final current = state.asData?.value ?? await future;
+    if (!ref.mounted) {
+      return;
+    }
+    final nextInputId = updateInput ? input?.id : current.currentInputId;
+    final nextOutputId = updateOutput ? output?.id : current.currentOutputId;
+    await ref
+        .read(coreSessionProvider)
+        .setAudioDevices(input: nextInputId, output: nextOutputId);
+    if (!ref.mounted) {
+      return;
+    }
+    final latest = state.asData?.value ?? current;
+    state = AsyncData(
+      latest.copyWithSelection(
+        currentInputId: nextInputId,
+        currentOutputId: nextOutputId,
+      ),
+    );
+  });
+}

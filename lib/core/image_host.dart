@@ -8,7 +8,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:pasteboard/pasteboard.dart';
 
-const maxChatImageBytes = 20 * 1024 * 1024;
 const _storageKey = 'flspeak.image-host';
 
 class ImageHostConfiguration {
@@ -112,11 +111,12 @@ class ImageInput {
       ],
     );
     if (file == null) return null;
-    if (await file.length() > maxChatImageBytes) {
+    final limit = maxChatImageBytes();
+    if (await file.length() > limit) {
       throw const ImageInputException(ImageInputFailure.tooLarge);
     }
     final bytes = await file.readAsBytes();
-    if (bytes.length > maxChatImageBytes) {
+    if (bytes.length > limit) {
       throw const ImageInputException(ImageInputFailure.tooLarge);
     }
     return PickedChatImage(bytes: bytes, name: file.name);
@@ -127,7 +127,7 @@ class ImageInput {
     if (bytes == null || bytes.isEmpty) {
       throw const ImageInputException(ImageInputFailure.clipboardEmpty);
     }
-    if (bytes.length > maxChatImageBytes) {
+    if (bytes.length > maxChatImageBytes()) {
       throw const ImageInputException(ImageInputFailure.tooLarge);
     }
     return PickedChatImage(bytes: bytes, name: 'clipboard.png');

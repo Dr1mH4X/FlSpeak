@@ -13,7 +13,8 @@ use reqwest::redirect::Policy;
 use reqwest::{Client, Url};
 use thiserror::Error;
 
-pub(crate) const MAX_IMAGE_BYTES: usize = 20 * 1024 * 1024;
+/// 聊天图片字节大小安全上限。
+pub const MAX_IMAGE_BYTES: usize = 20 * 1024 * 1024;
 const MAX_REDIRECTS: usize = 3;
 const TIMEOUT: Duration = Duration::from_secs(15);
 

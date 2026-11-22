@@ -1,15 +1,21 @@
 use super::*;
 use crate::actor::test_support::*;
 
-struct SlowImage(Arc<tokio::sync::Notify>);
+struct SlowImage {
+    started: Arc<tokio::sync::Notify>,
+    calls: Arc<std::sync::atomic::AtomicUsize>,
+}
 
 impl tsclient_rs::CommandMiddleware for SlowImage {
     fn wrap(&self, _: TestCommandHandler) -> TestCommandHandler {
-        let started = Arc::clone(&self.0);
+        let started = Arc::clone(&self.started);
+        let calls = Arc::clone(&self.calls);
         Arc::new(move |command| {
             let started = Arc::clone(&started);
+            let calls = Arc::clone(&calls);
             Box::pin(async move {
                 if command.starts_with("ftinitdownload ") {
+                    calls.fetch_add(1, Ordering::SeqCst);
                     started.notify_one();
                     tokio::time::sleep(Duration::from_millis(300)).await;
                 }
@@ -66,12 +72,16 @@ async fn avatar_negotiation_keeps_audio_and_controls_responsive() {
     tokio::task::LocalSet::new()
         .run_until(async {
             let started = Arc::new(tokio::sync::Notify::new());
+            let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
             let client = Client::new(
                 tsclient_rs::generateIdentity(0),
                 "127.0.0.1:9987".into(),
                 "test".into(),
                 tsclient_rs::ClientOptions {
-                    command_middleware: vec![Box::new(SlowImage(Arc::clone(&started)))],
+                    command_middleware: vec![Box::new(SlowImage {
+                        started: Arc::clone(&started),
+                        calls: Arc::clone(&calls),
+                    })],
                     ..Default::default()
                 },
             );
@@ -121,11 +131,9 @@ async fn avatar_negotiation_keeps_audio_and_controls_responsive() {
                 .unwrap()
                 .unwrap()
                 .unwrap();
-            // 控制命令优先抢占，正在进行的图片协商立即被打断
-            assert!(matches!(
-                result.await.unwrap(),
-                Err(SessionError::Transfer(msg)) if msg.contains("interrupted")
-            ));
+            // 控制命令优先抢占正在进行的图片协商，Rust 在 500ms 后自动重试直至收到服务端 2568 负缓存响应。
+            assert_eq!(result.await.unwrap().unwrap(), None);
+            assert_eq!(calls.load(Ordering::SeqCst), 2);
             let (reply, muted) = oneshot::channel();
             commands
                 .send(SessionCommand::SetMuted { muted: true, reply })
