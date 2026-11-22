@@ -281,6 +281,14 @@ class SessionPreferences {
 
   final String nickname;
 
+  /// 用户是否显式设置过昵称；占位昵称与旧版默认值都视为未设置。
+  bool get hasExplicitNickname {
+    final trimmed = nickname.trim();
+    return trimmed.isNotEmpty &&
+        trimmed != fallbackNickname &&
+        trimmed != _legacyFallbackNickname;
+  }
+
   /// 服务器 id → 最近一次成功连接的时间，仅用于排序与「上次连接」。
   final Map<String, DateTime> lastConnected;
 

@@ -335,4 +335,24 @@ void main() {
     });
     expect(fallback.liquidGlass, LiquidGlassMode.none);
   });
+
+  test('placeholder nicknames are not explicit', () {
+    expect(
+      const SessionPreferences(nickname: SessionPreferences.fallbackNickname)
+          .hasExplicitNickname,
+      isFalse,
+    );
+    expect(
+      const SessionPreferences(nickname: 'ts-client').hasExplicitNickname,
+      isFalse,
+    );
+    expect(
+      const SessionPreferences(nickname: '   ').hasExplicitNickname,
+      isFalse,
+    );
+    expect(
+      const SessionPreferences(nickname: '  Alice  ').hasExplicitNickname,
+      isTrue,
+    );
+  });
 }

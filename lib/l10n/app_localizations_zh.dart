@@ -474,10 +474,39 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsLogLevel => '日志等级';
 
   @override
-  String get connectTitle => '找到你的声音';
+  String connectGreetingMorning(String name) {
+    return '上午好，$name';
+  }
 
   @override
-  String get connectSubtitle => '加入熟悉的频道，让对话自然发生。';
+  String connectGreetingAfternoon(String name) {
+    return '下午好，$name';
+  }
+
+  @override
+  String connectGreetingEvening(String name) {
+    return '晚上好，$name';
+  }
+
+  @override
+  String connectGreetingLateNight(String name) {
+    return '夜深了，$name';
+  }
+
+  @override
+  String get connectGreetingHello => '你好';
+
+  @override
+  String get connectGreetingWelcomeBack => '欢迎回来';
+
+  @override
+  String get connectPromptWhere => '今天去哪聊？';
+
+  @override
+  String get connectPromptDoing => '今天做点什么？';
+
+  @override
+  String get connectPromptHopIn => '选个频道开麦？';
 
   @override
   String get serverEmptyBody => '添加服务器地址，和伙伴在同一个频道相聚。';

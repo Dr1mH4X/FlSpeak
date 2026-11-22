@@ -37,6 +37,7 @@ import '../../widgets/compact_navigation_shell.dart';
 import '../../widgets/prism.dart' hide Divider;
 import '../../widgets/scaffold/scaffold.dart';
 import 'widgets/add_server_dialog.dart';
+import 'widgets/connect_greeting.dart';
 import 'widgets/identity_card.dart';
 import 'widgets/identity_dialog.dart';
 import 'widgets/remove_server_dialog.dart';
@@ -88,7 +89,7 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
         .read(sessionViewProvider.notifier)
         .connect(
           id: profile.id,
-          nickname: ref.read(preferencesProvider).nickname,
+          nickname: ref.read(activeIdentityProvider).nickname,
         );
     if (!mounted) {
       return;
@@ -123,7 +124,7 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
     final self = view.selfClient;
     await showIdentityDialog(
       context,
-      nickname: ref.read(preferencesProvider).nickname,
+      nickname: ref.read(activeIdentityProvider).nickname,
       onRename: ref.read(preferencesProvider.notifier).setNickname,
       avatarUid: view.connected && self != null && self.uid.isNotEmpty
           ? self.uid
@@ -172,13 +173,12 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
     );
     final canManageAvatar = connected && selfUid.isNotEmpty;
     final avatarBytes = ref.watch(identityAvatarProvider);
-    final (:nickname, :lastConnected) = ref.watch(
-      preferencesProvider.select(
-        (prefs) =>
-            (nickname: prefs.nickname, lastConnected: prefs.lastConnected),
-      ),
+    final nickname = ref.watch(
+      activeIdentityProvider.select((identity) => identity.nickname),
     );
-    final scheme = context.scheme;
+    final lastConnected = ref.watch(
+      preferencesProvider.select((prefs) => prefs.lastConnected),
+    );
     final size = MediaQuery.sizeOf(context);
     final desktop = size.width >= Breakpoints.compact;
     final wide = size.width >= Breakpoints.wide;
@@ -291,19 +291,7 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
           );
 
     final horizontal = wide ? 40.0 : 20.0;
-    final intro = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(l10n.connectTitle, style: context.texts.displaySmall),
-        const SizedBox(height: 12),
-        Text(
-          l10n.connectSubtitle,
-          style: context.texts.bodyLarge?.copyWith(
-            color: scheme.onSurfaceVariant,
-          ),
-        ),
-      ],
-    );
+    const intro = ConnectGreeting();
 
     final bottomDockInset = CompactBottomInsetScope.of(context);
     final inCompactTabs = CompactRootTabScope.maybeOf(context)?.active ?? false;
@@ -358,7 +346,7 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
       level: SurfaceLevel.page,
       child: Scaffold(
         backgroundColor: context.pageColor,
-        title: desktop ? l10n.serversTitle : l10n.appName,
+        title: desktop ? l10n.homeTitle : l10n.appName,
         actions: [
           if (connected && (desktop || !inCompactTabs))
             Semantics(

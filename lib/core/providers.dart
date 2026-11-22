@@ -1545,6 +1545,37 @@ final preferencesProvider =
       PreferencesController.new,
     );
 
+/// 当前激活身份。后端目前只有一份身份，它同时是默认身份；问候与身份卡共用这一入口。
+@immutable
+class ActiveIdentity {
+  const ActiveIdentity({
+    required this.nickname,
+    required this.hasExplicitNickname,
+  });
+
+  /// 连接与身份卡使用的昵称。未设置时是持久化层的占位昵称。
+  final String nickname;
+
+  /// 问候语是否可以对昵称署名。
+  final bool hasExplicitNickname;
+}
+
+final activeIdentityProvider = Provider<ActiveIdentity>((ref) {
+  final (:nickname, :hasExplicitNickname) = ref.watch(
+    preferencesProvider.select(
+      (prefs) => (
+        nickname: prefs.nickname,
+        hasExplicitNickname: prefs.hasExplicitNickname,
+      ),
+    ),
+  );
+  final trimmed = nickname.trim();
+  return ActiveIdentity(
+    nickname: trimmed.isEmpty ? SessionPreferences.fallbackNickname : trimmed,
+    hasExplicitNickname: hasExplicitNickname,
+  );
+});
+
 /// 启动时由 `main()` 通过 FFI 预加载的自头像快照。
 final identityAvatarInitialBytesProvider = Provider<Uint8List?>((ref) => null);
 

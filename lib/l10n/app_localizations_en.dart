@@ -485,10 +485,39 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsLogLevel => 'Log level';
 
   @override
-  String get connectTitle => 'Find your people';
+  String connectGreetingMorning(String name) {
+    return 'Good morning, $name';
+  }
 
   @override
-  String get connectSubtitle => 'Your communities, one conversation away.';
+  String connectGreetingAfternoon(String name) {
+    return 'Good afternoon, $name';
+  }
+
+  @override
+  String connectGreetingEvening(String name) {
+    return 'Good evening, $name';
+  }
+
+  @override
+  String connectGreetingLateNight(String name) {
+    return 'It\'s late, $name';
+  }
+
+  @override
+  String get connectGreetingHello => 'Hello';
+
+  @override
+  String get connectGreetingWelcomeBack => 'Welcome back';
+
+  @override
+  String get connectPromptWhere => 'Where to chat today?';
+
+  @override
+  String get connectPromptDoing => 'What are we doing today?';
+
+  @override
+  String get connectPromptHopIn => 'Ready to hop in?';
 
   @override
   String get serverEmptyBody =>

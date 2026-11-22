@@ -222,8 +222,43 @@
   "settingsAudioLoading": "正在读取音频设备…",
   "settingsAutoCheckUpdate": "自动检查更新",
   "settingsLogLevel": "日志等级",
-  "connectTitle": "找到你的声音",
-  "connectSubtitle": "加入熟悉的频道，让对话自然发生。",
+  "connectGreetingMorning": "上午好，{name}",
+  "@connectGreetingMorning": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "connectGreetingAfternoon": "下午好，{name}",
+  "@connectGreetingAfternoon": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "connectGreetingEvening": "晚上好，{name}",
+  "@connectGreetingEvening": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "connectGreetingLateNight": "夜深了，{name}",
+  "@connectGreetingLateNight": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "connectGreetingHello": "你好",
+  "connectGreetingWelcomeBack": "欢迎回来",
+  "connectPromptWhere": "今天去哪聊？",
+  "connectPromptDoing": "今天做点什么？",
+  "connectPromptHopIn": "选个频道开麦？",
   "serverEmptyBody": "添加服务器地址，和伙伴在同一个频道相聚。",
   "serverSearchLabel": "搜索服务器",
   "serverSearchEmpty": "没有匹配的服务器",

@@ -17,6 +17,7 @@ import 'package:flspeak/localization.dart';
 import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/router.dart';
 import 'package:flspeak/features/connect/connect_page.dart';
+import 'package:flspeak/features/connect/widgets/connect_greeting.dart';
 import 'package:flspeak/features/connect/widgets/identity_card.dart';
 import 'package:flspeak/features/connect/widgets/server_row.dart';
 import 'package:flspeak/widgets/app_navigation_sidebar.dart';
@@ -480,7 +481,7 @@ void main() {
     }
   }
 
-  testWidgets('compact layout places the identity row below the main title', (
+  testWidgets('compact layout places the identity row below the greeting', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(600, 800);
@@ -507,7 +508,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final titleFinder = find.text('找到你的声音');
+    final titleFinder = find.byType(ConnectGreeting);
     final stripFinder = find.byType(IdentityStrip);
 
     expect(titleFinder, findsOneWidget);
@@ -597,6 +598,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Alice'), findsOneWidget);
+    expect(find.textContaining('Alice'), findsNWidgets(2));
     expect(find.text('FlSpeakUser'), findsNothing);
   });
 
@@ -1215,13 +1217,13 @@ void main() {
 
         final barTitle = find.descendant(
           of: barFinder,
-          matching: find.text(wide ? '服务器' : 'FlSpeak'),
+          matching: find.text(wide ? '主页' : 'FlSpeak'),
         );
         expect(tester.getTopLeft(barTitle).dy, greaterThanOrEqualTo(40.0));
 
-        final introTitle = find.text('找到你的声音');
+        final introGreeting = find.byType(ConnectGreeting);
         expect(
-          tester.getTopLeft(introTitle).dy,
+          tester.getTopLeft(introGreeting).dy,
           greaterThanOrEqualTo(40.0 + pageToolbarHeight),
         );
 

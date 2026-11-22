@@ -968,17 +968,59 @@ abstract class AppLocalizations {
   /// **'Log level'**
   String get settingsLogLevel;
 
-  /// No description provided for @connectTitle.
+  /// No description provided for @connectGreetingMorning.
   ///
   /// In en, this message translates to:
-  /// **'Find your people'**
-  String get connectTitle;
+  /// **'Good morning, {name}'**
+  String connectGreetingMorning(String name);
 
-  /// No description provided for @connectSubtitle.
+  /// No description provided for @connectGreetingAfternoon.
   ///
   /// In en, this message translates to:
-  /// **'Your communities, one conversation away.'**
-  String get connectSubtitle;
+  /// **'Good afternoon, {name}'**
+  String connectGreetingAfternoon(String name);
+
+  /// No description provided for @connectGreetingEvening.
+  ///
+  /// In en, this message translates to:
+  /// **'Good evening, {name}'**
+  String connectGreetingEvening(String name);
+
+  /// No description provided for @connectGreetingLateNight.
+  ///
+  /// In en, this message translates to:
+  /// **'It\'s late, {name}'**
+  String connectGreetingLateNight(String name);
+
+  /// No description provided for @connectGreetingHello.
+  ///
+  /// In en, this message translates to:
+  /// **'Hello'**
+  String get connectGreetingHello;
+
+  /// No description provided for @connectGreetingWelcomeBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Welcome back'**
+  String get connectGreetingWelcomeBack;
+
+  /// No description provided for @connectPromptWhere.
+  ///
+  /// In en, this message translates to:
+  /// **'Where to chat today?'**
+  String get connectPromptWhere;
+
+  /// No description provided for @connectPromptDoing.
+  ///
+  /// In en, this message translates to:
+  /// **'What are we doing today?'**
+  String get connectPromptDoing;
+
+  /// No description provided for @connectPromptHopIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Ready to hop in?'**
+  String get connectPromptHopIn;
 
   /// No description provided for @serverEmptyBody.
   ///

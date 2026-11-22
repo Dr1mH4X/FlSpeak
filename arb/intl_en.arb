@@ -222,8 +222,43 @@
   "settingsAudioLoading": "Reading audio devices…",
   "settingsAutoCheckUpdate": "Auto check updates",
   "settingsLogLevel": "Log level",
-  "connectTitle": "Find your people",
-  "connectSubtitle": "Your communities, one conversation away.",
+  "connectGreetingMorning": "Good morning, {name}",
+  "@connectGreetingMorning": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "connectGreetingAfternoon": "Good afternoon, {name}",
+  "@connectGreetingAfternoon": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "connectGreetingEvening": "Good evening, {name}",
+  "@connectGreetingEvening": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "connectGreetingLateNight": "It's late, {name}",
+  "@connectGreetingLateNight": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "connectGreetingHello": "Hello",
+  "connectGreetingWelcomeBack": "Welcome back",
+  "connectPromptWhere": "Where to chat today?",
+  "connectPromptDoing": "What are we doing today?",
+  "connectPromptHopIn": "Ready to hop in?",
   "serverEmptyBody": "Add a server address to join your people in a channel.",
   "serverSearchLabel": "Search servers",
   "serverSearchEmpty": "No matching servers",
