@@ -21,6 +21,7 @@ import 'package:flspeak/features/connect/widgets/identity_card.dart';
 import 'package:flspeak/features/connect/widgets/server_row.dart';
 import 'package:flspeak/widgets/app_navigation_sidebar.dart';
 import 'package:flspeak/widgets/expressive_frame.dart';
+import 'package:flspeak/widgets/monogram.dart';
 import 'package:flspeak/widgets/prism.dart';
 import 'package:flspeak/widgets/scaffold/scaffold.dart' as app_scaffold;
 
@@ -63,6 +64,51 @@ class _AvatarSessionController extends _ConnectedSessionController {
     ],
   );
 }
+
+class _PendingAvatarCore extends _FakeCore {
+  final pending = Completer<Uint8List?>();
+
+  @override
+  Future<Uint8List?> fetchAvatar({required String uid}) => pending.future;
+}
+
+final _previewAvatar = Uint8List.fromList([
+  0x89,
+  0x50,
+  0x4E,
+  0x47,
+  0x0D,
+  0x0A,
+  0x1A,
+  0x0A,
+  0x00,
+  0x00,
+  0x00,
+  0x0D,
+  0x49,
+  0x48,
+  0x44,
+  0x52,
+]);
+
+final _freshAvatar = Uint8List.fromList([
+  0x89,
+  0x50,
+  0x4E,
+  0x47,
+  0x0D,
+  0x0A,
+  0x1A,
+  0x0A,
+  0x00,
+  0x00,
+  0x00,
+  0x0D,
+  0x49,
+  0x48,
+  0x44,
+  0x53,
+]);
 
 const _switchServers = [
   ServerProfileView(id: 'a', label: 'A', host: 'a.example.com', port: 9987),
@@ -281,6 +327,111 @@ void main() {
     final l10n = lookupAppLocalizations(const Locale('en'));
     expect(find.bySemanticsLabel(l10n.avatarManage), findsNothing);
   });
+
+  testWidgets('disconnected identity card shows the cached snapshot', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          coreSessionProvider.overrideWithValue(_FakeCore()),
+          sessionViewProvider.overrideWith(_TestSessionController.new),
+          identityAvatarInitialBytesProvider.overrideWithValue(_previewAvatar),
+        ],
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('en'),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
+          home: const ConnectPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final avatar = tester.widget<IdentityAvatar>(find.byType(IdentityAvatar));
+    expect(avatar.image, _previewAvatar);
+  });
+
+  testWidgets('connected identity card shows the snapshot while loading', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final core = _PendingAvatarCore();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          coreSessionProvider.overrideWithValue(core),
+          sessionViewProvider.overrideWith(_AvatarSessionController.new),
+          identityAvatarInitialBytesProvider.overrideWithValue(_previewAvatar),
+        ],
+        child: MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('en'),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
+          home: const ConnectPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    var avatar = tester.widget<IdentityAvatar>(find.byType(IdentityAvatar));
+    expect(avatar.image, _previewAvatar);
+
+    core.pending.complete(_freshAvatar);
+    await tester.pumpAndSettle();
+    avatar = tester.widget<IdentityAvatar>(find.byType(IdentityAvatar));
+    expect(avatar.image, _freshAvatar);
+  });
+
+  testWidgets(
+    'connected identity card shows a monogram when the server has no avatar',
+    (tester) async {
+      tester.view.physicalSize = const Size(1200, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            coreSessionProvider.overrideWithValue(_FakeCore()),
+            sessionViewProvider.overrideWith(_AvatarSessionController.new),
+            identityAvatarInitialBytesProvider.overrideWithValue(
+              _previewAvatar,
+            ),
+          ],
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            locale: const Locale('en'),
+            localizationsDelegates: appLocalizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) =>
+                PrismRootScope(brightness: Brightness.light, child: child!),
+            home: const ConnectPage(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final avatar = tester.widget<IdentityAvatar>(find.byType(IdentityAvatar));
+      expect(avatar.image, isNull);
+    },
+  );
 
   for (final locale in ['zh', 'en']) {
     for (final scale in [1.0, 2.0]) {

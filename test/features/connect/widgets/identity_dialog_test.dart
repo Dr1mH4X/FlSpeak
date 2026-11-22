@@ -12,6 +12,7 @@ import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
 import 'package:flspeak/localization.dart';
 import 'package:flspeak/theme/app_theme.dart';
+import 'package:flspeak/widgets/monogram.dart';
 import 'package:flspeak/widgets/prism.dart' show TextField;
 import 'package:flspeak/features/connect/widgets/identity_dialog.dart';
 
@@ -34,10 +35,30 @@ class _AvatarSession extends SessionController {
   );
 }
 
+final _previewAvatar = Uint8List.fromList([
+  0x89,
+  0x50,
+  0x4E,
+  0x47,
+  0x0D,
+  0x0A,
+  0x1A,
+  0x0A,
+  0x00,
+  0x00,
+  0x00,
+  0x0D,
+  0x49,
+  0x48,
+  0x44,
+  0x52,
+]);
+
 void main() {
   Widget buildTestWidget({
     required String nickname,
     required ValueChanged<String> onRename,
+    Uint8List? avatarBytes,
   }) {
     return MaterialApp(
       locale: const Locale('zh'),
@@ -51,6 +72,7 @@ void main() {
               context,
               nickname: nickname,
               onRename: onRename,
+              avatarBytes: avatarBytes,
             ),
             child: const Text('Open'),
           ),
@@ -74,6 +96,29 @@ void main() {
       expect(find.text('完成'), findsOneWidget);
     },
   );
+
+  testWidgets('disconnected identity dialog shows the cached snapshot', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      buildTestWidget(
+        nickname: 'FlSpeakUser',
+        onRename: (_) {},
+        avatarBytes: _previewAvatar,
+      ),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+
+    final avatar = tester.widget<IdentityAvatar>(find.byType(IdentityAvatar));
+    expect(avatar.image, _previewAvatar);
+    expect(
+      find.bySemanticsLabel(
+        lookupAppLocalizations(const Locale('zh')).avatarManage,
+      ),
+      findsNothing,
+    );
+  });
 
   testWidgets(
     'submitting without changes closes the dialog without calling onRename',

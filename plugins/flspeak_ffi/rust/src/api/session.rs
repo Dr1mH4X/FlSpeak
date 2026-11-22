@@ -617,6 +617,10 @@ impl CoreSession {
         Ok(self.handle.fetch_avatar(uid).await?)
     }
 
+    pub async fn load_self_avatar_snapshot(&self) -> Result<Option<Vec<u8>>, CoreError> {
+        Ok(self.handle.load_self_avatar_snapshot().await?)
+    }
+
     pub async fn upload_avatar(&self, bytes: Vec<u8>) -> Result<(), CoreError> {
         self.handle
             .upload_avatar(bytes)

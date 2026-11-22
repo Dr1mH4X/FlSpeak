@@ -210,6 +210,17 @@ enum AvatarDiskJob {
         store_path: PathBuf,
         active_server_ids: Vec<String>,
     },
+    LoadSelfSnapshot {
+        store_path: PathBuf,
+        on_done: Box<dyn FnOnce(Option<Vec<u8>>) + Send>,
+    },
+    SaveSelfSnapshot {
+        store_path: PathBuf,
+        bytes: Vec<u8>,
+    },
+    ClearSelfSnapshot {
+        store_path: PathBuf,
+    },
     #[cfg(test)]
     Flush(tokio::sync::oneshot::Sender<()>),
 }
@@ -270,6 +281,30 @@ impl AvatarDiskJob {
             } => {
                 let refs: Vec<&str> = active_server_ids.iter().map(String::as_str).collect();
                 prune_orphans(&store_path, &refs);
+            }
+            AvatarDiskJob::LoadSelfSnapshot {
+                store_path,
+                on_done,
+            } => {
+                on_done(crate::self_avatar::load(&store_path));
+            }
+            AvatarDiskJob::SaveSelfSnapshot { store_path, bytes } => {
+                if let Err(error) = crate::self_avatar::save(&store_path, &bytes) {
+                    tracing::warn!(
+                        target: "session",
+                        error = %error,
+                        "failed to save the self avatar snapshot"
+                    );
+                }
+            }
+            AvatarDiskJob::ClearSelfSnapshot { store_path } => {
+                if let Err(error) = crate::self_avatar::clear(&store_path) {
+                    tracing::warn!(
+                        target: "session",
+                        error = %error,
+                        "failed to clear the self avatar snapshot"
+                    );
+                }
             }
             #[cfg(test)]
             AvatarDiskJob::Flush(reply) => {
@@ -369,6 +404,25 @@ impl AvatarDiskQueue {
             store_path,
             active_server_ids,
         });
+    }
+
+    pub(crate) fn load_self_snapshot(
+        &self,
+        store_path: PathBuf,
+        on_done: impl FnOnce(Option<Vec<u8>>) + Send + 'static,
+    ) {
+        self.dispatch(AvatarDiskJob::LoadSelfSnapshot {
+            store_path,
+            on_done: Box::new(on_done),
+        });
+    }
+
+    pub(crate) fn save_self_snapshot(&self, store_path: PathBuf, bytes: Vec<u8>) {
+        self.dispatch(AvatarDiskJob::SaveSelfSnapshot { store_path, bytes });
+    }
+
+    pub(crate) fn clear_self_snapshot(&self, store_path: PathBuf) {
+        self.dispatch(AvatarDiskJob::ClearSelfSnapshot { store_path });
     }
 
     #[cfg(test)]
@@ -622,6 +676,52 @@ mod tests {
             },
         );
         assert_eq!(rx2.await.unwrap(), None);
+
+        queue.flush().await;
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn self_avatar_snapshot_queue_is_fifo_and_survives_avatar_pruning() {
+        const PNG_A: [u8; 16] = [
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48,
+            0x44, 0x52,
+        ];
+        const PNG_B: [u8; 16] = [
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48,
+            0x44, 0x53,
+        ];
+
+        let (dir, store_path) = temp_store_path("self-snapshot");
+        let queue = AvatarDiskQueue::new();
+
+        queue.save_self_snapshot(store_path.clone(), PNG_A.to_vec());
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        queue.load_self_snapshot(store_path.clone(), move |bytes| {
+            let _ = tx.send(bytes);
+        });
+        assert_eq!(rx.await.unwrap(), Some(PNG_A.to_vec()));
+
+        queue.save_self_snapshot(store_path.clone(), PNG_B.to_vec());
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        queue.load_self_snapshot(store_path.clone(), move |bytes| {
+            let _ = tx.send(bytes);
+        });
+        assert_eq!(rx.await.unwrap(), Some(PNG_B.to_vec()));
+
+        queue.prune_orphans(store_path.clone(), Vec::new());
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        queue.load_self_snapshot(store_path.clone(), move |bytes| {
+            let _ = tx.send(bytes);
+        });
+        assert_eq!(rx.await.unwrap(), Some(PNG_B.to_vec()));
+
+        queue.clear_self_snapshot(store_path.clone());
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        queue.load_self_snapshot(store_path.clone(), move |bytes| {
+            let _ = tx.send(bytes);
+        });
+        assert_eq!(rx.await.unwrap(), None);
 
         queue.flush().await;
         let _ = std::fs::remove_dir_all(&dir);

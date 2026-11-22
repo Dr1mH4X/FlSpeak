@@ -38,6 +38,7 @@ Future<void> main() async {
   final preferences = await PreferencesStore.load(
     PreferencesStore.pathFor(storePath),
   );
+  final initialSelfAvatar = await _loadInitialSelfAvatar(session);
   await syncLogLevel(
     preferences.current.logLevel.talkerLevel,
     rustLevelId: preferences.current.logLevel.id,
@@ -48,10 +49,20 @@ Future<void> main() async {
       overrides: [
         coreSessionProvider.overrideWithValue(session),
         preferencesStoreProvider.overrideWithValue(preferences),
+        identityAvatarInitialBytesProvider.overrideWithValue(initialSelfAvatar),
         storePathProvider.overrideWithValue(storePath),
         loggingFailureProvider.overrideWithValue(logging.error),
       ],
       child: const TsClientApp(),
     ),
   );
+}
+
+Future<Uint8List?> _loadInitialSelfAvatar(CoreSession session) async {
+  try {
+    return await session.loadSelfAvatarSnapshot();
+  } on Object catch (error) {
+    logWarn('failed to preload the self avatar snapshot', error: error);
+    return null;
+  }
 }

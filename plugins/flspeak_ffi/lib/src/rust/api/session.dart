@@ -134,6 +134,8 @@ abstract class CoreSession implements RustOpaqueInterface {
 
   Future<List<ServerProfileView>> listServers();
 
+  Future<Uint8List?> loadSelfAvatarSnapshot();
+
   Future<List<MemberGroupView>> memberGroups({
     required String uid,
     required int clientId,

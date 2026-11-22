@@ -563,6 +563,23 @@ impl Actor {
                     .collect();
                 let _ = reply.send(icons);
             }
+            SessionCommand::LoadSelfAvatarSnapshot { reply } => {
+                let (tx, rx) = oneshot::channel();
+                self.avatar_disk
+                    .load_self_snapshot(self.store_path.clone(), move |bytes| {
+                        let _ = tx.send(bytes);
+                    });
+                tokio::task::spawn_local(async move {
+                    match rx.await {
+                        Ok(bytes) => {
+                            let _ = reply.send(Ok(bytes));
+                        }
+                        Err(_) => {
+                            let _ = reply.send(Err(SessionError::Closed));
+                        }
+                    }
+                });
+            }
             SessionCommand::State { reply } => {
                 let _ = reply.send(self.state.clone());
             }

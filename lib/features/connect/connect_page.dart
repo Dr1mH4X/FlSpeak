@@ -128,6 +128,7 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
       avatarUid: view.connected && self != null && self.uid.isNotEmpty
           ? self.uid
           : null,
+      avatarBytes: ref.read(identityAvatarProvider),
     );
   }
 
@@ -170,9 +171,7 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
       ),
     );
     final canManageAvatar = connected && selfUid.isNotEmpty;
-    final avatarBytes = canManageAvatar
-        ? ref.watch(memberAvatarProvider(selfUid)).asData?.value
-        : null;
+    final avatarBytes = ref.watch(identityAvatarProvider);
     final (:nickname, :lastConnected) = ref.watch(
       preferencesProvider.select(
         (prefs) =>

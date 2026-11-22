@@ -74,6 +74,57 @@ pub(crate) fn load_hit(
     }
 }
 
+/// 写入临时文件后原子替换目标；`label` 只用于错误与日志文案。
+pub(crate) fn write_atomic(
+    path: &Path,
+    bytes: &[u8],
+    sync_all: bool,
+    label: &str,
+) -> Result<(), String> {
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent)
+            .map_err(|err| format!("failed to create the {label} directory: {err}"))?;
+    }
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| format!("the {label} path is missing a file name"))?;
+    let nanos = SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let mut temp_name = file_name.to_os_string();
+    temp_name.push(format!(".{nanos}.{:016x}.tmp", rand::random::<u64>()));
+    let temp = path.with_file_name(temp_name);
+
+    let write_outcome = (|| -> Result<(), String> {
+        use std::io::Write;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp)
+            .map_err(|err| format!("failed to create a temporary {label} file: {err}"))?;
+        file.write_all(bytes)
+            .map_err(|err| format!("failed to write the {label} cache: {err}"))?;
+        if sync_all {
+            file.sync_all()
+                .map_err(|err| format!("failed to sync the {label} cache: {err}"))?;
+        }
+        drop(file);
+        std::fs::rename(&temp, path)
+            .map_err(|err| format!("failed to replace the {label} cache: {err}"))?;
+        Ok(())
+    })();
+
+    if let Err(err) = write_outcome {
+        let _ = std::fs::remove_file(&temp);
+        return Err(err);
+    }
+
+    Ok(())
+}
+
 pub(crate) fn save_atomic(
     store_path: &Path,
     spec: MediaCacheSpec,
@@ -88,46 +139,7 @@ pub(crate) fn save_atomic(
         return Err(format!("invalid {} cache data", spec.dir_name));
     }
     let dir = server_dir(store_path, spec, server_id);
-    std::fs::create_dir_all(&dir).map_err(|err| {
-        format!(
-            "failed to create the {} cache directory: {err}",
-            spec.dir_name
-        )
-    })?;
-
-    let nanos = SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    let temp = dir.join(format!(
-        "{file_name}.{nanos}.{:016x}.tmp",
-        rand::random::<u64>()
-    ));
-
-    let write_outcome = (|| -> Result<(), String> {
-        use std::io::Write;
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temp)
-            .map_err(|err| format!("failed to create a temporary {} file: {err}", spec.dir_name))?;
-        file.write_all(bytes)
-            .map_err(|err| format!("failed to write the {} cache: {err}", spec.dir_name))?;
-        if spec.sync_all {
-            file.sync_all()
-                .map_err(|err| format!("failed to sync the {} cache: {err}", spec.dir_name))?;
-        }
-        drop(file);
-        std::fs::rename(&temp, dir.join(file_name))
-            .map_err(|err| format!("failed to replace the {} cache: {err}", spec.dir_name))?;
-        Ok(())
-    })();
-
-    if let Err(err) = write_outcome {
-        let _ = std::fs::remove_file(&temp);
-        return Err(err);
-    }
-
+    write_atomic(&dir.join(file_name), bytes, spec.sync_all, spec.dir_name)?;
     Ok(dir)
 }
 

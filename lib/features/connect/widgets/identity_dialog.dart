@@ -28,6 +28,7 @@ Future<void> showIdentityDialog(
   required String nickname,
   required ValueChanged<String> onRename,
   String? avatarUid,
+  Uint8List? avatarBytes,
 }) {
   final contentKey = GlobalKey<_IdentityDialogContentState>();
 
@@ -39,6 +40,7 @@ Future<void> showIdentityDialog(
       nickname: nickname,
       onRename: onRename,
       avatarUid: avatarUid,
+      avatarBytes: avatarBytes,
     ),
     footer: (context) => ElasticButton(
       child: FilledButton(
@@ -58,11 +60,13 @@ class _IdentityDialogContent extends StatefulWidget {
     required this.nickname,
     required this.onRename,
     this.avatarUid,
+    this.avatarBytes,
   });
 
   final String nickname;
   final ValueChanged<String> onRename;
   final String? avatarUid;
+  final Uint8List? avatarBytes;
 
   @override
   State<_IdentityDialogContent> createState() => _IdentityDialogContentState();
@@ -126,11 +130,18 @@ class _IdentityDialogContentState extends State<_IdentityDialogContent> {
   }) {
     final uid = widget.avatarUid;
     if (uid == null) {
-      return IdentityAvatar(nickname: labelNickname, size: 36);
+      return IdentityAvatar(
+        nickname: labelNickname,
+        size: 36,
+        image: widget.avatarBytes,
+      );
     }
     return Consumer(
       builder: (context, ref, _) {
-        final bytes = ref.watch(memberAvatarProvider(uid)).asData?.value;
+        final avatar = ref.watch(memberAvatarProvider(uid));
+        final bytes = avatar is AsyncData<Uint8List?>
+            ? avatar.value
+            : widget.avatarBytes;
         return Semantics(
           button: true,
           label: l10n.avatarManage,

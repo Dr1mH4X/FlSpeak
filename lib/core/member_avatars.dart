@@ -205,3 +205,38 @@ final memberAvatarProvider = FutureProvider.autoDispose
         );
       });
     }, retry: (retryCount, error) => null);
+
+/// 连接页身份卡与身份对话框共用的头像来源。
+///
+/// 未连接、加载中或加载失败时回退到本机快照；服务器明确返回 `null` 时
+/// 返回 `null`，由界面显示缩写圆。
+final identityAvatarProvider = Provider<Uint8List?>((ref) {
+  final preview = ref.watch(identityAvatarPreviewProvider);
+  final (:connected, :uid) = ref.watch(
+    sessionViewProvider.select(
+      (view) => (connected: view.connected, uid: view.selfClient?.uid ?? ''),
+    ),
+  );
+  if (!connected || uid.isEmpty) {
+    return preview;
+  }
+  final avatar = ref.watch(memberAvatarProvider(uid));
+  if (avatar is AsyncData<Uint8List?>) {
+    return avatar.value;
+  }
+  return preview;
+});
+
+/// 当前连接下自头像拉取到的字节；加载中、失败或服务器无头像时为 `null`。
+final selfAvatarBytesProvider = Provider<Uint8List?>((ref) {
+  final uid = ref.watch(
+    sessionViewProvider.select(
+      (view) => view.connected ? view.selfClient?.uid ?? '' : '',
+    ),
+  );
+  if (uid.isEmpty) {
+    return null;
+  }
+  final avatar = ref.watch(memberAvatarProvider(uid));
+  return avatar is AsyncData<Uint8List?> ? avatar.value : null;
+});

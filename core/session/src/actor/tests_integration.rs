@@ -24,6 +24,44 @@ impl tsclient_rs::CommandMiddleware for SlowImage {
 }
 
 #[tokio::test]
+async fn load_self_avatar_snapshot_command_reads_the_store() {
+    const PNG: [u8; 16] = [
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44,
+        0x52,
+    ];
+
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let temp = std::env::temp_dir().join(format!(
+                "flspeak-self-avatar-command-{:x}",
+                rand::random::<u64>()
+            ));
+            let _ = std::fs::create_dir_all(&temp);
+            let store_path = temp.join("preferences.json");
+            crate::self_avatar::save(&store_path, &PNG).unwrap();
+
+            let mut actor = audio_actor();
+            actor.store_path = store_path;
+            let (commands, rx) = mpsc::unbounded_channel();
+            let task = tokio::task::spawn_local(async move {
+                actor.run(rx).await;
+            });
+
+            let (reply, result) = oneshot::channel();
+            commands
+                .send(SessionCommand::LoadSelfAvatarSnapshot { reply })
+                .unwrap();
+            assert_eq!(result.await.unwrap().unwrap(), Some(PNG.to_vec()));
+
+            commands.send(SessionCommand::Shutdown).unwrap();
+            task.await.unwrap();
+
+            let _ = std::fs::remove_dir_all(&temp);
+        })
+        .await;
+}
+
+#[tokio::test]
 async fn avatar_negotiation_keeps_audio_and_controls_responsive() {
     tokio::task::LocalSet::new()
         .run_until(async {

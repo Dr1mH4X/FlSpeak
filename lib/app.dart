@@ -14,6 +14,7 @@ import 'package:flspeak_ffi/flspeak_ffi.dart' show UpdateStateView;
 import 'core/global_hotkey.dart';
 import 'core/hotkey_codes.dart';
 import 'core/logging/logger.dart';
+import 'core/member_avatars.dart';
 import 'core/notices.dart';
 import 'core/preferences.dart';
 import 'core/providers.dart';
@@ -546,6 +547,24 @@ class _StartupLoggingNoticeState extends ConsumerState<_StartupLoggingNotice> {
   Widget build(BuildContext context) => widget.child;
 }
 
+/// 应用根部的自头像快照写入点；返回同一个 child，不重建页面子树。
+class _IdentityAvatarSync extends ConsumerWidget {
+  const _IdentityAvatarSync({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(selfAvatarBytesProvider);
+    ref.listen<Uint8List?>(selfAvatarBytesProvider, (_, bytes) {
+      if (bytes != null) {
+        unawaited(ref.read(identityAvatarPreviewProvider.notifier).refresh());
+      }
+    });
+    return child;
+  }
+}
+
 /// 窗口框架：macOS 窄屏画 28px 标题条，宽屏让页面铺到窗口上沿。
 /// 红绿灯的让位通过 [ViewScope] 传给侧栏与通栏页面。
 class _WindowFrame extends StatelessWidget {
@@ -589,7 +608,7 @@ class _WindowFrame extends StatelessWidget {
               isMacOS: isMacOS,
               isWindows: isWindows,
               isMobileView: isMobileView,
-              child: child,
+              child: _IdentityAvatarSync(child: child),
             ),
           ),
         ),

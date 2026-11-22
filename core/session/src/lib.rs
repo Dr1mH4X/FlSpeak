@@ -20,6 +20,7 @@ mod network;
 pub use network::NetworkTelemetry;
 pub mod notices;
 mod proxy;
+mod self_avatar;
 mod server_icons;
 pub mod settings;
 mod store;
@@ -342,6 +343,9 @@ pub enum SessionCommand {
     },
     ListServerIcons {
         reply: oneshot::Sender<Vec<ServerIconView>>,
+    },
+    LoadSelfAvatarSnapshot {
+        reply: oneshot::Sender<Result<Option<Vec<u8>>, SessionError>>,
     },
     State {
         reply: oneshot::Sender<SessionState>,
@@ -781,6 +785,12 @@ impl SessionHandle {
         let (reply, rx) = oneshot::channel();
         self.send(SessionCommand::ListServerIcons { reply })?;
         rx.await.map_err(|_| SessionError::Closed)
+    }
+
+    pub async fn load_self_avatar_snapshot(&self) -> Result<Option<Vec<u8>>, SessionError> {
+        let (reply, rx) = oneshot::channel();
+        self.send(SessionCommand::LoadSelfAvatarSnapshot { reply })?;
+        rx.await.map_err(|_| SessionError::Closed)?
     }
 
     pub async fn state(&self) -> Result<SessionState, SessionError> {

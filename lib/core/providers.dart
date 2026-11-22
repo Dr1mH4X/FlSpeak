@@ -672,13 +672,25 @@ class SessionController extends Notifier<SessionView> {
   }
 
   /// 上传当前服务器上的自己的头像；错误由 `_run` 统一转成 NoticeCenter 文案。
-  Future<bool> uploadAvatar(Uint8List bytes) {
-    return _run(() => ref.read(coreSessionProvider).uploadAvatar(bytes: bytes));
+  Future<bool> uploadAvatar(Uint8List bytes) async {
+    final saved = await _run(
+      () => ref.read(coreSessionProvider).uploadAvatar(bytes: bytes),
+    );
+    if (saved && ref.mounted) {
+      await ref.read(identityAvatarPreviewProvider.notifier).refresh();
+    }
+    return saved;
   }
 
   /// 删除当前服务器上的自己的头像。
-  Future<bool> deleteAvatar() {
-    return _run(() => ref.read(coreSessionProvider).deleteAvatar());
+  Future<bool> deleteAvatar() async {
+    final deleted = await _run(
+      () => ref.read(coreSessionProvider).deleteAvatar(),
+    );
+    if (deleted && ref.mounted) {
+      await ref.read(identityAvatarPreviewProvider.notifier).refresh();
+    }
+    return deleted;
   }
 
   Future<PickedChatImage?> pickChatImage({required bool paste}) async {
@@ -1531,6 +1543,45 @@ final preferencesStoreProvider = Provider<PreferencesStore>(
 final preferencesProvider =
     NotifierProvider<PreferencesController, SessionPreferences>(
       PreferencesController.new,
+    );
+
+/// 启动时由 `main()` 通过 FFI 预加载的自头像快照。
+final identityAvatarInitialBytesProvider = Provider<Uint8List?>((ref) => null);
+
+/// 本机保留的最近一次自头像。离线、加载中或加载失败时由界面读取。
+class IdentityAvatarPreviewController extends Notifier<Uint8List?> {
+  int _request = 0;
+
+  @override
+  Uint8List? build() => ref.watch(identityAvatarInitialBytesProvider);
+
+  /// 通过 FFI 重新读取 Rust 侧快照；并发调用时只有最后一次结果生效。
+  Future<void> refresh() async {
+    final request = ++_request;
+    Uint8List? bytes;
+    try {
+      bytes = await ref.read(coreSessionProvider).loadSelfAvatarSnapshot();
+    } on Object catch (error) {
+      logWarn('failed to load the self avatar snapshot over FFI', error: error);
+      return;
+    }
+    if (!ref.mounted || request != _request) {
+      return;
+    }
+    final current = state;
+    if (current == null && bytes == null) {
+      return;
+    }
+    if (current != null && bytes != null && listEquals(current, bytes)) {
+      return;
+    }
+    state = bytes;
+  }
+}
+
+final identityAvatarPreviewProvider =
+    NotifierProvider<IdentityAvatarPreviewController, Uint8List?>(
+      IdentityAvatarPreviewController.new,
     );
 
 class PreferencesController extends Notifier<SessionPreferences> {

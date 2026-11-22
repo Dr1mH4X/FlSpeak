@@ -398,6 +398,10 @@ impl Actor {
             return;
         }
         if let Some(bytes) = bytes {
+            if self.self_uid_from_snapshot().as_deref() == Some(uid.as_str()) {
+                self.avatar_disk
+                    .save_self_snapshot(self.store_path.clone(), bytes.clone());
+            }
             if let Some(waiters) = self.in_flight_avatars.remove(&key) {
                 for reply in waiters {
                     let _ = reply.send(Ok(Some(bytes.clone())));
@@ -456,6 +460,10 @@ impl Actor {
         }
         match result {
             Ok(bytes) => {
+                if self.self_uid_from_snapshot().as_deref() == Some(uid.as_str()) {
+                    self.avatar_disk
+                        .save_self_snapshot(self.store_path.clone(), bytes.clone());
+                }
                 self.avatar_disk.save(
                     self.store_path.clone(),
                     server_id,
@@ -791,6 +799,16 @@ impl Actor {
         Ok(())
     }
 
+    fn self_uid_from_snapshot(&self) -> Option<String> {
+        let self_id = self.self_client_id?;
+        let (_, clients) = self.last_snapshot.as_ref()?;
+        clients
+            .iter()
+            .find(|client| client.id == self_id)
+            .map(|client| client.uid.clone())
+            .filter(|uid| !uid.is_empty())
+    }
+
     async fn self_uid(&mut self, client: &Client) -> Result<String, SessionError> {
         let Some(self_id) = self.self_client_id else {
             return Err(SessionError::AvatarUnavailable);
@@ -842,6 +860,8 @@ impl Actor {
             // 磁盘队列顺序为 remove -> save，后续 load_hit 能命中新图。
             self.record_avatar_hash(uid, Some(md5.clone()), true);
         }
+        self.avatar_disk
+            .save_self_snapshot(self.store_path.clone(), bytes.clone());
         if let Some(server_id) = self.active_server_id.clone() {
             self.avatar_disk.save(
                 self.store_path.clone(),
@@ -856,6 +876,8 @@ impl Actor {
     fn apply_avatar_delete(&mut self, uid: &str) {
         // 删除结果已由服务器确认，负缓存不应再阻止后续读取。
         self.avatar_negative_cache.remove(uid);
+        self.avatar_disk
+            .clear_self_snapshot(self.store_path.clone());
         self.record_avatar_hash(uid, None, true);
     }
 }
@@ -950,6 +972,22 @@ impl AsyncRead for ProgressReader {
 mod tests {
     use super::*;
     use crate::actor::test_support::*;
+
+    const SELF_AVATAR_PNG: [u8; 16] = [
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44,
+        0x52,
+    ];
+
+    fn install_self_client(actor: &mut Actor, uid: &str) {
+        actor.self_client_id = Some(1);
+        actor.last_snapshot = Some((
+            Vec::new(),
+            vec![ClientView::from(ClientInfo {
+                uid: uid.to_string(),
+                ..client_info(1, 5, "Self")
+            })],
+        ));
+    }
 
     #[tokio::test]
     async fn active_download_is_cancelled_promptly_on_disconnect() {
@@ -1678,6 +1716,163 @@ mod tests {
                 actor.apply_avatar_delete(uid);
                 actor.avatar_disk.flush().await;
                 assert!(events.try_recv().is_err());
+
+                let _ = std::fs::remove_dir_all(&temp);
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn self_avatar_upload_saves_snapshot_and_delete_clears_it() {
+        tokio::task::LocalSet::new()
+            .run_until(async {
+                let temp = std::env::temp_dir().join(format!(
+                    "flspeak-actor-self-avatar-upload-{:x}",
+                    rand::random::<u64>()
+                ));
+                let _ = std::fs::create_dir_all(&temp);
+                let mut actor = audio_actor();
+                actor.store_path = temp.join("preferences.json");
+                actor.active_server_id = Some("a.example:9987".into());
+                let uid = "self-avatar-uid";
+
+                actor.apply_avatar_upload(
+                    uid,
+                    "0123456789abcdef0123456789abcdef".into(),
+                    SELF_AVATAR_PNG.to_vec(),
+                );
+                actor.avatar_disk.flush().await;
+                assert_eq!(
+                    crate::self_avatar::load(&actor.store_path),
+                    Some(SELF_AVATAR_PNG.to_vec())
+                );
+
+                actor.apply_avatar_delete(uid);
+                actor.avatar_disk.flush().await;
+                assert_eq!(crate::self_avatar::load(&actor.store_path), None);
+
+                let _ = std::fs::remove_dir_all(&temp);
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn fetched_self_avatar_updates_snapshot_and_disconnect_keeps_it() {
+        tokio::task::LocalSet::new()
+            .run_until(async {
+                let temp = std::env::temp_dir().join(format!(
+                    "flspeak-actor-self-avatar-fetch-{:x}",
+                    rand::random::<u64>()
+                ));
+                let _ = std::fs::create_dir_all(&temp);
+                let mut actor = audio_actor();
+                actor.store_path = temp.join("preferences.json");
+                actor.active_server_id = Some("a.example:9987".into());
+                let uid = "self-avatar-uid";
+                install_self_client(&mut actor, uid);
+
+                let (reply, rx) = oneshot::channel();
+                actor.in_flight_avatars.insert(
+                    (
+                        actor.connection_epoch,
+                        "a.example:9987".into(),
+                        uid.into(),
+                        0,
+                    ),
+                    vec![reply],
+                );
+                actor.handle_avatar_fetched(AvatarFetchOutcome {
+                    epoch: actor.connection_epoch,
+                    server_id: "a.example:9987".into(),
+                    uid: uid.into(),
+                    revision: 0,
+                    avatar_hash: Some("h1".into()),
+                    result: Ok(SELF_AVATAR_PNG.to_vec()),
+                });
+                actor.avatar_disk.flush().await;
+                assert_eq!(rx.await.unwrap().unwrap(), Some(SELF_AVATAR_PNG.to_vec()));
+                assert_eq!(
+                    crate::self_avatar::load(&actor.store_path),
+                    Some(SELF_AVATAR_PNG.to_vec())
+                );
+
+                actor.reset_avatar_session_state();
+                actor.avatar_disk.flush().await;
+                assert_eq!(
+                    crate::self_avatar::load(&actor.store_path),
+                    Some(SELF_AVATAR_PNG.to_vec())
+                );
+
+                let _ = std::fs::remove_dir_all(&temp);
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn self_avatar_disk_hit_writes_snapshot_and_missing_fetch_keeps_it() {
+        tokio::task::LocalSet::new()
+            .run_until(async {
+                let temp = std::env::temp_dir().join(format!(
+                    "flspeak-actor-self-avatar-hit-{:x}",
+                    rand::random::<u64>()
+                ));
+                let _ = std::fs::create_dir_all(&temp);
+                let mut actor = audio_actor();
+                actor.store_path = temp.join("preferences.json");
+                actor.active_server_id = Some("a.example:9987".into());
+                let uid = "self-avatar-uid";
+                install_self_client(&mut actor, uid);
+
+                let (reply, rx) = oneshot::channel();
+                actor.in_flight_avatars.insert(
+                    (
+                        actor.connection_epoch,
+                        "a.example:9987".into(),
+                        uid.into(),
+                        0,
+                    ),
+                    vec![reply],
+                );
+                actor.handle_avatar_disk_loaded(AvatarDiskLoad {
+                    epoch: actor.connection_epoch,
+                    server_id: "a.example:9987".into(),
+                    uid: uid.into(),
+                    revision: 0,
+                    avatar_hash: Some("h1".into()),
+                    remote_path: "/avatar_self".into(),
+                    bytes: Some(SELF_AVATAR_PNG.to_vec()),
+                });
+                actor.avatar_disk.flush().await;
+                assert_eq!(rx.await.unwrap().unwrap(), Some(SELF_AVATAR_PNG.to_vec()));
+                assert_eq!(
+                    crate::self_avatar::load(&actor.store_path),
+                    Some(SELF_AVATAR_PNG.to_vec())
+                );
+
+                let (reply, rx) = oneshot::channel();
+                actor.in_flight_avatars.insert(
+                    (
+                        actor.connection_epoch,
+                        "a.example:9987".into(),
+                        uid.into(),
+                        0,
+                    ),
+                    vec![reply],
+                );
+                actor.handle_avatar_fetched(AvatarFetchOutcome {
+                    epoch: actor.connection_epoch,
+                    server_id: "a.example:9987".into(),
+                    uid: uid.into(),
+                    revision: 0,
+                    avatar_hash: Some("h1".into()),
+                    result: Err(ImageFetchError::NotFound("gone".into())),
+                });
+                actor.avatar_disk.flush().await;
+                assert!(rx.await.unwrap().unwrap().is_none());
+                assert_eq!(
+                    crate::self_avatar::load(&actor.store_path),
+                    Some(SELF_AVATAR_PNG.to_vec())
+                );
 
                 let _ = std::fs::remove_dir_all(&temp);
             })
