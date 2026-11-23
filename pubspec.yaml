@@ -1,7 +1,7 @@
 name: flspeak
 description: flspeak
 publish_to: 'none'
-version: 0.1.14+1
+version: 0.1.15+1
 
 environment:
   sdk: ^3.13.4
