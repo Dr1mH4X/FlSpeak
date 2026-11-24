@@ -22,7 +22,14 @@ const INCOMING_CAPACITY: usize = 256;
 const IO_TICK_MS: u64 = 10;
 const CAPTURE_POLL_MS: u64 = 5;
 const PLAYBACK_POLL_MS: u64 = 5;
+#[cfg(target_os = "android")]
+pub const PLAYBACK_TARGET_WATERMARK_MS: u64 = 40;
+#[cfg(not(target_os = "android"))]
 pub const PLAYBACK_TARGET_WATERMARK_MS: u64 = 25;
+
+#[cfg(target_os = "android")]
+const MAX_PLAYBACK_TICKS_PER_WAKE: usize = 4;
+#[cfg(not(target_os = "android"))]
 const MAX_PLAYBACK_TICKS_PER_WAKE: usize = 2;
 const CATCHUP_PACING_MS: u64 = 2;
 

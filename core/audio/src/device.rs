@@ -25,6 +25,9 @@ use crate::recovery::{
 const CAPTURE_QUEUE_CAPACITY: usize = 48_000 * 2 * 2;
 /// 播放环形队列容量时长：按输出设备实际采样率与声道数动态分配 120ms。
 pub const PLAYBACK_QUEUE_MS: u64 = 120;
+const MAX_TRACKED_CHANNELS: usize = 8;
+const UNDERRUN_DECAY: f32 = 0.94;
+const UNDERRUN_ZERO_THRESHOLD: f32 = 1e-5;
 
 pub fn playback_queue_capacity(format: AudioFormat) -> usize {
     let frames = ((format.sample_rate_hz as u64 * PLAYBACK_QUEUE_MS) / 1000).max(1) as usize;
@@ -425,6 +428,37 @@ fn build_output_stream(
     }
 }
 
+fn fill_output_buffer<T>(
+    data: &mut [T],
+    channels: usize,
+    samples: &ArrayQueue<f32>,
+    last_samples: &mut [f32; MAX_TRACKED_CHANNELS],
+) where
+    T: SizedSample + FromSample<f32>,
+{
+    for frame in data.chunks_mut(channels.max(1)) {
+        for (ch, target) in frame.iter_mut().enumerate() {
+            let sample = if let Some(s) = samples.pop() {
+                if let Some(slot) = last_samples.get_mut(ch) {
+                    *slot = s;
+                }
+                s
+            } else if let Some(slot) = last_samples.get_mut(ch) {
+                let decayed = *slot * UNDERRUN_DECAY;
+                *slot = if decayed.abs() < UNDERRUN_ZERO_THRESHOLD {
+                    0.0
+                } else {
+                    decayed
+                };
+                *slot
+            } else {
+                0.0
+            };
+            *target = T::from_sample(sample);
+        }
+    }
+}
+
 fn spawn_output<T>(
     device: &cpal::Device,
     config: &cpal::StreamConfig,
@@ -436,14 +470,13 @@ where
     T: FromSample<f32>,
 {
     let error_slot = errors;
+    let channels = (config.channels as usize).max(1);
+    let mut last_samples = [0.0f32; MAX_TRACKED_CHANNELS];
     device
         .build_output_stream(
             *config,
             move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
-                for target in data.iter_mut() {
-                    let sample = samples.pop().unwrap_or(0.0);
-                    *target = T::from_sample(sample);
-                }
+                fill_output_buffer(data, channels, &samples, &mut last_samples);
             },
             move |err: cpal::Error| {
                 error_slot.set(StreamError {
@@ -576,5 +609,34 @@ mod tests {
         stream.drain_into(&mut out, 5);
         assert_eq!(out, vec![5.0, -5.0, 6.0, -6.0]);
         assert_eq!(stream.buffered_samples(), 2);
+    }
+
+    #[test]
+    fn output_callback_underrun_decays_smoothly_to_zero() {
+        let queue = Arc::new(ArrayQueue::new(16));
+        queue.push(0.8).unwrap();
+        queue.push(-0.4).unwrap();
+
+        let mut out = [0.0f32; 400];
+        let mut last = [0.0f32; MAX_TRACKED_CHANNELS];
+        fill_output_buffer(&mut out, 2, &queue, &mut last);
+
+        assert_eq!(out[0], 0.8);
+        assert_eq!(out[1], -0.4);
+        assert!((out[2] - 0.8 * UNDERRUN_DECAY).abs() < 1e-6);
+        assert!((out[3] - (-0.4 * UNDERRUN_DECAY)).abs() < 1e-6);
+
+        for frame_idx in 1..200 {
+            let prev_l = out[(frame_idx - 1) * 2].abs();
+            let curr_l = out[frame_idx * 2].abs();
+            let prev_r = out[(frame_idx - 1) * 2 + 1].abs();
+            let curr_r = out[frame_idx * 2 + 1].abs();
+            assert!(curr_l <= prev_l);
+            assert!(curr_r <= prev_r);
+        }
+        assert_eq!(out[398], 0.0);
+        assert_eq!(out[399], 0.0);
+        assert_eq!(last[0], 0.0);
+        assert_eq!(last[1], 0.0);
     }
 }

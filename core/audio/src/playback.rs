@@ -15,9 +15,6 @@ pub const MIX_FRAME_MS: u64 = 10;
 pub const MIX_SAMPLES_PER_CHANNEL: usize = 480;
 pub const MIX_SAMPLES: usize = MIX_SAMPLES_PER_CHANNEL * 2;
 
-/// 自适应目标延迟下界与上界（40ms..=160ms）。
-const MIN_TARGET_DELAY_MS: f64 = 40.0;
-const MAX_TARGET_DELAY_MS: f64 = 160.0;
 /// Jitter 单次观测上限（ms），防止异常长静音间隔污染 EWMA。
 const MAX_JITTER_SAMPLE_MS: f64 = 120.0;
 /// 乱序重排窗口（允许领先当前播放序号的最大帧差）。
@@ -32,14 +29,58 @@ const RAMP_FRAMES: usize = 192;
 const EOS_FADE_FRAMES: usize = 360;
 /// 无缓存剩余样本时合成的最短尾音淡出长度（5ms @ 48kHz）。
 const MIN_EOS_TAIL_FRAMES: usize = 240;
-/// 缓冲深度超出目标延迟的追赶触发余量（60ms）。
-const CATCHUP_SLACK: Duration = Duration::from_millis(60);
-/// 连续超限次数达到该阈值才执行追赶裁剪，避免瞬时突发误裁。
-const CATCHUP_SUSTAINED_TICKS: u32 = 3;
 /// 优先裁剪的低能量静音帧平均绝对振幅阈值。
 const LOW_ENERGY_THRESHOLD: f32 = 0.008;
 /// 第 2 帧 PLC 起的每样本指数衰减系数（约每 20ms 帧衰减至 23.6%）。
 const PLC_DECAY_PER_SAMPLE: f32 = 0.9985;
+
+/// 按音频流类型区分的抖动缓冲与追赶策略配置。
+#[derive(Debug, Clone, Copy)]
+struct JitterProfile {
+    min_target_delay_ms: f64,
+    max_target_delay_ms: f64,
+    jitter_multiplier: f64,
+    catchup_slack_ms: u64,
+    catchup_sustained_ticks: u32,
+    force_catchup_ticks: u32,
+    catchup_cooldown_ticks: u32,
+    use_inband_fec: bool,
+}
+
+impl JitterProfile {
+    const VOICE: Self = Self {
+        min_target_delay_ms: 40.0,
+        max_target_delay_ms: 100.0,
+        jitter_multiplier: 2.0,
+        catchup_slack_ms: 60,
+        catchup_sustained_ticks: 3,
+        force_catchup_ticks: 6,
+        catchup_cooldown_ticks: 4,
+        use_inband_fec: true,
+    };
+
+    const MUSIC: Self = Self {
+        min_target_delay_ms: 60.0,
+        max_target_delay_ms: 240.0,
+        jitter_multiplier: 2.5,
+        catchup_slack_ms: 120,
+        catchup_sustained_ticks: 6,
+        force_catchup_ticks: 15,
+        catchup_cooldown_ticks: 8,
+        use_inband_fec: false,
+    };
+
+    fn for_codec(codec: i32) -> Self {
+        match codec {
+            MUSIC_CODEC => Self::MUSIC,
+            _ => Self::VOICE,
+        }
+    }
+
+    fn catchup_slack(&self) -> Duration {
+        Duration::from_millis(self.catchup_slack_ms)
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct VoiceFrame {
@@ -59,6 +100,8 @@ struct JitterFrame {
 }
 
 struct Talker {
+    codec: i32,
+    profile: JitterProfile,
     decoder: OpusDecoder,
     reorder: BTreeMap<u16, JitterFrame>,
     expected_seq: Option<u16>,
@@ -73,11 +116,13 @@ struct Talker {
     jitter_ms: f64,
     target_delay_ms: f64,
     plc_frames: u32,
+    plc_hold_frames: u32,
     plc_gain: f32,
     needs_fade_in: bool,
     last_l: f32,
     last_r: f32,
     overload_streak: u32,
+    catchup_cooldown: u32,
     dropped: u64,
     fec_recovered: u64,
     plc_generated: u64,
@@ -85,8 +130,11 @@ struct Talker {
 }
 
 impl Talker {
-    fn new(now: Instant) -> Result<Self, AudioError> {
+    fn new(codec: i32, now: Instant) -> Result<Self, AudioError> {
+        let profile = JitterProfile::for_codec(codec);
         Ok(Self {
+            codec,
+            profile,
             decoder: OpusDecoder::new()?,
             reorder: BTreeMap::new(),
             expected_seq: None,
@@ -99,13 +147,15 @@ impl Talker {
             last_packet_at: now,
             last_transit: None,
             jitter_ms: 0.0,
-            target_delay_ms: MIN_TARGET_DELAY_MS,
+            target_delay_ms: profile.min_target_delay_ms,
             plc_frames: 0,
+            plc_hold_frames: 0,
             plc_gain: 1.0,
             needs_fade_in: true,
             last_l: 0.0,
             last_r: 0.0,
             overload_streak: 0,
+            catchup_cooldown: 0,
             dropped: 0,
             fec_recovered: 0,
             plc_generated: 0,
@@ -115,13 +165,18 @@ impl Talker {
 
     fn target_delay(&self) -> Duration {
         Duration::from_secs_f64(
-            self.target_delay_ms
-                .clamp(MIN_TARGET_DELAY_MS, MAX_TARGET_DELAY_MS)
-                / 1000.0,
+            self.target_delay_ms.clamp(
+                self.profile.min_target_delay_ms,
+                self.profile.max_target_delay_ms,
+            ) / 1000.0,
         )
     }
 
-    fn update_jitter(&mut self, seq: u16, received_at: Instant) {
+    fn max_expand_hold_frames(&self) -> u32 {
+        ((self.target_delay_ms / FRAME_MS as f64).ceil() as u32).clamp(1, MAX_PLC_FRAMES)
+    }
+
+    fn update_jitter(&mut self, seq: u16, received_at: Instant, advance_anchor: bool) {
         if let Some((prev_seq, prev_at)) = self.last_transit {
             let seq_delta = seq.wrapping_sub(prev_seq) as i16;
             if seq_delta != 0 && seq_delta.abs() <= MAX_REORDER_WINDOW {
@@ -143,19 +198,26 @@ impl Talker {
                 };
                 self.jitter_ms += (transit_diff - self.jitter_ms) * alpha;
 
-                let desired = (MIN_TARGET_DELAY_MS + 2.0 * self.jitter_ms)
-                    .clamp(MIN_TARGET_DELAY_MS, MAX_TARGET_DELAY_MS);
+                let desired = (self.profile.min_target_delay_ms
+                    + self.profile.jitter_multiplier * self.jitter_ms)
+                    .clamp(
+                        self.profile.min_target_delay_ms,
+                        self.profile.max_target_delay_ms,
+                    );
                 if desired > self.target_delay_ms {
                     self.target_delay_ms = desired;
                 } else {
                     self.target_delay_ms += (desired - self.target_delay_ms) * 0.05;
                 }
-                self.target_delay_ms = self
-                    .target_delay_ms
-                    .clamp(MIN_TARGET_DELAY_MS, MAX_TARGET_DELAY_MS);
+                self.target_delay_ms = self.target_delay_ms.clamp(
+                    self.profile.min_target_delay_ms,
+                    self.profile.max_target_delay_ms,
+                );
             }
         }
-        self.last_transit = Some((seq, received_at));
+        if advance_anchor {
+            self.last_transit = Some((seq, received_at));
+        }
     }
 
     fn resync_talkspurt(&mut self, frame: VoiceFrame, now: Instant) {
@@ -165,9 +227,11 @@ impl Talker {
         self.prebuffer_started_at = frame.received_at;
         self.end_of_stream_reached = false;
         self.plc_frames = 0;
+        self.plc_hold_frames = 0;
         self.plc_gain = 1.0;
         self.needs_fade_in = true;
         self.overload_streak = 0;
+        self.catchup_cooldown = 0;
         self.last_transit = Some((frame.seq, frame.received_at));
         self.last_packet_at = now.max(frame.received_at);
         self.reorder.insert(
@@ -183,6 +247,14 @@ impl Talker {
     fn push(&mut self, frame: VoiceFrame, now: Instant) {
         if !frame.is_end_of_stream && frame.data.len() <= 1 {
             return;
+        }
+        if !frame.is_end_of_stream && frame.codec != self.codec {
+            self.codec = frame.codec;
+            self.profile = JitterProfile::for_codec(frame.codec);
+            self.target_delay_ms = self.target_delay_ms.clamp(
+                self.profile.min_target_delay_ms,
+                self.profile.max_target_delay_ms,
+            );
         }
 
         let timed_out = now.saturating_duration_since(self.last_packet_at) >= TALKER_TIMEOUT;
@@ -213,6 +285,9 @@ impl Talker {
         }
 
         if diff < 0 {
+            if !frame.is_end_of_stream && diff >= -MAX_REORDER_WINDOW {
+                self.update_jitter(frame.seq, frame.received_at, false);
+            }
             self.dropped += 1;
             return;
         }
@@ -232,7 +307,7 @@ impl Talker {
         }
 
         if !frame.is_end_of_stream {
-            self.update_jitter(frame.seq, frame.received_at);
+            self.update_jitter(frame.seq, frame.received_at, true);
         }
         self.last_packet_at = now.max(frame.received_at);
         self.reorder.insert(
@@ -275,7 +350,9 @@ impl Talker {
         self.end_of_stream_reached = true;
         self.prebuffering = false;
         self.plc_frames = 0;
+        self.plc_hold_frames = 0;
         self.overload_streak = 0;
+        self.catchup_cooldown = 0;
 
         let available_frames = self.pcm.len() / 2;
         if available_frames > 0 {
@@ -331,6 +408,7 @@ impl Talker {
                 && earliest != exp
             {
                 self.expected_seq = Some(earliest);
+                self.plc_hold_frames = 0;
                 self.needs_fade_in = true;
                 self.dropped += 1;
                 return Ok(true);
@@ -346,6 +424,7 @@ impl Talker {
             Ok(n) => n,
             Err(_) => {
                 self.expected_seq = Some(next);
+                self.plc_hold_frames = 0;
                 self.dropped += 1;
                 return Ok(true);
             }
@@ -353,14 +432,34 @@ impl Talker {
         let len1 = (n1 * 2).min(self.scratch_buffer.len());
         if mean_abs(&self.scratch_buffer[..len1]) < LOW_ENERGY_THRESHOLD {
             self.expected_seq = Some(next);
+            self.plc_hold_frames = 0;
             self.needs_fade_in = true;
             self.dropped += 1;
             self.has_decoded = true;
             return Ok(true);
         }
 
+        if self.overload_streak < self.profile.force_catchup_ticks {
+            let apply_ramp = self.needs_fade_in || self.plc_frames > 0;
+            push_pcm_frames(
+                &mut self.pcm,
+                &mut self.last_l,
+                &mut self.last_r,
+                &self.scratch_buffer[..len1],
+                apply_ramp,
+            );
+            self.expected_seq = Some(next);
+            self.plc_hold_frames = 0;
+            self.needs_fade_in = false;
+            self.plc_frames = 0;
+            self.plc_gain = 1.0;
+            self.has_decoded = true;
+            return Ok(false);
+        }
+
         let second = self.reorder.remove(&next).expect("checked");
         self.expected_seq = Some(next.wrapping_add(1));
+        self.plc_hold_frames = 0;
         self.has_decoded = true;
 
         let n2 = match self
@@ -369,14 +468,17 @@ impl Talker {
         {
             Ok(n) => n,
             Err(_) => {
+                let apply_ramp = self.needs_fade_in || self.plc_frames > 0;
                 push_pcm_frames(
                     &mut self.pcm,
                     &mut self.last_l,
                     &mut self.last_r,
                     &self.scratch_buffer[..len1],
-                    self.needs_fade_in,
+                    apply_ramp,
                 );
                 self.needs_fade_in = false;
+                self.plc_frames = 0;
+                self.plc_gain = 1.0;
                 self.dropped += 1;
                 return Ok(true);
             }
@@ -384,50 +486,35 @@ impl Talker {
         let len2 = (n2 * 2).min(self.decode_buffer.len());
         self.dropped += 1;
 
-        if mean_abs(&self.decode_buffer[..len2]) < LOW_ENERGY_THRESHOLD {
-            let frames = (len1 / 2).min(len2 / 2);
+        let frames = (len1 / 2).min(len2 / 2);
+        let apply_ramp = self.needs_fade_in || self.plc_frames > 0;
+        if frames > 0 {
             let ramp = frames.min(RAMP_FRAMES);
-            if ramp > 0 {
-                let start_frame = frames - ramp;
-                for i in 0..ramp {
-                    let alpha = (i + 1) as f32 / ramp as f32;
-                    let idx = (start_frame + i) * 2;
-                    self.scratch_buffer[idx] =
-                        self.scratch_buffer[idx] * (1.0 - alpha) + self.decode_buffer[idx] * alpha;
-                    self.scratch_buffer[idx + 1] = self.scratch_buffer[idx + 1] * (1.0 - alpha)
-                        + self.decode_buffer[idx + 1] * alpha;
-                }
+            let start_frame = frames - ramp;
+            for i in 0..ramp {
+                let alpha = (i + 1) as f32 / ramp as f32;
+                let idx = (start_frame + i) * 2;
+                self.scratch_buffer[idx] =
+                    self.scratch_buffer[idx] * (1.0 - alpha) + self.decode_buffer[idx] * alpha;
+                self.scratch_buffer[idx + 1] = self.scratch_buffer[idx + 1] * (1.0 - alpha)
+                    + self.decode_buffer[idx + 1] * alpha;
             }
             push_pcm_frames(
                 &mut self.pcm,
                 &mut self.last_l,
                 &mut self.last_r,
-                &self.scratch_buffer[..len1],
-                self.needs_fade_in,
+                &self.scratch_buffer[..frames * 2],
+                apply_ramp,
             );
-            self.needs_fade_in = false;
-            self.plc_frames = 0;
-            self.plc_gain = 1.0;
-            return Ok(true);
+        } else {
+            push_pcm_frames(
+                &mut self.pcm,
+                &mut self.last_l,
+                &mut self.last_r,
+                &self.scratch_buffer[..len1],
+                apply_ramp,
+            );
         }
-
-        // 两帧均为高能量语音：跨整帧线性 Cross-fade 合并为单帧，避免跳帧爆音。
-        let frames = (len1 / 2).min(len2 / 2);
-        let denom = frames.saturating_sub(1).max(1) as f32;
-        for i in 0..frames {
-            let w = i as f32 / denom;
-            self.scratch_buffer[i * 2] =
-                self.scratch_buffer[i * 2] * (1.0 - w) + self.decode_buffer[i * 2] * w;
-            self.scratch_buffer[i * 2 + 1] =
-                self.scratch_buffer[i * 2 + 1] * (1.0 - w) + self.decode_buffer[i * 2 + 1] * w;
-        }
-        push_pcm_frames(
-            &mut self.pcm,
-            &mut self.last_l,
-            &mut self.last_r,
-            &self.scratch_buffer[..frames * 2],
-            self.needs_fade_in,
-        );
         self.needs_fade_in = false;
         self.plc_frames = 0;
         self.plc_gain = 1.0;
@@ -444,9 +531,11 @@ impl Talker {
 
         let target_delay = self.target_delay();
         if self.prebuffering {
-            let buffered_audio = Duration::from_millis(self.audio_packet_count() as u64 * FRAME_MS);
+            let extra_buffered = Duration::from_millis(
+                self.audio_packet_count().saturating_sub(1) as u64 * FRAME_MS,
+            );
             let elapsed = now.saturating_duration_since(self.prebuffer_started_at);
-            if elapsed >= target_delay || buffered_audio >= target_delay || self.has_end_of_stream()
+            if elapsed >= target_delay || extra_buffered >= target_delay || self.has_end_of_stream()
             {
                 self.prebuffering = false;
             } else {
@@ -454,10 +543,20 @@ impl Talker {
             }
         }
 
-        if self.buffered_duration() > target_delay + CATCHUP_SLACK {
+        let in_cooldown = self.catchup_cooldown > 0;
+        if in_cooldown {
+            self.catchup_cooldown -= 1;
+        }
+
+        if self.buffered_duration() > target_delay + self.profile.catchup_slack() {
             self.overload_streak = self.overload_streak.saturating_add(1);
-            if self.overload_streak >= CATCHUP_SUSTAINED_TICKS {
-                let _ = self.try_catch_up()?;
+            if !in_cooldown
+                && self.overload_streak >= self.profile.catchup_sustained_ticks
+                && self.pcm.len() < needed
+                && self.try_catch_up()?
+            {
+                self.overload_streak = 0;
+                self.catchup_cooldown = self.profile.catchup_cooldown_ticks;
             }
         } else {
             self.overload_streak = 0;
@@ -473,6 +572,7 @@ impl Talker {
 
             if let Some(frame) = self.reorder.remove(&exp) {
                 self.expected_seq = Some(exp.wrapping_add(1));
+                self.plc_hold_frames = 0;
                 if frame.is_end_of_stream {
                     self.apply_eos_fade();
                     break;
@@ -515,31 +615,39 @@ impl Talker {
                     self.apply_eos_fade();
                     break;
                 }
-                self.expected_seq = Some(next_seq);
-                let fec_result = self
-                    .decoder
-                    .decode_fec(&next_frame.data, &mut self.decode_buffer[..FRAME_SAMPLES]);
-                if let Ok(samples) = fec_result
-                    && samples > 0
-                {
-                    let count = (samples * 2).min(FRAME_SAMPLES);
-                    let apply_ramp = self.needs_fade_in || self.plc_frames > 0;
-                    push_pcm_frames(
-                        &mut self.pcm,
-                        &mut self.last_l,
-                        &mut self.last_r,
-                        &self.decode_buffer[..count],
-                        apply_ramp,
-                    );
-                    self.plc_frames = 0;
-                    self.plc_gain = 1.0;
-                    self.needs_fade_in = false;
-                    self.has_decoded = true;
-                    self.fec_recovered += 1;
-                } else {
-                    self.dropped += 1;
+                if self.plc_hold_frames > 0 {
+                    self.expected_seq = Some(next_seq);
+                    self.plc_hold_frames = 0;
+                    continue;
                 }
-                continue;
+                if self.profile.use_inband_fec {
+                    self.expected_seq = Some(next_seq);
+                    let fec_result = self
+                        .decoder
+                        .decode_fec(&next_frame.data, &mut self.decode_buffer[..FRAME_SAMPLES]);
+                    if let Ok(samples) = fec_result
+                        && samples > 0
+                    {
+                        let count = (samples * 2).min(FRAME_SAMPLES);
+                        let apply_ramp = self.needs_fade_in || self.plc_frames > 0;
+                        push_pcm_frames(
+                            &mut self.pcm,
+                            &mut self.last_l,
+                            &mut self.last_r,
+                            &self.decode_buffer[..count],
+                            apply_ramp,
+                        );
+                        self.plc_frames = 0;
+                        self.plc_hold_frames = 0;
+                        self.plc_gain = 1.0;
+                        self.needs_fade_in = false;
+                        self.has_decoded = true;
+                        self.fec_recovered += 1;
+                    } else {
+                        self.dropped += 1;
+                    }
+                    continue;
+                }
             }
 
             if self.has_decoded && !self.end_of_stream_reached && self.plc_frames < MAX_PLC_FRAMES {
@@ -549,7 +657,11 @@ impl Talker {
                 {
                     self.plc_frames += 1;
                     self.plc_generated += 1;
-                    self.expected_seq = Some(exp.wrapping_add(1));
+                    if self.plc_hold_frames < self.max_expand_hold_frames() {
+                        self.plc_hold_frames += 1;
+                    } else {
+                        self.expected_seq = Some(exp.wrapping_add(1));
+                    }
                     let frames = samples.min(FRAME_SAMPLES_PER_CHANNEL);
                     if frames > 0 {
                         if self.plc_frames >= 2 {
@@ -596,6 +708,7 @@ impl Talker {
                     });
                 if is_ready {
                     self.expected_seq = Some(earliest);
+                    self.plc_hold_frames = 0;
                     self.needs_fade_in = true;
                     continue;
                 }
@@ -760,7 +873,7 @@ impl PlaybackPipeline {
             if frame.is_end_of_stream {
                 return;
             }
-            match Talker::new(now) {
+            match Talker::new(frame.codec, now) {
                 Ok(talker) => {
                     entry.insert(talker);
                 }
@@ -860,6 +973,29 @@ mod tests {
             .collect()
     }
 
+    fn music_packets(count: usize, amplitude: f32) -> Vec<Vec<u8>> {
+        let mut encoder = OpusEncoder::new(MUSIC_CODEC).unwrap();
+        let mut output = [0u8; MAX_PACKET_BYTES];
+        (0..count)
+            .map(|frame_idx| {
+                let pcm: Vec<f32> = (0..FRAME_SAMPLES_PER_CHANNEL)
+                    .flat_map(|i| {
+                        let t = (frame_idx * FRAME_SAMPLES_PER_CHANNEL + i) as f32 / 48_000.0;
+                        let l = ((2.0 * std::f32::consts::PI * 220.0 * t).sin()
+                            + 0.5 * (2.0 * std::f32::consts::PI * 440.0 * t).sin())
+                            * amplitude;
+                        let r = ((2.0 * std::f32::consts::PI * 330.0 * t).sin()
+                            + 0.4 * (2.0 * std::f32::consts::PI * 660.0 * t).sin())
+                            * amplitude;
+                        [l, r]
+                    })
+                    .collect();
+                let written = encoder.encode(&pcm, &mut output).unwrap();
+                output[..written].to_vec()
+            })
+            .collect()
+    }
+
     fn frame(client_id: i32, seq: u16, received_at: Instant, data: Vec<u8>) -> VoiceFrame {
         VoiceFrame {
             client_id,
@@ -902,7 +1038,7 @@ mod tests {
             pipeline.set_deafened(deafened);
             pipeline.restart();
             let tick = pipeline.tick(
-                now + Duration::from_millis(MIN_TARGET_DELAY_MS as u64),
+                now + Duration::from_millis(JitterProfile::MUSIC.min_target_delay_ms as u64),
                 MIX_SAMPLES_PER_CHANNEL,
             );
             assert!(tick.talkers.is_empty());
@@ -924,20 +1060,67 @@ mod tests {
                 .iter()
                 .all(|sample| *sample == 0.0)
         );
+        assert!(
+            pipeline
+                .tick(t0 + Duration::from_millis(45), MIX_SAMPLES_PER_CHANNEL)
+                .samples
+                .iter()
+                .all(|sample| *sample == 0.0)
+        );
 
-        let tick = pipeline.tick(t0 + Duration::from_millis(45), MIX_SAMPLES_PER_CHANNEL);
+        let tick = pipeline.tick(t0 + Duration::from_millis(65), MIX_SAMPLES_PER_CHANNEL);
         assert!(tick.samples.iter().any(|sample| sample.abs() > 0.001));
         assert_eq!(tick.talkers, vec![1]);
     }
 
     #[test]
     fn burst_prebuffer_plays_without_waiting() {
-        let mut pipeline = PlaybackPipeline::new();
         let t0 = Instant::now();
-        for seq in 0..3 {
-            pipeline.push_incoming(frame(2, seq, t0, packet(0.5)), t0);
+
+        // MUSIC_CODEC 无到达抖动时起播需 60ms 额外余量（共 4 包 = 3 * 20ms）。
+        let mut music_pipeline = PlaybackPipeline::new();
+        for seq in 0..3u16 {
+            let at = t0 + Duration::from_millis(u64::from(seq) * 20);
+            music_pipeline.push_incoming(frame(2, seq, at, packet(0.5)), t0);
         }
-        let tick = pipeline.tick(t0, MIX_SAMPLES_PER_CHANNEL);
+        assert!(
+            music_pipeline
+                .tick(t0, MIX_SAMPLES_PER_CHANNEL)
+                .samples
+                .iter()
+                .all(|sample| *sample == 0.0)
+        );
+        music_pipeline.push_incoming(frame(2, 3, t0 + Duration::from_millis(60), packet(0.5)), t0);
+        let tick = music_pipeline.tick(t0, MIX_SAMPLES_PER_CHANNEL);
+        assert!(tick.samples.iter().any(|sample| sample.abs() > 0.001));
+
+        // 同时间戳突发到达会抬高 target_delay_ms，达到足够余量（6 包 = 100ms）后仍可立即起播。
+        let mut burst_music = PlaybackPipeline::new();
+        for seq in 0..6u16 {
+            burst_music.push_incoming(frame(4, seq, t0, packet(0.5)), t0);
+        }
+        let burst_tick = burst_music.tick(t0, MIX_SAMPLES_PER_CHANNEL);
+        assert!(burst_tick.samples.iter().any(|sample| sample.abs() > 0.001));
+
+        // VOICE_CODEC 无到达抖动时起播需 40ms 额外余量（共 3 包 = 2 * 20ms）。
+        let mut voice_pipeline = PlaybackPipeline::new();
+        let pkts = speech_packets(3, 0.4);
+        for (seq, pkt) in pkts.iter().take(2).enumerate() {
+            let at = t0 + Duration::from_millis(seq as u64 * 20);
+            voice_pipeline.push_incoming(voice_frame(3, seq as u16, at, pkt.clone()), t0);
+        }
+        assert!(
+            voice_pipeline
+                .tick(t0, MIX_SAMPLES_PER_CHANNEL)
+                .samples
+                .iter()
+                .all(|sample| *sample == 0.0)
+        );
+        voice_pipeline.push_incoming(
+            voice_frame(3, 2, t0 + Duration::from_millis(40), pkts[2].clone()),
+            t0,
+        );
+        let tick = voice_pipeline.tick(t0, MIX_SAMPLES_PER_CHANNEL);
         assert!(tick.samples.iter().any(|sample| sample.abs() > 0.001));
     }
 
@@ -1023,7 +1206,7 @@ mod tests {
         );
 
         let mut now = t0 + Duration::from_millis(45);
-        for _ in 0..10 {
+        for _ in 0..15 {
             pipeline.tick(now, MIX_SAMPLES_PER_CHANNEL);
             now += Duration::from_millis(MIX_FRAME_MS);
         }
@@ -1121,7 +1304,7 @@ mod tests {
 
     #[test]
     fn adaptive_target_delay_rises_quickly_on_jitter_and_decays_slowly() {
-        let mut talker = Talker::new(Instant::now()).unwrap();
+        let mut talker = Talker::new(VOICE_CODEC, Instant::now()).unwrap();
         let t0 = Instant::now();
         let pkts = speech_packets(8, 0.3);
 
@@ -1135,7 +1318,7 @@ mod tests {
         );
         let spiked_delay = talker.target_delay_ms;
         assert!(
-            spiked_delay > 55.0 && spiked_delay <= MAX_TARGET_DELAY_MS,
+            spiked_delay > 55.0 && spiked_delay <= JitterProfile::VOICE.max_target_delay_ms,
             "target_delay should rise quickly: {spiked_delay}"
         );
 
@@ -1146,7 +1329,7 @@ mod tests {
             at += Duration::from_millis(20);
         }
         assert!(talker.target_delay_ms < spiked_delay);
-        assert!(talker.target_delay_ms > MIN_TARGET_DELAY_MS + 5.0);
+        assert!(talker.target_delay_ms > JitterProfile::VOICE.min_target_delay_ms + 5.0);
     }
 
     #[test]
@@ -1171,14 +1354,23 @@ mod tests {
         }
         assert!(pipeline.talkers.get(&20).unwrap().dropped > 0);
 
-        // 2. 高能量语音积压：带 Cross-fade 跳帧消耗积压，无爆音削波。
+        // 2. 高能量语音积压：到达 force_catchup_ticks 前暂缓强裁，达到后短窗交叉淡变消耗积压且无削波。
         let mut speech_pipeline = PlaybackPipeline::new();
-        let pkts = speech_packets(10, 0.45);
+        let pkts = speech_packets(12, 0.45);
         for (seq, pkt) in pkts.into_iter().enumerate() {
             let at = t0 + Duration::from_millis(seq as u64 * 20);
             speech_pipeline.push_incoming(voice_frame(21, seq as u16, at, pkt), t0);
         }
         for i in 0..4 {
+            let tick = speech_pipeline.tick(
+                t0 + Duration::from_millis(50 + i * 10),
+                MIX_SAMPLES_PER_CHANNEL,
+            );
+            assert!(tick.samples.iter().all(|s| s.abs() <= 1.0));
+        }
+        assert_eq!(speech_pipeline.talkers.get(&21).unwrap().dropped, 0);
+
+        for i in 4..8 {
             let tick = speech_pipeline.tick(
                 t0 + Duration::from_millis(50 + i * 10),
                 MIX_SAMPLES_PER_CHANNEL,
@@ -1214,7 +1406,7 @@ mod tests {
         let t0 = Instant::now();
         pipeline.push_incoming(frame(4, 0, t0, packet(0.5)), t0);
         pipeline.set_deafened(true);
-        let tick = pipeline.tick(t0 + Duration::from_millis(50), MIX_SAMPLES_PER_CHANNEL);
+        let tick = pipeline.tick(t0 + Duration::from_millis(65), MIX_SAMPLES_PER_CHANNEL);
         assert!(tick.samples.iter().all(|sample| *sample == 0.0));
         assert_eq!(pipeline.talker_count(), 0);
     }
@@ -1245,7 +1437,7 @@ mod tests {
         for client_id in [7, 8, 9] {
             pipeline.push_incoming(frame(client_id, 0, t0, packet(client_id as f32)), t0);
         }
-        let tick = pipeline.tick(t0 + Duration::from_millis(50), MIX_SAMPLES_PER_CHANNEL);
+        let tick = pipeline.tick(t0 + Duration::from_millis(65), MIX_SAMPLES_PER_CHANNEL);
         assert!(tick.samples.iter().all(|sample| sample.abs() <= 1.0));
         assert!(tick.samples.iter().any(|sample| sample.abs() > 0.001));
     }
@@ -1415,6 +1607,322 @@ mod tests {
         assert!(
             decoded_peak > 0.01,
             "the second short utterance should decode to audible audio"
+        );
+    }
+
+    #[test]
+    fn voice_and_music_profiles_clamp_target_delay_and_switch_on_codec_change() {
+        let t0 = Instant::now();
+        let voice_pkts = speech_packets(24, 0.35);
+        let music_pkts = music_packets(24, 0.35);
+
+        // VOICE_CODEC 在强抖动下受限于 40.0..=100.0ms。
+        let mut voice_talker = Talker::new(VOICE_CODEC, t0).unwrap();
+        assert!((voice_talker.target_delay_ms - 40.0).abs() < 1e-6);
+        let mut at = t0;
+        for (seq, pkt) in voice_pkts.iter().enumerate() {
+            voice_talker.push(voice_frame(1, seq as u16, at, pkt.clone()), at);
+            assert!(
+                (40.0..=100.0).contains(&voice_talker.target_delay_ms),
+                "voice target delay out of bounds: {}",
+                voice_talker.target_delay_ms
+            );
+            at += Duration::from_millis(if seq % 2 == 0 { 140 } else { 20 });
+        }
+        assert!(
+            (voice_talker.target_delay_ms - 100.0).abs() < 1e-6,
+            "voice target delay should clamp at max 100ms: {}",
+            voice_talker.target_delay_ms
+        );
+
+        // MUSIC_CODEC 在强抖动下可突破 100ms 并受限于 60.0..=240.0ms。
+        let mut music_talker = Talker::new(MUSIC_CODEC, t0).unwrap();
+        assert!((music_talker.target_delay_ms - 60.0).abs() < 1e-6);
+        let mut music_at = t0;
+        for (seq, pkt) in music_pkts.iter().enumerate() {
+            music_talker.push(frame(2, seq as u16, music_at, pkt.clone()), music_at);
+            assert!(
+                (60.0..=240.0).contains(&music_talker.target_delay_ms),
+                "music target delay out of bounds: {}",
+                music_talker.target_delay_ms
+            );
+            music_at += Duration::from_millis(if seq % 2 == 0 { 140 } else { 20 });
+        }
+        assert!(
+            music_talker.target_delay_ms > 150.0,
+            "music target delay should expand beyond voice cap: {}",
+            music_talker.target_delay_ms
+        );
+
+        // 切回 VOICE_CODEC：同步切换 profile 并将 target_delay_ms clamp 到 40..=100ms。
+        let next_seq = music_pkts.len() as u16;
+        music_at += Duration::from_millis(20);
+        music_talker.push(
+            voice_frame(2, next_seq, music_at, voice_pkts[0].clone()),
+            music_at,
+        );
+        assert_eq!(music_talker.codec, VOICE_CODEC);
+        assert!(music_talker.profile.use_inband_fec);
+        assert!((music_talker.target_delay_ms - 100.0).abs() < 1e-6);
+
+        // 从 VOICE_CODEC（40ms 起点）切到 MUSIC_CODEC：clamp 到 60..=240ms 且关闭 FEC。
+        let mut switch_talker = Talker::new(VOICE_CODEC, t0).unwrap();
+        switch_talker.push(voice_frame(3, 0, t0, voice_pkts[0].clone()), t0);
+        assert!((switch_talker.target_delay_ms - 40.0).abs() < 1e-6);
+        let t1 = t0 + Duration::from_millis(20);
+        switch_talker.push(frame(3, 1, t1, music_pkts[0].clone()), t1);
+        assert_eq!(switch_talker.codec, MUSIC_CODEC);
+        assert!(!switch_talker.profile.use_inband_fec);
+        assert!(
+            switch_talker.target_delay_ms >= 60.0 && switch_talker.target_delay_ms <= 240.0,
+            "switched music target delay out of bounds: {}",
+            switch_talker.target_delay_ms
+        );
+    }
+
+    #[test]
+    fn wifi_jitter_late_packet_preserved_by_plc_hold_and_expands_buffer() {
+        let mut pipeline = PlaybackPipeline::new();
+        let t0 = Instant::now();
+        let pkts = speech_packets(10, 0.35);
+
+        // 起播 3 帧（seq 0, 1, 2），形成 40ms 额外缓冲余量。
+        for (seq, pkt) in pkts.iter().take(3).enumerate() {
+            let at = t0 + Duration::from_millis(seq as u64 * 20);
+            pipeline.push_incoming(voice_frame(30, seq as u16, at, pkt.clone()), at);
+        }
+
+        // t0 + 40ms .. t0 + 90ms 播完前 3 帧（seq 0, 1, 2）。
+        let mut now = t0 + Duration::from_millis(40);
+        for _ in 0..6 {
+            pipeline.tick(now, MIX_SAMPLES_PER_CHANNEL);
+            now += Duration::from_millis(MIX_FRAME_MS);
+        }
+        assert_eq!(pipeline.talkers.get(&30).unwrap().expected_seq, Some(3));
+
+        // 模拟 Wi-Fi 45ms 抖动：seq 3（标称 t0+60ms）延后到 t0+105ms 才到达。
+        // t0+100ms 欠载触发 1 帧 PLC hold，暂缓推进 expected_seq。
+        pipeline.tick(t0 + Duration::from_millis(100), MIX_SAMPLES_PER_CHANNEL);
+        {
+            let talker = pipeline.talkers.get(&30).unwrap();
+            assert_eq!(talker.plc_generated, 1);
+            assert_eq!(talker.plc_hold_frames, 1);
+            assert_eq!(talker.expected_seq, Some(3));
+        }
+
+        // t0+105ms seq 3 晚到（随后 seq 4..7 按后续到达节奏抵达）。
+        pipeline.push_incoming(
+            voice_frame(30, 3, t0 + Duration::from_millis(105), pkts[3].clone()),
+            t0 + Duration::from_millis(105),
+        );
+        pipeline.push_incoming(
+            voice_frame(30, 4, t0 + Duration::from_millis(106), pkts[4].clone()),
+            t0 + Duration::from_millis(106),
+        );
+        pipeline.push_incoming(
+            voice_frame(30, 5, t0 + Duration::from_millis(107), pkts[5].clone()),
+            t0 + Duration::from_millis(107),
+        );
+        pipeline.push_incoming(
+            voice_frame(30, 6, t0 + Duration::from_millis(120), pkts[6].clone()),
+            t0 + Duration::from_millis(120),
+        );
+        {
+            let talker = pipeline.talkers.get(&30).unwrap();
+            assert_eq!(talker.dropped, 0);
+            assert!(talker.target_delay_ms > 50.0);
+        }
+
+        // 消耗完 PLC 后半帧及 seq 3..6（t0+110ms .. t0+190ms），共 90ms，actual 缓冲余量已扩张。
+        now = t0 + Duration::from_millis(110);
+        for _ in 0..9 {
+            pipeline.tick(now, MIX_SAMPLES_PER_CHANNEL);
+            now += Duration::from_millis(MIX_FRAME_MS);
+        }
+        assert_eq!(pipeline.talkers.get(&30).unwrap().expected_seq, Some(7));
+
+        // 后续 seq 7（标称 t0+140ms）再次出现 50ms 抖动于 t0+190ms 才到，
+        // 因缓冲深度已在 PLC hold 后扩张，不再反复触发 PLC。
+        pipeline.push_incoming(
+            voice_frame(30, 7, t0 + Duration::from_millis(190), pkts[7].clone()),
+            t0 + Duration::from_millis(190),
+        );
+        let tick = pipeline.tick(t0 + Duration::from_millis(200), MIX_SAMPLES_PER_CHANNEL);
+        assert!(tick.samples.iter().any(|s| s.abs() > 0.001));
+        let talker = pipeline.talkers.get(&30).unwrap();
+        assert_eq!(talker.plc_generated, 1);
+        assert_eq!(talker.dropped, 0);
+
+        // 真正过期迟到包（diff < 0）在丢弃前仍更新 jitter，但保持 last_transit 基准不回退。
+        let talker_mut = pipeline.talkers.get_mut(&30).unwrap();
+        let anchor_before = talker_mut.last_transit;
+        let delay_before = talker_mut.target_delay_ms;
+        talker_mut.push(
+            voice_frame(30, 5, t0 + Duration::from_millis(260), pkts[5].clone()),
+            t0 + Duration::from_millis(260),
+        );
+        assert_eq!(talker_mut.dropped, 1);
+        assert_eq!(talker_mut.last_transit, anchor_before);
+        assert!(talker_mut.target_delay_ms > delay_before);
+    }
+
+    #[test]
+    fn permanent_single_packet_loss_does_not_double_conceal_with_plc_and_fec() {
+        // 1. VOICE_CODEC：先欠载触发 1 次 PLC hold，随后 next_seq 到来时不重复调 FEC。
+        let mut voice_pipeline = PlaybackPipeline::new();
+        let t0 = Instant::now();
+        let voice_pkts = speech_packets(6, 0.4);
+        for (seq, pkt) in voice_pkts.iter().take(3).enumerate() {
+            let at = t0 + Duration::from_millis(seq as u64 * 20);
+            voice_pipeline.push_incoming(voice_frame(31, seq as u16, at, pkt.clone()), at);
+        }
+        let mut now = t0 + Duration::from_millis(40);
+        for _ in 0..6 {
+            voice_pipeline.tick(now, MIX_SAMPLES_PER_CHANNEL);
+            now += Duration::from_millis(MIX_FRAME_MS);
+        }
+        // seq 3 缺失且 seq 4 尚未到：触发 1 次 PLC hold。
+        voice_pipeline.tick(now, MIX_SAMPLES_PER_CHANNEL);
+        assert_eq!(voice_pipeline.talkers.get(&31).unwrap().plc_generated, 1);
+        assert_eq!(voice_pipeline.talkers.get(&31).unwrap().fec_recovered, 0);
+
+        // seq 4 在下一 tick 到来（seq 3 永久丢失）；连续 10ms tick 耗尽 PLC 后直接推进到 seq 4。
+        now += Duration::from_millis(MIX_FRAME_MS);
+        voice_pipeline.push_incoming(voice_frame(31, 4, now, voice_pkts[4].clone()), now);
+        voice_pipeline.tick(now, MIX_SAMPLES_PER_CHANNEL);
+        now += Duration::from_millis(MIX_FRAME_MS);
+        voice_pipeline.tick(now, MIX_SAMPLES_PER_CHANNEL);
+        {
+            let talker = voice_pipeline.talkers.get(&31).unwrap();
+            assert_eq!(talker.plc_generated, 1);
+            assert_eq!(talker.fec_recovered, 0);
+            assert_eq!(talker.expected_seq, Some(5));
+            assert_eq!(talker.dropped, 0);
+        }
+
+        // 2. MUSIC_CODEC（关闭 FEC）：next_seq 已到达时不调 FEC，先走 1 次 PLC hold 吸收乱序，
+        //    永久丢失后直接推进到 next_seq。
+        let mut music_pipeline = PlaybackPipeline::new();
+        let music_pkts = music_packets(7, 0.35);
+        for (seq, pkt) in music_pkts.iter().take(4).enumerate() {
+            let at = t0 + Duration::from_millis(seq as u64 * 20);
+            music_pipeline.push_incoming(frame(32, seq as u16, at, pkt.clone()), at);
+        }
+        let mut mnow = t0 + Duration::from_millis(60);
+        for _ in 0..8 {
+            music_pipeline.tick(mnow, MIX_SAMPLES_PER_CHANNEL);
+            mnow += Duration::from_millis(MIX_FRAME_MS);
+        }
+        // 丢掉 seq 4，直接送达 seq 5。
+        music_pipeline.push_incoming(frame(32, 5, mnow, music_pkts[5].clone()), mnow);
+        music_pipeline.tick(mnow, MIX_SAMPLES_PER_CHANNEL);
+        {
+            let talker = music_pipeline.talkers.get(&32).unwrap();
+            assert_eq!(talker.fec_recovered, 0);
+            assert_eq!(talker.plc_generated, 1);
+            assert_eq!(talker.plc_hold_frames, 1);
+            assert_eq!(talker.expected_seq, Some(4));
+        }
+
+        // seq 4 始终未补回：连续 10ms tick 耗尽 PLC 后直接推进到 seq 5 正常解码，不再重复 PLC。
+        mnow += Duration::from_millis(MIX_FRAME_MS);
+        music_pipeline.tick(mnow, MIX_SAMPLES_PER_CHANNEL);
+        mnow += Duration::from_millis(MIX_FRAME_MS);
+        music_pipeline.tick(mnow, MIX_SAMPLES_PER_CHANNEL);
+        {
+            let talker = music_pipeline.talkers.get(&32).unwrap();
+            assert_eq!(talker.fec_recovered, 0);
+            assert_eq!(talker.plc_generated, 1);
+            assert_eq!(talker.plc_hold_frames, 0);
+            assert_eq!(talker.expected_seq, Some(6));
+        }
+    }
+
+    #[test]
+    fn high_energy_catchup_respects_cooldown_and_short_window_splice_without_clipping() {
+        let t0 = Instant::now();
+
+        // 1. VOICE_CODEC：force_catchup_ticks = 6，catchup_cooldown_ticks = 4。
+        let mut voice_pipeline = PlaybackPipeline::new();
+        let voice_pkts = speech_packets(16, 0.45);
+        for (seq, pkt) in voice_pkts.into_iter().enumerate() {
+            let at = t0 + Duration::from_millis(seq as u64 * 20);
+            voice_pipeline.push_incoming(voice_frame(33, seq as u16, at, pkt), t0);
+        }
+
+        let mut now = t0 + Duration::from_millis(40);
+        for _ in 0..5 {
+            let tick = voice_pipeline.tick(now, MIX_SAMPLES_PER_CHANNEL);
+            assert!(tick.samples.iter().all(|s| s.abs() <= 1.0));
+            assert_eq!(voice_pipeline.talkers.get(&33).unwrap().dropped, 0);
+            now += Duration::from_millis(MIX_FRAME_MS);
+        }
+
+        let mut first_drop_seen = false;
+        let mut drops_during_cooldown = 0u64;
+        for _ in 0..10 {
+            let tick = voice_pipeline.tick(now, MIX_SAMPLES_PER_CHANNEL);
+            assert!(tick.samples.iter().all(|s| s.abs() <= 1.0));
+            let talker = voice_pipeline.talkers.get(&33).unwrap();
+            if !first_drop_seen && talker.dropped > 0 {
+                first_drop_seen = true;
+                assert_eq!(talker.dropped, 1);
+                assert_eq!(talker.overload_streak, 0);
+                assert_eq!(
+                    talker.catchup_cooldown,
+                    JitterProfile::VOICE.catchup_cooldown_ticks
+                );
+                // 接下来的 4 个冷却 tick 内不能继续丢帧。
+                for _ in 0..JitterProfile::VOICE.catchup_cooldown_ticks {
+                    now += Duration::from_millis(MIX_FRAME_MS);
+                    let cd_tick = voice_pipeline.tick(now, MIX_SAMPLES_PER_CHANNEL);
+                    assert!(cd_tick.samples.iter().all(|s| s.abs() <= 1.0));
+                    drops_during_cooldown = voice_pipeline.talkers.get(&33).unwrap().dropped;
+                }
+                break;
+            }
+            now += Duration::from_millis(MIX_FRAME_MS);
+        }
+        assert!(
+            first_drop_seen,
+            "voice backlog should trigger forced catchup"
+        );
+        assert_eq!(drops_during_cooldown, 1);
+
+        // 2. MUSIC_CODEC：force_catchup_ticks = 15，catchup_cooldown_ticks = 8。
+        let mut music_pipeline = PlaybackPipeline::new();
+        let music_pkts = music_packets(22, 0.45);
+        for (seq, pkt) in music_pkts.into_iter().enumerate() {
+            let at = t0 + Duration::from_millis(seq as u64 * 20);
+            music_pipeline.push_incoming(frame(34, seq as u16, at, pkt), t0);
+        }
+        let mut mnow = t0 + Duration::from_millis(60);
+        for _ in 0..14 {
+            let tick = music_pipeline.tick(mnow, MIX_SAMPLES_PER_CHANNEL);
+            assert!(tick.samples.iter().all(|s| s.abs() <= 1.0));
+            assert_eq!(music_pipeline.talkers.get(&34).unwrap().dropped, 0);
+            mnow += Duration::from_millis(MIX_FRAME_MS);
+        }
+
+        let mut music_dropped = false;
+        for _ in 0..4 {
+            let tick = music_pipeline.tick(mnow, MIX_SAMPLES_PER_CHANNEL);
+            assert!(tick.samples.iter().all(|s| s.abs() <= 1.0));
+            let talker = music_pipeline.talkers.get(&34).unwrap();
+            if talker.dropped > 0 {
+                music_dropped = true;
+                assert_eq!(talker.dropped, 1);
+                assert_eq!(
+                    talker.catchup_cooldown,
+                    JitterProfile::MUSIC.catchup_cooldown_ticks
+                );
+                break;
+            }
+            mnow += Duration::from_millis(MIX_FRAME_MS);
+        }
+        assert!(
+            music_dropped,
+            "music backlog should trigger forced catchup after 15 ticks"
         );
     }
 }
