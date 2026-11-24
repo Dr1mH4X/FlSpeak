@@ -44,7 +44,7 @@ async fn load_self_avatar_snapshot_command_reads_the_store() {
             ));
             let _ = std::fs::create_dir_all(&temp);
             let store_path = temp.join("preferences.json");
-            crate::self_avatar::save(&store_path, &PNG).unwrap();
+            crate::media::save_self_avatar_snapshot(&store_path, &PNG).unwrap();
 
             let mut actor = audio_actor();
             actor.store_path = store_path;

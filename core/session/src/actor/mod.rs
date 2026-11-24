@@ -43,8 +43,8 @@ use crate::store::{self, identity_path};
 use crate::streams::{StreamEndReason, StreamView};
 use crate::{
     AudioDeviceView, AudioDevicesView, AudioSettings, BotCommandView, ChannelView, ClientType,
-    ClientView, ServerIconView, SessionCommand, SessionError, SessionEvent, SessionState,
-    SettingsManager, TextMessageView, TransferDirection, VoiceStateView,
+    ClientView, SessionCommand, SessionError, SessionEvent, SessionState, SettingsManager,
+    TextMessageView, TransferDirection, VoiceStateView,
 };
 use streams::ActiveStreamSession;
 
@@ -319,7 +319,7 @@ pub(crate) struct Actor {
     voice_report: VoiceReportState,
     pending_images: VecDeque<PendingImage>,
     active_image: Option<ActiveImage>,
-    server_icons: HashMap<String, crate::server_icons::CachedServerIcon>,
+    icons: crate::media::IconCache,
     active_server_icon_id: Option<u32>,
     fetching_server_icon: Option<(u64, String, u32)>,
     in_flight_channel_icons: HashMap<ChannelIconKey, ChannelIconWaiters>,
@@ -329,7 +329,7 @@ pub(crate) struct Actor {
     avatar_revisions: HashMap<String, u64>,
     avatars_fetched_without_hash: HashSet<String>,
     in_flight_avatars: HashMap<AvatarFetchKey, AvatarWaiters>,
-    avatar_disk: crate::avatars::AvatarDiskQueue,
+    avatar_disk: crate::media::AvatarDiskQueue,
     disconnect_tx: watch::Sender<u64>,
     disconnect_rx: watch::Receiver<u64>,
 }
@@ -358,9 +358,8 @@ impl Actor {
             .iter()
             .map(|profile| profile.id.as_str())
             .collect();
-        let server_icons = crate::server_icons::load(&store_path, &active_server_ids);
-        crate::channel_icons::prune_orphans(&store_path, &active_server_ids);
-        let avatar_disk = crate::avatars::AvatarDiskQueue::new();
+        let icons = crate::media::IconCache::load(&store_path, &active_server_ids);
+        let avatar_disk = crate::media::AvatarDiskQueue::new();
         avatar_disk.prune_orphans(
             store_path.clone(),
             active_server_ids
@@ -449,7 +448,7 @@ impl Actor {
             voice_report: VoiceReportState::default(),
             pending_images: VecDeque::new(),
             active_image: None,
-            server_icons,
+            icons,
             active_server_icon_id: None,
             fetching_server_icon: None,
             in_flight_channel_icons: HashMap::new(),
@@ -594,15 +593,7 @@ impl Actor {
                 let _ = reply.send(self.registry.profiles().to_vec());
             }
             SessionCommand::ListServerIcons { reply } => {
-                let icons = self
-                    .server_icons
-                    .iter()
-                    .map(|(server_id, entry)| ServerIconView {
-                        server_id: server_id.clone(),
-                        bytes: entry.bytes.clone(),
-                    })
-                    .collect();
-                let _ = reply.send(icons);
+                let _ = reply.send(self.icons.list_server_icons());
             }
             SessionCommand::LoadSelfAvatarSnapshot { reply } => {
                 let (tx, rx) = oneshot::channel();
@@ -1342,9 +1333,8 @@ impl Actor {
                 self.fetching_server_icon = None;
                 match result {
                     Ok(bytes) => {
-                        if let Err(error) = crate::server_icons::save(
+                        if let Err(error) = self.icons.save_server_icon(
                             &self.store_path,
-                            &mut self.server_icons,
                             &server_id,
                             icon_id,
                             bytes.clone(),

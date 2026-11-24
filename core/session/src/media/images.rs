@@ -243,7 +243,7 @@ fn looks_like_image(bytes: &[u8]) -> bool {
     image_format(bytes).is_some()
 }
 
-pub(crate) fn image_format(bytes: &[u8]) -> Option<(&'static str, &'static str)> {
+pub(super) fn image_format(bytes: &[u8]) -> Option<(&'static str, &'static str)> {
     if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
         Some(("image/png", "png"))
     } else if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {

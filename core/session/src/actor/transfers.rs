@@ -191,7 +191,10 @@ impl Actor {
             let _ = reply.send(Err(SessionError::NotConnected));
             return;
         };
-        if let Some(bytes) = crate::channel_icons::load_hit(&self.store_path, &server_id, icon_id) {
+        if let Some(bytes) = self
+            .icons
+            .load_channel_icon(&self.store_path, &server_id, icon_id)
+        {
             let _ = reply.send(Ok(bytes));
             return;
         }
@@ -277,7 +280,8 @@ impl Actor {
         match result {
             Ok(bytes) => {
                 if let Err(error) =
-                    crate::channel_icons::save(&self.store_path, &server_id, icon_id, &bytes)
+                    self.icons
+                        .save_channel_icon(&self.store_path, &server_id, icon_id, &bytes)
                 {
                     self.emit(SessionEvent::Log {
                         level: "warn".into(),
@@ -350,8 +354,7 @@ impl Actor {
         self.active_server_icon_id = Some(icon_id);
         if icon_id == 0 {
             self.fetching_server_icon = None;
-            match crate::server_icons::remove(&self.store_path, &mut self.server_icons, &server_id)
-            {
+            match self.icons.clear_server_icon(&self.store_path, &server_id) {
                 Ok(true) => {
                     self.emit(SessionEvent::ServerIconUpdated {
                         server_id,
@@ -368,11 +371,7 @@ impl Actor {
             }
             return;
         }
-        if self
-            .server_icons
-            .get(&server_id)
-            .is_some_and(|entry| entry.icon_id == icon_id)
-        {
+        if self.icons.has_server_icon(&server_id, icon_id) {
             return;
         }
         if self
@@ -1056,11 +1055,11 @@ impl Actor {
 
     pub(super) async fn upload_avatar(&mut self, bytes: Vec<u8>) -> Result<(), SessionError> {
         let client = self.connected()?;
-        if !crate::avatars::is_supported_image(&bytes) {
+        if !crate::media::is_supported_avatar_image(&bytes) {
             return Err(SessionError::AvatarUnsupportedFormat);
         }
         let limit = crate::channel_tools::avatar_size_limit(&client, &mut self.channel_tools).await;
-        crate::avatars::validate_size(bytes.len(), limit)?;
+        crate::media::validate_avatar_size(bytes.len(), limit)?;
         let host = {
             let target = self
                 .transfer_target
@@ -1186,9 +1185,7 @@ impl Actor {
 
 fn known_avatar_limit(limit: Option<i32>) -> Option<u64> {
     match limit {
-        Some(value) if value > 0 => {
-            Some((value as u64).min(crate::avatars::MAX_AVATAR_BYTES as u64))
-        }
+        Some(value) if value > 0 => Some((value as u64).min(crate::media::MAX_AVATAR_BYTES as u64)),
         _ => None,
     }
 }
@@ -1423,10 +1420,7 @@ mod tests {
                 actor.handle_signal(signal).await;
 
                 assert!(actor.fetching_server_icon.is_none());
-                assert_eq!(
-                    actor.server_icons.get("127.0.0.1:9987").map(|e| e.icon_id),
-                    Some(12345)
-                );
+                assert_eq!(actor.icons.server_icon_id("127.0.0.1:9987"), Some(12345));
 
                 // 重复收到相同 icon_id 不重复入队
                 actor.sync_server_icon("127.0.0.1:9987".into(), Some(12345));
@@ -1434,7 +1428,7 @@ mod tests {
 
                 // 收到 None 时保留已有缓存
                 actor.sync_server_icon("127.0.0.1:9987".into(), None);
-                assert!(actor.server_icons.contains_key("127.0.0.1:9987"));
+                assert!(actor.icons.server_icon_id("127.0.0.1:9987").is_some());
 
                 // 收到 Some(0) 时清除缓存并广播清除事件
                 actor
@@ -1443,9 +1437,10 @@ mod tests {
                         icon_id: Some(0),
                     })
                     .await;
-                assert!(!actor.server_icons.contains_key("127.0.0.1:9987"));
+                assert!(actor.icons.server_icon_id("127.0.0.1:9987").is_none());
                 assert!(
-                    crate::server_icons::load(&actor.store_path, &["127.0.0.1:9987"]).is_empty()
+                    crate::media::IconCache::load(&actor.store_path, &["127.0.0.1:9987"])
+                        .is_empty()
                 );
 
                 let updates: Vec<(String, Option<Vec<u8>>)> =
@@ -1734,7 +1729,7 @@ mod tests {
                 actor.avatar_disk.flush().await;
                 assert_eq!(rx_fb.await.unwrap().unwrap(), Some(vec![55, 66]));
                 assert_eq!(
-                    crate::avatars::load_hit(
+                    crate::media::load_avatar_hit(
                         &actor.store_path,
                         "a.example:9987",
                         &fallback_uid,
@@ -1763,8 +1758,14 @@ mod tests {
                 let mut events = actor.events.subscribe();
 
                 let uid = base64::engine::general_purpose::STANDARD.encode([3u8; 20]);
-                crate::avatars::save(&actor.store_path, "a.example:9987", &uid, Some("h1"), &[1])
-                    .unwrap();
+                crate::media::save_avatar(
+                    &actor.store_path,
+                    "a.example:9987",
+                    &uid,
+                    Some("h1"),
+                    &[1],
+                )
+                .unwrap();
 
                 let drain_avatar_updates =
                     |rx: &mut broadcast::Receiver<SessionEvent>| -> Vec<String> {
@@ -1805,7 +1806,12 @@ mod tests {
                     .await;
                 assert!(drain_avatar_updates(&mut events).is_empty());
                 assert_eq!(
-                    crate::avatars::load_hit(&actor.store_path, "a.example:9987", &uid, Some("h1")),
+                    crate::media::load_avatar_hit(
+                        &actor.store_path,
+                        "a.example:9987",
+                        &uid,
+                        Some("h1")
+                    ),
                     Some(vec![1])
                 );
 
@@ -1827,13 +1833,24 @@ mod tests {
                 actor.avatar_disk.flush().await;
                 assert_eq!(drain_avatar_updates(&mut events), vec![uid.clone()]);
                 assert_eq!(
-                    crate::avatars::load_hit(&actor.store_path, "a.example:9987", &uid, Some("h1")),
+                    crate::media::load_avatar_hit(
+                        &actor.store_path,
+                        "a.example:9987",
+                        &uid,
+                        Some("h1")
+                    ),
                     None
                 );
 
                 // 4. 写入新 h2 后通过 ClientUpdated 清空为 None：清理 h2 磁盘缓存并广播 AvatarUpdated
-                crate::avatars::save(&actor.store_path, "a.example:9987", &uid, Some("h2"), &[2])
-                    .unwrap();
+                crate::media::save_avatar(
+                    &actor.store_path,
+                    "a.example:9987",
+                    &uid,
+                    Some("h2"),
+                    &[2],
+                )
+                .unwrap();
                 actor
                     .handle_signal(SessionSignal::ClientUpdated {
                         epoch: actor.connection_epoch,
@@ -1851,7 +1868,12 @@ mod tests {
                 actor.avatar_disk.flush().await;
                 assert_eq!(drain_avatar_updates(&mut events), vec![uid.clone()]);
                 assert_eq!(
-                    crate::avatars::load_hit(&actor.store_path, "a.example:9987", &uid, Some("h2")),
+                    crate::media::load_avatar_hit(
+                        &actor.store_path,
+                        "a.example:9987",
+                        &uid,
+                        Some("h2")
+                    ),
                     None
                 );
 
@@ -1917,7 +1939,12 @@ mod tests {
                 assert!(!actor.avatar_negative_cache.contains(uid));
 
                 assert_eq!(
-                    crate::avatars::load_hit(&actor.store_path, "a.example:9987", uid, Some(md5)),
+                    crate::media::load_avatar_hit(
+                        &actor.store_path,
+                        "a.example:9987",
+                        uid,
+                        Some(md5)
+                    ),
                     Some(vec![7, 8, 9])
                 );
                 assert!(matches!(
@@ -1930,7 +1957,12 @@ mod tests {
                 actor.avatar_disk.flush().await;
                 assert!(events.try_recv().is_err());
                 assert_eq!(
-                    crate::avatars::load_hit(&actor.store_path, "a.example:9987", uid, Some(md5)),
+                    crate::media::load_avatar_hit(
+                        &actor.store_path,
+                        "a.example:9987",
+                        uid,
+                        Some(md5)
+                    ),
                     Some(vec![7, 8, 9])
                 );
 
@@ -2011,7 +2043,12 @@ mod tests {
                 ));
                 assert!(!actor.avatar_negative_cache.contains(uid));
                 assert_eq!(
-                    crate::avatars::load_hit(&actor.store_path, "a.example:9987", uid, Some(md5)),
+                    crate::media::load_avatar_hit(
+                        &actor.store_path,
+                        "a.example:9987",
+                        uid,
+                        Some(md5)
+                    ),
                     None
                 );
 
@@ -2045,13 +2082,16 @@ mod tests {
                 );
                 actor.avatar_disk.flush().await;
                 assert_eq!(
-                    crate::self_avatar::load(&actor.store_path),
+                    crate::media::load_self_avatar_snapshot(&actor.store_path),
                     Some(SELF_AVATAR_PNG.to_vec())
                 );
 
                 actor.apply_avatar_delete(uid);
                 actor.avatar_disk.flush().await;
-                assert_eq!(crate::self_avatar::load(&actor.store_path), None);
+                assert_eq!(
+                    crate::media::load_self_avatar_snapshot(&actor.store_path),
+                    None
+                );
 
                 let _ = std::fs::remove_dir_all(&temp);
             })
@@ -2096,14 +2136,14 @@ mod tests {
                 actor.avatar_disk.flush().await;
                 assert_eq!(rx.await.unwrap().unwrap(), Some(SELF_AVATAR_PNG.to_vec()));
                 assert_eq!(
-                    crate::self_avatar::load(&actor.store_path),
+                    crate::media::load_self_avatar_snapshot(&actor.store_path),
                     Some(SELF_AVATAR_PNG.to_vec())
                 );
 
                 actor.reset_avatar_session_state();
                 actor.avatar_disk.flush().await;
                 assert_eq!(
-                    crate::self_avatar::load(&actor.store_path),
+                    crate::media::load_self_avatar_snapshot(&actor.store_path),
                     Some(SELF_AVATAR_PNG.to_vec())
                 );
 
@@ -2149,7 +2189,7 @@ mod tests {
                 actor.avatar_disk.flush().await;
                 assert_eq!(rx.await.unwrap().unwrap(), Some(SELF_AVATAR_PNG.to_vec()));
                 assert_eq!(
-                    crate::self_avatar::load(&actor.store_path),
+                    crate::media::load_self_avatar_snapshot(&actor.store_path),
                     Some(SELF_AVATAR_PNG.to_vec())
                 );
 
@@ -2176,7 +2216,7 @@ mod tests {
                 actor.avatar_disk.flush().await;
                 assert!(rx.await.unwrap().unwrap().is_none());
                 assert_eq!(
-                    crate::self_avatar::load(&actor.store_path),
+                    crate::media::load_self_avatar_snapshot(&actor.store_path),
                     Some(SELF_AVATAR_PNG.to_vec())
                 );
 

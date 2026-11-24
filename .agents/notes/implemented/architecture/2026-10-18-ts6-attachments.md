@@ -17,7 +17,7 @@ Status: implemented
 ## Decision
 
 1. **不接 myTeamSpeak 附件服务**。用户明确不做 myTS token；官方图片不下载、不访问`tmspk.net`，只显示「不支持的图片格式」+文件信息。
-2. **第三方 URL 独立抓取**。`core/session` 的 `images.rs` 只接受 http/https；拒绝`proto::forbidden_host` 命中的主机、localhost/私网/链路本地/CGNAT/IPv4-mapped IPv6；DNS 解析后逐个检查并 pin 到公网地址；限制 3 次重定向、15s、20 MiB、`image/*`/magic。Dart 通过 FFI `fetchImage` 取字节。
+2. **第三方 URL 独立抓取**。`core/session` 的 `media/images.rs` 只接受 http/https；拒绝`proto::forbidden_host` 命中的主机、localhost/私网/链路本地/CGNAT/IPv4-mapped IPv6；DNS 解析后逐个检查并 pin 到公网地址；限制 3 次重定向、15s、20 MiB、`image/*`/magic。Dart 通过 FFI `fetchImage` 取字节。
 3. **不伪造附件消息**。发送侧不生成 `ts.file.myts`；只支持用户自配图床 + URL。官方客户端是否把第三方 URL 渲染成图片仍未验证，不能承诺。
 4. **富文本先做安全子集**。解析在 Dart UI 层完成，原始文本不动；暂不支持链接点击、脚注、数学排版、mermaid、可揭示 spoiler。
 

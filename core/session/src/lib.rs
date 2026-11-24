@@ -8,20 +8,14 @@
 //! `Client::send_voice`；音频帧本身不进入这条事件流。
 
 mod actor;
-mod avatars;
-mod channel_icons;
 mod downloads;
 mod events;
-mod image_upload;
-mod images;
 pub mod logging;
-mod media_cache;
+mod media;
 mod network;
 pub use network::NetworkTelemetry;
 pub mod notices;
 mod proxy;
-mod self_avatar;
-mod server_icons;
 pub mod settings;
 mod store;
 mod streams;
@@ -45,9 +39,9 @@ use tokio::runtime::Builder;
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
 use tokio::task::LocalSet;
 
-pub use avatars::MAX_AVATAR_BYTES;
-pub use image_upload::{upload_image, validate_image_host};
-pub use images::{ImageError, MAX_IMAGE_BYTES, fetch_image};
+pub use media::{
+    ImageError, MAX_AVATAR_BYTES, MAX_IMAGE_BYTES, fetch_image, upload_image, validate_image_host,
+};
 pub use proto::ConnectError;
 pub use streams::DEFAULT_MAX_STREAM_VIEWERS;
 pub use text_format::{

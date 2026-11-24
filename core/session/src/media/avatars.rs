@@ -9,12 +9,13 @@ use std::path::{Path, PathBuf};
 
 use tokio::sync::mpsc;
 
-use crate::media_cache::{self, MediaCacheSpec};
+use super::cache::{self, MediaCacheSpec};
+use super::self_avatar;
 
 /// 头像字节大小安全上限。
 pub const MAX_AVATAR_BYTES: usize = 1024 * 1024;
-pub(crate) const MAX_AVATARS_PER_SERVER: usize = 512;
-pub(crate) const MAX_BYTES_PER_SERVER: u64 = 32 * 1024 * 1024;
+const MAX_AVATARS_PER_SERVER: usize = 512;
+const MAX_BYTES_PER_SERVER: u64 = 32 * 1024 * 1024;
 const MAX_AVATAR_HASH_LEN: usize = 64;
 
 const SPEC: MediaCacheSpec = MediaCacheSpec {
@@ -28,7 +29,7 @@ const SPEC: MediaCacheSpec = MediaCacheSpec {
 /// 头像只接受 PNG / JPEG / GIF / WebP；服务器不校验内容，客户端负责这一步。
 pub(crate) fn is_supported_image(bytes: &[u8]) -> bool {
     matches!(
-        crate::images::image_format(bytes),
+        super::images::image_format(bytes),
         Some(("image/png" | "image/jpeg" | "image/gif" | "image/webp", _))
     )
 }
@@ -63,7 +64,7 @@ pub(crate) fn validate_size(len: usize, limit: Option<i32>) -> Result<(), crate:
     }
 }
 
-pub(crate) fn is_valid_avatar_hash(hash: &str) -> bool {
+fn is_valid_avatar_hash(hash: &str) -> bool {
     !hash.is_empty()
         && hash.len() <= MAX_AVATAR_HASH_LEN
         && hash
@@ -71,8 +72,8 @@ pub(crate) fn is_valid_avatar_hash(hash: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
 }
 
-pub(crate) fn file_name(uid: &str, avatar_hash: Option<&str>) -> String {
-    let uid_key = media_cache::sha1_hex(uid);
+fn file_name(uid: &str, avatar_hash: Option<&str>) -> String {
+    let uid_key = cache::sha1_hex(uid);
     match avatar_hash.filter(|hash| is_valid_avatar_hash(hash)) {
         Some(hash) => format!("{uid_key}.{hash}.bin"),
         None => format!("{uid_key}.bin"),
@@ -112,7 +113,7 @@ pub(crate) fn load_hit(
     if uid.is_empty() {
         return None;
     }
-    media_cache::load_hit(store_path, SPEC, server_id, &file_name(uid, avatar_hash))
+    cache::load_hit(store_path, SPEC, server_id, &file_name(uid, avatar_hash))
 }
 
 pub(crate) fn save(
@@ -133,7 +134,7 @@ pub(crate) fn save(
     )
 }
 
-pub(crate) fn save_with_limits(
+fn save_with_limits(
     store_path: &Path,
     server_id: &str,
     uid: &str,
@@ -145,37 +146,37 @@ pub(crate) fn save_with_limits(
     if uid.is_empty() {
         return Err("avatar UID must not be empty".to_string());
     }
-    let uid_key = media_cache::sha1_hex(uid);
+    let uid_key = cache::sha1_hex(uid);
     let keep_name = file_name(uid, avatar_hash);
-    let dir = media_cache::save_atomic(store_path, SPEC, server_id, &keep_name, bytes)?;
+    let dir = cache::save_atomic(store_path, SPEC, server_id, &keep_name, bytes)?;
     // 先清理同 UID 的旧 hash / 回退文件再计入单服 LRU 预算，避免旧文件被算进总体积触发误淘汰。
-    media_cache::remove_files_matching(store_path, SPEC, server_id, |name| {
+    cache::remove_files_matching(store_path, SPEC, server_id, |name| {
         is_uid_avatar_file(name, &uid_key) && !is_same_cache_file(name, &keep_name)
     });
-    media_cache::evict_over_budget(&dir, max_files, max_bytes);
+    cache::evict_over_budget(&dir, max_files, max_bytes);
     Ok(())
 }
 
-pub(crate) fn remove_uid(store_path: &Path, server_id: &str, uid: &str) {
+fn remove_uid(store_path: &Path, server_id: &str, uid: &str) {
     if uid.is_empty() {
         return;
     }
-    let uid_key = media_cache::sha1_hex(uid);
-    media_cache::remove_files_matching(store_path, SPEC, server_id, |name| {
+    let uid_key = cache::sha1_hex(uid);
+    cache::remove_files_matching(store_path, SPEC, server_id, |name| {
         is_uid_avatar_file(name, &uid_key)
     });
 }
 
-pub(crate) fn prune_orphans(store_path: &Path, active_server_ids: &[&str]) {
-    media_cache::prune_orphans(store_path, SPEC, active_server_ids);
+fn prune_orphans(store_path: &Path, active_server_ids: &[&str]) {
+    cache::prune_orphans(store_path, SPEC, active_server_ids);
 }
 
-pub(crate) fn remove_server(store_path: &Path, server_id: &str) {
-    media_cache::remove_server(store_path, SPEC, server_id);
+fn remove_server(store_path: &Path, server_id: &str) {
+    cache::remove_server(store_path, SPEC, server_id);
 }
 
-pub(crate) fn move_server(store_path: &Path, old_id: &str, new_id: &str) {
-    media_cache::move_server(store_path, SPEC, old_id, new_id);
+fn move_server(store_path: &Path, old_id: &str, new_id: &str) {
+    cache::move_server(store_path, SPEC, old_id, new_id);
 }
 
 enum AvatarDiskJob {
@@ -287,10 +288,10 @@ impl AvatarDiskJob {
                 store_path,
                 on_done,
             } => {
-                on_done(crate::self_avatar::load(&store_path));
+                on_done(self_avatar::load(&store_path));
             }
             AvatarDiskJob::SaveSelfSnapshot { store_path, bytes } => {
-                if let Err(error) = crate::self_avatar::save(&store_path, &bytes) {
+                if let Err(error) = self_avatar::save(&store_path, &bytes) {
                     tracing::warn!(
                         target: "session",
                         error = %error,
@@ -299,7 +300,7 @@ impl AvatarDiskJob {
                 }
             }
             AvatarDiskJob::ClearSelfSnapshot { store_path } => {
-                if let Err(error) = crate::self_avatar::clear(&store_path) {
+                if let Err(error) = self_avatar::clear(&store_path) {
                     tracing::warn!(
                         target: "session",
                         error = %error,
@@ -445,7 +446,7 @@ mod tests {
     use super::*;
 
     fn server_dir(store_path: &Path, server_id: &str) -> PathBuf {
-        media_cache::server_dir(store_path, SPEC, server_id)
+        cache::server_dir(store_path, SPEC, server_id)
     }
 
     fn temp_store_path(label: &str) -> (PathBuf, PathBuf) {
@@ -500,7 +501,7 @@ mod tests {
     #[test]
     fn validates_avatar_hash_and_builds_expected_cache_file_names() {
         let uid = "KqXRNkJgnzjGFbp0GTCPJN1ODJY=";
-        let uid_key = media_cache::sha1_hex(uid);
+        let uid_key = cache::sha1_hex(uid);
 
         assert_eq!(
             file_name(uid, Some("deadbeef_01-AB")),

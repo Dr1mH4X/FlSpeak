@@ -3,8 +3,7 @@ use std::time::Duration;
 
 use reqwest::{Client, Request, Url, redirect::Policy};
 
-use crate::ImageError;
-use crate::images::{MAX_IMAGE_BYTES, image_format};
+use super::images::{ImageError, MAX_IMAGE_BYTES, image_format};
 
 pub fn validate_image_host(upload_base: &str, public_base: &str) -> Result<(), ImageError> {
     base_url(upload_base)?;

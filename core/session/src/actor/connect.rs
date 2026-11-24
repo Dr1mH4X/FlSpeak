@@ -37,10 +37,11 @@ impl Actor {
         .map_err(SessionError::Storage)?;
         self.registry = registry;
         self.emit(SessionEvent::Servers(self.registry.profiles().to_vec()));
-        crate::channel_icons::remove_server(&self.store_path, &id);
         self.avatar_disk
             .remove_server(self.store_path.clone(), id.clone());
-        if crate::server_icons::remove(&self.store_path, &mut self.server_icons, &id)
+        if self
+            .icons
+            .remove_server(&self.store_path, &id)
             .unwrap_or(false)
         {
             self.emit(SessionEvent::ServerIconUpdated {
@@ -74,22 +75,16 @@ impl Actor {
         self.registry = registry;
         self.emit(SessionEvent::Servers(self.registry.profiles().to_vec()));
         if profile.id != id {
-            crate::channel_icons::move_server(&self.store_path, &id, &profile.id);
             self.avatar_disk
                 .move_server(self.store_path.clone(), id.clone(), profile.id.clone());
-            if let Ok(Some(entry)) = crate::server_icons::move_entry(
-                &self.store_path,
-                &mut self.server_icons,
-                &id,
-                &profile.id,
-            ) {
+            if let Ok(Some(bytes)) = self.icons.move_server(&self.store_path, &id, &profile.id) {
                 self.emit(SessionEvent::ServerIconUpdated {
                     server_id: id,
                     bytes: None,
                 });
                 self.emit(SessionEvent::ServerIconUpdated {
                     server_id: profile.id.clone(),
-                    bytes: Some(entry.bytes),
+                    bytes: Some(bytes),
                 });
             }
         }

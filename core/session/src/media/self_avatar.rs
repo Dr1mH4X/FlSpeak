@@ -6,12 +6,12 @@
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
-use crate::avatars::{MAX_AVATAR_BYTES, is_supported_image};
-use crate::media_cache;
+use super::avatars::{MAX_AVATAR_BYTES, is_supported_image};
+use super::cache;
 
 const FILE_NAME: &str = "identity-avatar.bin";
 
-pub(crate) fn path(store_path: &Path) -> PathBuf {
+fn path(store_path: &Path) -> PathBuf {
     store_path.with_file_name(FILE_NAME)
 }
 
@@ -65,10 +65,10 @@ pub(crate) fn save(store_path: &Path, bytes: &[u8]) -> Result<(), String> {
     if bytes.is_empty() || bytes.len() > MAX_AVATAR_BYTES || !is_supported_image(bytes) {
         return Err("invalid self avatar snapshot".to_string());
     }
-    media_cache::write_atomic(&path(store_path), bytes, false, "self avatar snapshot")
+    cache::write_atomic(&path(store_path), bytes, false, "self avatar snapshot")
 }
 
-pub(crate) fn clear(store_path: &Path) -> Result<(), String> {
+pub(super) fn clear(store_path: &Path) -> Result<(), String> {
     if store_path.as_os_str().is_empty() {
         return Ok(());
     }
