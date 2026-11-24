@@ -1,4 +1,4 @@
-import 'package:flspeak/core/android_app_lifecycle.dart';
+import 'package:flspeak/core/platform/android_app_lifecycle.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';

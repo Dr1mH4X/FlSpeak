@@ -8,7 +8,7 @@ import 'dart:isolate';
 import 'package:ffi/ffi.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
-import 'logging/logger.dart';
+import '../logging/logger.dart';
 
 @visibleForTesting
 Future<List<String>> Function() systemFontFamiliesReader = () =>

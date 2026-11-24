@@ -5,8 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:flspeak/core/window_chrome.dart';
-import 'package:flspeak/core/window_metrics.dart';
+import 'package:flspeak/core/platform/desktop_window.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
 import 'package:flspeak/localization.dart';
 import 'package:flspeak/widgets/caption_icon.dart';

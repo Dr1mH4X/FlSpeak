@@ -5,9 +5,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
+import 'platform/desktop_window.dart';
 import 'preferences.dart';
 import 'providers.dart';
-import 'window_chrome.dart';
 
 /// Default STUN server configuration for TS6 screen-share viewer and publisher connections.
 /// Matches WebSpeak's official TeamSpeak STUN pair so ICE gathering finishes

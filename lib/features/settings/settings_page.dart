@@ -9,10 +9,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/global_hotkey.dart';
-import '../../core/hotkey_codes.dart';
 import '../../core/models.dart';
 import '../../core/notices.dart';
+import '../../core/platform/global_hotkey.dart';
 import '../../core/preferences.dart';
 import '../../core/providers.dart';
 import '../../core/update_check.dart';

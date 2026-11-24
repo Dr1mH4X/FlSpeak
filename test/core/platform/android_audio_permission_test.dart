@@ -1,4 +1,4 @@
-import 'package:flspeak/core/android_audio_permission.dart';
+import 'package:flspeak/core/platform/android_audio_permission.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';

@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
-import 'logging/logger.dart';
+import '../logging/logger.dart';
 
 /// 同步 Android 活跃网络的 DNS 上游地址到 Rust 解析器。
 class AndroidDnsSync {

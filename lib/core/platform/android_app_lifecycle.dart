@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-import 'logging/logger.dart';
+import '../logging/logger.dart';
 
 abstract interface class AndroidAppLifecycleGateway {
   Future<bool> moveToBackground();

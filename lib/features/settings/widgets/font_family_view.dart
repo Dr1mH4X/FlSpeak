@@ -9,8 +9,8 @@ import 'package:material_ui/material_ui.dart' hide IconButton;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/platform/system_fonts.dart';
 import '../../../core/preferences.dart';
-import '../../../core/system_fonts.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/prism.dart';

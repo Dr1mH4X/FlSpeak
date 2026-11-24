@@ -320,7 +320,7 @@ static FlValue* register_x11_hotkey(MyApplication* self, guint keycode) {
 }
 #endif
 
-// 将 lib/core/hotkey_codes.dart 中的 X11 keycode (evdev + 8) 映射为
+// 将 lib/core/platform/global_hotkey.dart 中的 X11 keycode (evdev + 8) 映射为
 // XDG GlobalShortcuts preferred_trigger 键名。
 static const gchar* keycode_to_portal_trigger(guint keycode) {
   switch (keycode) {

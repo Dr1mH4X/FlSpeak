@@ -7,12 +7,12 @@ import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:flspeak/core/android_audio_permission.dart';
 import 'package:flspeak/core/audio_selection.dart';
 import 'package:flspeak/core/models.dart';
-import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/core/notices.dart';
+import 'package:flspeak/core/platform/android_audio_permission.dart';
 import 'package:flspeak/core/preferences.dart';
+import 'package:flspeak/core/providers.dart';
 
 class _Core extends Fake implements CoreSession {
   _Core(this.eventsController);

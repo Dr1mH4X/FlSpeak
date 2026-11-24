@@ -19,8 +19,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flspeak/app.dart';
-import 'package:flspeak/core/android_app_lifecycle.dart';
 import 'package:flspeak/core/models.dart';
+import 'package:flspeak/core/platform/android_app_lifecycle.dart';
 import 'package:flspeak/core/preferences.dart';
 import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/core/stream_viewer.dart';

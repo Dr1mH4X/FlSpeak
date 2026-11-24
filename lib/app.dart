@@ -11,16 +11,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart' show UpdateStateView;
 
-import 'core/global_hotkey.dart';
-import 'core/hotkey_codes.dart';
 import 'core/identity/identity.dart';
 import 'core/logging/logger.dart';
 import 'core/notices.dart';
+import 'core/platform/desktop_window.dart';
+import 'core/platform/global_hotkey.dart';
 import 'core/preferences.dart';
 import 'core/providers.dart';
 import 'core/update_check.dart';
-import 'core/window_chrome.dart';
-import 'core/window_metrics.dart';
 import 'l10n/app_localizations.dart';
 import 'localization.dart';
 import 'router.dart';
