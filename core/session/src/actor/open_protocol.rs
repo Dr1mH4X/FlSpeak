@@ -69,34 +69,27 @@ impl Actor {
     }
 
     fn sync_peer_metadata_to_snapshot(&mut self) {
-        let Some((channels, mut clients)) = self.last_snapshot.clone() else {
+        let Some((_, mut clients)) = self.directory.snapshot_clone() else {
             return;
         };
         self.enrich_clients(&mut clients);
-        if self
-            .last_snapshot
-            .as_ref()
-            .is_some_and(|(_, old_clients)| old_clients == &clients)
-        {
-            return;
+        let commit = self
+            .directory
+            .update_snapshot_clients_if_changed(clients, self.self_client_id);
+        if let Some(uid) = commit.self_uid {
+            self.self_uid = Some(uid);
         }
-        self.sync_clients_cache(&clients);
-        self.last_snapshot = Some((channels.clone(), clients.clone()));
-        self.emit(SessionEvent::Snapshot { channels, clients });
+        if let Some((channels, clients)) = commit.emitted {
+            self.emit(SessionEvent::Snapshot { channels, clients });
+        }
     }
 
     fn resolve_peer_uid(&self, invoker_id: i32, invoker_uid: &str) -> String {
         if !invoker_uid.is_empty() {
             return invoker_uid.to_string();
         }
-        self.last_snapshot
-            .as_ref()
-            .and_then(|(_, clients)| {
-                clients
-                    .iter()
-                    .find(|client| client.id == invoker_id && !client.uid.is_empty())
-                    .map(|client| client.uid.clone())
-            })
+        self.directory
+            .snapshot_client_uid(invoker_id)
             .or_else(|| {
                 self.client
                     .as_ref()?
@@ -343,7 +336,7 @@ mod tests {
         let mut actor = audio_actor();
         actor.self_client_id = Some(7);
         actor.open_protocol.on_connected(7, 5, Instant::now());
-        actor.last_snapshot = Some((
+        actor.directory.set_snapshot_for_test(
             Vec::new(),
             vec![
                 ClientView::from(ClientInfo {
@@ -359,7 +352,7 @@ mod tests {
                     ..client_info(12, 5, "MusicBot")
                 }),
             ],
-        ));
+        );
         let mut events = actor.events.subscribe();
 
         // 自身广播回显直接忽略，不写入缓存也不触发事件。
@@ -412,7 +405,7 @@ mod tests {
         let mut actor = audio_actor();
         actor.self_client_id = Some(7);
         actor.open_protocol.on_connected(7, 5, Instant::now());
-        actor.last_snapshot = Some((
+        actor.directory.set_snapshot_for_test(
             Vec::new(),
             vec![ClientView::from(ClientInfo {
                 id: 12,
@@ -420,7 +413,7 @@ mod tests {
                 uid: "bot-uid".into(),
                 ..client_info(12, 5, "MusicBot")
             })],
-        ));
+        );
         let mut events = actor.events.subscribe();
 
         for bad_version in [0, 2] {
@@ -463,7 +456,7 @@ mod tests {
         let mut actor = audio_actor();
         actor.self_client_id = Some(7);
         actor.open_protocol.on_connected(7, 5, Instant::now());
-        actor.last_snapshot = Some((
+        actor.directory.set_snapshot_for_test(
             Vec::new(),
             vec![ClientView::from(ClientInfo {
                 id: 12,
@@ -471,7 +464,7 @@ mod tests {
                 uid: "bot-uid".into(),
                 ..client_info(12, 5, "MusicBot")
             })],
-        ));
+        );
         // 模拟在途请求未连客户端时回退：应返回 NotConnected
         assert!(matches!(
             actor.fetch_bot_commands(12, "bot-uid"),
@@ -589,7 +582,7 @@ mod tests {
                 actor.client = Some(client);
                 actor.self_client_id = Some(7);
                 actor.open_protocol.on_connected(7, 5, Instant::now());
-                actor.last_snapshot = Some((
+                actor.directory.set_snapshot_for_test(
                     Vec::new(),
                     vec![ClientView::from(ClientInfo {
                         id: 12,
@@ -597,7 +590,7 @@ mod tests {
                         uid: "bot-uid".into(),
                         ..client_info(12, 5, "MusicBot")
                     })],
-                ));
+                );
                 let mut events = actor.events.subscribe();
 
                 // 1. Peer announces slash-commands capability -> Actor automatically dispatches COMMANDS_PLUGIN list_req.

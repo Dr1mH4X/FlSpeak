@@ -386,18 +386,17 @@ impl Actor {
             return;
         };
         let flags = VoiceFlagsSnapshot::from_voice_state(&self.voice_state);
-        if let Some(row) = self.known_clients.get_mut(&self_id) {
-            row.input_muted = Some(flags.input_muted);
-            row.output_muted = Some(flags.output_muted);
-            row.away = Some(flags.away);
-        }
-        if let Some((_, clients)) = &mut self.last_snapshot
-            && let Some(row) = clients.iter_mut().find(|client| client.id == self_id)
-        {
-            row.input_muted = Some(flags.input_muted);
-            row.output_muted = Some(flags.output_muted);
-            row.away = Some(flags.away);
-        }
+        self.directory.update_client_flags(
+            self_id,
+            Some(self_id),
+            ClientFlagsPatch {
+                channel_id: 0,
+                input_muted: Some(flags.input_muted),
+                output_muted: Some(flags.output_muted),
+                away: Some(flags.away),
+                away_message: None,
+            },
+        );
         self.emit(SessionEvent::ClientUpdated {
             id: self_id,
             input_muted: Some(flags.input_muted),
@@ -1149,6 +1148,8 @@ pub(super) fn mute_flags(muted: bool, deafened: bool) -> (&'static str, &'static
 
 #[cfg(test)]
 mod tests {
+    use std::collections::VecDeque;
+
     use super::*;
     use crate::actor::test_support::*;
 
@@ -1945,7 +1946,7 @@ mod tests {
         peer_bot.app_name = Some("MusicBot".into());
         peer_bot.bot_command_prefix = Some("!".into());
         peer_bot.capabilities = vec!["chat:slash_commands".into()];
-        actor.upsert_client_in_cache(peer_bot);
+        actor.directory.upsert_client(peer_bot);
 
         actor
             .handle_signal(SessionSignal::ClientMoved {

@@ -12,7 +12,7 @@ import 'package:material_ui/material_ui.dart'
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/member_avatars.dart';
+import '../../../core/identity/avatars.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';

@@ -15,9 +15,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flspeak/core/models.dart';
+import 'package:flspeak/core/platform/system_fonts.dart';
 import 'package:flspeak/core/preferences.dart';
 import 'package:flspeak/core/providers.dart';
-import 'package:flspeak/core/system_fonts.dart';
 import 'package:flspeak/core/update_check.dart';
 import 'package:flspeak/features/settings/settings_page.dart';
 import 'package:flspeak/features/settings/widgets/font_family_view.dart';

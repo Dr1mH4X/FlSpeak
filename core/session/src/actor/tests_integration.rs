@@ -44,7 +44,7 @@ async fn load_self_avatar_snapshot_command_reads_the_store() {
             ));
             let _ = std::fs::create_dir_all(&temp);
             let store_path = temp.join("preferences.json");
-            crate::self_avatar::save(&store_path, &PNG).unwrap();
+            crate::media::save_self_avatar_snapshot(&store_path, &PNG).unwrap();
 
             let mut actor = audio_actor();
             actor.store_path = store_path;
@@ -194,11 +194,11 @@ fn invalidate_handlers_resets_open_protocol_caches_and_cooldowns() {
     assert!(actor.open_protocol.self_client_id().is_none());
     assert_eq!(actor.open_protocol.self_channel_id(), 0);
     assert_eq!(actor.connection_epoch, prev_epoch + 1);
-    assert!(actor.channel_list_allowed.is_none());
-    assert!(actor.channel_meta_allowed.is_none());
-    assert!(actor.client_list_allowed.is_none());
-    assert!(!actor.subscribed_all_channels);
-    assert!(actor.self_server_groups.is_empty());
+    assert!(actor.directory.channel_list_allowed().is_none());
+    assert!(actor.directory.channel_meta_allowed().is_none());
+    assert!(actor.directory.client_list_allowed().is_none());
+    assert!(!actor.directory.subscribed_all_channels());
+    assert!(actor.directory.self_server_groups().is_empty());
 }
 
 #[tokio::test]
@@ -206,22 +206,24 @@ async fn dynamic_reset_triggers_clear_permission_flags() {
     let mut actor = audio_actor();
     actor.self_client_id = Some(7);
     actor.self_channel_id = 5;
-    actor.self_server_groups = vec!["6".into()];
+    actor.directory.set_self_server_groups(&["6".into()]);
 
     // 1. 切换频道重置权限标志。
-    actor.channel_list_allowed = Some(false);
-    actor.channel_meta_allowed = Some(false);
-    actor.client_list_allowed = Some(false);
+    actor.directory.set_channel_list_allowed(false);
+    actor.directory.set_channel_meta_allowed(false);
+    actor.directory.set_client_list_allowed(false);
     actor.on_self_moved(9).await;
-    assert_eq!(actor.channel_list_allowed, None);
-    assert_eq!(actor.channel_meta_allowed, None);
-    assert_eq!(actor.client_list_allowed, None);
+    assert_eq!(actor.directory.channel_list_allowed(), None);
+    assert_eq!(actor.directory.channel_meta_allowed(), None);
+    assert_eq!(actor.directory.client_list_allowed(), None);
 
     // 2. ClientUpdated 服务器组不变时不重置；变化时重置（顺序不同但集合相同也不重置）。
-    actor.channel_list_allowed = Some(false);
-    actor.channel_meta_allowed = Some(false);
-    actor.client_list_allowed = Some(false);
-    actor.self_server_groups = vec!["6".into(), "8".into()];
+    actor.directory.set_channel_list_allowed(false);
+    actor.directory.set_channel_meta_allowed(false);
+    actor.directory.set_client_list_allowed(false);
+    actor
+        .directory
+        .set_self_server_groups(&["6".into(), "8".into()]);
     actor
         .handle_signal(SessionSignal::ClientUpdated {
             epoch: actor.connection_epoch,
@@ -236,7 +238,7 @@ async fn dynamic_reset_triggers_clear_permission_flags() {
             avatar_hash: None,
         })
         .await;
-    assert_eq!(actor.channel_list_allowed, Some(false));
+    assert_eq!(actor.directory.channel_list_allowed(), Some(false));
 
     actor
         .handle_signal(SessionSignal::ClientUpdated {
@@ -252,14 +254,14 @@ async fn dynamic_reset_triggers_clear_permission_flags() {
             avatar_hash: None,
         })
         .await;
-    assert_eq!(actor.channel_list_allowed, None);
-    assert_eq!(actor.channel_meta_allowed, None);
-    assert_eq!(actor.client_list_allowed, None);
+    assert_eq!(actor.directory.channel_list_allowed(), None);
+    assert_eq!(actor.directory.channel_meta_allowed(), None);
+    assert_eq!(actor.directory.client_list_allowed(), None);
 
     // 3. DirectorySnapshot 检测到自身 server_groups 变化时也重置。
-    actor.channel_list_allowed = Some(false);
-    actor.channel_meta_allowed = Some(false);
-    actor.client_list_allowed = Some(false);
+    actor.directory.set_channel_list_allowed(false);
+    actor.directory.set_channel_meta_allowed(false);
+    actor.directory.set_client_list_allowed(false);
     actor
         .handle_signal(SessionSignal::Snapshot {
             epoch: actor.connection_epoch,
@@ -273,14 +275,14 @@ async fn dynamic_reset_triggers_clear_permission_flags() {
             },
         })
         .await;
-    assert_eq!(actor.channel_list_allowed, None);
-    assert_eq!(actor.channel_meta_allowed, None);
-    assert_eq!(actor.client_list_allowed, None);
+    assert_eq!(actor.directory.channel_list_allowed(), None);
+    assert_eq!(actor.directory.channel_meta_allowed(), None);
+    assert_eq!(actor.directory.client_list_allowed(), None);
 
     // 4. RequestSnapshot 命令重置权限标志。
-    actor.channel_list_allowed = Some(false);
-    actor.channel_meta_allowed = Some(false);
-    actor.client_list_allowed = Some(false);
+    actor.directory.set_channel_list_allowed(false);
+    actor.directory.set_channel_meta_allowed(false);
+    actor.directory.set_client_list_allowed(false);
     let (reply, rx) = oneshot::channel();
     assert!(
         actor
@@ -288,9 +290,9 @@ async fn dynamic_reset_triggers_clear_permission_flags() {
             .await
     );
     assert!(rx.await.unwrap().is_ok());
-    assert_eq!(actor.channel_list_allowed, None);
-    assert_eq!(actor.channel_meta_allowed, None);
-    assert_eq!(actor.client_list_allowed, None);
+    assert_eq!(actor.directory.channel_list_allowed(), None);
+    assert_eq!(actor.directory.channel_meta_allowed(), None);
+    assert_eq!(actor.directory.client_list_allowed(), None);
 }
 
 struct SlowDirectory(Arc<tokio::sync::Notify>);

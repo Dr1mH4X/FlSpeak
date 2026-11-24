@@ -69,7 +69,7 @@ Connected ──非主动断开──> Reconnecting{attempt, delay}
 - 戳一下交互通过 Actor 串行调用 `tsclient_rs::poke`，接收侧统一注册 `on_poked` 监听并核对连接代次转换为 UI 通知；戳一下交互不落盘写入聊天历史。
 - 接收侧统一注册单一 `on_text_message` 处理器，构造 `TextMessageView` 后推入事件队列；私聊记录以发送者 UID 为持久索引键。
 - TS6 协议官方图片消息使用 `{"msg_type":"ts.file.myts",...}` JSON 载荷；客户端不接入 myTeamSpeak 附件服务，官方附件统一展示格式不支持占位，不伪造图片。
-- 用户自配图床与第三方 HTTP/HTTPS 图片通过 `images.rs` 进行公网 IP、SSRF 与文件头校验后安全抓取；图片裸数据不经过音频链路。
+- 用户自配图床与第三方 HTTP/HTTPS 图片通过 `media/images.rs` 进行公网 IP、SSRF 与文件头校验后安全抓取；图片裸数据不经过音频链路。
 
 ## 消息历史与文件传输
 

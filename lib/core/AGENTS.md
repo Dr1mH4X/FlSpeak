@@ -8,4 +8,14 @@
 - **通知中心**：页面级瞬时错误与浮动提醒统一通过 `NoticeCenter` 处理，不使用原生 `SnackBar` 或页面自制横幅。
 - **日志管道**：遵循 [docs/defensive-patterns/logging.md](../../docs/defensive-patterns/logging.md)，通过 Talker 收集应用诊断，`JsonLinesFileObserver` 异步串行写入 `frontend.YYYY-MM-DD.log`，错误级别立即 flush，队列溢出丢弃旧记录，按 UTC 日期保留 7 天；非调试构建不记录 DEBUG；前端严禁越权记录连接与会话等后端领域状态。
 - **目录调起与降级**：通过 `launchOrCopyDirectory` 调起系统文件管理器，调用必须限制最长 3 秒超时；失败或超时后必须自动降级为向剪贴板写入目录路径并提示用户。
-- **单测摆放**：Dart 单测集中放置在根目录 `test/` 下，镜像 `lib/` 源码目录层级（如 `lib/core/directory_launcher.dart` 对应 `test/core/directory_launcher_test.dart`）。
+- **单测摆放**：Dart 单测集中放置在根目录 `test/` 下，镜像 `lib/` 源码目录层级（如 `lib/core/platform/directory_launcher.dart` 对应 `test/core/platform/directory_launcher_test.dart`，`lib/core/identity/avatars.dart` 对应 `test/core/identity/avatars_test.dart`）。
+
+## 模块职责
+
+- `providers.dart`：承载 `SessionController`、会话生命周期派生 provider（`sessionViewProvider`、`voiceLevelsProvider`、`activePttHotkeyProvider`、`sessionAccessProvider`、`memberGroupsProvider`、`channelDescriptionProvider`、`channelIconProvider`）与根依赖注入 seam（`coreSessionProvider`、`storePathProvider`、`clockProvider`、`appVersionProvider` 等）。
+- `preferences.dart`：承载 `SessionPreferences`、`PreferencesStore`、`resolveStorePath` 与 `PreferencesController`（`preferencesStoreProvider`、`preferencesProvider`）。
+- `platform/`：承载 OS / 宿主平台桥接（`android_app_lifecycle.dart`、`android_audio_permission.dart`、`android_dns_sync.dart`、`desktop_window.dart`、`directory_launcher.dart`、`file_export.dart`、`global_hotkey.dart`、`system_fonts.dart`）；仅在同时存在真机与测试替身时保留 `Gateway` 接口，不为单一实现新增抽象层。
+- `identity/identity.dart`：承载激活身份与自头像离线预览（`ActiveIdentity`、`activeIdentityProvider`、`identityAvatarInitialBytesProvider`、`IdentityAvatarPreviewController`、`identityAvatarPreviewProvider`、`identityAvatarProvider`、`selfAvatarBytesProvider`）。
+- `identity/avatars.dart`：承载成员头像缓存与头像文件选取（`memberAvatarProvider`、`memberAvatarRevisionsProvider`、`avatarInputProvider`、`AvatarInput`）。
+- `models.dart`：承载会话视图模型（`SessionView`、`ChatMessage`、`FileTransfer`、`VoiceLevels`）、错误/通知文案映射与字节数格式化（`formatByteSize`）。
+- `image_host.dart`：承载图床配置持久化（`imageHostProvider`）、聊天图片选取与远端图片受控抓取（`imageInputProvider`、`remoteImageProvider`）。

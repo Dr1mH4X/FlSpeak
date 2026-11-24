@@ -8,21 +8,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../l10n/app_localizations.dart';
-import 'android_app_lifecycle.dart';
-import 'android_audio_permission.dart';
 import 'audio_selection.dart';
-import 'byte_size.dart';
-import 'logging/logger.dart';
-import 'models.dart';
-import 'global_hotkey.dart';
-import 'file_export.dart';
+import 'identity/identity.dart';
 import 'image_host.dart';
+import 'models.dart';
 import 'notices.dart';
+import 'platform/android_app_lifecycle.dart';
+import 'platform/android_audio_permission.dart';
+import 'platform/file_export.dart';
+import 'platform/global_hotkey.dart';
 import 'preferences.dart';
-import 'server_icon.dart';
 import 'stream_publisher.dart';
 import 'stream_viewer.dart';
-import 'voice_levels.dart';
 
 final appLocalizationsProvider = Provider<AppLocalizations>((ref) {
   final code =
@@ -137,6 +134,22 @@ final channelDescriptionProvider = FutureProvider.autoDispose
           .read(coreSessionProvider)
           .channelDescription(channelId: channelId);
     }, retry: (retryCount, error) => null);
+
+/// 同一连接内共用图标；重连或切换服务器会销毁旧请求的缓存。
+final channelIconProvider = FutureProvider.autoDispose.family<Uint8List, int>((
+  ref,
+  iconId,
+) async {
+  final session = ref.watch(
+    sessionViewProvider.select(
+      (view) => (view.activeServerId, view.connectionEpoch, view.connected),
+    ),
+  );
+  if (!session.$3 || session.$1 == null) {
+    throw StateError('Channel icon requires an active connection');
+  }
+  return ref.read(coreSessionProvider).fetchIcon(iconId: iconId);
+}, retry: (retryCount, error) => null);
 
 class SessionController extends Notifier<SessionView> {
   final _transferReplies = <int, Completer<bool>>{};
@@ -1381,308 +1394,6 @@ class SessionController extends Notifier<SessionView> {
           state = current.copyWith(identityUpgradeTarget: null);
           _notifyFailure(text);
         }
-    }
-  }
-}
-
-/// 读写昵称与最近连接时间。`main()` 里覆盖成文件实现；测试里默认是内存实现。
-final preferencesStoreProvider = Provider<PreferencesStore>(
-  (ref) => PreferencesStore.inMemory(),
-);
-
-final preferencesProvider =
-    NotifierProvider<PreferencesController, SessionPreferences>(
-      PreferencesController.new,
-    );
-
-/// 当前激活身份。后端目前只有一份身份，它同时是默认身份；问候与身份卡共用这一入口。
-@immutable
-class ActiveIdentity {
-  const ActiveIdentity({
-    required this.nickname,
-    required this.hasExplicitNickname,
-  });
-
-  /// 连接与身份卡使用的昵称。未设置时是持久化层的占位昵称。
-  final String nickname;
-
-  /// 问候语是否可以对昵称署名。
-  final bool hasExplicitNickname;
-}
-
-final activeIdentityProvider = Provider<ActiveIdentity>((ref) {
-  final (:nickname, :hasExplicitNickname) = ref.watch(
-    preferencesProvider.select(
-      (prefs) => (
-        nickname: prefs.nickname,
-        hasExplicitNickname: prefs.hasExplicitNickname,
-      ),
-    ),
-  );
-  final trimmed = nickname.trim();
-  return ActiveIdentity(
-    nickname: trimmed.isEmpty ? SessionPreferences.fallbackNickname : trimmed,
-    hasExplicitNickname: hasExplicitNickname,
-  );
-});
-
-/// 启动时由 `main()` 通过 FFI 预加载的自头像快照。
-final identityAvatarInitialBytesProvider = Provider<Uint8List?>((ref) => null);
-
-/// 本机保留的最近一次自头像。离线、加载中或加载失败时由界面读取。
-class IdentityAvatarPreviewController extends Notifier<Uint8List?> {
-  int _request = 0;
-
-  @override
-  Uint8List? build() => ref.watch(identityAvatarInitialBytesProvider);
-
-  /// 通过 FFI 重新读取 Rust 侧快照；并发调用时只有最后一次结果生效。
-  Future<void> refresh() async {
-    final request = ++_request;
-    Uint8List? bytes;
-    try {
-      bytes = await ref.read(coreSessionProvider).loadSelfAvatarSnapshot();
-    } on Object catch (error) {
-      logWarn('failed to load the self avatar snapshot over FFI', error: error);
-      return;
-    }
-    if (!ref.mounted || request != _request) {
-      return;
-    }
-    final current = state;
-    if (current == null && bytes == null) {
-      return;
-    }
-    if (current != null && bytes != null && listEquals(current, bytes)) {
-      return;
-    }
-    state = bytes;
-  }
-}
-
-final identityAvatarPreviewProvider =
-    NotifierProvider<IdentityAvatarPreviewController, Uint8List?>(
-      IdentityAvatarPreviewController.new,
-    );
-
-class PreferencesController extends Notifier<SessionPreferences> {
-  @override
-  SessionPreferences build() => ref.watch(preferencesStoreProvider).current;
-
-  void setNickname(String value) {
-    if (value == state.nickname) {
-      return;
-    }
-    _update(state.copyWith(nickname: value));
-  }
-
-  /// `null` 表示跟随系统。
-  void setLocale(String? code) {
-    if (code == state.locale) {
-      return;
-    }
-    _update(state.copyWith(locale: code));
-  }
-
-  void setTheme(AppThemePreference theme) {
-    if (theme == state.theme) {
-      return;
-    }
-    _update(state.copyWith(theme: theme));
-  }
-
-  void setLiquidGlass(LiquidGlassMode mode) {
-    if (mode == state.liquidGlass) {
-      return;
-    }
-    _update(state.copyWith(liquidGlass: mode));
-  }
-
-  void setPureBlack(bool enabled) {
-    if (enabled == state.pureBlack) {
-      return;
-    }
-    _update(state.copyWith(pureBlack: enabled));
-  }
-
-  void setPrimaryColor(int color) {
-    final normalized = 0xFF000000 | (color & 0x00FFFFFF);
-    if (normalized == state.primaryColor) {
-      return;
-    }
-    _update(state.copyWith(primaryColor: normalized));
-  }
-
-  void updateThemePalette({
-    int? primaryColor,
-    List<int>? primaryColors,
-    AppColorStyle? colorStyle,
-  }) {
-    _update(
-      state.copyWith(
-        primaryColor: primaryColor == null
-            ? null
-            : (0xFF000000 | (primaryColor & 0x00FFFFFF)),
-        primaryColors: primaryColors == null
-            ? null
-            : List.unmodifiable(primaryColors),
-        colorStyle: colorStyle,
-      ),
-    );
-  }
-
-  void setColorStyle(AppColorStyle style) {
-    if (style == state.colorStyle) {
-      return;
-    }
-    _update(state.copyWith(colorStyle: style));
-  }
-
-  void setFloatingNavigationBar(bool floating) {
-    if (floating == state.floatingNavigationBar) {
-      return;
-    }
-    _update(state.copyWith(floatingNavigationBar: floating));
-  }
-
-  void setFontFamily(String? family) {
-    final trimmed = family?.trim();
-    final normalized = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
-    if (normalized == state.fontFamily) {
-      return;
-    }
-    _update(state.copyWith(fontFamily: normalized));
-  }
-
-  void setTextScale({bool? enabled, double? scale}) {
-    final nextEnabled = enabled ?? state.textScaleEnabled;
-    final nextScale = (scale ?? state.textScale)
-        .clamp(minTextScale, maxTextScale)
-        .toDouble();
-    if (nextEnabled == state.textScaleEnabled && nextScale == state.textScale) {
-      return;
-    }
-    _update(
-      state.copyWith(textScaleEnabled: nextEnabled, textScale: nextScale),
-    );
-  }
-
-  /// `null` 表示清除按住说话快捷键。
-  void setPttHotkey(int? keyId) {
-    if (keyId == state.pttHotkey) {
-      return;
-    }
-    _update(state.copyWith(pttHotkey: keyId));
-  }
-
-  /// `null` 表示回到默认宽度。
-  void setChannelPanelWidth(double? width) {
-    if (width == state.channelPanelWidth) {
-      return;
-    }
-    _update(state.copyWith(channelPanelWidth: width));
-  }
-
-  /// `null` 表示回到默认自适应高度。
-  void setStreamViewerHeight(double? height) {
-    if (height == state.streamViewerHeight) {
-      return;
-    }
-    _update(state.copyWith(streamViewerHeight: height));
-  }
-
-  void setVoiceMeterSource(VoiceMeterSource source) {
-    if (source == state.voiceMeterSource) {
-      return;
-    }
-    _update(state.copyWith(voiceMeterSource: source));
-  }
-
-  void setScreenShareResolution(ScreenShareResolutionPreset preset) {
-    if (preset == state.screenShareResolution) {
-      return;
-    }
-    _update(state.copyWith(screenShareResolution: preset));
-  }
-
-  void setScreenShareFrameRate(ScreenShareFrameRatePreset preset) {
-    if (preset == state.screenShareFrameRate) {
-      return;
-    }
-    _update(state.copyWith(screenShareFrameRate: preset));
-  }
-
-  void setScreenShareCodec(ScreenShareCodecPreference codec) {
-    if (codec == state.screenShareCodec) {
-      return;
-    }
-    _update(state.copyWith(screenShareCodec: codec));
-  }
-
-  void setScreenShareDegradation(ScreenShareDegradationPreference degradation) {
-    if (degradation == state.screenShareDegradation) {
-      return;
-    }
-    _update(state.copyWith(screenShareDegradation: degradation));
-  }
-
-  void setAutoCheckUpdate(bool enabled) {
-    if (enabled == state.autoCheckUpdate) {
-      return;
-    }
-    _update(state.copyWith(autoCheckUpdate: enabled));
-  }
-
-  void setNoiseSuppression(bool enabled) {
-    if (enabled == state.noiseSuppression) {
-      return;
-    }
-    _update(state.copyWith(noiseSuppression: enabled));
-  }
-
-  void setLogLevel(AppLogLevel level) {
-    if (level == state.logLevel) {
-      return;
-    }
-    _update(state.copyWith(logLevel: level));
-    unawaited(syncLogLevel(level.talkerLevel, rustLevelId: level.id));
-  }
-
-  void setServerIcon(String serverId, ServerIconChoice icon) {
-    _update(
-      state.copyWith(
-        serverIcons: Map.unmodifiable({...state.serverIcons, serverId: icon}),
-      ),
-    );
-  }
-
-  void moveServerPreferences(String oldId, String newId) {
-    final icons = {...state.serverIcons};
-    final icon = icons.remove(oldId);
-    if (icon != null) icons[newId] = icon;
-    final connected = {...state.lastConnected};
-    final at = connected.remove(oldId);
-    if (at != null) connected[newId] = at;
-    _update(state.copyWith(serverIcons: icons, lastConnected: connected));
-  }
-
-  void markConnected(String serverId, DateTime at) {
-    _update(
-      state.copyWith(lastConnected: {...state.lastConnected, serverId: at}),
-    );
-  }
-
-  void _update(SessionPreferences next) {
-    state = next;
-    unawaited(_persist(next));
-  }
-
-  Future<void> _persist(SessionPreferences next) async {
-    try {
-      final normalized = await ref.read(preferencesStoreProvider).save(next);
-      state = state.copyWith(nickname: normalized.nickname);
-    } on Object catch (error) {
-      logError('failed to save preferences', error: error);
     }
   }
 }

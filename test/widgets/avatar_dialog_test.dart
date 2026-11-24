@@ -13,7 +13,7 @@ import 'package:material_ui/material_ui.dart'
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:flspeak/core/avatar_input.dart';
+import 'package:flspeak/core/identity/avatars.dart';
 import 'package:flspeak/core/models.dart';
 import 'package:flspeak/core/notices.dart';
 import 'package:flspeak/core/providers.dart';

@@ -2,8 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:flspeak/core/global_hotkey.dart';
-import 'package:flspeak/core/hotkey_codes.dart';
+import 'package:flspeak/core/platform/global_hotkey.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

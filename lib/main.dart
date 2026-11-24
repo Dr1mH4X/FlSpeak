@@ -5,12 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import 'app.dart';
-import 'core/android_dns_sync.dart';
+import 'core/identity/identity.dart';
 import 'core/logging/logger.dart';
+import 'core/platform/android_dns_sync.dart';
+import 'core/platform/desktop_window.dart';
 import 'core/preferences.dart';
 import 'core/providers.dart';
-import 'core/store_path.dart';
-import 'core/window_chrome.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

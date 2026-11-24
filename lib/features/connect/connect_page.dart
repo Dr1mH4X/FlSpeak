@@ -25,8 +25,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/member_avatars.dart';
+import '../../core/identity/identity.dart';
 import '../../core/notices.dart';
+import '../../core/preferences.dart';
 import '../../core/providers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../router.dart';

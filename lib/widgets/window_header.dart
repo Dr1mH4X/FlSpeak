@@ -9,8 +9,7 @@ import 'dart:math' as math;
 
 import 'package:material_ui/material_ui.dart';
 
-import '../core/window_chrome.dart';
-import '../core/window_metrics.dart';
+import '../core/platform/desktop_window.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
 import 'caption_icon.dart';

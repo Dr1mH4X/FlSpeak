@@ -15,10 +15,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import 'package:flspeak/app.dart';
-import 'package:flspeak/core/global_hotkey.dart';
-import 'package:flspeak/core/hotkey_codes.dart';
 import 'package:flspeak/core/logging/json_lines_file_observer.dart';
 import 'package:flspeak/core/logging/logger.dart';
+import 'package:flspeak/core/platform/global_hotkey.dart';
 import 'package:flspeak/features/settings/settings_page.dart';
 import 'package:talker/talker.dart';
 import 'package:flspeak/theme/app_theme.dart';

@@ -15,6 +15,7 @@ import 'package:material_ui/material_ui.dart'
         TextButton;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/preferences.dart';
 import '../core/providers.dart';
 import '../core/server_icon.dart';
 import 'expressive_frame.dart';

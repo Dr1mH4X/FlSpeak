@@ -32,7 +32,7 @@
 
 - 识别 `ts.file.myts` JSON 并提取 `file_name`、`file_size`、`body`；展示“不支持的图片格式”占位卡片与文件尺寸信息，不发出任何网络请求；原始 JSON 完整写入本地聊天历史。
 - 识别 TS6 Markdown `![alt](https://...)`、TS3 风格 `[img]https://...[/img]` 以及整行图片链接（扩展名 png/jpg/jpeg/gif/webp/avif）。普通链接保持纯文本样式，不预抓取。
-- Dart `MessageContent` 通过 FFI `fetchImage(url)` 请求字节，由 Rust 侧 `core/session/src/images.rs` 执行安全校验与抓取。
+- Dart `MessageContent` 通过 FFI `fetchImage(url)` 请求字节，由 Rust 侧 `core/session/src/media/images.rs` 执行安全校验与抓取。
 - 安全校验：仅允许 http/https 协议；拒绝携带凭据；拒绝 `proto::forbidden_host` 官方主机；拒绝 localhost、私有主机名（.local/.lan/.internal）、私网地址、链路本地与 CGNAT 网段；DNS 解析后固定到公网 IP 发起请求，防御 DNS 重绑定。
 - 抓取限制：最多跟随 3 次重定向（逐跳重新执行 SSRF 校验）；15 秒全局超时；20 MiB 响应体积上限；`Content-Type` 必须为 `image/*` 或文件头特征匹配 PNG/JPEG/GIF/WebP/AVIF。
 - 代理与透明网关适配：支持系统代理与环境变量代理；检测到代理时交由远端代理进行 DNS 解析以避免本地污染。允许 RFC 2544 保留网段 `198.18.0.0/15`（TUN/fake-IP 网关），满足透明代理抓取需求，同时严格拦截真实局域网与环回私网。

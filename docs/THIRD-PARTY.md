@@ -20,9 +20,8 @@
 | 本仓库文件 | 原始文件 |
 | --- | --- |
 | `lib/app.dart` | `lib/manager/theme_manager.dart` |
-| `lib/core/window_metrics.dart` | `lib/common/layout.dart` |
-| `lib/core/system_fonts.dart` | `lib/common/system_fonts.dart` |
-| `lib/core/window_chrome.dart` | `plugins/window/lib/src/desktop_window.dart`、`lib/common/window.dart` |
+| `lib/core/platform/desktop_window.dart` | `plugins/window/lib/src/desktop_window.dart`、`lib/common/window.dart`、`lib/common/layout.dart` |
+| `lib/core/platform/system_fonts.dart` | `lib/common/system_fonts.dart` |
 | `lib/widgets/window_header.dart` | `lib/manager/window_manager.dart`、`lib/ui/scaffold.dart` |
 | `lib/widgets/scaffold/scaffold.dart`、`scaffold_actions.dart`、`scaffold_search.dart` | `lib/ui/scaffold/scaffold.dart`、`scaffold_actions.dart`、`scaffold_search.dart` |
 | `lib/features/connect/connect_page.dart`（搜索展开动效） | `lib/ui/scaffold/scaffold_search.dart` |
@@ -73,7 +72,7 @@ FlSpeak 通过 `pubspec.yaml` Pub 依赖与 [lib/widgets/prism.dart](../lib/widg
 | `windows/runner/window_controller.h`、`windows/runner/window_controller.cpp` | `plugins/window/windows/window_controller.h`、`window_controller.cpp` |
 | `windows/runner/flutter_window.h`、`windows/runner/flutter_window.cpp` | `plugins/window/windows/window_plugin.cpp`、`window_controller.cpp` |
 | `windows/runner/main.cpp` | `windows/runner/main.cpp` |
-| `lib/core/window_chrome.dart` | `plugins/window/lib/src/desktop_window.dart` |
+| `lib/core/platform/desktop_window.dart` | `plugins/window/lib/src/desktop_window.dart` |
 
 MIT 许可原文：
 

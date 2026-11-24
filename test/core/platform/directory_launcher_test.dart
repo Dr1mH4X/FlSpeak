@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flspeak/core/directory_launcher.dart';
+import 'package:flspeak/core/platform/directory_launcher.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

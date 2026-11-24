@@ -8,9 +8,9 @@
 - 采用 Actor 模型串行执行所有协议调用，彻底规避底库内部跨 await 持锁的死锁风险。
 - 管理会话状态机（`Disconnected`, `Connecting`, `Connected`, `Reconnecting`）、频道快照轮询及断线重连。
 - 维护本地身份标识、服务器历史消息持久化（上限 500 条）及应用配置管理 `SettingsManager`。
-- 维护成员头像的按服磁盘缓存与本机自头像快照；所有头像磁盘读写经单一 FIFO 阻塞线程执行。
+- 由 `core/session::media` 统一维护成员头像、自头像离线快照、服务器图标与频道图标的磁盘缓存；所有成员头像与自头像快照的磁盘读写经 `AvatarDiskQueue` 单一 FIFO 阻塞线程执行。
 - 管理全局 `tracing` 订阅器与每日按 UTC 轮转的文件 worker（`backend.YYYY-MM-DD.log`）。
-- 处理第三方聊天图片安全抓取校验及图床上传逻辑。
+- 由 `core/session::media` 处理第三方聊天图片安全抓取校验及图床上传逻辑。
 - 调度基于 `PluginCommand` 的开放身份互认（`tsclient:identity`）与 Bot 斜杠命令按需拉取（`tsclient:commands`），维护会话级元数据缓存与防刷冷却。
 - 提供版本更新检查、6 小时缓存与失败回退；它不进入 Actor 命令队列。
 
@@ -33,6 +33,7 @@
 - 日志文件 worker 必须启用 `lossy(true)` 非阻塞队列，在背压或写盘抖动时丢弃日志，严禁阻塞会话 Actor 或实时音频线程；重复初始化具备幂等保护。
 - 跨 FFI 的提示只传稳定 notice code：`VoiceStateView.message` 与 `SessionEvent::{Denied, Failed}` 携带 `voice.*` / `session.*` 代码，Dart 负责映射本地化文案；详细诊断写入后端日志。
 - 版本更新检查是旁路：全局异步锁保证同一时刻只跑一个检查，不占用 Actor 命令队列，也不访问 `Client`；失败不得覆盖上次成功缓存，并返回缓存推导出的最终状态。
+- 会话 Actor 维持单一 `current-thread` runtime 与 `LocalSet` 串行调度，其内部状态按子域封装为 `ReconnectState`、`DirectoryState`、`StreamCoordinatorState` 与 `MediaTransferState`，通过窄方法与显式 `reset_on_disconnect()` / `reset_on_channel_change()` 收口断线与切频道状态清理。
 
 ## 相关决策
 

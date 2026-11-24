@@ -9,10 +9,10 @@ Status: implemented
 ## Decision
 
 - **单槽快照**：本机只保留最近一次成功看到的自头像，不按服务器分槽。快照语义是[自头像](../../../../GLOSSARY.md)在服务器侧的最近一次快照，不引入独立的本地资料头像。
-- **Rust 持久化**：快照文件为 `<应用支持目录>/identity-avatar.bin`，与 `preferences.json` 同目录。读写与清空由 `core/session` 的 `self_avatar` 模块负责，不进入 `preferences.json`，也不复用 `avatars/` 的 512 个 / 32 MiB LRU 预算。
+- **Rust 持久化**：快照文件为 `<应用支持目录>/identity-avatar.bin`，与 `preferences.json` 同目录。读写与清空由 `core/session` 的 `media/self_avatar` 模块负责，不进入 `preferences.json`，也不复用 `avatars/` 的 512 个 / 32 MiB LRU 预算。
 - **单一 FIFO 阻塞线程**：快照的读取、写入与清理都通过 `AvatarDiskQueue` 的阻塞工作线程串行执行；该队列同时承载成员头像缓存，保证「写入快照」与随后的「读取快照」严格有序，且不阻塞 Actor 主线程。
-- **原子写**：写入复用 `media_cache::write_atomic`，先写同目录临时文件再原子替换目标文件；写盘失败只记录警告。
-- **读取校验**：`load_self_avatar_snapshot` 读取时校验文件存在、非空、`<= 1 MiB` 且通过 `avatars::is_supported_image`（PNG / JPEG / GIF / WebP）；缺失、损坏或超限时记录警告并返回 `None`，不阻塞启动。
+- **原子写**：写入复用 `media/cache` 的 `write_atomic`，先写同目录临时文件再原子替换目标文件；写盘失败只记录警告。
+- **读取校验**：`load_self_avatar_snapshot` 读取时校验文件存在、非空、`<= 1 MiB` 且通过 `media/avatars` 的 `is_supported_image`（PNG / JPEG / GIF / WebP）；缺失、损坏或超限时记录警告并返回 `None`，不阻塞启动。
 - **刷新规则**：Actor 拉取到自己的非空头像字节时覆盖快照；本机上传自头像成功立即写入上传字节；本机删除自头像成功立即清空。加载中、拉取失败、服务器返回 `null`、断线、重启、移除服务器都保留现有快照。
 - **`null` 不自动清空**：当前 FFI 把「服务器没有头像」与「无权读取 / 未找到」都映射成 `None`，自动清空会因权限不足误删有效快照。连接期间服务器返回 `null` 时界面仍显示缩写圆，快照只用于未连接、加载中与加载失败的兜底。
 - **FFI 只读入口**：`CoreSession::load_self_avatar_snapshot()` 返回 `Option<Vec<u8>>`。`main()` 在 `runApp` 前预加载并写入 `identityAvatarInitialBytesProvider`；Dart 只保留内存快照，收到自头像变更或上传/删除完成后再次调用 FFI 刷新内存兜底。
@@ -39,8 +39,8 @@ Status: implemented
 
 ## Testing
 
-- `core/session` 的 `self_avatar` 测试覆盖保存/读取/清空、原子写无残留、超限与不支持格式的拒绝，以及空 store path 的安全处理。
-- `avatars` 的 FIFO 队列测试覆盖快照保存后读取到最新值、清空后读到 `None`，以及 `avatars/` 的孤儿清理不影响根目录快照。
+- `core/session` 的 `media::self_avatar` 测试覆盖保存/读取/清空、原子写无残留、超限与不支持格式的拒绝，以及空 store path 的安全处理。
+- `media::avatars` 的 FIFO 队列测试覆盖快照保存后读取到最新值、清空后读到 `None`，以及 `avatars/` 的孤儿清理不影响根目录快照。
 - Actor 测试覆盖上传写入快照、删除清空快照、网络拉取与磁盘命中写入快照、断线保留快照，以及 `NotFound`/`None` 保留快照。
 - Session 集成测试覆盖 `LoadSelfAvatarSnapshot` 命令从 store 读取快照。
 - Flutter 测试覆盖离线、加载中、服务器返回 `null`、拉取失败、上传/删除后的 FFI 刷新、三处界面统一兜底与离线不可点击。

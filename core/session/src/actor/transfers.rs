@@ -1,3 +1,5 @@
+use std::collections::{HashSet, VecDeque};
+
 use super::*;
 
 const TRANSFER_PROGRESS_BYTES: u64 = 256 * 1024;
@@ -8,13 +10,14 @@ pub(crate) const MAX_AVATAR_TRANSIENT_RETRIES: u8 = 5;
 pub(crate) const AVATAR_TRANSIENT_RETRY_DELAY: Duration = Duration::from_millis(500);
 pub(crate) const AVATAR_FAILURE_COOLDOWN: Duration = Duration::from_secs(30);
 pub(crate) const MAX_AVATAR_FAILURE_ATTEMPTS: u8 = 3;
+const IMAGE_QUEUE_CAPACITY: usize = 32;
 
 type ImageNegotiation =
     Pin<Box<dyn std::future::Future<Output = Result<(String, FileDownloadInfo), ImageFetchError>>>>;
-pub(super) type ChannelIconKey = (u64, String, u32);
-pub(super) type ChannelIconWaiters = Vec<oneshot::Sender<Result<Vec<u8>, SessionError>>>;
-pub(super) type AvatarFetchKey = (u64, String, String, u64);
-pub(super) type AvatarWaiters = Vec<oneshot::Sender<Result<Option<Vec<u8>>, SessionError>>>;
+type ChannelIconKey = (u64, String, u32);
+type ChannelIconWaiters = Vec<oneshot::Sender<Result<Vec<u8>, SessionError>>>;
+type AvatarFetchKey = (u64, String, String, u64);
+type AvatarWaiters = Vec<oneshot::Sender<Result<Option<Vec<u8>>, SessionError>>>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ImageTransientReason {
@@ -128,26 +131,374 @@ pub(crate) struct AvatarRetry {
 }
 
 #[derive(Debug)]
-pub(crate) struct AvatarCooldown {
-    pub(super) attempts: u8,
-    pub(super) retry_not_before: Option<tokio::time::Instant>,
-    pub(super) last_error: SessionError,
+struct AvatarCooldown {
+    attempts: u8,
+    retry_not_before: Option<tokio::time::Instant>,
+    last_error: SessionError,
 }
 
-pub(super) struct PendingImage {
-    pub(super) remote_path: String,
-    pub(super) reply: oneshot::Sender<Result<Vec<u8>, ImageFetchError>>,
+struct PendingImage {
+    remote_path: String,
+    reply: oneshot::Sender<Result<Vec<u8>, ImageFetchError>>,
     preempt_retries: u8,
 }
 
-pub(super) struct ActiveImage {
+struct ActiveImage {
     remote_path: String,
-    pub(super) negotiation: ImageNegotiation,
-    pub(super) reply: oneshot::Sender<Result<Vec<u8>, ImageFetchError>>,
+    negotiation: ImageNegotiation,
+    reply: oneshot::Sender<Result<Vec<u8>, ImageFetchError>>,
     preempt_retries: u8,
 }
 
 const ICON_PREEMPT_RETRIES: u8 = 5;
+
+fn clone_image_error(error: &SessionError) -> SessionError {
+    match error {
+        SessionError::Protocol(msg) => SessionError::Protocol(msg.clone()),
+        SessionError::Transfer(msg) => SessionError::Transfer(msg.clone()),
+        SessionError::Storage(msg) => SessionError::Storage(msg.clone()),
+        SessionError::Stream(msg) => SessionError::Stream(msg.clone()),
+        SessionError::Spawn(msg) => SessionError::Spawn(msg.clone()),
+        SessionError::Timeout => SessionError::Timeout,
+        SessionError::NotConnected => SessionError::NotConnected,
+        SessionError::Closed => SessionError::Closed,
+        SessionError::ChannelPasswordRequired => SessionError::ChannelPasswordRequired,
+        SessionError::NotInChannel => SessionError::NotInChannel,
+        other => SessionError::Transfer(other.to_string()),
+    }
+}
+
+/// 服务器/频道图标与成员头像的在途协商队列、会话缓存与磁盘调度状态。
+pub(super) struct MediaTransferState {
+    pending_images: VecDeque<PendingImage>,
+    active_image: Option<ActiveImage>,
+    icons: crate::media::IconCache,
+    active_server_icon_id: Option<u32>,
+    fetching_server_icon: Option<(u64, String, u32)>,
+    in_flight_channel_icons: HashMap<ChannelIconKey, ChannelIconWaiters>,
+    avatar_hashes: HashMap<String, Option<String>>,
+    avatar_negative_cache: HashSet<String>,
+    avatar_cooldowns: HashMap<String, AvatarCooldown>,
+    avatar_revisions: HashMap<String, u64>,
+    avatars_fetched_without_hash: HashSet<String>,
+    in_flight_avatars: HashMap<AvatarFetchKey, AvatarWaiters>,
+    avatar_disk: crate::media::AvatarDiskQueue,
+}
+
+impl MediaTransferState {
+    pub(super) fn new(store_path: &std::path::Path, active_server_ids: &[&str]) -> Self {
+        let icons = crate::media::IconCache::load(store_path, active_server_ids);
+        let avatar_disk = crate::media::AvatarDiskQueue::new();
+        avatar_disk.prune_orphans(
+            store_path.to_path_buf(),
+            active_server_ids
+                .iter()
+                .map(|id| (*id).to_owned())
+                .collect(),
+        );
+        Self {
+            pending_images: VecDeque::new(),
+            active_image: None,
+            icons,
+            active_server_icon_id: None,
+            fetching_server_icon: None,
+            in_flight_channel_icons: HashMap::new(),
+            avatar_hashes: HashMap::new(),
+            avatar_negative_cache: HashSet::new(),
+            avatar_cooldowns: HashMap::new(),
+            avatar_revisions: HashMap::new(),
+            avatars_fetched_without_hash: HashSet::new(),
+            in_flight_avatars: HashMap::new(),
+            avatar_disk,
+        }
+    }
+
+    pub(super) fn reset_on_disconnect(&mut self) {
+        self.cancel_active_image();
+        for request in self.pending_images.drain(..) {
+            let _ = request
+                .reply
+                .send(Err(ImageFetchError::Permanent(SessionError::NotConnected)));
+        }
+        for (_, waiters) in self.in_flight_channel_icons.drain() {
+            for reply in waiters {
+                let _ = reply.send(Err(SessionError::NotConnected));
+            }
+        }
+        self.reset_avatar_session_state();
+        self.active_server_icon_id = None;
+        self.fetching_server_icon = None;
+    }
+
+    pub(super) fn reset_avatar_session_state(&mut self) {
+        for (_, waiters) in self.in_flight_avatars.drain() {
+            for reply in waiters {
+                let _ = reply.send(Err(SessionError::NotConnected));
+            }
+        }
+        self.avatar_hashes.clear();
+        self.avatar_negative_cache.clear();
+        self.avatar_cooldowns.clear();
+        self.avatar_revisions.clear();
+        self.avatars_fetched_without_hash.clear();
+    }
+
+    pub(super) fn can_start_next_image(&self) -> bool {
+        self.active_image.is_none() && !self.pending_images.is_empty()
+    }
+
+    pub(super) async fn poll_active_image(
+        &mut self,
+    ) -> Result<(String, FileDownloadInfo), ImageFetchError> {
+        match &mut self.active_image {
+            Some(active) => active.negotiation.as_mut().await,
+            None => std::future::pending().await,
+        }
+    }
+
+    pub(super) fn take_active_image_reply(
+        &mut self,
+    ) -> oneshot::Sender<Result<Vec<u8>, ImageFetchError>> {
+        self.active_image
+            .take()
+            .expect("polled image request")
+            .reply
+    }
+
+    fn pop_next_image(&mut self) -> Option<PendingImage> {
+        self.pending_images.pop_front()
+    }
+
+    fn set_active_image(&mut self, active: ActiveImage) {
+        self.active_image = Some(active);
+    }
+
+    pub(super) fn enqueue_image(
+        &mut self,
+        remote_path: &str,
+        reply: oneshot::Sender<Result<Vec<u8>, ImageFetchError>>,
+        preempt_retries: u8,
+    ) {
+        if self.pending_images.len() >= IMAGE_QUEUE_CAPACITY {
+            let _ = reply.send(Err(ImageFetchError::Transient(
+                ImageTransientReason::QueueFull,
+            )));
+            return;
+        }
+        self.pending_images.push_back(PendingImage {
+            remote_path: remote_path.to_owned(),
+            reply,
+            preempt_retries,
+        });
+    }
+
+    pub(super) fn interrupt_active_image(&mut self) {
+        if let Some(active) = self.active_image.take() {
+            if active.preempt_retries > 0 {
+                self.pending_images.push_back(PendingImage {
+                    remote_path: active.remote_path,
+                    reply: active.reply,
+                    preempt_retries: active.preempt_retries - 1,
+                });
+            } else {
+                let _ = active.reply.send(Err(ImageFetchError::Transient(
+                    ImageTransientReason::Interrupted,
+                )));
+            }
+        }
+    }
+
+    pub(super) fn cancel_active_image(&mut self) {
+        if let Some(active) = self.active_image.take() {
+            let _ = active
+                .reply
+                .send(Err(ImageFetchError::Permanent(SessionError::NotConnected)));
+        }
+    }
+
+    pub(super) fn list_server_icons(&self) -> Vec<crate::ServerIconView> {
+        self.icons.list_server_icons()
+    }
+
+    pub(super) fn load_self_avatar_snapshot(
+        &self,
+        store_path: PathBuf,
+        callback: impl FnOnce(Option<Vec<u8>>) + Send + 'static,
+    ) {
+        self.avatar_disk.load_self_snapshot(store_path, callback);
+    }
+
+    pub(super) fn remove_server(&mut self, store_path: &std::path::Path, server_id: &str) -> bool {
+        self.avatar_disk
+            .remove_server(store_path.to_path_buf(), server_id.to_owned());
+        self.icons
+            .remove_server(store_path, server_id)
+            .unwrap_or(false)
+    }
+
+    pub(super) fn move_server(
+        &mut self,
+        store_path: &std::path::Path,
+        old_id: &str,
+        new_id: &str,
+    ) -> Option<Vec<u8>> {
+        self.avatar_disk.move_server(
+            store_path.to_path_buf(),
+            old_id.to_owned(),
+            new_id.to_owned(),
+        );
+        self.icons
+            .move_server(store_path, old_id, new_id)
+            .ok()
+            .flatten()
+    }
+
+    pub(super) fn record_avatar_hash(
+        &mut self,
+        uid: &str,
+        next: Option<String>,
+        emit_on_initial_some: bool,
+    ) -> bool {
+        if uid.is_empty() {
+            return false;
+        }
+        let next = next.filter(|value| !value.is_empty());
+        let had_negative = self.avatar_negative_cache.contains(uid);
+        let fetched_without_hash = self.avatars_fetched_without_hash.remove(uid);
+        let changed = match self.avatar_hashes.get(uid) {
+            Some(existing) if existing == &next => return false,
+            Some(_) => true,
+            None => {
+                (fetched_without_hash && !had_negative)
+                    || ((had_negative || emit_on_initial_some) && next.is_some())
+            }
+        };
+        self.avatar_hashes.insert(uid.to_owned(), next);
+        if changed {
+            self.bump_avatar_revision(uid);
+            self.avatar_negative_cache.remove(uid);
+            self.avatar_cooldowns.remove(uid);
+        }
+        changed
+    }
+
+    pub(super) fn avatar_hash(&self, uid: &str) -> Option<&Option<String>> {
+        self.avatar_hashes.get(uid)
+    }
+
+    pub(super) fn avatar_revision(&self, uid: &str) -> u64 {
+        self.avatar_revisions.get(uid).copied().unwrap_or(0)
+    }
+
+    pub(super) fn bump_avatar_revision(&mut self, uid: &str) -> u64 {
+        let next = self.avatar_revision(uid) + 1;
+        self.avatar_revisions.insert(uid.to_owned(), next);
+        next
+    }
+
+    pub(super) fn clear_avatar_failure_state(&mut self, uid: &str) {
+        self.avatar_negative_cache.remove(uid);
+        self.avatar_cooldowns.remove(uid);
+    }
+
+    pub(super) fn mark_avatar_not_found(&mut self, uid: String) {
+        self.avatar_cooldowns.remove(&uid);
+        self.avatar_negative_cache.insert(uid);
+    }
+
+    pub(super) fn record_avatar_failure_cooldown(
+        &mut self,
+        uid: &str,
+        error: &SessionError,
+        now: tokio::time::Instant,
+    ) {
+        let attempts = self
+            .avatar_cooldowns
+            .get(uid)
+            .map_or(0, |existing| existing.attempts)
+            .saturating_add(1);
+        let retry_not_before =
+            (attempts < MAX_AVATAR_FAILURE_ATTEMPTS).then_some(now + AVATAR_FAILURE_COOLDOWN);
+        self.avatar_cooldowns.insert(
+            uid.to_owned(),
+            AvatarCooldown {
+                attempts,
+                retry_not_before,
+                last_error: clone_image_error(error),
+            },
+        );
+    }
+
+    pub(super) fn active_avatar_cooldown_error(
+        &self,
+        uid: &str,
+        now: tokio::time::Instant,
+    ) -> Option<SessionError> {
+        let cooldown = self.avatar_cooldowns.get(uid)?;
+        cooldown
+            .retry_not_before
+            .is_none_or(|deadline| now < deadline)
+            .then(|| clone_image_error(&cooldown.last_error))
+    }
+
+    fn register_channel_icon_waiter(
+        &mut self,
+        key: ChannelIconKey,
+        reply: oneshot::Sender<Result<Vec<u8>, SessionError>>,
+    ) -> bool {
+        if let Some(waiters) = self.in_flight_channel_icons.get_mut(&key) {
+            waiters.push(reply);
+            return false;
+        }
+        self.in_flight_channel_icons.insert(key, vec![reply]);
+        true
+    }
+
+    fn has_in_flight_channel_icon(&self, key: &ChannelIconKey) -> bool {
+        self.in_flight_channel_icons.contains_key(key)
+    }
+
+    fn take_channel_icon_waiters(&mut self, key: &ChannelIconKey) -> Option<ChannelIconWaiters> {
+        self.in_flight_channel_icons.remove(key)
+    }
+
+    fn fail_channel_icon_waiters(&mut self, key: &ChannelIconKey) {
+        if let Some(waiters) = self.in_flight_channel_icons.remove(key) {
+            for reply in waiters {
+                let _ = reply.send(Err(SessionError::NotConnected));
+            }
+        }
+    }
+
+    fn register_avatar_waiter(
+        &mut self,
+        key: AvatarFetchKey,
+        reply: oneshot::Sender<Result<Option<Vec<u8>>, SessionError>>,
+    ) -> bool {
+        if let Some(waiters) = self.in_flight_avatars.get_mut(&key) {
+            waiters.push(reply);
+            return false;
+        }
+        self.in_flight_avatars.insert(key, vec![reply]);
+        true
+    }
+
+    fn has_in_flight_avatar(&self, key: &AvatarFetchKey) -> bool {
+        self.in_flight_avatars.contains_key(key)
+    }
+
+    fn take_in_flight_avatar(&mut self, key: &AvatarFetchKey) -> Option<AvatarWaiters> {
+        self.in_flight_avatars.remove(key)
+    }
+
+    fn fail_avatar_waiters(&mut self, key: &AvatarFetchKey) {
+        if let Some(waiters) = self.in_flight_avatars.remove(key) {
+            for reply in waiters {
+                let _ = reply.send(Err(SessionError::NotConnected));
+            }
+        }
+    }
+}
 
 impl Actor {
     pub(super) fn fetch_remote_icon(
@@ -162,7 +513,7 @@ impl Actor {
             return;
         }
         let (tx, rx) = oneshot::channel();
-        self.enqueue_server_image(
+        self.media.enqueue_image(
             &tsclient_rs::icon_file_name(icon_id),
             tx,
             ICON_PREEMPT_RETRIES,
@@ -191,17 +542,19 @@ impl Actor {
             let _ = reply.send(Err(SessionError::NotConnected));
             return;
         };
-        if let Some(bytes) = crate::channel_icons::load_hit(&self.store_path, &server_id, icon_id) {
+        if let Some(bytes) =
+            self.media
+                .icons
+                .load_channel_icon(&self.store_path, &server_id, icon_id)
+        {
             let _ = reply.send(Ok(bytes));
             return;
         }
         let epoch = self.connection_epoch;
         let key = (epoch, server_id.clone(), icon_id);
-        if let Some(waiters) = self.in_flight_channel_icons.get_mut(&key) {
-            waiters.push(reply);
+        if !self.media.register_channel_icon_waiter(key, reply) {
             return;
         }
-        self.in_flight_channel_icons.insert(key, vec![reply]);
         self.dispatch_channel_icon_attempt(epoch, server_id, icon_id, 0);
     }
 
@@ -213,7 +566,7 @@ impl Actor {
         attempt: u8,
     ) {
         let (tx, rx) = oneshot::channel();
-        self.enqueue_server_image(
+        self.media.enqueue_image(
             &tsclient_rs::icon_file_name(icon_id),
             tx,
             ICON_PREEMPT_RETRIES,
@@ -243,17 +596,13 @@ impl Actor {
         result: Result<Vec<u8>, ImageFetchError>,
     ) {
         let key = (epoch, server_id.clone(), icon_id);
-        if !self.in_flight_channel_icons.contains_key(&key) {
+        if !self.media.has_in_flight_channel_icon(&key) {
             return;
         }
         if epoch != self.connection_epoch
             || self.active_server_id.as_deref() != Some(server_id.as_str())
         {
-            if let Some(waiters) = self.in_flight_channel_icons.remove(&key) {
-                for reply in waiters {
-                    let _ = reply.send(Err(SessionError::NotConnected));
-                }
-            }
+            self.media.fail_channel_icon_waiters(&key);
             return;
         }
         if let Err(ref err) = result
@@ -271,14 +620,17 @@ impl Actor {
             });
             return;
         }
-        let Some(waiters) = self.in_flight_channel_icons.remove(&key) else {
+        let Some(waiters) = self.media.take_channel_icon_waiters(&key) else {
             return;
         };
         match result {
             Ok(bytes) => {
-                if let Err(error) =
-                    crate::channel_icons::save(&self.store_path, &server_id, icon_id, &bytes)
-                {
+                if let Err(error) = self.media.icons.save_channel_icon(
+                    &self.store_path,
+                    &server_id,
+                    icon_id,
+                    &bytes,
+                ) {
                     self.emit(SessionEvent::Log {
                         level: "warn".into(),
                         message: format!("failed to save the channel icon cache: {error}"),
@@ -297,7 +649,7 @@ impl Actor {
                     });
                 }
                 for reply in waiters {
-                    let _ = reply.send(Err(Self::clone_image_error(&error)));
+                    let _ = reply.send(Err(clone_image_error(&error)));
                 }
             }
         }
@@ -311,46 +663,29 @@ impl Actor {
         attempt: u8,
     ) {
         let key = (epoch, server_id.clone(), icon_id);
-        if !self.in_flight_channel_icons.contains_key(&key) {
+        if !self.media.has_in_flight_channel_icon(&key) {
             return;
         }
         if epoch != self.connection_epoch
             || self.active_server_id.as_deref() != Some(server_id.as_str())
         {
-            if let Some(waiters) = self.in_flight_channel_icons.remove(&key) {
-                for reply in waiters {
-                    let _ = reply.send(Err(SessionError::NotConnected));
-                }
-            }
+            self.media.fail_channel_icon_waiters(&key);
             return;
         }
         self.dispatch_channel_icon_attempt(epoch, server_id, icon_id, attempt);
-    }
-
-    pub(super) fn clone_image_error(error: &SessionError) -> SessionError {
-        match error {
-            SessionError::Protocol(msg) => SessionError::Protocol(msg.clone()),
-            SessionError::Transfer(msg) => SessionError::Transfer(msg.clone()),
-            SessionError::Storage(msg) => SessionError::Storage(msg.clone()),
-            SessionError::Stream(msg) => SessionError::Stream(msg.clone()),
-            SessionError::Spawn(msg) => SessionError::Spawn(msg.clone()),
-            SessionError::Timeout => SessionError::Timeout,
-            SessionError::NotConnected => SessionError::NotConnected,
-            SessionError::Closed => SessionError::Closed,
-            SessionError::ChannelPasswordRequired => SessionError::ChannelPasswordRequired,
-            SessionError::NotInChannel => SessionError::NotInChannel,
-            other => SessionError::Transfer(other.to_string()),
-        }
     }
 
     pub(super) fn sync_server_icon(&mut self, server_id: String, icon_id: Option<u32>) {
         let Some(icon_id) = icon_id else {
             return;
         };
-        self.active_server_icon_id = Some(icon_id);
+        self.media.active_server_icon_id = Some(icon_id);
         if icon_id == 0 {
-            self.fetching_server_icon = None;
-            match crate::server_icons::remove(&self.store_path, &mut self.server_icons, &server_id)
+            self.media.fetching_server_icon = None;
+            match self
+                .media
+                .icons
+                .clear_server_icon(&self.store_path, &server_id)
             {
                 Ok(true) => {
                     self.emit(SessionEvent::ServerIconUpdated {
@@ -368,14 +703,11 @@ impl Actor {
             }
             return;
         }
-        if self
-            .server_icons
-            .get(&server_id)
-            .is_some_and(|entry| entry.icon_id == icon_id)
-        {
+        if self.media.icons.has_server_icon(&server_id, icon_id) {
             return;
         }
         if self
+            .media
             .fetching_server_icon
             .as_ref()
             .is_some_and(|(epoch, id, icon)| {
@@ -385,7 +717,7 @@ impl Actor {
             return;
         }
         let epoch = self.connection_epoch;
-        self.fetching_server_icon = Some((epoch, server_id.clone(), icon_id));
+        self.media.fetching_server_icon = Some((epoch, server_id.clone(), icon_id));
         let (reply, rx) = oneshot::channel();
         self.fetch_remote_icon(icon_id, reply);
         let signals = self.signals.clone();
@@ -403,17 +735,47 @@ impl Actor {
         });
     }
 
-    pub(super) fn reset_avatar_session_state(&mut self) {
-        for (_, waiters) in self.in_flight_avatars.drain() {
-            for reply in waiters {
-                let _ = reply.send(Err(SessionError::NotConnected));
+    pub(super) fn handle_server_icon_fetched(
+        &mut self,
+        epoch: u64,
+        server_id: String,
+        icon_id: u32,
+        result: Result<Vec<u8>, SessionError>,
+    ) {
+        if epoch != self.connection_epoch
+            || self.active_server_id.as_deref() != Some(server_id.as_str())
+            || self.media.active_server_icon_id != Some(icon_id)
+        {
+            return;
+        }
+        self.media.fetching_server_icon = None;
+        match result {
+            Ok(bytes) => {
+                if let Err(error) = self.media.icons.save_server_icon(
+                    &self.store_path,
+                    &server_id,
+                    icon_id,
+                    bytes.clone(),
+                ) {
+                    self.emit(SessionEvent::Log {
+                        level: "warn".into(),
+                        message: format!("failed to save the server icon cache: {error}"),
+                    });
+                }
+                self.emit(SessionEvent::ServerIconUpdated {
+                    server_id,
+                    bytes: Some(bytes),
+                });
+            }
+            Err(error) => {
+                if !matches!(error, SessionError::NotConnected) {
+                    self.emit(SessionEvent::Log {
+                        level: "warn".into(),
+                        message: format!("failed to fetch server icon {icon_id}: {error}"),
+                    });
+                }
             }
         }
-        self.avatar_hashes.clear();
-        self.avatar_negative_cache.clear();
-        self.avatar_cooldowns.clear();
-        self.avatar_revisions.clear();
-        self.avatars_fetched_without_hash.clear();
     }
 
     pub(super) fn sync_avatar_hashes_from_clients(&mut self, clients: &[ClientInfo]) {
@@ -459,29 +821,16 @@ impl Actor {
         next: Option<String>,
         emit_on_initial_some: bool,
     ) {
-        if uid.is_empty() {
-            return;
-        }
-        let next = next.filter(|value| !value.is_empty());
-        let had_negative = self.avatar_negative_cache.contains(uid);
-        let fetched_without_hash = self.avatars_fetched_without_hash.remove(uid);
-        let changed = match self.avatar_hashes.get(uid) {
-            Some(existing) if existing == &next => return,
-            Some(_) => true,
-            None => {
-                (fetched_without_hash && !had_negative)
-                    || ((had_negative || emit_on_initial_some) && next.is_some())
-            }
-        };
-        self.avatar_hashes.insert(uid.to_owned(), next);
-        if changed {
-            let next_revision = self.avatar_revisions.get(uid).copied().unwrap_or(0) + 1;
-            self.avatar_revisions.insert(uid.to_owned(), next_revision);
-            self.avatar_negative_cache.remove(uid);
-            self.avatar_cooldowns.remove(uid);
+        if self
+            .media
+            .record_avatar_hash(uid, next, emit_on_initial_some)
+        {
             if let Some(server_id) = self.active_server_id.clone() {
-                self.avatar_disk
-                    .remove_uid(self.store_path.clone(), server_id, uid.to_owned());
+                self.media.avatar_disk.remove_uid(
+                    self.store_path.clone(),
+                    server_id,
+                    uid.to_owned(),
+                );
             }
             self.emit(SessionEvent::AvatarUpdated {
                 uid: uid.to_owned(),
@@ -498,7 +847,7 @@ impl Actor {
             let _ = reply.send(Err(SessionError::NotConnected));
             return;
         };
-        let avatar_hash = match self.avatar_hashes.get(&uid) {
+        let avatar_hash = match self.media.avatar_hash(&uid) {
             Some(None) => {
                 let _ = reply.send(Ok(None));
                 return;
@@ -506,16 +855,15 @@ impl Actor {
             Some(Some(hash)) => Some(hash.clone()),
             None => None,
         };
-        if self.avatar_negative_cache.contains(&uid) {
+        if self.media.avatar_negative_cache.contains(&uid) {
             let _ = reply.send(Ok(None));
             return;
         }
-        if let Some(cooldown) = self.avatar_cooldowns.get(&uid)
-            && cooldown
-                .retry_not_before
-                .is_none_or(|deadline| tokio::time::Instant::now() < deadline)
+        if let Some(err) = self
+            .media
+            .active_avatar_cooldown_error(&uid, tokio::time::Instant::now())
         {
-            let _ = reply.send(Err(Self::clone_image_error(&cooldown.last_error)));
+            let _ = reply.send(Err(err));
             return;
         }
         let remote_path = match tsclient_rs::avatar_file_name(&uid) {
@@ -526,18 +874,16 @@ impl Actor {
             }
         };
         if avatar_hash.is_none() {
-            self.avatars_fetched_without_hash.insert(uid.clone());
+            self.media.avatars_fetched_without_hash.insert(uid.clone());
         }
         let epoch = self.connection_epoch;
-        let revision = self.avatar_revisions.get(&uid).copied().unwrap_or(0);
+        let revision = self.media.avatar_revision(&uid);
         let key = (epoch, server_id.clone(), uid.clone(), revision);
-        if let Some(waiters) = self.in_flight_avatars.get_mut(&key) {
-            waiters.push(reply);
+        if !self.media.register_avatar_waiter(key, reply) {
             return;
         }
-        self.in_flight_avatars.insert(key, vec![reply]);
         let signals = self.signals.clone();
-        self.avatar_disk.load_hit(
+        self.media.avatar_disk.load_hit(
             self.store_path.clone(),
             server_id.clone(),
             uid.clone(),
@@ -570,15 +916,11 @@ impl Actor {
         if epoch != self.connection_epoch
             || self.active_server_id.as_deref() != Some(server_id.as_str())
         {
-            if let Some(waiters) = self.in_flight_avatars.remove(&key) {
-                for reply in waiters {
-                    let _ = reply.send(Err(SessionError::NotConnected));
-                }
-            }
+            self.media.fail_avatar_waiters(&key);
             return;
         }
-        if self.avatar_revisions.get(&uid).copied().unwrap_or(0) != revision {
-            if let Some(waiters) = self.in_flight_avatars.remove(&key) {
+        if self.media.avatar_revision(&uid) != revision {
+            if let Some(waiters) = self.media.take_in_flight_avatar(&key) {
                 for reply in waiters {
                     self.fetch_avatar(uid.clone(), reply);
                 }
@@ -586,19 +928,20 @@ impl Actor {
             return;
         }
         if let Some(bytes) = bytes {
-            self.avatar_cooldowns.remove(&uid);
+            self.media.avatar_cooldowns.remove(&uid);
             if self.self_uid_from_snapshot().as_deref() == Some(uid.as_str()) {
-                self.avatar_disk
+                self.media
+                    .avatar_disk
                     .save_self_snapshot(self.store_path.clone(), bytes.clone());
             }
-            if let Some(waiters) = self.in_flight_avatars.remove(&key) {
+            if let Some(waiters) = self.media.take_in_flight_avatar(&key) {
                 for reply in waiters {
                     let _ = reply.send(Ok(Some(bytes.clone())));
                 }
             }
             return;
         }
-        if !self.in_flight_avatars.contains_key(&key) {
+        if !self.media.has_in_flight_avatar(&key) {
             return;
         }
         self.dispatch_avatar_remote_attempt(
@@ -624,7 +967,7 @@ impl Actor {
         attempt: u8,
     ) {
         let (tx, rx) = oneshot::channel();
-        self.enqueue_server_image(&remote_path, tx, 0);
+        self.media.enqueue_image(&remote_path, tx, 0);
         let signals = self.signals.clone();
         tokio::task::spawn_local(async move {
             let result = match rx.await {
@@ -656,21 +999,17 @@ impl Actor {
             result,
         } = outcome;
         let key = (epoch, server_id.clone(), uid.clone(), revision);
-        if !self.in_flight_avatars.contains_key(&key) {
+        if !self.media.has_in_flight_avatar(&key) {
             return;
         }
         if epoch != self.connection_epoch
             || self.active_server_id.as_deref() != Some(server_id.as_str())
         {
-            if let Some(waiters) = self.in_flight_avatars.remove(&key) {
-                for reply in waiters {
-                    let _ = reply.send(Err(SessionError::NotConnected));
-                }
-            }
+            self.media.fail_avatar_waiters(&key);
             return;
         }
-        if self.avatar_revisions.get(&uid).copied().unwrap_or(0) != revision {
-            if let Some(waiters) = self.in_flight_avatars.remove(&key) {
+        if self.media.avatar_revision(&uid) != revision {
+            if let Some(waiters) = self.media.take_in_flight_avatar(&key) {
                 for reply in waiters {
                     self.fetch_avatar(uid.clone(), reply);
                 }
@@ -696,17 +1035,18 @@ impl Actor {
             });
             return;
         }
-        let Some(waiters) = self.in_flight_avatars.remove(&key) else {
+        let Some(waiters) = self.media.take_in_flight_avatar(&key) else {
             return;
         };
         match result {
             Ok(bytes) => {
-                self.avatar_cooldowns.remove(&uid);
+                self.media.avatar_cooldowns.remove(&uid);
                 if self.self_uid_from_snapshot().as_deref() == Some(uid.as_str()) {
-                    self.avatar_disk
+                    self.media
+                        .avatar_disk
                         .save_self_snapshot(self.store_path.clone(), bytes.clone());
                 }
-                self.avatar_disk.save(
+                self.media.avatar_disk.save(
                     self.store_path.clone(),
                     server_id,
                     uid,
@@ -718,8 +1058,7 @@ impl Actor {
                 }
             }
             Err(ImageFetchError::NotFound(_) | ImageFetchError::PermissionDenied(_)) => {
-                self.avatar_cooldowns.remove(&uid);
-                self.avatar_negative_cache.insert(uid);
+                self.media.mark_avatar_not_found(uid);
                 for reply in waiters {
                     let _ = reply.send(Ok(None));
                 }
@@ -727,20 +1066,10 @@ impl Actor {
             Err(error @ (ImageFetchError::Transient(_) | ImageFetchError::Permanent(_))) => {
                 let error = error.into_session_error();
                 if !matches!(error, SessionError::NotConnected) {
-                    let attempts = self
-                        .avatar_cooldowns
-                        .get(&uid)
-                        .map_or(0, |existing| existing.attempts)
-                        .saturating_add(1);
-                    let retry_not_before = (attempts < MAX_AVATAR_FAILURE_ATTEMPTS)
-                        .then(|| tokio::time::Instant::now() + AVATAR_FAILURE_COOLDOWN);
-                    self.avatar_cooldowns.insert(
-                        uid.clone(),
-                        AvatarCooldown {
-                            attempts,
-                            retry_not_before,
-                            last_error: Self::clone_image_error(&error),
-                        },
+                    self.media.record_avatar_failure_cooldown(
+                        &uid,
+                        &error,
+                        tokio::time::Instant::now(),
                     );
                     self.emit(SessionEvent::Log {
                         level: "warn".into(),
@@ -748,7 +1077,7 @@ impl Actor {
                     });
                 }
                 for reply in waiters {
-                    let _ = reply.send(Err(Self::clone_image_error(&error)));
+                    let _ = reply.send(Err(clone_image_error(&error)));
                 }
             }
         }
@@ -765,21 +1094,17 @@ impl Actor {
             attempt,
         } = retry;
         let key = (epoch, server_id.clone(), uid.clone(), revision);
-        if !self.in_flight_avatars.contains_key(&key) {
+        if !self.media.has_in_flight_avatar(&key) {
             return;
         }
         if epoch != self.connection_epoch
             || self.active_server_id.as_deref() != Some(server_id.as_str())
         {
-            if let Some(waiters) = self.in_flight_avatars.remove(&key) {
-                for reply in waiters {
-                    let _ = reply.send(Err(SessionError::NotConnected));
-                }
-            }
+            self.media.fail_avatar_waiters(&key);
             return;
         }
-        if self.avatar_revisions.get(&uid).copied().unwrap_or(0) != revision {
-            if let Some(waiters) = self.in_flight_avatars.remove(&key) {
+        if self.media.avatar_revision(&uid) != revision {
+            if let Some(waiters) = self.media.take_in_flight_avatar(&key) {
                 for reply in waiters {
                     self.fetch_avatar(uid.clone(), reply);
                 }
@@ -797,30 +1122,11 @@ impl Actor {
         );
     }
 
-    pub(super) fn enqueue_server_image(
-        &mut self,
-        remote_path: &str,
-        reply: oneshot::Sender<Result<Vec<u8>, ImageFetchError>>,
-        preempt_retries: u8,
-    ) {
-        if self.pending_images.len() >= 32 {
-            let _ = reply.send(Err(ImageFetchError::Transient(
-                ImageTransientReason::QueueFull,
-            )));
-            return;
-        }
-        self.pending_images.push_back(PendingImage {
-            remote_path: remote_path.to_owned(),
-            reply,
-            preempt_retries,
-        });
-    }
-
     pub(super) fn start_next_image(&mut self) {
-        if self.active_image.is_some() {
+        if !self.media.can_start_next_image() {
             return;
         }
-        let Some(pending) = self.pending_images.pop_front() else {
+        let Some(pending) = self.media.pop_next_image() else {
             return;
         };
         let target = (|| {
@@ -841,7 +1147,7 @@ impl Actor {
         };
         let remote_path = pending.remote_path;
         let path = remote_path.clone();
-        self.active_image = Some(ActiveImage {
+        self.media.set_active_image(ActiveImage {
             remote_path,
             reply: pending.reply,
             preempt_retries: pending.preempt_retries,
@@ -862,30 +1168,6 @@ impl Actor {
                 Ok((host, info))
             }),
         });
-    }
-
-    pub(super) fn interrupt_active_image(&mut self) {
-        if let Some(active) = self.active_image.take() {
-            if active.preempt_retries > 0 {
-                self.pending_images.push_back(PendingImage {
-                    remote_path: active.remote_path,
-                    reply: active.reply,
-                    preempt_retries: active.preempt_retries - 1,
-                });
-            } else {
-                let _ = active.reply.send(Err(ImageFetchError::Transient(
-                    ImageTransientReason::Interrupted,
-                )));
-            }
-        }
-    }
-
-    pub(super) fn cancel_active_image(&mut self) {
-        if let Some(active) = self.active_image.take() {
-            let _ = active
-                .reply
-                .send(Err(ImageFetchError::Permanent(SessionError::NotConnected)));
-        }
     }
 
     pub(super) fn finish_server_image(
@@ -1056,11 +1338,13 @@ impl Actor {
 
     pub(super) async fn upload_avatar(&mut self, bytes: Vec<u8>) -> Result<(), SessionError> {
         let client = self.connected()?;
-        if !crate::avatars::is_supported_image(&bytes) {
+        if !crate::media::is_supported_avatar_image(&bytes) {
             return Err(SessionError::AvatarUnsupportedFormat);
         }
-        let limit = crate::channel_tools::avatar_size_limit(&client, &mut self.channel_tools).await;
-        crate::avatars::validate_size(bytes.len(), limit)?;
+        let limit =
+            crate::channel_tools::avatar_size_limit(&client, self.directory.channel_tools_mut())
+                .await;
+        crate::media::validate_avatar_size(bytes.len(), limit)?;
         let host = {
             let target = self
                 .transfer_target
@@ -1101,24 +1385,17 @@ impl Actor {
 
     fn self_uid_from_snapshot(&self) -> Option<String> {
         let self_id = self.self_client_id?;
-        let (_, clients) = self.last_snapshot.as_ref()?;
-        clients
-            .iter()
-            .find(|client| client.id == self_id)
-            .map(|client| client.uid.clone())
-            .filter(|uid| !uid.is_empty())
+        self.directory.snapshot_client_uid(self_id)
     }
 
     async fn self_uid(&mut self, client: &Client) -> Result<String, SessionError> {
         let Some(self_id) = self.self_client_id else {
             return Err(SessionError::AvatarUnavailable);
         };
-        if let Some((_, clients)) = &self.last_snapshot
-            && let Some(me) = clients.iter().find(|client| client.id == self_id)
-            && !me.uid.is_empty()
-            && tsclient_rs::avatar_file_name(&me.uid).is_ok()
+        if let Some(uid) = self.directory.snapshot_client_uid(self_id)
+            && tsclient_rs::avatar_file_name(&uid).is_ok()
         {
-            return Ok(me.uid.clone());
+            return Ok(uid);
         }
         let info = match tsclient_rs::getClientInfo(client, self_id).await {
             Ok(info) => info,
@@ -1142,17 +1419,18 @@ impl Actor {
 
     fn apply_avatar_upload(&mut self, uid: &str, md5: String, bytes: Vec<u8>) {
         // 上传已确认成功，负缓存与冷却不应再阻止读取。
-        self.avatar_negative_cache.remove(uid);
-        self.avatar_cooldowns.remove(uid);
-        let unchanged = matches!(self.avatar_hashes.get(uid), Some(Some(hash)) if hash == &md5);
+        self.media.clear_avatar_failure_state(uid);
+        let unchanged = matches!(self.media.avatar_hash(uid), Some(Some(hash)) if hash == &md5);
         if unchanged {
             // 同图重传时 hash 不变，仍要清旧缓存并广播一次让 UI 重新读取新写入的缓存。
             if let Some(server_id) = self.active_server_id.clone() {
-                self.avatar_disk
-                    .remove_uid(self.store_path.clone(), server_id, uid.to_owned());
+                self.media.avatar_disk.remove_uid(
+                    self.store_path.clone(),
+                    server_id,
+                    uid.to_owned(),
+                );
             }
-            let next_revision = self.avatar_revisions.get(uid).copied().unwrap_or(0) + 1;
-            self.avatar_revisions.insert(uid.to_owned(), next_revision);
+            self.media.bump_avatar_revision(uid);
             self.emit(SessionEvent::AvatarUpdated {
                 uid: uid.to_owned(),
             });
@@ -1161,10 +1439,11 @@ impl Actor {
             // 磁盘队列顺序为 remove -> save，后续 load_hit 能命中新图。
             self.record_avatar_hash(uid, Some(md5.clone()), true);
         }
-        self.avatar_disk
+        self.media
+            .avatar_disk
             .save_self_snapshot(self.store_path.clone(), bytes.clone());
         if let Some(server_id) = self.active_server_id.clone() {
-            self.avatar_disk.save(
+            self.media.avatar_disk.save(
                 self.store_path.clone(),
                 server_id,
                 uid.to_owned(),
@@ -1176,9 +1455,9 @@ impl Actor {
 
     fn apply_avatar_delete(&mut self, uid: &str) {
         // 删除结果已由服务器确认，负缓存与冷却不应再阻止后续读取。
-        self.avatar_negative_cache.remove(uid);
-        self.avatar_cooldowns.remove(uid);
-        self.avatar_disk
+        self.media.clear_avatar_failure_state(uid);
+        self.media
+            .avatar_disk
             .clear_self_snapshot(self.store_path.clone());
         self.record_avatar_hash(uid, None, true);
     }
@@ -1186,9 +1465,7 @@ impl Actor {
 
 fn known_avatar_limit(limit: Option<i32>) -> Option<u64> {
     match limit {
-        Some(value) if value > 0 => {
-            Some((value as u64).min(crate::avatars::MAX_AVATAR_BYTES as u64))
-        }
+        Some(value) if value > 0 => Some((value as u64).min(crate::media::MAX_AVATAR_BYTES as u64)),
         _ => None,
     }
 }
@@ -1282,13 +1559,13 @@ mod tests {
 
     fn install_self_client(actor: &mut Actor, uid: &str) {
         actor.self_client_id = Some(1);
-        actor.last_snapshot = Some((
+        actor.directory.set_snapshot_for_test(
             Vec::new(),
             vec![ClientView::from(ClientInfo {
                 uid: uid.to_string(),
                 ..client_info(1, 5, "Self")
             })],
-        ));
+        );
     }
 
     #[tokio::test]
@@ -1336,17 +1613,17 @@ mod tests {
         let mut replies = Vec::new();
         for _ in 0..32 {
             let (reply, result) = oneshot::channel();
-            actor.enqueue_server_image("/avatar_test", reply, 0);
+            actor.media.enqueue_image("/avatar_test", reply, 0);
             replies.push(result);
         }
         let (reply, result) = oneshot::channel();
-        actor.enqueue_server_image("/avatar_test", reply, 0);
+        actor.media.enqueue_image("/avatar_test", reply, 0);
         assert!(matches!(
             result.await.unwrap(),
             Err(ImageFetchError::Transient(ImageTransientReason::QueueFull))
         ));
         actor.invalidate_handlers();
-        assert!(actor.pending_images.is_empty());
+        assert!(actor.media.pending_images.is_empty());
         for result in replies {
             assert!(matches!(
                 result.await.unwrap(),
@@ -1412,29 +1689,29 @@ mod tests {
                 // 模拟首次收到有效服务器图标 id 触发入队并完成下载
                 actor.sync_server_icon("127.0.0.1:9987".into(), Some(12345));
                 assert_eq!(
-                    actor.fetching_server_icon,
+                    actor.media.fetching_server_icon,
                     Some((actor.connection_epoch, "127.0.0.1:9987".into(), 12345))
                 );
-                assert_eq!(actor.pending_images.len(), 1);
-                let pending = actor.pending_images.pop_front().unwrap();
+                assert_eq!(actor.media.pending_images.len(), 1);
+                let pending = actor.media.pending_images.pop_front().unwrap();
                 assert_eq!(pending.remote_path, "/icon_12345");
                 let _ = pending.reply.send(Ok(vec![137, 80, 78, 71]));
                 let signal = actor.signal_rx.recv().await.unwrap();
                 actor.handle_signal(signal).await;
 
-                assert!(actor.fetching_server_icon.is_none());
+                assert!(actor.media.fetching_server_icon.is_none());
                 assert_eq!(
-                    actor.server_icons.get("127.0.0.1:9987").map(|e| e.icon_id),
+                    actor.media.icons.server_icon_id("127.0.0.1:9987"),
                     Some(12345)
                 );
 
                 // 重复收到相同 icon_id 不重复入队
                 actor.sync_server_icon("127.0.0.1:9987".into(), Some(12345));
-                assert!(actor.pending_images.is_empty());
+                assert!(actor.media.pending_images.is_empty());
 
                 // 收到 None 时保留已有缓存
                 actor.sync_server_icon("127.0.0.1:9987".into(), None);
-                assert!(actor.server_icons.contains_key("127.0.0.1:9987"));
+                assert!(actor.media.icons.server_icon_id("127.0.0.1:9987").is_some());
 
                 // 收到 Some(0) 时清除缓存并广播清除事件
                 actor
@@ -1443,9 +1720,10 @@ mod tests {
                         icon_id: Some(0),
                     })
                     .await;
-                assert!(!actor.server_icons.contains_key("127.0.0.1:9987"));
+                assert!(actor.media.icons.server_icon_id("127.0.0.1:9987").is_none());
                 assert!(
-                    crate::server_icons::load(&actor.store_path, &["127.0.0.1:9987"]).is_empty()
+                    crate::media::IconCache::load(&actor.store_path, &["127.0.0.1:9987"])
+                        .is_empty()
                 );
 
                 let updates: Vec<(String, Option<Vec<u8>>)> =
@@ -1488,8 +1766,8 @@ mod tests {
                 let (reply_b, rx_b) = oneshot::channel();
                 actor.fetch_channel_icon(777, reply_a);
                 actor.fetch_channel_icon(777, reply_b);
-                assert_eq!(actor.pending_images.len(), 1);
-                let pending = actor.pending_images.pop_front().unwrap();
+                assert_eq!(actor.media.pending_images.len(), 1);
+                let pending = actor.media.pending_images.pop_front().unwrap();
                 assert_eq!(pending.remote_path, "/icon_777");
                 let _ = pending.reply.send(Ok(vec![1, 2, 3, 4]));
                 let signal = actor.signal_rx.recv().await.unwrap();
@@ -1501,15 +1779,15 @@ mod tests {
                 // 同服再次请求直接命中磁盘缓存，不再入队
                 let (reply_hit, rx_hit) = oneshot::channel();
                 actor.fetch_channel_icon(777, reply_hit);
-                assert!(actor.pending_images.is_empty());
+                assert!(actor.media.pending_images.is_empty());
                 assert_eq!(rx_hit.await.unwrap().unwrap(), vec![1, 2, 3, 4]);
 
                 // 切服后相同 icon_id 不串图，重新入队拉取
                 actor.active_server_id = Some("b.example:9987".into());
                 let (reply_other, rx_other) = oneshot::channel();
                 actor.fetch_channel_icon(777, reply_other);
-                assert_eq!(actor.pending_images.len(), 1);
-                let pending_other = actor.pending_images.pop_front().unwrap();
+                assert_eq!(actor.media.pending_images.len(), 1);
+                let pending_other = actor.media.pending_images.pop_front().unwrap();
                 let _ = pending_other.reply.send(Ok(vec![9, 9, 9]));
                 let signal_other = actor.signal_rx.recv().await.unwrap();
                 actor.handle_signal(signal_other).await;
@@ -1656,7 +1934,7 @@ mod tests {
                 for uid in [ts3_uid, ts6_uid] {
                     let (reply, rx) = oneshot::channel();
                     actor.fetch_avatar(uid, reply);
-                    assert!(actor.pending_images.is_empty());
+                    assert!(actor.media.pending_images.is_empty());
                     assert_eq!(rx.await.unwrap().unwrap(), None);
                 }
             })
@@ -1694,12 +1972,12 @@ mod tests {
                 let (reply_b, rx_b) = oneshot::channel();
                 actor.fetch_avatar(ts6_uid.clone(), reply_a);
                 actor.fetch_avatar(ts6_uid.clone(), reply_b);
-                actor.avatar_disk.flush().await;
+                actor.media.avatar_disk.flush().await;
                 let disk_signal = actor.signal_rx.recv().await.unwrap();
                 actor.handle_signal(disk_signal).await;
 
-                assert_eq!(actor.pending_images.len(), 1);
-                let pending = actor.pending_images.pop_front().unwrap();
+                assert_eq!(actor.media.pending_images.len(), 1);
+                let pending = actor.media.pending_images.pop_front().unwrap();
                 assert_eq!(
                     pending.remote_path,
                     tsclient_rs::avatar_file_name(&ts6_uid).unwrap()
@@ -1707,7 +1985,7 @@ mod tests {
                 let _ = pending.reply.send(Ok(vec![10, 20, 30]));
                 let fetched_signal = actor.signal_rx.recv().await.unwrap();
                 actor.handle_signal(fetched_signal).await;
-                actor.avatar_disk.flush().await;
+                actor.media.avatar_disk.flush().await;
 
                 assert_eq!(rx_a.await.unwrap().unwrap(), Some(vec![10, 20, 30]));
                 assert_eq!(rx_b.await.unwrap().unwrap(), Some(vec![10, 20, 30]));
@@ -1715,26 +1993,26 @@ mod tests {
                 // 同服再次请求直接命中磁盘缓存，不再发起传输
                 let (reply_hit, rx_hit) = oneshot::channel();
                 actor.fetch_avatar(ts6_uid.clone(), reply_hit);
-                actor.avatar_disk.flush().await;
+                actor.media.avatar_disk.flush().await;
                 let hit_signal = actor.signal_rx.recv().await.unwrap();
                 actor.handle_signal(hit_signal).await;
-                assert!(actor.pending_images.is_empty());
+                assert!(actor.media.pending_images.is_empty());
                 assert_eq!(rx_hit.await.unwrap().unwrap(), Some(vec![10, 20, 30]));
 
                 // 未知 hash 时退回无 hash 路径落盘并命中
                 let (reply_fb, rx_fb) = oneshot::channel();
                 actor.fetch_avatar(fallback_uid.clone(), reply_fb);
-                actor.avatar_disk.flush().await;
+                actor.media.avatar_disk.flush().await;
                 let fb_disk_signal = actor.signal_rx.recv().await.unwrap();
                 actor.handle_signal(fb_disk_signal).await;
-                let fb_pending = actor.pending_images.pop_front().unwrap();
+                let fb_pending = actor.media.pending_images.pop_front().unwrap();
                 let _ = fb_pending.reply.send(Ok(vec![55, 66]));
                 let fb_fetched = actor.signal_rx.recv().await.unwrap();
                 actor.handle_signal(fb_fetched).await;
-                actor.avatar_disk.flush().await;
+                actor.media.avatar_disk.flush().await;
                 assert_eq!(rx_fb.await.unwrap().unwrap(), Some(vec![55, 66]));
                 assert_eq!(
-                    crate::avatars::load_hit(
+                    crate::media::load_avatar_hit(
                         &actor.store_path,
                         "a.example:9987",
                         &fallback_uid,
@@ -1763,8 +2041,14 @@ mod tests {
                 let mut events = actor.events.subscribe();
 
                 let uid = base64::engine::general_purpose::STANDARD.encode([3u8; 20]);
-                crate::avatars::save(&actor.store_path, "a.example:9987", &uid, Some("h1"), &[1])
-                    .unwrap();
+                crate::media::save_avatar(
+                    &actor.store_path,
+                    "a.example:9987",
+                    &uid,
+                    Some("h1"),
+                    &[1],
+                )
+                .unwrap();
 
                 let drain_avatar_updates =
                     |rx: &mut broadcast::Receiver<SessionEvent>| -> Vec<String> {
@@ -1805,7 +2089,12 @@ mod tests {
                     .await;
                 assert!(drain_avatar_updates(&mut events).is_empty());
                 assert_eq!(
-                    crate::avatars::load_hit(&actor.store_path, "a.example:9987", &uid, Some("h1")),
+                    crate::media::load_avatar_hit(
+                        &actor.store_path,
+                        "a.example:9987",
+                        &uid,
+                        Some("h1")
+                    ),
                     Some(vec![1])
                 );
 
@@ -1824,16 +2113,27 @@ mod tests {
                         avatar_hash: Some("h2".into()),
                     })
                     .await;
-                actor.avatar_disk.flush().await;
+                actor.media.avatar_disk.flush().await;
                 assert_eq!(drain_avatar_updates(&mut events), vec![uid.clone()]);
                 assert_eq!(
-                    crate::avatars::load_hit(&actor.store_path, "a.example:9987", &uid, Some("h1")),
+                    crate::media::load_avatar_hit(
+                        &actor.store_path,
+                        "a.example:9987",
+                        &uid,
+                        Some("h1")
+                    ),
                     None
                 );
 
                 // 4. 写入新 h2 后通过 ClientUpdated 清空为 None：清理 h2 磁盘缓存并广播 AvatarUpdated
-                crate::avatars::save(&actor.store_path, "a.example:9987", &uid, Some("h2"), &[2])
-                    .unwrap();
+                crate::media::save_avatar(
+                    &actor.store_path,
+                    "a.example:9987",
+                    &uid,
+                    Some("h2"),
+                    &[2],
+                )
+                .unwrap();
                 actor
                     .handle_signal(SessionSignal::ClientUpdated {
                         epoch: actor.connection_epoch,
@@ -1848,10 +2148,15 @@ mod tests {
                         avatar_hash: None,
                     })
                     .await;
-                actor.avatar_disk.flush().await;
+                actor.media.avatar_disk.flush().await;
                 assert_eq!(drain_avatar_updates(&mut events), vec![uid.clone()]);
                 assert_eq!(
-                    crate::avatars::load_hit(&actor.store_path, "a.example:9987", &uid, Some("h2")),
+                    crate::media::load_avatar_hit(
+                        &actor.store_path,
+                        "a.example:9987",
+                        &uid,
+                        Some("h2")
+                    ),
                     None
                 );
 
@@ -1881,12 +2186,12 @@ mod tests {
 
         let unknown_uid = "KqXRNkJgnzjGFbp0GTCPJN1ODJY=";
         actor.sync_avatar_hash_from_join(unknown_uid, None);
-        assert_eq!(actor.avatar_hashes.get(unknown_uid), Some(&None));
+        assert_eq!(actor.media.avatar_hashes.get(unknown_uid), Some(&None));
         assert!(events.try_recv().is_err());
 
         actor.sync_avatar_hash_from_join("hashed-uid", Some("hash".into()));
         assert_eq!(
-            actor.avatar_hashes.get("hashed-uid"),
+            actor.media.avatar_hashes.get("hashed-uid"),
             Some(&Some("hash".into()))
         );
         assert!(matches!(
@@ -1910,14 +2215,19 @@ mod tests {
                 let mut events = actor.events.subscribe();
                 let uid = "avatar-uid";
                 let md5 = "0123456789abcdef0123456789abcdef";
-                actor.avatar_negative_cache.insert(uid.to_string());
+                actor.media.avatar_negative_cache.insert(uid.to_string());
 
                 actor.apply_avatar_upload(uid, md5.into(), vec![7, 8, 9]);
-                actor.avatar_disk.flush().await;
-                assert!(!actor.avatar_negative_cache.contains(uid));
+                actor.media.avatar_disk.flush().await;
+                assert!(!actor.media.avatar_negative_cache.contains(uid));
 
                 assert_eq!(
-                    crate::avatars::load_hit(&actor.store_path, "a.example:9987", uid, Some(md5)),
+                    crate::media::load_avatar_hit(
+                        &actor.store_path,
+                        "a.example:9987",
+                        uid,
+                        Some(md5)
+                    ),
                     Some(vec![7, 8, 9])
                 );
                 assert!(matches!(
@@ -1927,16 +2237,21 @@ mod tests {
 
                 // 服务器回显相同 hash：不重复广播，也不删除刚写入的缓存
                 actor.record_avatar_hash(uid, Some(md5.into()), true);
-                actor.avatar_disk.flush().await;
+                actor.media.avatar_disk.flush().await;
                 assert!(events.try_recv().is_err());
                 assert_eq!(
-                    crate::avatars::load_hit(&actor.store_path, "a.example:9987", uid, Some(md5)),
+                    crate::media::load_avatar_hit(
+                        &actor.store_path,
+                        "a.example:9987",
+                        uid,
+                        Some(md5)
+                    ),
                     Some(vec![7, 8, 9])
                 );
 
                 // 显式重传同一张图仍刷新一次 UI
                 actor.apply_avatar_upload(uid, md5.into(), vec![7, 8, 9]);
-                actor.avatar_disk.flush().await;
+                actor.media.avatar_disk.flush().await;
                 assert!(matches!(
                     events.try_recv(),
                     Ok(SessionEvent::AvatarUpdated { uid: ref updated }) if updated == uid
@@ -1966,7 +2281,7 @@ mod tests {
 
                 // 不等待 flush：remove -> save 必须排在这次 load 之前。
                 let (tx, rx) = oneshot::channel();
-                actor.avatar_disk.load_hit(
+                actor.media.avatar_disk.load_hit(
                     actor.store_path.clone(),
                     "a.example:9987".into(),
                     uid.into(),
@@ -1999,24 +2314,29 @@ mod tests {
                 let md5 = "0123456789abcdef0123456789abcdef";
 
                 actor.apply_avatar_upload(uid, md5.into(), vec![4, 5]);
-                actor.avatar_disk.flush().await;
+                actor.media.avatar_disk.flush().await;
                 let _ = events.try_recv();
-                actor.avatar_negative_cache.insert(uid.to_string());
+                actor.media.avatar_negative_cache.insert(uid.to_string());
 
                 actor.apply_avatar_delete(uid);
-                actor.avatar_disk.flush().await;
+                actor.media.avatar_disk.flush().await;
                 assert!(matches!(
                     events.try_recv(),
                     Ok(SessionEvent::AvatarUpdated { uid: ref updated }) if updated == uid
                 ));
-                assert!(!actor.avatar_negative_cache.contains(uid));
+                assert!(!actor.media.avatar_negative_cache.contains(uid));
                 assert_eq!(
-                    crate::avatars::load_hit(&actor.store_path, "a.example:9987", uid, Some(md5)),
+                    crate::media::load_avatar_hit(
+                        &actor.store_path,
+                        "a.example:9987",
+                        uid,
+                        Some(md5)
+                    ),
                     None
                 );
 
                 actor.apply_avatar_delete(uid);
-                actor.avatar_disk.flush().await;
+                actor.media.avatar_disk.flush().await;
                 assert!(events.try_recv().is_err());
 
                 let _ = std::fs::remove_dir_all(&temp);
@@ -2043,15 +2363,18 @@ mod tests {
                     "0123456789abcdef0123456789abcdef".into(),
                     SELF_AVATAR_PNG.to_vec(),
                 );
-                actor.avatar_disk.flush().await;
+                actor.media.avatar_disk.flush().await;
                 assert_eq!(
-                    crate::self_avatar::load(&actor.store_path),
+                    crate::media::load_self_avatar_snapshot(&actor.store_path),
                     Some(SELF_AVATAR_PNG.to_vec())
                 );
 
                 actor.apply_avatar_delete(uid);
-                actor.avatar_disk.flush().await;
-                assert_eq!(crate::self_avatar::load(&actor.store_path), None);
+                actor.media.avatar_disk.flush().await;
+                assert_eq!(
+                    crate::media::load_self_avatar_snapshot(&actor.store_path),
+                    None
+                );
 
                 let _ = std::fs::remove_dir_all(&temp);
             })
@@ -2074,7 +2397,7 @@ mod tests {
                 install_self_client(&mut actor, uid);
 
                 let (reply, rx) = oneshot::channel();
-                actor.in_flight_avatars.insert(
+                actor.media.in_flight_avatars.insert(
                     (
                         actor.connection_epoch,
                         "a.example:9987".into(),
@@ -2093,17 +2416,17 @@ mod tests {
                     attempt: 0,
                     result: Ok(SELF_AVATAR_PNG.to_vec()),
                 });
-                actor.avatar_disk.flush().await;
+                actor.media.avatar_disk.flush().await;
                 assert_eq!(rx.await.unwrap().unwrap(), Some(SELF_AVATAR_PNG.to_vec()));
                 assert_eq!(
-                    crate::self_avatar::load(&actor.store_path),
+                    crate::media::load_self_avatar_snapshot(&actor.store_path),
                     Some(SELF_AVATAR_PNG.to_vec())
                 );
 
-                actor.reset_avatar_session_state();
-                actor.avatar_disk.flush().await;
+                actor.media.reset_avatar_session_state();
+                actor.media.avatar_disk.flush().await;
                 assert_eq!(
-                    crate::self_avatar::load(&actor.store_path),
+                    crate::media::load_self_avatar_snapshot(&actor.store_path),
                     Some(SELF_AVATAR_PNG.to_vec())
                 );
 
@@ -2128,7 +2451,7 @@ mod tests {
                 install_self_client(&mut actor, uid);
 
                 let (reply, rx) = oneshot::channel();
-                actor.in_flight_avatars.insert(
+                actor.media.in_flight_avatars.insert(
                     (
                         actor.connection_epoch,
                         "a.example:9987".into(),
@@ -2146,15 +2469,15 @@ mod tests {
                     remote_path: "/avatar_self".into(),
                     bytes: Some(SELF_AVATAR_PNG.to_vec()),
                 });
-                actor.avatar_disk.flush().await;
+                actor.media.avatar_disk.flush().await;
                 assert_eq!(rx.await.unwrap().unwrap(), Some(SELF_AVATAR_PNG.to_vec()));
                 assert_eq!(
-                    crate::self_avatar::load(&actor.store_path),
+                    crate::media::load_self_avatar_snapshot(&actor.store_path),
                     Some(SELF_AVATAR_PNG.to_vec())
                 );
 
                 let (reply, rx) = oneshot::channel();
-                actor.in_flight_avatars.insert(
+                actor.media.in_flight_avatars.insert(
                     (
                         actor.connection_epoch,
                         "a.example:9987".into(),
@@ -2173,10 +2496,10 @@ mod tests {
                     attempt: 0,
                     result: Err(ImageFetchError::NotFound("gone".into())),
                 });
-                actor.avatar_disk.flush().await;
+                actor.media.avatar_disk.flush().await;
                 assert!(rx.await.unwrap().unwrap().is_none());
                 assert_eq!(
-                    crate::self_avatar::load(&actor.store_path),
+                    crate::media::load_self_avatar_snapshot(&actor.store_path),
                     Some(SELF_AVATAR_PNG.to_vec())
                 );
 
@@ -2394,8 +2717,11 @@ mod tests {
                 let mut actor = audio_actor();
                 actor.active_server_id = Some("127.0.0.1:9987".into());
                 let mut events = actor.events.subscribe();
-                actor.avatar_negative_cache.insert(uid_not_found.clone());
-                actor.avatar_negative_cache.insert(uid_perm.clone());
+                actor
+                    .media
+                    .avatar_negative_cache
+                    .insert(uid_not_found.clone());
+                actor.media.avatar_negative_cache.insert(uid_perm.clone());
 
                 actor
                     .handle_signal(SessionSignal::ClientUpdated {
@@ -2411,8 +2737,8 @@ mod tests {
                         avatar_hash: Some("fresh_hash".into()),
                     })
                     .await;
-                assert!(!actor.avatar_negative_cache.contains(&uid_not_found));
-                assert!(actor.avatar_negative_cache.contains(&uid_perm));
+                assert!(!actor.media.avatar_negative_cache.contains(&uid_not_found));
+                assert!(actor.media.avatar_negative_cache.contains(&uid_perm));
                 assert!(matches!(
                     events.try_recv(),
                     Ok(SessionEvent::AvatarUpdated { uid: ref updated }) if updated == &uid_not_found
@@ -2420,9 +2746,9 @@ mod tests {
 
                 // 重连失效清理全部会话级负缓存与状态
                 actor.invalidate_handlers();
-                assert!(actor.avatar_negative_cache.is_empty());
-                assert!(actor.avatar_cooldowns.is_empty());
-                assert!(actor.avatar_hashes.is_empty());
+                assert!(actor.media.avatar_negative_cache.is_empty());
+                assert!(actor.media.avatar_cooldowns.is_empty());
+                assert!(actor.media.avatar_hashes.is_empty());
 
                 let _ = std::fs::remove_dir_all(&temp);
             })
@@ -2503,13 +2829,13 @@ mod tests {
                 // 1. Transient queue-full error schedules attempt 1 after 300ms backoff and then succeeds.
                 let (reply, mut rx) = oneshot::channel();
                 actor.fetch_channel_icon(101, reply);
-                let pending = actor.pending_images.pop_front().unwrap();
+                let pending = actor.media.pending_images.pop_front().unwrap();
                 let _ = pending.reply.send(Err(ImageFetchError::Transient(
                     ImageTransientReason::QueueFull,
                 )));
                 let signal = actor.signal_rx.recv().await.unwrap();
                 actor.handle_signal(signal).await;
-                assert!(actor.pending_images.is_empty());
+                assert!(actor.media.pending_images.is_empty());
                 assert!(rx.try_recv().is_err());
 
                 let retry_signal =
@@ -2526,7 +2852,7 @@ mod tests {
                     }
                 ));
                 actor.handle_signal(retry_signal).await;
-                let pending = actor.pending_images.pop_front().unwrap();
+                let pending = actor.media.pending_images.pop_front().unwrap();
                 let _ = pending.reply.send(Ok(vec![7, 7, 7]));
                 let signal = actor.signal_rx.recv().await.unwrap();
                 actor.handle_signal(signal).await;
@@ -2535,7 +2861,7 @@ mod tests {
                 // 2. Permanent errors fail immediately without scheduling retries.
                 let (reply_perm, rx_perm) = oneshot::channel();
                 actor.fetch_channel_icon(202, reply_perm);
-                let pending = actor.pending_images.pop_front().unwrap();
+                let pending = actor.media.pending_images.pop_front().unwrap();
                 let _ = pending
                     .reply
                     .send(Err(ImageFetchError::PermissionDenied("denied".into())));
@@ -2546,7 +2872,7 @@ mod tests {
 
                 // 3. Reaching MAX_CHANNEL_ICON_RETRIES surfaces the failure instead of scheduling another retry.
                 let (reply_cap, rx_cap) = oneshot::channel();
-                actor.in_flight_channel_icons.insert(
+                actor.media.in_flight_channel_icons.insert(
                     (actor.connection_epoch, "a.example:9987".into(), 303),
                     vec![reply_cap],
                 );
@@ -2589,11 +2915,11 @@ mod tests {
                 // 1. Prompt 500ms retry recovers from QueueFull without recording cooldown failures.
                 let (reply, mut rx) = oneshot::channel();
                 actor.fetch_avatar(uid_transient.clone(), reply);
-                actor.avatar_disk.flush().await;
+                actor.media.avatar_disk.flush().await;
                 let disk_signal = actor.signal_rx.recv().await.unwrap();
                 actor.handle_signal(disk_signal).await;
 
-                let pending = actor.pending_images.pop_front().unwrap();
+                let pending = actor.media.pending_images.pop_front().unwrap();
                 let _ = pending.reply.send(Err(ImageFetchError::Transient(
                     ImageTransientReason::QueueFull,
                 )));
@@ -2607,21 +2933,21 @@ mod tests {
                         .unwrap()
                         .unwrap();
                 actor.handle_signal(retry_signal).await;
-                let pending = actor.pending_images.pop_front().unwrap();
+                let pending = actor.media.pending_images.pop_front().unwrap();
                 let _ = pending.reply.send(Ok(vec![11, 22, 33]));
                 let fetched = actor.signal_rx.recv().await.unwrap();
                 actor.handle_signal(fetched).await;
                 assert_eq!(rx.await.unwrap().unwrap(), Some(vec![11, 22, 33]));
-                assert!(!actor.avatar_cooldowns.contains_key(&uid_transient));
+                assert!(!actor.media.avatar_cooldowns.contains_key(&uid_transient));
 
                 // 2. Three failure attempts trigger ~30s cooldowns and then stop until AvatarUpdated or reconnect.
                 for attempt in 1..=MAX_AVATAR_FAILURE_ATTEMPTS {
                     let (reply, rx) = oneshot::channel();
                     actor.fetch_avatar(uid_cooldown.clone(), reply);
-                    actor.avatar_disk.flush().await;
+                    actor.media.avatar_disk.flush().await;
                     let disk_signal = actor.signal_rx.recv().await.unwrap();
                     actor.handle_signal(disk_signal).await;
-                    let pending = actor.pending_images.pop_front().unwrap();
+                    let pending = actor.media.pending_images.pop_front().unwrap();
                     let _ = pending.reply.send(Err(ImageFetchError::Transient(
                         ImageTransientReason::Timeout,
                     )));
@@ -2630,7 +2956,7 @@ mod tests {
                     assert!(matches!(rx.await.unwrap(), Err(SessionError::Timeout)));
 
                     {
-                        let cooldown = actor.avatar_cooldowns.get(&uid_cooldown).unwrap();
+                        let cooldown = actor.media.avatar_cooldowns.get(&uid_cooldown).unwrap();
                         assert_eq!(cooldown.attempts, attempt);
                         if attempt < MAX_AVATAR_FAILURE_ATTEMPTS {
                             let remaining = cooldown
@@ -2646,7 +2972,7 @@ mod tests {
                     // During cooldown (or after attempt 3), immediate fetch returns error without disk/network IO.
                     let (reply_blocked, rx_blocked) = oneshot::channel();
                     actor.fetch_avatar(uid_cooldown.clone(), reply_blocked);
-                    assert!(actor.pending_images.is_empty());
+                    assert!(actor.media.pending_images.is_empty());
                     assert!(matches!(
                         rx_blocked.await.unwrap(),
                         Err(SessionError::Timeout)
@@ -2654,6 +2980,7 @@ mod tests {
 
                     if attempt < MAX_AVATAR_FAILURE_ATTEMPTS {
                         actor
+                            .media
                             .avatar_cooldowns
                             .get_mut(&uid_cooldown)
                             .unwrap()
@@ -2665,7 +2992,7 @@ mod tests {
                 // After 3 attempts, cooldown stays locked permanently until update or reconnect.
                 let (reply_locked, rx_locked) = oneshot::channel();
                 actor.fetch_avatar(uid_cooldown.clone(), reply_locked);
-                assert!(actor.pending_images.is_empty());
+                assert!(actor.media.pending_images.is_empty());
                 assert!(matches!(
                     rx_locked.await.unwrap(),
                     Err(SessionError::Timeout)
@@ -2686,21 +3013,21 @@ mod tests {
                         avatar_hash: Some("fresh_after_cooldown".into()),
                     })
                     .await;
-                assert!(!actor.avatar_cooldowns.contains_key(&uid_cooldown));
+                assert!(!actor.media.avatar_cooldowns.contains_key(&uid_cooldown));
 
                 let (reply_after_update, rx_after_update) = oneshot::channel();
                 actor.fetch_avatar(uid_cooldown.clone(), reply_after_update);
-                actor.avatar_disk.flush().await;
+                actor.media.avatar_disk.flush().await;
                 let disk_signal = actor.signal_rx.recv().await.unwrap();
                 actor.handle_signal(disk_signal).await;
-                let pending = actor.pending_images.pop_front().unwrap();
+                let pending = actor.media.pending_images.pop_front().unwrap();
                 let _ = pending.reply.send(Ok(vec![55]));
                 let fetched = actor.signal_rx.recv().await.unwrap();
                 actor.handle_signal(fetched).await;
                 assert_eq!(rx_after_update.await.unwrap().unwrap(), Some(vec![55]));
 
                 // Reconnect / invalidate_handlers also clears cooldowns.
-                actor.avatar_cooldowns.insert(
+                actor.media.avatar_cooldowns.insert(
                     uid_cooldown.clone(),
                     AvatarCooldown {
                         attempts: 3,
@@ -2709,10 +3036,165 @@ mod tests {
                     },
                 );
                 actor.invalidate_handlers();
-                assert!(actor.avatar_cooldowns.is_empty());
+                assert!(actor.media.avatar_cooldowns.is_empty());
 
                 let _ = std::fs::remove_dir_all(&temp);
             })
             .await;
+    }
+
+    #[tokio::test]
+    async fn media_state_reset_on_disconnect_drains_waiters_and_clears_session_state() {
+        let mut media = MediaTransferState::new(&PathBuf::new(), &[]);
+
+        let (active_tx, active_rx) = oneshot::channel();
+        media.set_active_image(ActiveImage {
+            remote_path: "/icon_1".into(),
+            negotiation: Box::pin(std::future::pending()),
+            reply: active_tx,
+            preempt_retries: 1,
+        });
+        let (pending_tx, pending_rx) = oneshot::channel();
+        media.enqueue_image("/icon_2", pending_tx, 0);
+        let (chan_tx, chan_rx) = oneshot::channel();
+        assert!(media.register_channel_icon_waiter((1, "srv".into(), 10), chan_tx));
+        let (avatar_tx, avatar_rx) = oneshot::channel();
+        assert!(media.register_avatar_waiter((1, "srv".into(), "u1".into(), 0), avatar_tx));
+
+        media.active_server_icon_id = Some(42);
+        media.fetching_server_icon = Some((1, "srv".into(), 42));
+        assert!(media.record_avatar_hash("u1", Some("h1".into()), true));
+        media.mark_avatar_not_found("u2".into());
+        media.avatars_fetched_without_hash.insert("u3".into());
+        media.record_avatar_failure_cooldown(
+            "u4",
+            &SessionError::Timeout,
+            tokio::time::Instant::now(),
+        );
+
+        media.reset_on_disconnect();
+
+        assert!(matches!(
+            active_rx.await.unwrap(),
+            Err(ImageFetchError::Permanent(SessionError::NotConnected))
+        ));
+        assert!(matches!(
+            pending_rx.await.unwrap(),
+            Err(ImageFetchError::Permanent(SessionError::NotConnected))
+        ));
+        assert!(matches!(
+            chan_rx.await.unwrap(),
+            Err(SessionError::NotConnected)
+        ));
+        assert!(matches!(
+            avatar_rx.await.unwrap(),
+            Err(SessionError::NotConnected)
+        ));
+        assert!(media.active_image.is_none());
+        assert!(media.pending_images.is_empty());
+        assert!(media.in_flight_channel_icons.is_empty());
+        assert!(media.in_flight_avatars.is_empty());
+        assert!(media.active_server_icon_id.is_none());
+        assert!(media.fetching_server_icon.is_none());
+        assert!(media.avatar_hashes.is_empty());
+        assert!(media.avatar_negative_cache.is_empty());
+        assert!(media.avatar_cooldowns.is_empty());
+        assert!(media.avatar_revisions.is_empty());
+        assert!(media.avatars_fetched_without_hash.is_empty());
+    }
+
+    #[tokio::test]
+    async fn media_state_image_queue_capacity_and_interrupt_preempt_retries() {
+        let mut media = MediaTransferState::new(&PathBuf::new(), &[]);
+        let mut rxs = Vec::new();
+        for i in 0..IMAGE_QUEUE_CAPACITY {
+            let (tx, rx) = oneshot::channel();
+            media.enqueue_image(&format!("/img_{i}"), tx, 1);
+            rxs.push(rx);
+        }
+        let (overflow_tx, overflow_rx) = oneshot::channel();
+        media.enqueue_image("/img_overflow", overflow_tx, 0);
+        assert!(matches!(
+            overflow_rx.await.unwrap(),
+            Err(ImageFetchError::Transient(ImageTransientReason::QueueFull))
+        ));
+
+        let first = media.pop_next_image().unwrap();
+        assert_eq!(first.remote_path, "/img_0");
+        media.set_active_image(ActiveImage {
+            remote_path: first.remote_path,
+            negotiation: Box::pin(std::future::pending()),
+            reply: first.reply,
+            preempt_retries: first.preempt_retries,
+        });
+        media.interrupt_active_image();
+        assert!(media.active_image.is_none());
+        assert_eq!(media.pending_images.len(), IMAGE_QUEUE_CAPACITY);
+
+        let requeued = media.pending_images.pop_back().unwrap();
+        assert_eq!(requeued.remote_path, "/img_0");
+        assert_eq!(requeued.preempt_retries, 0);
+        media.set_active_image(ActiveImage {
+            remote_path: requeued.remote_path,
+            negotiation: Box::pin(std::future::pending()),
+            reply: requeued.reply,
+            preempt_retries: requeued.preempt_retries,
+        });
+        media.interrupt_active_image();
+        assert!(media.active_image.is_none());
+        assert!(matches!(
+            rxs.remove(0).await.unwrap(),
+            Err(ImageFetchError::Transient(
+                ImageTransientReason::Interrupted
+            ))
+        ));
+    }
+
+    #[test]
+    fn media_state_avatar_hash_transitions_and_cooldown_progression() {
+        let mut media = MediaTransferState::new(&PathBuf::new(), &[]);
+
+        assert!(!media.record_avatar_hash("", Some("h".into()), true));
+        assert!(!media.record_avatar_hash("u1", None, true));
+        assert_eq!(media.avatar_hash("u1"), Some(&None));
+        assert_eq!(media.avatar_revision("u1"), 0);
+
+        assert!(media.record_avatar_hash("u1", Some("h1".into()), false));
+        assert_eq!(media.avatar_revision("u1"), 1);
+        assert!(!media.record_avatar_hash("u1", Some("h1".into()), true));
+        assert_eq!(media.avatar_revision("u1"), 1);
+
+        media.avatars_fetched_without_hash.insert("u2".into());
+        assert!(media.record_avatar_hash("u2", None, false));
+        assert_eq!(media.avatar_revision("u2"), 1);
+
+        media.mark_avatar_not_found("u3".into());
+        assert!(!media.record_avatar_hash("u3", None, false));
+        assert!(media.record_avatar_hash("u3", Some("h3".into()), false));
+        assert!(!media.avatar_negative_cache.contains("u3"));
+
+        let now = tokio::time::Instant::now();
+        media.record_avatar_failure_cooldown("u4", &SessionError::Timeout, now);
+        assert!(matches!(
+            media.active_avatar_cooldown_error("u4", now + Duration::from_secs(10)),
+            Some(SessionError::Timeout)
+        ));
+        assert!(
+            media
+                .active_avatar_cooldown_error("u4", now + AVATAR_FAILURE_COOLDOWN)
+                .is_none()
+        );
+
+        media.record_avatar_failure_cooldown("u4", &SessionError::Timeout, now);
+        assert!(matches!(
+            media.active_avatar_cooldown_error("u4", now + Duration::from_secs(10)),
+            Some(SessionError::Timeout)
+        ));
+
+        media.record_avatar_failure_cooldown("u4", &SessionError::Timeout, now);
+        assert!(matches!(
+            media.active_avatar_cooldown_error("u4", now + Duration::from_secs(3_600)),
+            Some(SessionError::Timeout)
+        ));
     }
 }

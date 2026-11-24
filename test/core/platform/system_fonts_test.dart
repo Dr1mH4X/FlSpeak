@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:flspeak/core/system_fonts.dart';
+import 'package:flspeak/core/platform/system_fonts.dart';
 
 void main() {
   test('sortFontFamilies trims, drops hidden leading-dot names, deduplicates case-insensitively, and sorts', () {

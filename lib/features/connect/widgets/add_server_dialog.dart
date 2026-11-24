@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../../../core/models.dart';
+import '../../../core/preferences.dart';
 import '../../../core/providers.dart';
 import '../../../core/server_icon.dart';
 import '../../../l10n/app_localizations.dart';

@@ -12,12 +12,12 @@ use std::time::SystemTime;
 use sha1::{Digest, Sha1};
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct MediaCacheSpec {
-    pub(crate) dir_name: &'static str,
-    pub(crate) max_entry_bytes: usize,
-    pub(crate) max_files_per_server: usize,
-    pub(crate) max_bytes_per_server: u64,
-    pub(crate) sync_all: bool,
+pub(super) struct MediaCacheSpec {
+    pub(super) dir_name: &'static str,
+    pub(super) max_entry_bytes: usize,
+    pub(super) max_files_per_server: usize,
+    pub(super) max_bytes_per_server: u64,
+    pub(super) sync_all: bool,
 }
 
 fn has_store_path(store_path: &Path) -> bool {
@@ -31,7 +31,7 @@ fn is_valid_file_name(file_name: &str) -> bool {
         && !file_name.contains(['/', '\\', '\0'])
 }
 
-pub(crate) fn sha1_hex(input: &str) -> String {
+pub(super) fn sha1_hex(input: &str) -> String {
     let digest = Sha1::digest(input.as_bytes());
     let mut hex = String::with_capacity(digest.len() * 2);
     for byte in digest {
@@ -41,15 +41,15 @@ pub(crate) fn sha1_hex(input: &str) -> String {
     hex
 }
 
-pub(crate) fn cache_root(store_path: &Path, spec: MediaCacheSpec) -> PathBuf {
+fn cache_root(store_path: &Path, spec: MediaCacheSpec) -> PathBuf {
     store_path.with_file_name(spec.dir_name)
 }
 
-pub(crate) fn server_dir(store_path: &Path, spec: MediaCacheSpec, server_id: &str) -> PathBuf {
+pub(super) fn server_dir(store_path: &Path, spec: MediaCacheSpec, server_id: &str) -> PathBuf {
     cache_root(store_path, spec).join(sha1_hex(server_id))
 }
 
-pub(crate) fn load_hit(
+pub(super) fn load_hit(
     store_path: &Path,
     spec: MediaCacheSpec,
     server_id: &str,
@@ -75,7 +75,7 @@ pub(crate) fn load_hit(
 }
 
 /// 写入临时文件后原子替换目标；`label` 只用于错误与日志文案。
-pub(crate) fn write_atomic(
+pub(super) fn write_atomic(
     path: &Path,
     bytes: &[u8],
     sync_all: bool,
@@ -125,7 +125,7 @@ pub(crate) fn write_atomic(
     Ok(())
 }
 
-pub(crate) fn save_atomic(
+pub(super) fn save_atomic(
     store_path: &Path,
     spec: MediaCacheSpec,
     server_id: &str,
@@ -143,7 +143,7 @@ pub(crate) fn save_atomic(
     Ok(dir)
 }
 
-pub(crate) fn save(
+pub(super) fn save(
     store_path: &Path,
     spec: MediaCacheSpec,
     server_id: &str,
@@ -161,7 +161,7 @@ pub(crate) fn save(
     )
 }
 
-pub(crate) fn save_with_limits(
+pub(super) fn save_with_limits(
     store_path: &Path,
     spec: MediaCacheSpec,
     server_id: &str,
@@ -181,7 +181,7 @@ struct CachedEntry {
     modified: SystemTime,
 }
 
-pub(crate) fn evict_over_budget(dir: &Path, max_files: usize, max_bytes: u64) {
+pub(super) fn evict_over_budget(dir: &Path, max_files: usize, max_bytes: u64) {
     let Ok(read_dir) = std::fs::read_dir(dir) else {
         return;
     };
@@ -230,7 +230,7 @@ pub(crate) fn evict_over_budget(dir: &Path, max_files: usize, max_bytes: u64) {
     }
 }
 
-pub(crate) fn remove_files_matching(
+pub(super) fn remove_files_matching(
     store_path: &Path,
     spec: MediaCacheSpec,
     server_id: &str,
@@ -259,7 +259,7 @@ pub(crate) fn remove_files_matching(
     }
 }
 
-pub(crate) fn prune_orphans(store_path: &Path, spec: MediaCacheSpec, active_server_ids: &[&str]) {
+pub(super) fn prune_orphans(store_path: &Path, spec: MediaCacheSpec, active_server_ids: &[&str]) {
     if !has_store_path(store_path) {
         return;
     }
@@ -289,7 +289,7 @@ pub(crate) fn prune_orphans(store_path: &Path, spec: MediaCacheSpec, active_serv
     }
 }
 
-pub(crate) fn remove_server(store_path: &Path, spec: MediaCacheSpec, server_id: &str) {
+pub(super) fn remove_server(store_path: &Path, spec: MediaCacheSpec, server_id: &str) {
     if !has_store_path(store_path) {
         return;
     }
@@ -299,7 +299,7 @@ pub(crate) fn remove_server(store_path: &Path, spec: MediaCacheSpec, server_id: 
     }
 }
 
-pub(crate) fn move_server(store_path: &Path, spec: MediaCacheSpec, old_id: &str, new_id: &str) {
+pub(super) fn move_server(store_path: &Path, spec: MediaCacheSpec, old_id: &str, new_id: &str) {
     if !has_store_path(store_path) || old_id == new_id {
         return;
     }

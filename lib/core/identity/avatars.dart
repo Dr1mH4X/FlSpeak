@@ -1,8 +1,10 @@
 import 'dart:typed_data';
 
+import 'package:file_selector/file_selector.dart';
+import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'providers.dart';
+import '../providers.dart';
 
 class _AvatarCache {
   bool alive = true;
@@ -101,37 +103,43 @@ final memberAvatarProvider = FutureProvider.autoDispose
       });
     }, retry: (retryCount, error) => null);
 
-/// 连接页身份卡与身份对话框共用的头像来源。
-///
-/// 未连接、加载中或加载失败时回退到本机快照；服务器明确返回 `null` 时
-/// 返回 `null`，由界面显示缩写圆。
-final identityAvatarProvider = Provider<Uint8List?>((ref) {
-  final preview = ref.watch(identityAvatarPreviewProvider);
-  final (:connected, :uid) = ref.watch(
-    sessionViewProvider.select(
-      (view) => (connected: view.connected, uid: view.selfClient?.uid ?? ''),
-    ),
-  );
-  if (!connected || uid.isEmpty) {
-    return preview;
-  }
-  final avatar = ref.watch(memberAvatarProvider(uid));
-  if (avatar is AsyncData<Uint8List?>) {
-    return avatar.value;
-  }
-  return preview;
-});
+const _avatarTypeGroup = XTypeGroup(
+  extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'],
+  mimeTypes: ['image/png', 'image/jpeg', 'image/gif', 'image/webp'],
+  uniformTypeIdentifiers: [
+    'public.png',
+    'public.jpeg',
+    'com.compuserve.gif',
+    'org.webmproject.webp',
+  ],
+);
 
-/// 当前连接下自头像拉取到的字节；加载中、失败或服务器无头像时为 `null`。
-final selfAvatarBytesProvider = Provider<Uint8List?>((ref) {
-  final uid = ref.watch(
-    sessionViewProvider.select(
-      (view) => view.connected ? view.selfClient?.uid ?? '' : '',
-    ),
-  );
-  if (uid.isEmpty) {
-    return null;
+enum AvatarInputFailure { tooLarge }
+
+class AvatarInputException implements Exception {
+  const AvatarInputException(this.failure);
+
+  final AvatarInputFailure failure;
+}
+
+final avatarInputProvider = Provider<AvatarInput>((ref) => const AvatarInput());
+
+void ensureAvatarSize(int length) {
+  if (length > maxAvatarBytes()) {
+    throw const AvatarInputException(AvatarInputFailure.tooLarge);
   }
-  final avatar = ref.watch(memberAvatarProvider(uid));
-  return avatar is AsyncData<Uint8List?> ? avatar.value : null;
-});
+}
+
+class AvatarInput {
+  const AvatarInput();
+
+  /// 先读文件长度，超过上限的文件不会进入内存。
+  Future<Uint8List?> pick() async {
+    final file = await openFile(acceptedTypeGroups: const [_avatarTypeGroup]);
+    if (file == null) return null;
+    ensureAvatarSize(await file.length());
+    final bytes = await file.readAsBytes();
+    ensureAvatarSize(bytes.length);
+    return bytes;
+  }
+}

@@ -3,7 +3,7 @@ import 'package:material_ui/material_ui.dart'
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:prism_ui/prism_ui.dart' as prism_ui show SelectableText;
 
-import '../core/remote_images.dart';
+import '../core/image_host.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
 import 'prism.dart';

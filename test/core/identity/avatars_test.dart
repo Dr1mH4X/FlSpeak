@@ -5,7 +5,7 @@ import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:flspeak/core/member_avatars.dart';
+import 'package:flspeak/core/identity/avatars.dart';
 import 'package:flspeak/core/models.dart';
 import 'package:flspeak/core/providers.dart';
 
@@ -53,6 +53,21 @@ class _Controller extends SessionController {
 }
 
 void main() {
+  test('avatar input accepts the cap and rejects larger lengths', () {
+    final limit = maxAvatarBytes();
+    expect(() => ensureAvatarSize(limit), returnsNormally);
+    expect(
+      () => ensureAvatarSize(limit + 1),
+      throwsA(
+        isA<AvatarInputException>().having(
+          (error) => error.failure,
+          'failure',
+          AvatarInputFailure.tooLarge,
+        ),
+      ),
+    );
+  });
+
   testWidgets(
     'failures surface directly without Dart timers and evict failed futures for reload',
     (tester) async {

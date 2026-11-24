@@ -19,7 +19,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flspeak/core/models.dart';
 import 'package:flspeak/core/preferences.dart';
 import 'package:flspeak/core/providers.dart';
-import 'package:flspeak/core/voice_levels.dart';
 import 'package:flspeak/features/workspace/widgets/channel_pane.dart';
 import 'package:flspeak/features/workspace/widgets/chat_pane.dart';
 import 'package:flspeak/features/workspace/widgets/members_pane.dart';

@@ -3,7 +3,6 @@ import 'dart:typed_data';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../core/channel_icons.dart';
 import '../core/providers.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';

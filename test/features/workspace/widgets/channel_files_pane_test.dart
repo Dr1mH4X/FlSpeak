@@ -10,8 +10,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
-import 'package:flspeak/core/file_export.dart';
 import 'package:flspeak/core/models.dart';
+import 'package:flspeak/core/platform/file_export.dart';
 import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
 import 'package:flspeak/localization.dart';
