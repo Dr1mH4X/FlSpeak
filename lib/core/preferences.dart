@@ -3,8 +3,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart' as ffi;
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:talker/talker.dart' show LogLevel;
 
 import 'logging/logger.dart';
@@ -694,6 +696,249 @@ class PreferencesStore {
       return _preferences;
     } finally {
       completed.complete();
+    }
+  }
+}
+
+/// 核心偏好与档案文件：`<应用支持目录>/preferences.json`。
+///
+/// 身份私钥由 Rust 侧写在同一目录的 `identity.json`，不经过 Dart。
+Future<String> resolveStorePath() async {
+  final directory = await getApplicationSupportDirectory();
+  if (!await Directory(directory.path).exists()) {
+    await Directory(directory.path).create(recursive: true);
+  }
+  return p.join(directory.path, 'preferences.json');
+}
+
+/// 读写昵称与最近连接时间。`main()` 里覆盖成文件实现；测试里默认是内存实现。
+final preferencesStoreProvider = Provider<PreferencesStore>(
+  (ref) => PreferencesStore.inMemory(),
+);
+
+final preferencesProvider =
+    NotifierProvider<PreferencesController, SessionPreferences>(
+      PreferencesController.new,
+    );
+
+class PreferencesController extends Notifier<SessionPreferences> {
+  @override
+  SessionPreferences build() => ref.watch(preferencesStoreProvider).current;
+
+  void setNickname(String value) {
+    if (value == state.nickname) {
+      return;
+    }
+    _update(state.copyWith(nickname: value));
+  }
+
+  /// `null` 表示跟随系统。
+  void setLocale(String? code) {
+    if (code == state.locale) {
+      return;
+    }
+    _update(state.copyWith(locale: code));
+  }
+
+  void setTheme(AppThemePreference theme) {
+    if (theme == state.theme) {
+      return;
+    }
+    _update(state.copyWith(theme: theme));
+  }
+
+  void setLiquidGlass(LiquidGlassMode mode) {
+    if (mode == state.liquidGlass) {
+      return;
+    }
+    _update(state.copyWith(liquidGlass: mode));
+  }
+
+  void setPureBlack(bool enabled) {
+    if (enabled == state.pureBlack) {
+      return;
+    }
+    _update(state.copyWith(pureBlack: enabled));
+  }
+
+  void setPrimaryColor(int color) {
+    final normalized = 0xFF000000 | (color & 0x00FFFFFF);
+    if (normalized == state.primaryColor) {
+      return;
+    }
+    _update(state.copyWith(primaryColor: normalized));
+  }
+
+  void updateThemePalette({
+    int? primaryColor,
+    List<int>? primaryColors,
+    AppColorStyle? colorStyle,
+  }) {
+    _update(
+      state.copyWith(
+        primaryColor: primaryColor == null
+            ? null
+            : (0xFF000000 | (primaryColor & 0x00FFFFFF)),
+        primaryColors: primaryColors == null
+            ? null
+            : List.unmodifiable(primaryColors),
+        colorStyle: colorStyle,
+      ),
+    );
+  }
+
+  void setColorStyle(AppColorStyle style) {
+    if (style == state.colorStyle) {
+      return;
+    }
+    _update(state.copyWith(colorStyle: style));
+  }
+
+  void setFloatingNavigationBar(bool floating) {
+    if (floating == state.floatingNavigationBar) {
+      return;
+    }
+    _update(state.copyWith(floatingNavigationBar: floating));
+  }
+
+  void setFontFamily(String? family) {
+    final trimmed = family?.trim();
+    final normalized = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+    if (normalized == state.fontFamily) {
+      return;
+    }
+    _update(state.copyWith(fontFamily: normalized));
+  }
+
+  void setTextScale({bool? enabled, double? scale}) {
+    final nextEnabled = enabled ?? state.textScaleEnabled;
+    final nextScale = (scale ?? state.textScale)
+        .clamp(minTextScale, maxTextScale)
+        .toDouble();
+    if (nextEnabled == state.textScaleEnabled && nextScale == state.textScale) {
+      return;
+    }
+    _update(
+      state.copyWith(textScaleEnabled: nextEnabled, textScale: nextScale),
+    );
+  }
+
+  /// `null` 表示清除按住说话快捷键。
+  void setPttHotkey(int? keyId) {
+    if (keyId == state.pttHotkey) {
+      return;
+    }
+    _update(state.copyWith(pttHotkey: keyId));
+  }
+
+  /// `null` 表示回到默认宽度。
+  void setChannelPanelWidth(double? width) {
+    if (width == state.channelPanelWidth) {
+      return;
+    }
+    _update(state.copyWith(channelPanelWidth: width));
+  }
+
+  /// `null` 表示回到默认自适应高度。
+  void setStreamViewerHeight(double? height) {
+    if (height == state.streamViewerHeight) {
+      return;
+    }
+    _update(state.copyWith(streamViewerHeight: height));
+  }
+
+  void setVoiceMeterSource(VoiceMeterSource source) {
+    if (source == state.voiceMeterSource) {
+      return;
+    }
+    _update(state.copyWith(voiceMeterSource: source));
+  }
+
+  void setScreenShareResolution(ScreenShareResolutionPreset preset) {
+    if (preset == state.screenShareResolution) {
+      return;
+    }
+    _update(state.copyWith(screenShareResolution: preset));
+  }
+
+  void setScreenShareFrameRate(ScreenShareFrameRatePreset preset) {
+    if (preset == state.screenShareFrameRate) {
+      return;
+    }
+    _update(state.copyWith(screenShareFrameRate: preset));
+  }
+
+  void setScreenShareCodec(ScreenShareCodecPreference codec) {
+    if (codec == state.screenShareCodec) {
+      return;
+    }
+    _update(state.copyWith(screenShareCodec: codec));
+  }
+
+  void setScreenShareDegradation(ScreenShareDegradationPreference degradation) {
+    if (degradation == state.screenShareDegradation) {
+      return;
+    }
+    _update(state.copyWith(screenShareDegradation: degradation));
+  }
+
+  void setAutoCheckUpdate(bool enabled) {
+    if (enabled == state.autoCheckUpdate) {
+      return;
+    }
+    _update(state.copyWith(autoCheckUpdate: enabled));
+  }
+
+  void setNoiseSuppression(bool enabled) {
+    if (enabled == state.noiseSuppression) {
+      return;
+    }
+    _update(state.copyWith(noiseSuppression: enabled));
+  }
+
+  void setLogLevel(AppLogLevel level) {
+    if (level == state.logLevel) {
+      return;
+    }
+    _update(state.copyWith(logLevel: level));
+    unawaited(syncLogLevel(level.talkerLevel, rustLevelId: level.id));
+  }
+
+  void setServerIcon(String serverId, ServerIconChoice icon) {
+    _update(
+      state.copyWith(
+        serverIcons: Map.unmodifiable({...state.serverIcons, serverId: icon}),
+      ),
+    );
+  }
+
+  void moveServerPreferences(String oldId, String newId) {
+    final icons = {...state.serverIcons};
+    final icon = icons.remove(oldId);
+    if (icon != null) icons[newId] = icon;
+    final connected = {...state.lastConnected};
+    final at = connected.remove(oldId);
+    if (at != null) connected[newId] = at;
+    _update(state.copyWith(serverIcons: icons, lastConnected: connected));
+  }
+
+  void markConnected(String serverId, DateTime at) {
+    _update(
+      state.copyWith(lastConnected: {...state.lastConnected, serverId: at}),
+    );
+  }
+
+  void _update(SessionPreferences next) {
+    state = next;
+    unawaited(_persist(next));
+  }
+
+  Future<void> _persist(SessionPreferences next) async {
+    try {
+      final normalized = await ref.read(preferencesStoreProvider).save(next);
+      state = state.copyWith(nickname: normalized.nickname);
+    } on Object catch (error) {
+      logError('failed to save preferences', error: error);
     }
   }
 }

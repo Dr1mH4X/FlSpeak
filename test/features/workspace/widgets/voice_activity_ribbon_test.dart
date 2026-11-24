@@ -12,7 +12,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flspeak/core/models.dart';
 import 'package:flspeak/core/preferences.dart';
 import 'package:flspeak/core/providers.dart';
-import 'package:flspeak/core/voice_levels.dart';
 import 'package:flspeak/features/workspace/widgets/voice_activity_ribbon.dart';
 
 class _Session extends SessionController {

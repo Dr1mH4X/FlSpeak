@@ -3,7 +3,6 @@ import 'dart:typed_data';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../l10n/app_localizations.dart';
-import 'byte_size.dart';
 
 /// 文字消息的投递范围，由协议里的 `targetMode` 归一化而来。
 enum ChatScope {
@@ -422,6 +421,17 @@ class SessionView {
   );
 }
 
+/// 将以字节为单位的上限格式化为界面可读的短文本。
+String formatByteSize(int bytes) {
+  if (bytes >= 1024 * 1024) {
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MiB';
+  }
+  if (bytes >= 1024) {
+    return '${(bytes / 1024).toStringAsFixed(1)} KiB';
+  }
+  return '$bytes B';
+}
+
 /// 把 FFI 错误映射为当前 locale 的文案。
 String describeCoreError(CoreError error, AppLocalizations l10n) =>
     switch (error) {
@@ -482,4 +492,22 @@ class FileTransfer {
   final int transferred;
   final bool finished;
   final String? error;
+}
+
+/// 两路音频的聚合电平，取值 0–1。
+///
+/// 由 Rust 侧每 20ms 推送一次；这里只保存响度，不携带音频样本。
+class VoiceLevels {
+  const VoiceLevels({this.mic = 0, this.received = 0});
+
+  static const silent = VoiceLevels();
+
+  /// 本端麦克风。
+  final double mic;
+
+  /// 远端语音混音。
+  final double received;
+
+  VoiceLevels copyWith({double? mic, double? received}) =>
+      VoiceLevels(mic: mic ?? this.mic, received: received ?? this.received);
 }

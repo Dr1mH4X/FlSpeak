@@ -1,9 +1,9 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/models.dart';
 import '../../../core/preferences.dart';
 import '../../../core/providers.dart';
-import '../../../core/voice_levels.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/signal_ribbon.dart';
 

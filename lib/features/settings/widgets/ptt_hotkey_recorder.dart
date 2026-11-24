@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/global_hotkey.dart';
 import '../../../core/hotkey_codes.dart';
-import '../../../core/providers.dart';
+import '../../../core/preferences.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/common.dart';

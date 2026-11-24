@@ -1,7 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/member_avatars.dart';
+import '../../../core/identity/avatars.dart';
 import '../../../theme/app_theme.dart';
 import '../../../widgets/monogram.dart';
 

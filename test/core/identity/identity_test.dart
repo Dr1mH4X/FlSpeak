@@ -6,7 +6,8 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:flspeak/core/member_avatars.dart';
+import 'package:flspeak/core/identity/avatars.dart';
+import 'package:flspeak/core/identity/identity.dart';
 import 'package:flspeak/core/models.dart';
 import 'package:flspeak/core/providers.dart';
 

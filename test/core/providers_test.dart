@@ -13,7 +13,6 @@ import 'package:flspeak/core/models.dart';
 import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/core/notices.dart';
 import 'package:flspeak/core/preferences.dart';
-import 'package:flspeak/core/voice_levels.dart';
 
 class _Core extends Fake implements CoreSession {
   _Core(this.eventsController);
@@ -1729,6 +1728,99 @@ void main() {
     expect(updated.channelId, 6);
     expect(updated.isStreaming, isFalse);
   });
+
+  test('channelIconProvider shares ID within a connection; old transfer cannot replace new server data', () async {
+    final core = _ChannelIconCore();
+    final container = ProviderContainer(
+      overrides: [
+        coreSessionProvider.overrideWithValue(core),
+        sessionViewProvider.overrideWith(_ChannelIconController.new),
+      ],
+    );
+    addTearDown(container.dispose);
+    final first = container.listen(
+      channelIconProvider(42),
+      (previous, next) {},
+    );
+    final second = container.listen(
+      channelIconProvider(42),
+      (previous, next) {},
+    );
+    addTearDown(first.close);
+    addTearDown(second.close);
+    await Future<void>.delayed(Duration.zero);
+    expect(core.requests, hasLength(1));
+    (container.read(sessionViewProvider.notifier) as _ChannelIconController)
+        .switchServer();
+    await Future<void>.delayed(Duration.zero);
+    expect(core.requests, hasLength(2));
+    core.requests[0].complete(Uint8List.fromList([1]));
+    await Future<void>.delayed(Duration.zero);
+    expect(container.read(channelIconProvider(42)).hasValue, isFalse);
+    core.requests[1].complete(Uint8List.fromList([2]));
+    expect(await container.read(channelIconProvider(42).future), [2]);
+  });
+
+  testWidgets(
+    'channelIconProvider surfaces Rust failures directly without Dart retry timers and reloads on explicit invalidation',
+    (tester) async {
+      final core = _ChannelIconCore();
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(core),
+          sessionViewProvider.overrideWith(_ChannelIconController.new),
+        ],
+      );
+      addTearDown(container.dispose);
+      final provider = channelIconProvider(42);
+      final subscription = container.listen(provider, (_, _) {});
+      addTearDown(subscription.close);
+
+      expect(core.requests, hasLength(1));
+      final failure = expectLater(
+        container.read(provider.future),
+        throwsA(isA<CoreError>()),
+      );
+      core.requests.single.completeError(
+        const CoreError.connection(message: 'image request queue is full'),
+      );
+      await tester.pump();
+      await failure;
+
+      await tester.pump(const Duration(seconds: 5));
+      expect(core.requests, hasLength(1));
+
+      container.invalidate(provider);
+      final reloaded = container.read(provider.future);
+      expect(core.requests, hasLength(2));
+      core.requests.last.complete(Uint8List.fromList([7, 8]));
+      await tester.pump();
+      expect(await reloaded, [7, 8]);
+    },
+  );
+}
+
+class _ChannelIconCore extends Fake implements CoreSession {
+  final requests = <Completer<Uint8List>>[];
+
+  @override
+  Future<Uint8List> fetchIcon({required int iconId}) {
+    final response = Completer<Uint8List>();
+    requests.add(response);
+    return response.future;
+  }
+}
+
+class _ChannelIconController extends SessionController {
+  @override
+  SessionView build() => const SessionView(
+    activeServerId: 'a',
+    connectionEpoch: 1,
+    state: CoreSessionState.connected(clientId: 1, channelId: 1),
+  );
+
+  void switchServer() =>
+      state = state.copyWith(activeServerId: 'b', connectionEpoch: 2);
 }
 
 class _PermissionCore extends _Core {

@@ -13,8 +13,8 @@ import 'package:flspeak_ffi/flspeak_ffi.dart' show UpdateStateView;
 
 import 'core/global_hotkey.dart';
 import 'core/hotkey_codes.dart';
+import 'core/identity/identity.dart';
 import 'core/logging/logger.dart';
-import 'core/member_avatars.dart';
 import 'core/notices.dart';
 import 'core/preferences.dart';
 import 'core/providers.dart';

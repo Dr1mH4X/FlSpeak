@@ -24,6 +24,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/preferences.dart';
 import '../core/providers.dart';
 import '../core/server_icon.dart';
 import '../features/connect/widgets/add_server_dialog.dart';

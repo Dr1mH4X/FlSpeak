@@ -20,6 +20,7 @@ import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../../../core/image_host.dart';
 import '../../../core/models.dart';
+import '../../../core/preferences.dart';
 import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_motion.dart';

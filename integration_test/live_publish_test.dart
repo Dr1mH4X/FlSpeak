@@ -10,7 +10,6 @@
 
 import 'package:flspeak/core/preferences.dart';
 import 'package:flspeak/core/providers.dart';
-import 'package:flspeak/core/store_path.dart';
 import 'package:flspeak/core/stream_publisher.dart';
 import 'package:flspeak_ffi/flspeak_ffi.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
