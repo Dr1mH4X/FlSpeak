@@ -10,4 +10,5 @@
 - **日志归属与真相来源**：遵循 [../../docs/defensive-patterns/logging.md](../../docs/defensive-patterns/logging.md)，会话状态机、协议交互与底层错误一律通过 `tracing` 归入 `backend.YYYY-MM-DD.log`，作为核心状态唯一权威事实来源。
 - **广播通道容量与背压**：事件广播通道固定容量为 256，UI 滞后触发 `Lagged` 丢弃旧事件；频道快照按固定周期触发。
 - **媒体与图片归属**：`core/session::media` 统一管理本地媒体磁盘缓存（`IconCache`、`AvatarDiskQueue`）与第三方图片抓取和图床上传；生产代码中成员头像与自头像快照的磁盘读写仅经 `AvatarDiskQueue` 单一 FIFO 阻塞线程执行。
+- **Actor 子状态封装与生命周期重置**：`Actor` 内部子域状态封装在各自子模块的私有结构体中（`actor::connect::ReconnectState`、`actor::directory::DirectoryState`、`actor::streams::StreamCoordinatorState`、`actor::transfers::MediaTransferState`），仅通过窄方法读写；断线与切频道清理统一收口到各子状态的 `reset_on_disconnect()`（`DirectoryState` 与 `StreamCoordinatorState` 另提供 `reset_on_channel_change()`）。
 - 完整子系统契约见 [../../docs/subsystems/session.md](../../docs/subsystems/session.md)。

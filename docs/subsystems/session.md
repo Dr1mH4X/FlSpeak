@@ -33,6 +33,7 @@
 - 日志文件 worker 必须启用 `lossy(true)` 非阻塞队列，在背压或写盘抖动时丢弃日志，严禁阻塞会话 Actor 或实时音频线程；重复初始化具备幂等保护。
 - 跨 FFI 的提示只传稳定 notice code：`VoiceStateView.message` 与 `SessionEvent::{Denied, Failed}` 携带 `voice.*` / `session.*` 代码，Dart 负责映射本地化文案；详细诊断写入后端日志。
 - 版本更新检查是旁路：全局异步锁保证同一时刻只跑一个检查，不占用 Actor 命令队列，也不访问 `Client`；失败不得覆盖上次成功缓存，并返回缓存推导出的最终状态。
+- 会话 Actor 维持单一 `current-thread` runtime 与 `LocalSet` 串行调度，其内部状态按子域封装为 `ReconnectState`、`DirectoryState`、`StreamCoordinatorState` 与 `MediaTransferState`，通过窄方法与显式 `reset_on_disconnect()` / `reset_on_channel_change()` 收口断线与切频道状态清理。
 
 ## 相关决策
 

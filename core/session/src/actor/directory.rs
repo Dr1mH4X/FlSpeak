@@ -1,6 +1,338 @@
 use super::snapshot::*;
 use super::*;
 
+pub(super) type SnapshotPair = (Vec<ChannelView>, Vec<ClientView>);
+
+pub(super) struct SnapshotCommit {
+    pub(super) emitted: Option<SnapshotPair>,
+    pub(super) self_uid: Option<String>,
+}
+
+pub(super) struct ClientFlagsPatch<'a> {
+    pub(super) channel_id: u64,
+    pub(super) input_muted: Option<bool>,
+    pub(super) output_muted: Option<bool>,
+    pub(super) away: Option<bool>,
+    pub(super) away_message: Option<&'a String>,
+}
+
+/// 目录快照、频道编解码与成员权限探测缓存状态。
+#[derive(Default)]
+pub(super) struct DirectoryState {
+    last_snapshot: Option<(Vec<ChannelView>, Vec<ClientView>)>,
+    known_clients: HashMap<i32, ClientView>,
+    channel_codecs: HashMap<u64, i32>,
+    channel_list_allowed: Option<bool>,
+    channel_meta_allowed: Option<bool>,
+    client_list_allowed: Option<bool>,
+    subscribed_all_channels: bool,
+    self_server_groups: Vec<String>,
+    channel_tools: crate::channel_tools::ChannelTools,
+}
+
+impl DirectoryState {
+    pub(super) fn reset_on_disconnect(&mut self) {
+        self.last_snapshot = None;
+        self.known_clients.clear();
+        self.channel_codecs.clear();
+        self.reset_permissions();
+        self.subscribed_all_channels = false;
+        self.self_server_groups.clear();
+        self.channel_tools = Default::default();
+    }
+
+    pub(super) fn reset_on_channel_change(&mut self) {
+        self.reset_permissions();
+    }
+
+    pub(super) fn reset_permissions(&mut self) {
+        self.channel_list_allowed = None;
+        self.channel_meta_allowed = None;
+        self.client_list_allowed = None;
+    }
+
+    pub(super) fn channel_list_allowed(&self) -> Option<bool> {
+        self.channel_list_allowed
+    }
+
+    pub(super) fn set_channel_list_allowed(&mut self, allowed: bool) {
+        self.channel_list_allowed = Some(allowed);
+    }
+
+    pub(super) fn channel_meta_allowed(&self) -> Option<bool> {
+        self.channel_meta_allowed
+    }
+
+    pub(super) fn set_channel_meta_allowed(&mut self, allowed: bool) {
+        self.channel_meta_allowed = Some(allowed);
+    }
+
+    pub(super) fn client_list_allowed(&self) -> Option<bool> {
+        self.client_list_allowed
+    }
+
+    pub(super) fn set_client_list_allowed(&mut self, allowed: bool) {
+        self.client_list_allowed = Some(allowed);
+    }
+
+    pub(super) fn set_subscribed_all_channels(&mut self, subscribed: bool) {
+        self.subscribed_all_channels = subscribed;
+    }
+
+    pub(super) fn should_prune_departed(&self, from_directory_only: bool) -> bool {
+        !from_directory_only
+            || self.subscribed_all_channels
+            || self.client_list_allowed == Some(false)
+    }
+
+    pub(super) fn normalize_server_groups(groups: &[String]) -> Vec<String> {
+        let mut normalized: Vec<String> =
+            groups.iter().filter(|g| !g.is_empty()).cloned().collect();
+        normalized.sort();
+        normalized.dedup();
+        normalized
+    }
+
+    pub(super) fn set_self_server_groups(&mut self, groups: &[String]) {
+        self.self_server_groups = Self::normalize_server_groups(groups);
+    }
+
+    pub(super) fn sync_self_server_groups(&mut self, groups: &[String]) -> bool {
+        let normalized = Self::normalize_server_groups(groups);
+        if self.self_server_groups != normalized {
+            self.self_server_groups = normalized;
+            self.reset_permissions();
+            true
+        } else {
+            false
+        }
+    }
+
+    pub(super) fn channel_codec(&self, channel_id: u64) -> Option<i32> {
+        self.channel_codecs.get(&channel_id).copied()
+    }
+
+    pub(super) fn set_channel_codec(&mut self, channel_id: u64, codec: i32) {
+        self.channel_codecs.insert(channel_id, codec);
+    }
+
+    pub(super) fn replace_channel_codecs(&mut self, codecs: HashMap<u64, i32>) {
+        self.channel_codecs = codecs;
+    }
+
+    pub(super) fn channel_codecs(&self) -> &HashMap<u64, i32> {
+        &self.channel_codecs
+    }
+
+    pub(super) fn channel_tools_mut(&mut self) -> &mut crate::channel_tools::ChannelTools {
+        &mut self.channel_tools
+    }
+
+    pub(super) fn snapshot_slices(&self) -> (&[ChannelView], &[ClientView]) {
+        self.last_snapshot
+            .as_ref()
+            .map(|(channels, clients)| (channels.as_slice(), clients.as_slice()))
+            .unwrap_or((&[], &[]))
+    }
+
+    pub(super) fn snapshot_clone(&self) -> Option<SnapshotPair> {
+        self.last_snapshot.clone()
+    }
+
+    pub(super) fn known_client_row(&self, id: i32) -> Option<ClientView> {
+        self.known_clients.get(&id).cloned().or_else(|| {
+            self.last_snapshot
+                .as_ref()
+                .and_then(|(_, clients)| clients.iter().find(|client| client.id == id).cloned())
+        })
+    }
+
+    pub(super) fn upsert_client(&mut self, client: ClientView) {
+        self.known_clients.insert(client.id, client.clone());
+        if let Some((_, clients)) = &mut self.last_snapshot {
+            match clients.iter_mut().find(|existing| existing.id == client.id) {
+                Some(existing) => *existing = client,
+                None => {
+                    clients.push(client);
+                    clients.sort_by_key(|existing| existing.id);
+                }
+            }
+        }
+    }
+
+    pub(super) fn remove_client(&mut self, id: i32) {
+        self.known_clients.remove(&id);
+        if let Some((_, clients)) = &mut self.last_snapshot {
+            clients.retain(|client| client.id != id);
+        }
+    }
+
+    pub(super) fn update_client_flags(
+        &mut self,
+        id: i32,
+        self_client_id: Option<i32>,
+        patch: ClientFlagsPatch<'_>,
+    ) {
+        let apply = |row: &mut ClientView| {
+            if patch.channel_id != 0 && (Some(id) != self_client_id || row.channel_id == 0) {
+                row.channel_id = patch.channel_id;
+            }
+            if let Some(value) = patch.input_muted {
+                row.input_muted = Some(value);
+            }
+            if let Some(value) = patch.output_muted {
+                row.output_muted = Some(value);
+            }
+            if let Some(value) = patch.away {
+                row.away = Some(value);
+            }
+            if let Some(value) = patch.away_message {
+                row.away_message = Some(value.clone());
+            }
+        };
+        if let Some(row) = self.known_clients.get_mut(&id) {
+            apply(row);
+        }
+        if let Some((_, clients)) = &mut self.last_snapshot
+            && let Some(row) = clients.iter_mut().find(|client| client.id == id)
+        {
+            apply(row);
+        }
+    }
+
+    pub(super) fn snapshot_client_uid(&self, id: i32) -> Option<String> {
+        self.last_snapshot.as_ref().and_then(|(_, clients)| {
+            clients
+                .iter()
+                .find(|client| client.id == id && !client.uid.is_empty())
+                .map(|client| client.uid.clone())
+        })
+    }
+
+    pub(super) fn find_non_empty_client_uid(&self, id: i32) -> Option<String> {
+        self.snapshot_client_uid(id).or_else(|| {
+            self.known_clients
+                .get(&id)
+                .filter(|client| !client.uid.is_empty())
+                .map(|client| client.uid.clone())
+        })
+    }
+
+    pub(super) fn find_client_uid_by_u64(&self, target_id: u64) -> Option<String> {
+        self.last_snapshot
+            .as_ref()
+            .and_then(|(_, clients)| {
+                clients
+                    .iter()
+                    .find(|client| client.id as u64 == target_id)
+                    .map(|client| client.uid.clone())
+            })
+            .or_else(|| {
+                i32::try_from(target_id)
+                    .ok()
+                    .and_then(|id| self.known_clients.get(&id))
+                    .map(|client| client.uid.clone())
+            })
+    }
+
+    pub(super) fn snapshot_client_channel(&self, clid: i32) -> Option<u64> {
+        self.last_snapshot
+            .as_ref()
+            .and_then(|(_, clients)| clients.iter().find(|c| c.id == clid))
+            .map(|client| client.channel_id)
+            .filter(|channel| *channel != 0)
+    }
+
+    fn sync_clients_cache(
+        &mut self,
+        clients: &[ClientView],
+        self_client_id: Option<i32>,
+    ) -> Option<String> {
+        self.known_clients = clients
+            .iter()
+            .map(|client| (client.id, client.clone()))
+            .collect();
+        self_client_id
+            .and_then(|self_id| self.known_clients.get(&self_id))
+            .filter(|me| !me.uid.is_empty())
+            .map(|me| me.uid.clone())
+    }
+
+    pub(super) fn commit_snapshot(
+        &mut self,
+        channels: Vec<ChannelView>,
+        clients: Vec<ClientView>,
+        force: bool,
+        self_client_id: Option<i32>,
+    ) -> SnapshotCommit {
+        let self_uid = self.sync_clients_cache(&clients, self_client_id);
+        let changed = force
+            || self
+                .last_snapshot
+                .as_ref()
+                .is_none_or(|(old_channels, old_clients)| {
+                    old_channels != &channels || old_clients != &clients
+                });
+        let emitted = if changed {
+            self.last_snapshot = Some((channels.clone(), clients.clone()));
+            Some((channels, clients))
+        } else {
+            None
+        };
+        SnapshotCommit { emitted, self_uid }
+    }
+
+    pub(super) fn update_snapshot_clients_if_changed(
+        &mut self,
+        clients: Vec<ClientView>,
+        self_client_id: Option<i32>,
+    ) -> SnapshotCommit {
+        let Some((channels, old_clients)) = self.last_snapshot.as_ref() else {
+            return SnapshotCommit {
+                emitted: None,
+                self_uid: None,
+            };
+        };
+        if old_clients == &clients {
+            return SnapshotCommit {
+                emitted: None,
+                self_uid: None,
+            };
+        }
+        let channels = channels.clone();
+        let self_uid = self.sync_clients_cache(&clients, self_client_id);
+        self.last_snapshot = Some((channels.clone(), clients.clone()));
+        SnapshotCommit {
+            emitted: Some((channels, clients)),
+            self_uid,
+        }
+    }
+
+    #[cfg(test)]
+    pub(super) fn set_snapshot_for_test(
+        &mut self,
+        channels: Vec<ChannelView>,
+        clients: Vec<ClientView>,
+    ) {
+        self.last_snapshot = Some((channels, clients));
+    }
+
+    #[cfg(test)]
+    pub(super) fn insert_known_client_for_test(&mut self, client: ClientView) {
+        self.known_clients.insert(client.id, client);
+    }
+
+    #[cfg(test)]
+    pub(super) fn subscribed_all_channels(&self) -> bool {
+        self.subscribed_all_channels
+    }
+
+    #[cfg(test)]
+    pub(super) fn self_server_groups(&self) -> &[String] {
+        &self.self_server_groups
+    }
+}
+
 impl Actor {
     pub(super) async fn list_channels(&mut self) -> Result<Vec<ChannelView>, SessionError> {
         let client = self.connected()?;
@@ -36,7 +368,7 @@ impl Actor {
         if let Some(ref dir_clients) = directory {
             self.sync_avatar_hashes_from_clients(dir_clients);
         }
-        if self.client_list_allowed == Some(false) {
+        if self.directory.client_list_allowed() == Some(false) {
             let Some(directory) = directory else {
                 return Err(SessionError::Protocol(
                     "member directory is not ready".into(),
@@ -50,7 +382,7 @@ impl Actor {
         let listed = tsclient_rs::listClients(client).await;
         let (mut rows, from_directory_only) = match listed {
             Ok(listed) => {
-                self.client_list_allowed = Some(true);
+                self.directory.set_client_list_allowed(true);
                 // clientlist 不请求头像标志（始终为 None）；仅在显式带回非空 hash 时补充记录，绝不用 None 覆盖目录状态。
                 for info in &listed {
                     if let Some(ref hash) = info.avatar_hash
@@ -64,7 +396,7 @@ impl Actor {
             }
             Err(err) => {
                 if is_permission_denied(&err) {
-                    self.client_list_allowed = Some(false);
+                    self.directory.set_client_list_allowed(false);
                     let Some(directory) = directory else {
                         return Err(protocol_error(err));
                     };
@@ -200,9 +532,9 @@ impl Actor {
             None => rows.push(ClientView {
                 id: self_id,
                 nickname: self
-                    .last_target
-                    .as_ref()
-                    .map(|target| target.nickname.clone())
+                    .reconnect
+                    .last_nickname()
+                    .map(str::to_string)
                     .unwrap_or_default(),
                 uid: String::new(),
                 channel_id: self.self_channel_id,
@@ -264,13 +596,14 @@ impl Actor {
 
         let (channels, clients) = self.prepare_merged_snapshot(incoming_channels, incoming_clients);
 
-        let mut self_codec = self.channel_codecs.get(&self.self_channel_id).copied();
+        let mut self_codec = self.directory.channel_codec(self.self_channel_id);
         if self_codec.is_none() && self.self_channel_id != 0 {
             match fetch_channel_codec(&client, self.self_channel_id).await {
                 Ok(found) => {
                     self_codec = found;
                     if let Some(found) = found {
-                        self.channel_codecs.insert(self.self_channel_id, found);
+                        self.directory
+                            .set_channel_codec(self.self_channel_id, found);
                     }
                 }
                 Err(err) => self.emit(SessionEvent::Log {
@@ -304,10 +637,10 @@ impl Actor {
         };
         match client.exec_command("channelsubscribeall", 5_000).await {
             Ok(()) => {
-                self.subscribed_all_channels = true;
+                self.directory.set_subscribed_all_channels(true);
             }
             Err(err) => {
-                self.subscribed_all_channels = false;
+                self.directory.set_subscribed_all_channels(false);
                 self.emit(SessionEvent::Log {
                     level: "warn".into(),
                     message: format!("failed to subscribe to all channels; only members in the current subscription scope will be received: {err}"),
@@ -331,7 +664,7 @@ impl Actor {
         client: &Client,
         probe_whoami_on_skip: bool,
     ) -> Result<ChannelDirectory, SessionError> {
-        if self.channel_list_allowed == Some(false) {
+        if self.directory.channel_list_allowed() == Some(false) {
             if probe_whoami_on_skip && self.network_monitor.is_some() {
                 let started = Instant::now();
                 let probe = client.exec_command_with_response("whoami", 5_000).await;
@@ -358,12 +691,12 @@ impl Actor {
 
         let channels = match result {
             Ok(channels) => {
-                self.channel_list_allowed = Some(true);
+                self.directory.set_channel_list_allowed(true);
                 channels
             }
             Err(err) => {
                 if is_permission_denied(&err) {
-                    self.channel_list_allowed = Some(false);
+                    self.directory.set_channel_list_allowed(false);
                 }
                 let Some(snapshot) = client
                     .directory_snapshot()
@@ -375,13 +708,13 @@ impl Actor {
             }
         };
 
-        if self.channel_meta_allowed == Some(false) {
+        if self.directory.channel_meta_allowed() == Some(false) {
             return Ok(directory_from_channels(channels, None));
         }
 
         match fetch_channel_metadata(client).await {
             Ok(metadata) => {
-                self.channel_meta_allowed = Some(true);
+                self.directory.set_channel_meta_allowed(true);
                 let mut codecs: HashMap<u64, i32> = metadata
                     .iter()
                     .filter_map(|(id, channel)| channel.codec.map(|codec| (*id, codec)))
@@ -407,7 +740,7 @@ impl Actor {
             }
             Err(err) => {
                 if is_permission_denied(&err) {
-                    self.channel_meta_allowed = Some(false);
+                    self.directory.set_channel_meta_allowed(false);
                     Ok(directory_from_channels(channels, None))
                 } else {
                     Ok(directory_from_channels(
@@ -435,8 +768,8 @@ impl Actor {
         if self.self_channel_id == channel_id {
             return;
         }
-        self.reset_directory_permissions();
-        let mut codec = self.channel_codecs.get(&channel_id).copied();
+        self.directory.reset_on_channel_change();
+        let mut codec = self.directory.channel_codec(channel_id);
         if codec.is_none()
             && channel_id != 0
             && let Some(client) = self.client.clone()
@@ -445,7 +778,7 @@ impl Actor {
                 Ok(found) => {
                     codec = found;
                     if let Some(found) = found {
-                        self.channel_codecs.insert(channel_id, found);
+                        self.directory.set_channel_codec(channel_id, found);
                     }
                 }
                 Err(err) => self.emit(SessionEvent::Log {
@@ -460,35 +793,13 @@ impl Actor {
         }
     }
 
-    pub(super) fn reset_directory_permissions(&mut self) {
-        self.channel_list_allowed = None;
-        self.channel_meta_allowed = None;
-        self.client_list_allowed = None;
-    }
-
-    pub(super) fn normalize_server_groups(groups: &[String]) -> Vec<String> {
-        let mut normalized: Vec<String> =
-            groups.iter().filter(|g| !g.is_empty()).cloned().collect();
-        normalized.sort();
-        normalized.dedup();
-        normalized
-    }
-
-    pub(super) fn sync_self_server_groups(&mut self, groups: &[String]) {
-        let normalized = Self::normalize_server_groups(groups);
-        if self.self_server_groups != normalized {
-            self.self_server_groups = normalized;
-            self.reset_directory_permissions();
-        }
-    }
-
     pub(super) fn handle_directory_snapshot(&mut self, snapshot: tsclient_rs::DirectorySnapshot) {
         self.sync_avatar_hashes_from_clients(&snapshot.clients);
         let mut snapshot_self_channel = None;
         if let Some(self_id) = self.self_client_id
             && let Some(me) = snapshot.clients.iter().find(|c| c.id == self_id)
         {
-            self.sync_self_server_groups(&me.server_groups);
+            self.directory.sync_self_server_groups(&me.server_groups);
             if me.channel_id != 0 {
                 snapshot_self_channel = Some(me.channel_id);
             }
@@ -512,10 +823,10 @@ impl Actor {
         if self.self_channel_id == 0
             && let Some(channel_id) = snapshot_self_channel
         {
-            let codec = self.channel_codecs.get(&channel_id).copied();
+            let codec = self.directory.channel_codec(channel_id);
             self.apply_self_channel(channel_id, codec);
         } else if self.self_channel_id != 0
-            && let Some(codec) = self.channel_codecs.get(&self.self_channel_id).copied()
+            && let Some(codec) = self.directory.channel_codec(self.self_channel_id)
             && codec != self.current_codec
         {
             self.apply_channel_codec(Some(codec));
@@ -528,11 +839,7 @@ impl Actor {
         incoming_channels: Option<(Vec<ChannelView>, HashMap<u64, i32>)>,
         incoming_clients: Option<(Vec<ClientView>, bool)>,
     ) -> (Vec<ChannelView>, Vec<ClientView>) {
-        let (prev_channels, prev_clients) = self
-            .last_snapshot
-            .as_ref()
-            .map(|(channels, clients)| (channels.as_slice(), clients.as_slice()))
-            .unwrap_or((&[], &[]));
+        let (prev_channels, prev_clients) = self.directory.snapshot_slices();
 
         let channels = match incoming_channels {
             Some((raw_channels, raw_codecs)) => {
@@ -540,27 +847,27 @@ impl Actor {
                     raw_channels,
                     raw_codecs,
                     prev_channels,
-                    &self.channel_codecs,
+                    self.directory.channel_codecs(),
                 );
-                self.channel_codecs = merged_codecs;
-                merged_channels
+                let prev_clients = prev_clients.to_vec();
+                self.directory.replace_channel_codecs(merged_codecs);
+                (merged_channels, prev_clients)
             }
-            None => prev_channels.to_vec(),
+            None => (prev_channels.to_vec(), prev_clients.to_vec()),
         };
 
+        let (channels, prev_clients) = channels;
         let mut clients = match incoming_clients {
             Some((raw_clients, from_directory_only)) => {
-                let prune_departed = !from_directory_only
-                    || self.subscribed_all_channels
-                    || self.client_list_allowed == Some(false);
+                let prune_departed = self.directory.should_prune_departed(from_directory_only);
                 merge_clients(
                     raw_clients,
-                    prev_clients,
+                    &prev_clients,
                     prune_departed,
                     self.self_channel_id,
                 )
             }
-            None => prev_clients.to_vec(),
+            None => prev_clients,
         };
         // TS6 服务器推给自己的行永远缺频道，用会话状态补齐后再统一补充身份信息。
         self.patch_self_row(&mut clients);
@@ -577,16 +884,13 @@ impl Actor {
     ) {
         self.open_protocol_sync_peers(&clients);
         self.sync_client_channels_from_snapshot(&clients);
-        self.sync_clients_cache(&clients);
-        let changed = force
-            || self
-                .last_snapshot
-                .as_ref()
-                .is_none_or(|(old_channels, old_clients)| {
-                    old_channels != &channels || old_clients != &clients
-                });
-        if changed {
-            self.last_snapshot = Some((channels.clone(), clients.clone()));
+        let commit = self
+            .directory
+            .commit_snapshot(channels, clients, force, self.self_client_id);
+        if let Some(uid) = commit.self_uid {
+            self.self_uid = Some(uid);
+        }
+        if let Some((channels, clients)) = commit.emitted {
             self.emit(SessionEvent::Snapshot { channels, clients });
         }
         self.sync_streams_view();
@@ -645,7 +949,7 @@ mod tests {
         let mut actor = audio_actor();
         actor.self_client_id = Some(1);
         actor.self_channel_id = 5;
-        actor.subscribed_all_channels = true;
+        actor.directory.subscribed_all_channels = true;
         actor.open_protocol.on_connected(1, 5, Instant::now());
         actor.open_protocol.on_plugin_command(
             &PluginCommandEvent {
@@ -666,9 +970,9 @@ mod tests {
             None,
             Instant::now(),
         );
-        actor.channel_codecs.insert(5, 4);
-        actor.channel_codecs.insert(99, 5);
-        actor.last_snapshot = Some((
+        actor.directory.channel_codecs.insert(5, 4);
+        actor.directory.channel_codecs.insert(99, 5);
+        actor.directory.last_snapshot = Some((
             vec![
                 ChannelView {
                     icon_id: Some(77),
@@ -753,8 +1057,8 @@ mod tests {
             truncated: false,
         });
         assert!(events.try_recv().is_ok()); // 频道 99 被删除，触发一次更新
-        assert!(!actor.channel_codecs.contains_key(&99));
-        assert_eq!(actor.channel_codecs.get(&5), Some(&4));
+        assert!(!actor.directory.channel_codecs.contains_key(&99));
+        assert_eq!(actor.directory.channel_codecs.get(&5), Some(&4));
 
         // 再次推送完全相同的快照，命中 Diff 跳过广播。
         actor.handle_directory_snapshot(tsclient_rs::DirectorySnapshot {
@@ -810,7 +1114,7 @@ mod tests {
         assert_eq!(channels[0].password_protected, Some(true));
         assert_eq!(channels[1].id, 8);
         assert_eq!(channels[1].password_protected, Some(true));
-        assert_eq!(actor.channel_codecs.get(&8), Some(&5));
+        assert_eq!(actor.directory.channel_codecs.get(&8), Some(&5));
         let self_row = clients.iter().find(|c| c.id == 1).unwrap();
         assert_eq!(self_row.channel_id, 5);
         let peer_row = clients.iter().find(|c| c.id == 2).unwrap();
@@ -823,9 +1127,9 @@ mod tests {
         let mut actor = audio_actor();
         actor.self_client_id = Some(1);
         actor.self_channel_id = 5;
-        actor.subscribed_all_channels = false;
-        actor.client_list_allowed = Some(true);
-        actor.last_snapshot = Some((
+        actor.directory.subscribed_all_channels = false;
+        actor.directory.client_list_allowed = Some(true);
+        actor.directory.last_snapshot = Some((
             vec![
                 ChannelView {
                     icon_id: None,
@@ -866,11 +1170,11 @@ mod tests {
             clients: vec![client_info(1, 5, "Self")],
             truncated: false,
         });
-        let (_, clients) = actor.last_snapshot.as_ref().unwrap();
+        let (_, clients) = actor.directory.last_snapshot.as_ref().unwrap();
         assert_eq!(clients.iter().map(|c| c.id).collect::<Vec<_>>(), vec![1, 3]);
 
         // 当 clientlist 被禁用时，按目录快照裁剪所有不在快照里的成员。
-        actor.client_list_allowed = Some(false);
+        actor.directory.client_list_allowed = Some(false);
         actor.handle_directory_snapshot(tsclient_rs::DirectorySnapshot {
             channels: vec![
                 channel_info(5, 0, 0, "Current"),
@@ -879,7 +1183,7 @@ mod tests {
             clients: vec![client_info(1, 5, "Self")],
             truncated: false,
         });
-        let (_, clients) = actor.last_snapshot.as_ref().unwrap();
+        let (_, clients) = actor.directory.last_snapshot.as_ref().unwrap();
         assert_eq!(clients.iter().map(|c| c.id).collect::<Vec<_>>(), vec![1]);
     }
 
@@ -945,9 +1249,9 @@ mod tests {
                 let client_ref = actor.client.clone().unwrap();
                 let _ = actor.read_channel_directory(&client_ref, true).await;
                 let _ = actor.read_clients(&client_ref).await;
-                assert_eq!(actor.channel_list_allowed, Some(false));
-                assert_eq!(actor.client_list_allowed, Some(false));
-                assert_eq!(actor.channel_meta_allowed, None);
+                assert_eq!(actor.directory.channel_list_allowed, Some(false));
+                assert_eq!(actor.directory.client_list_allowed, Some(false));
+                assert_eq!(actor.directory.channel_meta_allowed, None);
 
                 // 清空记录，第二次轮询应跳过 channellist/clientlist，改用 whoami 测 RTT。
                 calls.lock().unwrap().clear();
@@ -1001,7 +1305,7 @@ mod tests {
         });
 
         assert_eq!(
-            actor.avatar_hashes.get("shared-uid"),
+            actor.media.avatar_hash("shared-uid"),
             Some(&Some("clone_hash".to_string()))
         );
         assert!(matches!(
@@ -1009,5 +1313,150 @@ mod tests {
             Ok(SessionEvent::Snapshot { .. })
         ));
         assert!(events.try_recv().is_err());
+    }
+
+    #[test]
+    fn directory_state_reset_on_disconnect_and_channel_change() {
+        let mut state = DirectoryState::default();
+        state.set_snapshot_for_test(
+            Vec::new(),
+            vec![ClientView::from(client_info(1, 5, "Self"))],
+        );
+        state.insert_known_client_for_test(ClientView::from(client_info(1, 5, "Self")));
+        state.set_channel_codec(5, 4);
+        state.set_channel_list_allowed(false);
+        state.set_channel_meta_allowed(false);
+        state.set_client_list_allowed(false);
+        state.set_subscribed_all_channels(true);
+        state.set_self_server_groups(&["6".into()]);
+
+        state.reset_on_channel_change();
+        assert_eq!(state.channel_list_allowed(), None);
+        assert_eq!(state.channel_meta_allowed(), None);
+        assert_eq!(state.client_list_allowed(), None);
+        assert!(state.last_snapshot.is_some());
+        assert!(!state.known_clients.is_empty());
+        assert_eq!(state.channel_codec(5), Some(4));
+        assert!(state.subscribed_all_channels());
+        assert_eq!(state.self_server_groups(), &["6".to_string()]);
+
+        state.reset_on_disconnect();
+        assert!(state.last_snapshot.is_none());
+        assert!(state.known_clients.is_empty());
+        assert!(state.channel_codecs().is_empty());
+        assert_eq!(state.channel_list_allowed(), None);
+        assert_eq!(state.channel_meta_allowed(), None);
+        assert_eq!(state.client_list_allowed(), None);
+        assert!(!state.subscribed_all_channels());
+        assert!(state.self_server_groups().is_empty());
+    }
+
+    #[test]
+    fn directory_state_server_groups_normalization_and_conditional_reset() {
+        let mut state = DirectoryState::default();
+        state.set_channel_list_allowed(false);
+        state.set_channel_meta_allowed(false);
+        state.set_client_list_allowed(false);
+
+        assert!(state.sync_self_server_groups(&[
+            "8".into(),
+            String::new(),
+            "6".into(),
+            "8".into(),
+        ]));
+        assert_eq!(
+            state.self_server_groups(),
+            &["6".to_string(), "8".to_string()]
+        );
+        assert_eq!(state.channel_list_allowed(), None);
+
+        state.set_channel_list_allowed(false);
+        state.set_channel_meta_allowed(true);
+        state.set_client_list_allowed(false);
+        assert!(!state.sync_self_server_groups(&["8".into(), "6".into()]));
+        assert_eq!(state.channel_list_allowed(), Some(false));
+        assert_eq!(state.channel_meta_allowed(), Some(true));
+        assert_eq!(state.client_list_allowed(), Some(false));
+
+        assert!(state.sync_self_server_groups(&["6".into(), "7".into(), "8".into()]));
+        assert_eq!(state.channel_list_allowed(), None);
+        assert_eq!(state.channel_meta_allowed(), None);
+        assert_eq!(state.client_list_allowed(), None);
+    }
+
+    #[test]
+    fn directory_state_snapshot_commit_client_cache_and_prune_matrix() {
+        let mut state = DirectoryState::default();
+        let mut self_client = ClientView::from(client_info(1, 5, "Self"));
+        self_client.uid = "self-uid".into();
+        let mut peer_client = ClientView::from(client_info(3, 5, "Peer3"));
+        peer_client.uid = "peer3-uid".into();
+
+        let commit = state.commit_snapshot(Vec::new(), vec![self_client.clone()], false, Some(1));
+        assert!(commit.emitted.is_some());
+        assert_eq!(commit.self_uid.as_deref(), Some("self-uid"));
+
+        let commit_dup =
+            state.commit_snapshot(Vec::new(), vec![self_client.clone()], false, Some(1));
+        assert!(commit_dup.emitted.is_none());
+
+        let commit_forced = state.commit_snapshot(Vec::new(), vec![self_client], true, Some(1));
+        assert!(commit_forced.emitted.is_some());
+
+        state.upsert_client(peer_client);
+        let mut mid_client = ClientView::from(client_info(2, 5, "Peer2"));
+        mid_client.uid = "peer2-uid".into();
+        state.upsert_client(mid_client);
+        let (_, clients) = state.snapshot_slices();
+        assert_eq!(
+            clients.iter().map(|c| c.id).collect::<Vec<_>>(),
+            vec![1, 2, 3]
+        );
+
+        // 自身已有非零 channel_id 时，ClientUpdated 不得用新 channel_id 覆盖（需走 ClientMoved）。
+        state.update_client_flags(
+            1,
+            Some(1),
+            ClientFlagsPatch {
+                channel_id: 99,
+                input_muted: Some(true),
+                output_muted: None,
+                away: None,
+                away_message: None,
+            },
+        );
+        assert_eq!(state.snapshot_client_channel(1), Some(5));
+        assert_eq!(
+            state.known_client_row(1).and_then(|c| c.input_muted),
+            Some(true)
+        );
+
+        state.update_client_flags(
+            2,
+            Some(1),
+            ClientFlagsPatch {
+                channel_id: 9,
+                input_muted: None,
+                output_muted: Some(true),
+                away: Some(true),
+                away_message: Some(&"brb".to_string()),
+            },
+        );
+        assert_eq!(state.snapshot_client_channel(2), Some(9));
+        assert_eq!(
+            state.find_client_uid_by_u64(2).as_deref(),
+            Some("peer2-uid")
+        );
+
+        state.remove_client(2);
+        assert!(state.known_client_row(2).is_none());
+
+        assert!(state.should_prune_departed(false));
+        assert!(!state.should_prune_departed(true));
+        state.set_subscribed_all_channels(true);
+        assert!(state.should_prune_departed(true));
+        state.set_subscribed_all_channels(false);
+        state.set_client_list_allowed(false);
+        assert!(state.should_prune_departed(true));
     }
 }

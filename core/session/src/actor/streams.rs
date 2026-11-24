@@ -314,7 +314,7 @@ type TestWatchHook = Rc<
 >;
 
 /// 单次连接生命周期内的屏幕共享会话状态。
-pub(super) struct ActiveStreamSession {
+struct ActiveStreamSession {
     streams: Streams,
     watch: Option<ActiveWatch>,
     starting_publish: Option<StartingPublish>,
@@ -328,6 +328,183 @@ pub(super) struct ActiveStreamSession {
     test_refreshed_clids: RefCell<Vec<u16>>,
     #[cfg(test)]
     test_watch_hook: Option<TestWatchHook>,
+}
+
+/// 屏幕共享会话、频道流投影缓存与成员频道映射状态。
+#[derive(Default)]
+pub(super) struct StreamCoordinatorState {
+    session: Option<ActiveStreamSession>,
+    stream_epoch: u64,
+    client_channels: HashMap<i32, u64>,
+    last_streams_state: (Vec<StreamView>, Option<String>),
+    next_watch_id: u64,
+    next_stream_token: u64,
+}
+
+impl StreamCoordinatorState {
+    pub(super) fn stream_epoch(&self) -> u64 {
+        self.stream_epoch
+    }
+
+    pub(super) fn matches_epoch(&self, stream_epoch: u64) -> bool {
+        self.stream_epoch == stream_epoch
+    }
+
+    pub(super) fn next_watch_id(&mut self) -> u64 {
+        self.next_watch_id = self.next_watch_id.wrapping_add(1);
+        self.next_watch_id
+    }
+
+    pub(super) fn next_stream_token(&mut self) -> u64 {
+        self.next_stream_token = self.next_stream_token.wrapping_add(1);
+        if self.next_stream_token == 0 {
+            self.next_stream_token = 1;
+        }
+        self.next_stream_token
+    }
+
+    fn install_session(&mut self, session: ActiveStreamSession) {
+        self.stream_epoch = self.stream_epoch.wrapping_add(1);
+        self.session = Some(session);
+    }
+
+    pub(super) fn record_client_channel(&mut self, clid: i32, channel_id: u64) {
+        if channel_id != 0 {
+            self.client_channels.insert(clid, channel_id);
+        } else {
+            self.client_channels.remove(&clid);
+        }
+    }
+
+    pub(super) fn remove_client_channel(&mut self, clid: i32) {
+        self.client_channels.remove(&clid);
+    }
+
+    pub(super) fn sync_client_channels(&mut self, clients: &[ClientView]) {
+        self.client_channels.clear();
+        for client in clients {
+            if client.channel_id != 0 {
+                self.client_channels.insert(client.id, client.channel_id);
+            }
+        }
+    }
+
+    pub(super) fn cached_client_channel(&self, clid: i32) -> Option<u64> {
+        self.client_channels.get(&clid).copied()
+    }
+
+    pub(super) fn update_streams_view(
+        &mut self,
+        next: (Vec<StreamView>, Option<String>),
+    ) -> Option<(Vec<StreamView>, Option<String>)> {
+        if next != self.last_streams_state {
+            self.last_streams_state = next.clone();
+            Some(next)
+        } else {
+            None
+        }
+    }
+
+    pub(super) fn reset_on_disconnect(
+        &mut self,
+        reason: StreamEndReason,
+        events: &broadcast::Sender<SessionEvent>,
+    ) {
+        self.stream_epoch = self.stream_epoch.wrapping_add(1);
+        self.client_channels.clear();
+        if let Some(mut session) = self.session.take() {
+            if let Some(watch) = session.watch.take() {
+                if let WatchPhase::Joining {
+                    abort,
+                    done,
+                    settled_view,
+                } = watch.phase
+                {
+                    let _ = cancel_joining_watch(abort, done, settled_view, events.clone());
+                }
+                emit(
+                    events,
+                    SessionEvent::StreamEnded {
+                        stream_id: watch.stream_id,
+                        reason,
+                    },
+                );
+            }
+            if let Some(starting) = session.starting_publish.take() {
+                starting.abort.abort();
+            }
+            if session.publish.take().is_some() {
+                emit(events, SessionEvent::ScreenShareStopped);
+            }
+            session.streams.dispose();
+        }
+        if self.update_streams_view((Vec::new(), None)).is_some() {
+            emit(
+                events,
+                SessionEvent::Streams {
+                    streams: Vec::new(),
+                    watching: None,
+                },
+            );
+        }
+    }
+
+    pub(super) fn reset_on_channel_change(
+        &mut self,
+        prev_channel: u64,
+        next_channel: u64,
+        self_client_id: Option<i32>,
+        events: &broadcast::Sender<SessionEvent>,
+    ) {
+        if let Some(self_id) = self_client_id {
+            self.record_client_channel(self_id, next_channel);
+        }
+        if prev_channel != 0 && prev_channel != next_channel {
+            self.stream_epoch = self.stream_epoch.wrapping_add(1);
+            self.end_active_watch_best_effort(StreamEndReason::SelfMoved, events);
+            if let Some(session) = self.session.as_mut() {
+                if let Some(starting) = session.starting_publish.take() {
+                    starting.abort.abort();
+                }
+                if let Some(publish) = session.publish.take() {
+                    let stream = publish.stream.clone();
+                    drop(publish);
+                    emit(events, SessionEvent::ScreenShareStopped);
+                    spawn_best_effort_stop(stream, events.clone());
+                }
+            }
+        }
+    }
+
+    pub(super) fn end_active_watch_best_effort(
+        &mut self,
+        reason: StreamEndReason,
+        events: &broadcast::Sender<SessionEvent>,
+    ) {
+        let Some(watch) = self
+            .session
+            .as_mut()
+            .and_then(|session| session.watch.take())
+        else {
+            return;
+        };
+        let stream_id = watch.stream_id;
+        let cleanup = match watch.phase {
+            WatchPhase::Joining {
+                abort,
+                done,
+                settled_view,
+            } => cancel_joining_watch(abort, done, settled_view, events.clone()),
+            WatchPhase::Active { view, _task } => {
+                drop(_task);
+                spawn_best_effort_leave_notifying(view, events.clone())
+            }
+        };
+        if let Some(session) = self.session.as_mut() {
+            session.record_watch_cleanup(&stream_id, cleanup);
+        }
+        emit(events, SessionEvent::StreamEnded { stream_id, reason });
+    }
 }
 
 impl ActiveStreamSession {
@@ -442,17 +619,8 @@ fn cancel_joining_watch(
 }
 
 impl Actor {
-    fn next_stream_token(&mut self) -> u64 {
-        self.next_stream_token = self.next_stream_token.wrapping_add(1);
-        if self.next_stream_token == 0 {
-            self.next_stream_token = 1;
-        }
-        self.next_stream_token
-    }
-
     /// 为新建立的 `Client` 挂接 `tsclient_rs::stream::Streams` 并开始转发流事件。
     pub(super) fn init_stream_session(&mut self, client: &Client) {
-        self.stream_epoch = self.stream_epoch.wrapping_add(1);
         let streams = Streams::new(
             client,
             StreamsOptions {
@@ -472,7 +640,7 @@ impl Actor {
                 }
             }
         });
-        self.stream_session = Some(ActiveStreamSession {
+        self.streams.install_session(ActiveStreamSession {
             streams,
             watch: None,
             starting_publish: None,
@@ -490,64 +658,24 @@ impl Actor {
         self.sync_streams_view();
     }
 
-    /// 断线或重连前回收全部屏幕共享会话并清理缓存的成员频道。
-    pub(super) fn reset_streams(&mut self, reason: StreamEndReason) {
-        self.stream_epoch = self.stream_epoch.wrapping_add(1);
-        self.client_channels.clear();
-        if let Some(mut session) = self.stream_session.take() {
-            if let Some(watch) = session.watch.take() {
-                if let WatchPhase::Joining {
-                    abort,
-                    done,
-                    settled_view,
-                } = watch.phase
-                {
-                    let _ = cancel_joining_watch(abort, done, settled_view, self.events.clone());
-                }
-                self.emit(SessionEvent::StreamEnded {
-                    stream_id: watch.stream_id,
-                    reason,
-                });
-            }
-            if let Some(starting) = session.starting_publish.take() {
-                starting.abort.abort();
-            }
-            if session.publish.take().is_some() {
-                self.emit(SessionEvent::ScreenShareStopped);
-            }
-            session.streams.dispose();
-        }
-        self.sync_streams_view();
-    }
-
     pub(super) fn record_client_channel(&mut self, clid: i32, channel_id: u64) {
-        if channel_id != 0 {
-            self.client_channels.insert(clid, channel_id);
-        } else {
-            self.client_channels.remove(&clid);
-        }
+        self.streams.record_client_channel(clid, channel_id);
     }
 
     pub(super) fn remove_client_channel(&mut self, clid: i32) {
-        self.client_channels.remove(&clid);
+        self.streams.remove_client_channel(clid);
     }
 
     pub(super) fn sync_client_channels_from_snapshot(&mut self, clients: &[ClientView]) {
-        self.client_channels.clear();
-        for client in clients {
-            if client.channel_id != 0 {
-                self.client_channels.insert(client.id, client.channel_id);
-            }
-        }
+        self.streams.sync_client_channels(clients);
     }
 
     fn client_channel(&self, clid: i32) -> Option<u64> {
         if Some(clid) == self.self_client_id {
             return (self.self_channel_id != 0).then_some(self.self_channel_id);
         }
-        self.client_channels
-            .get(&clid)
-            .copied()
+        self.streams
+            .cached_client_channel(clid)
             .filter(|channel| *channel != 0)
             .or_else(|| {
                 self.client
@@ -557,18 +685,12 @@ impl Actor {
                     .map(|info| info.channel_id)
                     .filter(|channel| *channel != 0)
             })
-            .or_else(|| {
-                self.last_snapshot
-                    .as_ref()
-                    .and_then(|(_, clients)| clients.iter().find(|c| c.id == clid))
-                    .map(|client| client.channel_id)
-                    .filter(|channel| *channel != 0)
-            })
+            .or_else(|| self.directory.snapshot_client_channel(clid))
     }
 
     /// 根据全服已发现流与当前频道成员关系重新投影 `SessionView.streams`，仅在变化时广播。
     pub(super) fn sync_streams_view(&mut self) {
-        let next = match &self.stream_session {
+        let next = match &self.streams.session {
             Some(session) => {
                 let infos = session.infos();
                 let streams = project_channel_streams(
@@ -582,56 +704,41 @@ impl Actor {
             }
             None => (Vec::new(), None),
         };
-        if next != self.last_streams_state {
-            self.last_streams_state = next.clone();
-            self.emit(SessionEvent::Streams {
-                streams: next.0,
-                watching: next.1,
-            });
+        if let Some((streams, watching)) = self.streams.update_streams_view(next) {
+            self.emit(SessionEvent::Streams { streams, watching });
         }
     }
 
     /// 自己切换频道后中止跨频道观看/推流，并直接将目标频道内已发现的流投影给 UI。
     pub(super) fn on_stream_self_channel_changed(&mut self, prev_channel: u64, next_channel: u64) {
-        if let Some(self_id) = self.self_client_id {
-            self.record_client_channel(self_id, next_channel);
-        }
-        if prev_channel != 0 && prev_channel != next_channel {
-            self.stream_epoch = self.stream_epoch.wrapping_add(1);
-            self.end_active_watch_best_effort(StreamEndReason::SelfMoved);
-            if let Some(session) = self.stream_session.as_mut() {
-                if let Some(starting) = session.starting_publish.take() {
-                    starting.abort.abort();
-                }
-                if let Some(publish) = session.publish.take() {
-                    let events = self.events.clone();
-                    let stream = publish.stream.clone();
-                    drop(publish);
-                    self.emit(SessionEvent::ScreenShareStopped);
-                    spawn_best_effort_stop(stream, events);
-                }
-            }
-        }
+        self.streams.reset_on_channel_change(
+            prev_channel,
+            next_channel,
+            self.self_client_id,
+            &self.events,
+        );
         self.sync_streams_view();
     }
 
     pub(super) fn on_stream_peer_moved(&mut self, peer_clid: i32, channel_id: u64) {
         self.record_client_channel(peer_clid, channel_id);
         let watched_left_channel = self
-            .stream_session
+            .streams
+            .session
             .as_ref()
             .and_then(|session| session.watch.as_ref())
             .is_some_and(|watch| watch.source_clid == peer_clid)
             && channel_id != self.self_channel_id;
         if watched_left_channel {
-            self.end_active_watch_best_effort(StreamEndReason::SourceMoved);
+            self.streams
+                .end_active_watch_best_effort(StreamEndReason::SourceMoved, &self.events);
         }
         if self.self_channel_id != 0
             && channel_id == self.self_channel_id
             && Some(peer_clid) != self.self_client_id
             && let Ok(clid) = u16::try_from(peer_clid)
             && clid != 0
-            && let Some(session) = self.stream_session.as_ref()
+            && let Some(session) = self.streams.session.as_ref()
             && !session
                 .infos()
                 .iter()
@@ -645,14 +752,16 @@ impl Actor {
     pub(super) fn on_stream_peer_left(&mut self, peer_clid: i32) {
         self.remove_client_channel(peer_clid);
         let watched_left = self
-            .stream_session
+            .streams
+            .session
             .as_ref()
             .and_then(|session| session.watch.as_ref())
             .is_some_and(|watch| watch.source_clid == peer_clid);
         if watched_left {
-            self.end_active_watch_best_effort(StreamEndReason::SourceLeft);
+            self.streams
+                .end_active_watch_best_effort(StreamEndReason::SourceLeft, &self.events);
         }
-        if let Some(session) = self.stream_session.as_mut()
+        if let Some(session) = self.streams.session.as_mut()
             && let Some(publish) = session.publish.as_mut()
         {
             let stream_id = publish.stream.id().to_string();
@@ -668,32 +777,6 @@ impl Actor {
         self.sync_streams_view();
     }
 
-    fn end_active_watch_best_effort(&mut self, reason: StreamEndReason) {
-        let Some(watch) = self
-            .stream_session
-            .as_mut()
-            .and_then(|session| session.watch.take())
-        else {
-            return;
-        };
-        let stream_id = watch.stream_id;
-        let cleanup = match watch.phase {
-            WatchPhase::Joining {
-                abort,
-                done,
-                settled_view,
-            } => cancel_joining_watch(abort, done, settled_view, self.events.clone()),
-            WatchPhase::Active { view, _task } => {
-                drop(_task);
-                spawn_best_effort_leave_notifying(view, self.events.clone())
-            }
-        };
-        if let Some(session) = self.stream_session.as_mut() {
-            session.record_watch_cleanup(&stream_id, cleanup);
-        }
-        self.emit(SessionEvent::StreamEnded { stream_id, reason });
-    }
-
     pub(super) fn join_stream(
         &mut self,
         stream_id: String,
@@ -702,7 +785,8 @@ impl Actor {
         self.connected()?;
         let source_channel = self.client_channel(source_clid);
         let session = self
-            .stream_session
+            .streams
+            .session
             .as_ref()
             .ok_or(SessionError::NotConnected)?;
         let Some(info) = session.get_info(&stream_id) else {
@@ -737,22 +821,22 @@ impl Actor {
             return Ok(());
         }
 
-        self.end_active_watch_best_effort(StreamEndReason::Left);
+        self.streams
+            .end_active_watch_best_effort(StreamEndReason::Left, &self.events);
 
-        self.next_watch_id = self.next_watch_id.wrapping_add(1);
-        let watch_id = self.next_watch_id;
+        let watch_id = self.streams.next_watch_id();
         let abort = AbortSignal::new();
         let task_abort = abort.clone();
         let signals = self.signals.clone();
         let epoch = self.connection_epoch;
-        let stream_epoch = self.stream_epoch;
+        let stream_epoch = self.streams.stream_epoch();
         let target_stream_id = stream_id.clone();
         let (done_tx, done_rx) = watch::channel(false);
         let settled_view: Rc<RefCell<Option<TsStreamView>>> = Rc::new(RefCell::new(None));
         let task_settled = Rc::clone(&settled_view);
         let events_for_leave = self.events.clone();
 
-        let Some(session) = self.stream_session.as_mut() else {
+        let Some(session) = self.streams.session.as_mut() else {
             return Err(SessionError::NotConnected);
         };
         let streams = session.streams.clone();
@@ -850,7 +934,8 @@ impl Actor {
         stream_id: String,
         reply: oneshot::Sender<Result<(), SessionError>>,
     ) {
-        let Some(session) = self.stream_session.as_mut() else {
+        let stream_epoch = self.streams.stream_epoch();
+        let Some(session) = self.streams.session.as_mut() else {
             let _ = reply.send(Err(SessionError::Stream(
                 "not watching this screen share".into(),
             )));
@@ -869,7 +954,6 @@ impl Actor {
         let watch = session.watch.take().unwrap();
         let signals = self.signals.clone();
         let epoch = self.connection_epoch;
-        let stream_epoch = self.stream_epoch;
         match watch.phase {
             WatchPhase::Joining {
                 abort,
@@ -964,7 +1048,8 @@ impl Actor {
         target_clid: i32,
     ) -> Result<TsStreamView, SessionError> {
         let watch = self
-            .stream_session
+            .streams
+            .session
             .as_ref()
             .and_then(|session| session.watch.as_ref())
             .filter(|watch| watch.stream_id == stream_id)
@@ -1015,7 +1100,7 @@ impl Actor {
         let signals = self.signals.clone();
         let events = self.events.clone();
         let epoch = self.connection_epoch;
-        let stream_epoch = self.stream_epoch;
+        let stream_epoch = self.streams.stream_epoch();
         tokio::task::spawn_local(async move {
             let outcome = view.answer(&sdp).await;
             if let Err(ref err) = outcome {
@@ -1087,7 +1172,7 @@ impl Actor {
         let signals = self.signals.clone();
         let events = self.events.clone();
         let epoch = self.connection_epoch;
-        let stream_epoch = self.stream_epoch;
+        let stream_epoch = self.streams.stream_epoch();
         tokio::task::spawn_local(async move {
             let outcome = view.send_candidate(&cand).await;
             if let Err(ref err) = outcome {
@@ -1134,7 +1219,7 @@ impl Actor {
                 return;
             }
         };
-        let Some(session) = self.stream_session.as_ref() else {
+        let Some(session) = self.streams.session.as_ref() else {
             let _ = reply.send(Err(SessionError::NotConnected));
             return;
         };
@@ -1144,10 +1229,10 @@ impl Actor {
             )));
             return;
         }
-        let publish_token = self.next_stream_token();
+        let publish_token = self.streams.next_stream_token();
         let abort = AbortSignal::new();
         options.abort = Some(abort.clone());
-        let session = self.stream_session.as_mut().expect("checked above");
+        let session = self.streams.session.as_mut().expect("checked above");
         session.starting_publish = Some(StartingPublish {
             token: publish_token,
             abort,
@@ -1156,7 +1241,7 @@ impl Actor {
         let streams = session.streams.clone();
         let signals = self.signals.clone();
         let epoch = self.connection_epoch;
-        let stream_epoch = self.stream_epoch;
+        let stream_epoch = self.streams.stream_epoch();
         tokio::task::spawn_local(async move {
             let outcome = streams.publish(options).await;
             let _ = signals.send(SessionSignal::StartScreenShareResolved {
@@ -1177,7 +1262,7 @@ impl Actor {
         outcome: Result<PublishedStream, StreamError>,
         reply: oneshot::Sender<Result<(), SessionError>>,
     ) {
-        if epoch != self.connection_epoch || stream_epoch != self.stream_epoch {
+        if epoch != self.connection_epoch || !self.streams.matches_epoch(stream_epoch) {
             if let Ok(published) = outcome {
                 spawn_best_effort_stop(PublishedStreamHandle::Live(published), self.events.clone());
             }
@@ -1188,7 +1273,7 @@ impl Actor {
             }));
             return;
         }
-        let Some(session) = self.stream_session.as_mut() else {
+        let Some(session) = self.streams.session.as_mut() else {
             if let Ok(published) = outcome {
                 spawn_best_effort_stop(PublishedStreamHandle::Live(published), self.events.clone());
             }
@@ -1248,7 +1333,7 @@ impl Actor {
     }
 
     pub(super) fn stop_screen_share(&mut self, reply: oneshot::Sender<Result<(), SessionError>>) {
-        let Some(session) = self.stream_session.as_mut() else {
+        let Some(session) = self.streams.session.as_mut() else {
             let _ = reply.send(Ok(()));
             return;
         };
@@ -1268,7 +1353,7 @@ impl Actor {
         }
         let signals = self.signals.clone();
         let epoch = self.connection_epoch;
-        let stream_epoch = self.stream_epoch;
+        let stream_epoch = self.streams.stream_epoch();
         tokio::task::spawn_local(async move {
             let outcome = stream.stop(0).await;
             let _ = signals.send(SessionSignal::StreamCommandFinished {
@@ -1311,7 +1396,8 @@ impl Actor {
             return;
         }
         let Some(publish) = self
-            .stream_session
+            .streams
+            .session
             .as_mut()
             .and_then(|session| session.publish.as_mut())
         else {
@@ -1401,7 +1487,7 @@ impl Actor {
         });
         let signals = self.signals.clone();
         let epoch = self.connection_epoch;
-        let stream_epoch = self.stream_epoch;
+        let stream_epoch = self.streams.stream_epoch();
         tokio::task::spawn_local(async move {
             let outcome = if accept {
                 request.accept(&offer_sdp, "").await.map(Some)
@@ -1442,7 +1528,7 @@ impl Actor {
                 ),
             });
         }
-        if epoch != self.connection_epoch || stream_epoch != self.stream_epoch {
+        if epoch != self.connection_epoch || !self.streams.matches_epoch(stream_epoch) {
             if let Ok(Some(peer)) = outcome {
                 tokio::task::spawn_local(async move {
                     let _ = peer.close().await;
@@ -1456,7 +1542,8 @@ impl Actor {
             return;
         }
         let has_matching_publish = self
-            .stream_session
+            .streams
+            .session
             .as_ref()
             .and_then(|session| session.publish.as_ref())
             .is_some_and(|publish| publish.stream.id() == stream_id);
@@ -1473,7 +1560,8 @@ impl Actor {
         }
 
         let still_pending = self
-            .stream_session
+            .streams
+            .session
             .as_ref()
             .and_then(|session| session.publish.as_ref())
             .and_then(|publish| publish.requests.get(&viewer_clid))
@@ -1509,7 +1597,8 @@ impl Actor {
             Ok(Some(peer)) => {
                 if peer.closed() {
                     if let Some(publish) = self
-                        .stream_session
+                        .streams
+                        .session
                         .as_mut()
                         .and_then(|session| session.publish.as_mut())
                     {
@@ -1530,7 +1619,7 @@ impl Actor {
                     )));
                     return;
                 }
-                let peer_token = self.next_stream_token();
+                let peer_token = self.streams.next_stream_token();
                 let mut sub = peer.subscribe();
                 let signals = self.signals.clone();
                 let peer_stream_id = peer.stream_id().to_string();
@@ -1552,7 +1641,8 @@ impl Actor {
                     }
                 });
                 if let Some(publish) = self
-                    .stream_session
+                    .streams
+                    .session
                     .as_mut()
                     .and_then(|session| session.publish.as_mut())
                     .filter(|publish| publish.stream.id() == stream_id)
@@ -1571,7 +1661,8 @@ impl Actor {
             }
             Ok(None) => {
                 if let Some(publish) = self
-                    .stream_session
+                    .streams
+                    .session
                     .as_mut()
                     .and_then(|session| session.publish.as_mut())
                 {
@@ -1582,7 +1673,8 @@ impl Actor {
             Err(err) => {
                 let mut removed_terminal = false;
                 if let Some(publish) = self
-                    .stream_session
+                    .streams
+                    .session
                     .as_mut()
                     .and_then(|session| session.publish.as_mut())
                     && let Some(pending) = publish.requests.get_mut(&viewer_clid)
@@ -1626,7 +1718,8 @@ impl Actor {
             return;
         }
         let Some(publish) = self
-            .stream_session
+            .streams
+            .session
             .as_ref()
             .and_then(|session| session.publish.as_ref())
         else {
@@ -1693,7 +1786,7 @@ impl Actor {
         let signals = self.signals.clone();
         let events = self.events.clone();
         let epoch = self.connection_epoch;
-        let stream_epoch = self.stream_epoch;
+        let stream_epoch = self.streams.stream_epoch();
         tokio::task::spawn_local(async move {
             let outcome = peer.send_candidate(&cand).await;
             if let Err(ref err) = outcome {
@@ -1726,8 +1819,10 @@ impl Actor {
             let _ = reply.send(Err(err));
             return;
         }
+        let stream_epoch = self.streams.stream_epoch();
         let Some(publish) = self
-            .stream_session
+            .streams
+            .session
             .as_mut()
             .and_then(|session| session.publish.as_mut())
         else {
@@ -1739,7 +1834,6 @@ impl Actor {
         let stream_id = publish.stream.id().to_string();
         let signals = self.signals.clone();
         let epoch = self.connection_epoch;
-        let stream_epoch = self.stream_epoch;
         if let Some(accepted) = publish.viewers.remove(&viewer_clid) {
             drop(accepted._task);
             self.emit(SessionEvent::StreamViewerLeft {
@@ -1797,7 +1891,7 @@ impl Actor {
             let _ = reply.send(Err(SessionError::NotConnected));
             return;
         }
-        if require_matching_epoch && stream_epoch != self.stream_epoch {
+        if require_matching_epoch && !self.streams.matches_epoch(stream_epoch) {
             let _ = reply.send(Err(match outcome {
                 Err(err) => stream_error(err),
                 Ok(()) => SessionError::Stream("screen share session has ended".into()),
@@ -1822,14 +1916,16 @@ impl Actor {
             StreamsEvent::Stopped(stopped) => {
                 let stop_id = stopped.info.id;
                 let watching_stopped = self
-                    .stream_session
+                    .streams
+                    .session
                     .as_ref()
                     .and_then(|session| session.watch.as_ref())
                     .is_some_and(|watch| watch.stream_id == stop_id);
                 if watching_stopped {
-                    self.end_active_watch_best_effort(StreamEndReason::SourceStopped);
+                    self.streams
+                        .end_active_watch_best_effort(StreamEndReason::SourceStopped, &self.events);
                 }
-                if let Some(session) = self.stream_session.as_mut()
+                if let Some(session) = self.streams.session.as_mut()
                     && session
                         .publish
                         .as_ref()
@@ -1842,7 +1938,7 @@ impl Actor {
             }
             StreamsEvent::ViewerJoined(_) => {}
             StreamsEvent::ViewerLeft(ev) => {
-                if let Some(session) = self.stream_session.as_mut()
+                if let Some(session) = self.streams.session.as_mut()
                     && let Some(publish) = session.publish.as_mut()
                     && publish.stream.id() == ev.info.id
                 {
@@ -1876,7 +1972,7 @@ impl Actor {
             }
             StreamsEvent::Error(err) => match err {
                 StreamError::Unsupported(_) => {
-                    let should_log = self.stream_session.as_mut().is_some_and(|session| {
+                    let should_log = self.streams.session.as_mut().is_some_and(|session| {
                         let first = !session.unsupported_logged;
                         session.unsupported_logged = true;
                         first
@@ -1915,7 +2011,8 @@ impl Actor {
         outcome: Result<TsStreamView, StreamError>,
     ) {
         let is_current = self
-            .stream_session
+            .streams
+            .session
             .as_ref()
             .and_then(|session| session.watch.as_ref())
             .is_some_and(|watch| watch.id == watch_id);
@@ -1933,7 +2030,7 @@ impl Actor {
                 let mut sub = view.subscribe();
                 let signals = self.signals.clone();
                 let epoch = self.connection_epoch;
-                let stream_epoch = self.stream_epoch;
+                let stream_epoch = self.streams.stream_epoch();
                 let view_stream_id = view.stream_id().to_string();
                 let source_client_id = view.client_id();
                 let sdp = view.offer().to_string();
@@ -1953,7 +2050,7 @@ impl Actor {
                         }
                     }
                 });
-                if let Some(session) = self.stream_session.as_mut()
+                if let Some(session) = self.streams.session.as_mut()
                     && let Some(watch) = session.watch.as_mut()
                     && watch.id == watch_id
                 {
@@ -1969,7 +2066,7 @@ impl Actor {
                 });
             }
             Err(err) => {
-                if let Some(session) = self.stream_session.as_mut() {
+                if let Some(session) = self.streams.session.as_mut() {
                     session.watch = None;
                 }
                 self.sync_streams_view();
@@ -1994,7 +2091,8 @@ impl Actor {
         event: PeerEvent,
     ) {
         let Some(source_clid) = self
-            .stream_session
+            .streams
+            .session
             .as_ref()
             .and_then(|session| session.watch.as_ref())
             .filter(|watch| watch.id == watch_id)
@@ -2021,7 +2119,7 @@ impl Actor {
                 });
             }
             PeerEvent::Closed(closed) => {
-                if let Some(session) = self.stream_session.as_mut() {
+                if let Some(session) = self.streams.session.as_mut() {
                     session.watch = None;
                 }
                 self.sync_streams_view();
@@ -2045,14 +2143,15 @@ impl Actor {
             }
             PublishedStreamEvent::Ended(_) => {
                 let is_current = self
-                    .stream_session
+                    .streams
+                    .session
                     .as_ref()
                     .and_then(|session| session.publish.as_ref())
                     .is_some_and(|publish| publish.stream.id() == stream_id);
                 if !is_current {
                     return;
                 }
-                if let Some(session) = self.stream_session.as_mut() {
+                if let Some(session) = self.streams.session.as_mut() {
                     session.publish = None;
                 }
                 self.emit(SessionEvent::ScreenShareStopped);
@@ -2066,7 +2165,8 @@ impl Actor {
         // 先清理旧会话并通知前端关闭，再注册新请求，避免迟到的 Closed 误删新会话。
         let (replaced_viewer, replaced_request) = {
             let Some(publish) = self
-                .stream_session
+                .streams
+                .session
                 .as_mut()
                 .and_then(|session| session.publish.as_mut())
                 .filter(|publish| publish.stream.id() == stream_id)
@@ -2095,11 +2195,11 @@ impl Actor {
             });
         }
 
-        let token = self.next_stream_token();
+        let token = self.streams.next_stream_token();
         let mut sub = request.subscribe();
         let signals = self.signals.clone();
         let epoch = self.connection_epoch;
-        let stream_epoch = self.stream_epoch;
+        let stream_epoch = self.streams.stream_epoch();
         let req_stream_id = stream_id.clone();
         let req_task = tokio::task::spawn_local(async move {
             if let Some(JoinRequestEvent::Closed { cause }) = sub.recv().await {
@@ -2113,7 +2213,7 @@ impl Actor {
                 });
             }
         });
-        if let Some(session) = self.stream_session.as_mut()
+        if let Some(session) = self.streams.session.as_mut()
             && let Some(publish) = session.publish.as_mut()
             && publish.stream.id() == stream_id
         {
@@ -2142,7 +2242,8 @@ impl Actor {
         _cause: JoinRequestCloseCause,
     ) {
         let Some(publish) = self
-            .stream_session
+            .streams
+            .session
             .as_mut()
             .and_then(|session| session.publish.as_mut())
             .filter(|publish| publish.stream.id() == stream_id)
@@ -2170,7 +2271,8 @@ impl Actor {
         event: PeerEvent,
     ) {
         let Some(publish) = self
-            .stream_session
+            .streams
+            .session
             .as_mut()
             .and_then(|session| session.publish.as_mut())
             .filter(|publish| publish.stream.id() == stream_id)
@@ -2240,7 +2342,7 @@ impl Actor {
 #[cfg(test)]
 impl Actor {
     pub(super) fn push_test_stream_event(&mut self, event: StreamsEvent) {
-        if let Some(session) = &mut self.stream_session {
+        if let Some(session) = &mut self.streams.session {
             match &event {
                 StreamsEvent::Started(info) | StreamsEvent::Updated(info) => {
                     session.test_infos.insert(info.id.clone(), info.clone());
@@ -2420,7 +2522,7 @@ mod tests {
             actor.client = Some(Arc::clone(&client));
             actor.self_client_id = Some(1);
             actor.self_channel_id = 5;
-            actor.subscribed_all_channels = true;
+            actor.directory.set_subscribed_all_channels(true);
             actor.init_stream_session(&client);
 
             actor.handle_directory_snapshot(DirectorySnapshot {
@@ -2442,10 +2544,10 @@ mod tests {
             actor.push_test_stream_event(StreamsEvent::Started(stream_info("s-ch9", 12, "Ch9")));
 
             // 当前在频道 5，不应看到频道 8 / 频道 9 的流。
-            assert!(actor.last_streams_state.0.is_empty());
+            assert!(actor.streams.last_streams_state.0.is_empty());
 
             // 在频道 5 注册一个正在等待中的观看以验证切频道时会发 SelfMoved。
-            if let Some(session) = &mut actor.stream_session {
+            if let Some(session) = &mut actor.streams.session {
                 let (_tx, done) = watch::channel(false);
                 session.watch = Some(ActiveWatch {
                     id: 77,
@@ -2515,7 +2617,7 @@ mod tests {
             actor.client = Some(Arc::clone(&client));
             actor.self_client_id = Some(1);
             actor.self_channel_id = 5;
-            actor.subscribed_all_channels = false;
+            actor.directory.set_subscribed_all_channels(false);
             actor.init_stream_session(&client);
 
             actor
@@ -2616,7 +2718,7 @@ mod tests {
                 truncated: false,
             });
             actor.push_test_stream_event(StreamsEvent::Started(stream_info("s1", 2, "Screen")));
-            assert_eq!(actor.last_streams_state.0.len(), 1);
+            assert_eq!(actor.streams.last_streams_state.0.len(), 1);
 
             let mut events = actor.events.subscribe();
             // Unsupported 错误只记录一次 info 日志，不刷屏。
@@ -2641,10 +2743,10 @@ mod tests {
                     channel_id: 99,
                 })
                 .await;
-            assert!(actor.last_streams_state.0.is_empty());
+            assert!(actor.streams.last_streams_state.0.is_empty());
 
             // 验证 WatchResolved(JoinDenied) 会映射为 StreamEndReason::Rejected。
-            if let Some(session) = &mut actor.stream_session {
+            if let Some(session) = &mut actor.streams.session {
                 let (_tx, done) = watch::channel(false);
                 session.watch = Some(ActiveWatch {
                     id: 88,
@@ -2660,7 +2762,7 @@ mod tests {
             actor
                 .handle_signal(SessionSignal::WatchResolved {
                     epoch: actor.connection_epoch,
-                    stream_epoch: actor.stream_epoch,
+                    stream_epoch: actor.streams.stream_epoch(),
                     watch_id: 88,
                     stream_id: "s-denied".into(),
                     outcome: Err(StreamError::JoinDenied(
@@ -2679,10 +2781,12 @@ mod tests {
                 .collect();
             assert_eq!(ended_reasons, vec![StreamEndReason::Rejected]);
 
-            // disconnect/reset_streams 释放 Streams 会话并清空状态。
-            actor.reset_streams(StreamEndReason::Disconnected);
-            assert!(actor.stream_session.is_none());
-            assert!(actor.client_channels.is_empty());
+            // disconnect/reset_on_disconnect 释放 Streams 会话并清空状态。
+            actor
+                .streams
+                .reset_on_disconnect(StreamEndReason::Disconnected, &actor.events);
+            assert!(actor.streams.session.is_none());
+            assert!(actor.streams.client_channels.is_empty());
         })
         .await;
     }
@@ -2708,7 +2812,7 @@ mod tests {
                 ],
                 truncated: false,
             });
-            if let Some(session) = &mut actor.stream_session {
+            if let Some(session) = &mut actor.streams.session {
                 session
                     .test_infos
                     .insert("s1".into(), stream_info("s1", 2, "Screen"));
@@ -2731,7 +2835,7 @@ mod tests {
                 }
             }
 
-            if let Some(session) = &mut actor.stream_session {
+            if let Some(session) = &mut actor.streams.session {
                 let attempts = Rc::clone(&attempts);
                 let first_abort_observed = Rc::clone(&first_abort_observed);
                 let first_cleanup_finished = Rc::clone(&first_cleanup_finished);
@@ -2780,7 +2884,8 @@ mod tests {
                 .await;
             assert!(
                 actor
-                    .stream_session
+                    .streams
+                    .session
                     .as_ref()
                     .is_some_and(|session| session.watch.is_none())
             );
@@ -2830,7 +2935,7 @@ mod tests {
             actor.self_client_id = Some(1);
             actor.self_channel_id = 5;
             actor.init_stream_session(&client);
-            if let Some(session) = &mut actor.stream_session {
+            if let Some(session) = &mut actor.streams.session {
                 session
                     .test_infos
                     .insert("s3".into(), stream_info("s3", 3, "Existing"));
@@ -2865,7 +2970,8 @@ mod tests {
 
             assert_eq!(
                 actor
-                    .stream_session
+                    .streams
+                    .session
                     .as_ref()
                     .unwrap()
                     .test_refreshed_clids
@@ -2873,8 +2979,8 @@ mod tests {
                     .as_slice(),
                 &[2]
             );
-            assert_eq!(actor.last_streams_state.0.len(), 1);
-            assert_eq!(actor.last_streams_state.0[0].id, "s3");
+            assert_eq!(actor.streams.last_streams_state.0.len(), 1);
+            assert_eq!(actor.streams.last_streams_state.0[0].id, "s3");
 
             // ClientUpdated 携带频道变更时应同步 client_channels、补查并刷新流视图。
             actor
@@ -2891,10 +2997,11 @@ mod tests {
                     avatar_hash: None,
                 })
                 .await;
-            assert_eq!(actor.client_channels.get(&2), Some(&5));
+            assert_eq!(actor.streams.client_channels.get(&2), Some(&5));
             assert_eq!(
                 actor
-                    .stream_session
+                    .streams
+                    .session
                     .as_ref()
                     .unwrap()
                     .test_refreshed_clids
@@ -2917,8 +3024,8 @@ mod tests {
                     avatar_hash: None,
                 })
                 .await;
-            assert_eq!(actor.client_channels.get(&3), Some(&8));
-            assert!(actor.last_streams_state.0.is_empty());
+            assert_eq!(actor.streams.client_channels.get(&3), Some(&8));
+            assert!(actor.streams.last_streams_state.0.is_empty());
             assert!(drain_stream_events(&mut events).len() >= 2);
         })
         .await;
@@ -2948,20 +3055,22 @@ mod tests {
                 .await;
             assert!(
                 actor
-                    .stream_session
+                    .streams
+                    .session
                     .as_ref()
                     .is_some_and(|s| s.starting_publish.is_some())
             );
 
-            let old_stream_epoch = actor.stream_epoch;
+            let old_stream_epoch = actor.streams.stream_epoch();
             let epoch = actor.connection_epoch;
 
             // 在开播结果回投前切频道：应立即推进 stream_epoch 并取消 starting_publish。
             actor.on_stream_self_channel_changed(5, 9);
-            assert!(actor.stream_epoch != old_stream_epoch);
+            assert!(actor.streams.stream_epoch() != old_stream_epoch);
             assert!(
                 actor
-                    .stream_session
+                    .streams
+                    .session
                     .as_ref()
                     .is_some_and(|s| s.starting_publish.is_none())
             );
@@ -3055,7 +3164,7 @@ mod tests {
                 })
                 .await;
 
-            assert_eq!(actor.client_channels.get(&7), Some(&5));
+            assert_eq!(actor.streams.client_channels.get(&7), Some(&5));
             let emitted = std::iter::from_fn(|| events.try_recv().ok())
                 .find_map(|event| match event {
                     SessionEvent::ClientJoined(view) => Some(view),
@@ -3125,7 +3234,7 @@ mod tests {
                 let mut rx = pub_rx;
                 let _ = rx.recv().await;
             });
-            actor.stream_session.as_mut().unwrap().publish = Some(ActivePublish {
+            actor.streams.session.as_mut().unwrap().publish = Some(ActivePublish {
                 stream: PublishedStreamHandle::Test {
                     id: "pub-reconn".into(),
                 },
@@ -3151,7 +3260,8 @@ mod tests {
             assert!(reply_rx1.await.unwrap().is_ok());
 
             let old_peer_token = actor
-                .stream_session
+                .streams
+                .session
                 .as_ref()
                 .and_then(|s| s.publish.as_ref())
                 .and_then(|p| p.viewers.get(&42))
@@ -3168,7 +3278,8 @@ mod tests {
             // 旧 AcceptedViewer 必须已被移除，新请求已注册。
             {
                 let publish = actor
-                    .stream_session
+                    .streams
+                    .session
                     .as_ref()
                     .and_then(|s| s.publish.as_ref())
                     .unwrap();
@@ -3217,7 +3328,7 @@ mod tests {
             actor
                 .handle_signal(SessionSignal::PublisherPeerEvent {
                     epoch: actor.connection_epoch,
-                    stream_epoch: actor.stream_epoch,
+                    stream_epoch: actor.streams.stream_epoch(),
                     stream_id: "pub-reconn".into(),
                     viewer_clid: 42,
                     token: old_peer_token,
@@ -3231,7 +3342,8 @@ mod tests {
 
             assert!(
                 actor
-                    .stream_session
+                    .streams
+                    .session
                     .as_ref()
                     .and_then(|s| s.publish.as_ref())
                     .is_some_and(|p| p.requests.contains_key(&42))
@@ -3258,7 +3370,8 @@ mod tests {
             );
 
             let new_peer_token = actor
-                .stream_session
+                .streams
+                .session
                 .as_ref()
                 .and_then(|s| s.publish.as_ref())
                 .and_then(|p| p.viewers.get(&42))
@@ -3270,7 +3383,7 @@ mod tests {
             actor
                 .handle_signal(SessionSignal::PublisherPeerEvent {
                     epoch: actor.connection_epoch,
-                    stream_epoch: actor.stream_epoch,
+                    stream_epoch: actor.streams.stream_epoch(),
                     stream_id: "pub-reconn".into(),
                     viewer_clid: 42,
                     token: old_peer_token,
@@ -3294,7 +3407,8 @@ mod tests {
             );
             assert!(
                 actor
-                    .stream_session
+                    .streams
+                    .session
                     .as_ref()
                     .and_then(|s| s.publish.as_ref())
                     .is_some_and(|p| p.viewers.contains_key(&42))
@@ -3369,7 +3483,7 @@ mod tests {
                 let mut rx = pub_rx;
                 let _ = rx.recv().await;
             });
-            actor.stream_session.as_mut().unwrap().publish = Some(ActivePublish {
+            actor.streams.session.as_mut().unwrap().publish = Some(ActivePublish {
                 stream: PublishedStreamHandle::Test {
                     id: "pub-logs".into(),
                 },
@@ -3523,7 +3637,7 @@ mod tests {
                 let mut rx = pub_rx;
                 let _ = rx.recv().await;
             });
-            actor.stream_session.as_mut().unwrap().publish = Some(ActivePublish {
+            actor.streams.session.as_mut().unwrap().publish = Some(ActivePublish {
                 stream: PublishedStreamHandle::Test {
                     id: "pub-limit".into(),
                 },
@@ -3563,7 +3677,8 @@ mod tests {
             );
             assert_eq!(*req3_handle.state.lock().unwrap(), JoinRequestState::Denied);
             let publish = actor
-                .stream_session
+                .streams
+                .session
                 .as_ref()
                 .and_then(|s| s.publish.as_ref())
                 .unwrap();
@@ -3571,7 +3686,7 @@ mod tests {
             assert!(!publish.requests.contains_key(&103));
 
             // 3. Default viewer_limit = 0 allows unlimited viewers without interception.
-            actor.stream_session.as_mut().unwrap().publish = Some(ActivePublish {
+            actor.streams.session.as_mut().unwrap().publish = Some(ActivePublish {
                 stream: PublishedStreamHandle::Test {
                     id: "pub-unlimited".into(),
                 },
@@ -3596,7 +3711,8 @@ mod tests {
             }
             assert_eq!(
                 actor
-                    .stream_session
+                    .streams
+                    .session
                     .as_ref()
                     .and_then(|s| s.publish.as_ref())
                     .unwrap()
@@ -3606,5 +3722,67 @@ mod tests {
             );
         })
         .await;
+    }
+
+    #[test]
+    fn stream_coordinator_state_reset_and_token_semantics() {
+        let mut state = StreamCoordinatorState::default();
+        assert_eq!(state.next_watch_id(), 1);
+        assert_eq!(state.next_watch_id(), 2);
+
+        state.next_stream_token = u64::MAX - 1;
+        assert_eq!(state.next_stream_token(), u64::MAX);
+        assert_eq!(state.next_stream_token(), 1);
+
+        state.record_client_channel(10, 5);
+        assert_eq!(state.cached_client_channel(10), Some(5));
+        state.record_client_channel(10, 0);
+        assert_eq!(state.cached_client_channel(10), None);
+
+        state.sync_client_channels(&[
+            ClientView::from(client_info(1, 0, "Zero")),
+            ClientView::from(client_info(2, 7, "Seven")),
+        ]);
+        assert_eq!(state.cached_client_channel(1), None);
+        assert_eq!(state.cached_client_channel(2), Some(7));
+
+        let view = crate::streams::stream_view(&stream_info("s1", 2, "Screen"));
+        assert!(
+            state
+                .update_streams_view((vec![view.clone()], Some("s1".into())))
+                .is_some()
+        );
+        assert!(
+            state
+                .update_streams_view((vec![view], Some("s1".into())))
+                .is_none()
+        );
+
+        let (events, mut rx) = broadcast::channel(8);
+        let epoch_before = state.stream_epoch();
+        state.reset_on_channel_change(0, 7, Some(1), &events);
+        assert_eq!(state.cached_client_channel(1), Some(7));
+        assert_eq!(state.stream_epoch(), epoch_before);
+
+        state.reset_on_channel_change(7, 7, Some(1), &events);
+        assert_eq!(state.stream_epoch(), epoch_before);
+
+        state.reset_on_channel_change(7, 9, Some(1), &events);
+        assert_eq!(state.cached_client_channel(1), Some(9));
+        assert_eq!(state.stream_epoch(), epoch_before + 1);
+
+        state.reset_on_disconnect(StreamEndReason::Disconnected, &events);
+        assert_eq!(state.stream_epoch(), epoch_before + 2);
+        assert!(state.client_channels.is_empty());
+        assert_eq!(state.last_streams_state, (Vec::new(), None));
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(SessionEvent::Streams { streams, watching }) if streams.is_empty() && watching.is_none()
+        ));
+
+        // 再次重置为空时不再重复广播。
+        state.reset_on_disconnect(StreamEndReason::Disconnected, &events);
+        assert_eq!(state.stream_epoch(), epoch_before + 3);
+        assert!(rx.try_recv().is_err());
     }
 }

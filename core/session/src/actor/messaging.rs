@@ -121,20 +121,8 @@ impl Actor {
         let Some(self_id) = self.self_client_id else {
             return String::new();
         };
-        self.last_snapshot
-            .as_ref()
-            .and_then(|(_, clients)| {
-                clients
-                    .iter()
-                    .find(|client| client.id == self_id && !client.uid.is_empty())
-                    .map(|client| client.uid.clone())
-            })
-            .or_else(|| {
-                self.known_clients
-                    .get(&self_id)
-                    .filter(|client| !client.uid.is_empty())
-                    .map(|client| client.uid.clone())
-            })
+        self.directory
+            .find_non_empty_client_uid(self_id)
             .or_else(|| {
                 let snapshot = self.client.as_ref()?.directory_snapshot()?;
                 snapshot
@@ -207,20 +195,8 @@ impl Actor {
         if !self.is_own_text_message(message) {
             return message.from_uid.clone();
         }
-        self.last_snapshot
-            .as_ref()
-            .and_then(|(_, clients)| {
-                clients
-                    .iter()
-                    .find(|client| client.id as u64 == message.target_id)
-                    .map(|client| client.uid.clone())
-            })
-            .or_else(|| {
-                i32::try_from(message.target_id)
-                    .ok()
-                    .and_then(|id| self.known_clients.get(&id))
-                    .map(|client| client.uid.clone())
-            })
+        self.directory
+            .find_client_uid_by_u64(message.target_id)
             .or_else(|| {
                 let snapshot = self.client.as_ref()?.directory_snapshot()?;
                 snapshot
@@ -299,7 +275,7 @@ mod tests {
     fn direct_peer_uid_uses_the_sender_or_resolves_the_echo_target() {
         let mut actor = audio_actor();
         actor.self_client_id = Some(7);
-        actor.last_snapshot = Some((
+        actor.directory.set_snapshot_for_test(
             Vec::new(),
             vec![
                 ClientView {
@@ -339,7 +315,7 @@ mod tests {
                     bot_command_prefix: None,
                 },
             ],
-        ));
+        );
 
         let incoming = TextMessageView {
             from: "Peer".into(),
@@ -555,27 +531,24 @@ mod tests {
         actor.self_client_id = Some(7);
         actor.self_channel_id = 42;
         actor.self_uid = Some("self-uid".into());
-        actor.known_clients.insert(
-            9,
-            ClientView {
-                id: 9,
-                nickname: "Peer".into(),
-                uid: "peer-uid".into(),
-                channel_id: 42,
-                input_muted: None,
-                output_muted: None,
-                away: None,
-                away_message: None,
-                is_streaming: false,
-                client_type: ClientType::Standard,
-                app_name: None,
-                app_version: None,
-                capabilities: Vec::new(),
-                bot_commands: Vec::new(),
-                bot_commands_loaded: false,
-                bot_command_prefix: None,
-            },
-        );
+        actor.directory.insert_known_client_for_test(ClientView {
+            id: 9,
+            nickname: "Peer".into(),
+            uid: "peer-uid".into(),
+            channel_id: 42,
+            input_muted: None,
+            output_muted: None,
+            away: None,
+            away_message: None,
+            is_streaming: false,
+            client_type: ClientType::Standard,
+            app_name: None,
+            app_version: None,
+            capabilities: Vec::new(),
+            bot_commands: Vec::new(),
+            bot_commands_loaded: false,
+            bot_command_prefix: None,
+        });
 
         let mut own_channel = TextMessageView {
             from: "Self".into(),

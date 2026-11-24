@@ -15,7 +15,7 @@ mod transfers;
 mod voice;
 
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::rc::Rc;
@@ -46,21 +46,16 @@ use crate::{
     ClientView, SessionCommand, SessionError, SessionEvent, SessionState, SettingsManager,
     TextMessageView, TransferDirection, VoiceStateView,
 };
-use streams::ActiveStreamSession;
 
-use connect::*;
+use connect::{IdentityUpgradeFinish, ReconnectState, validate_port};
+use directory::{ClientFlagsPatch, DirectoryState};
 use open_protocol::*;
+use streams::StreamCoordinatorState;
 use transfers::*;
 use voice::*;
 
 /// 音频线程到 actor 的事件队列，溢出时丢的是语音包而不是协议命令。
 pub(crate) const AUDIO_EVENT_CAPACITY: usize = 64;
-
-#[derive(Debug, Clone)]
-pub(super) struct ConnectTarget {
-    id: String,
-    nickname: String,
-}
 
 #[derive(Debug)]
 pub(crate) struct StreamJoinResponse {
@@ -275,10 +270,7 @@ pub(crate) struct Actor {
     active_server_id: Option<String>,
     transfer_target: Option<ServerTarget>,
     dns_resolver: proto::HickoryDnsResolver,
-    last_target: Option<ConnectTarget>,
-    generation: u64,
-    reconnect_attempt: u32,
-    auto_reconnect: bool,
+    reconnect: ReconnectState,
     voice_state: VoiceStateView,
     input_device: Option<String>,
     output_device: Option<String>,
@@ -287,29 +279,12 @@ pub(crate) struct Actor {
     audio_since: Instant,
     audio_enabled: bool,
     voice_tx_gate: Rc<RefCell<VoiceTxGate>>,
-    last_snapshot: Option<(Vec<ChannelView>, Vec<ClientView>)>,
-    known_clients: HashMap<i32, ClientView>,
-    channel_codecs: HashMap<u64, i32>,
-    channel_list_allowed: Option<bool>,
-    channel_meta_allowed: Option<bool>,
-    client_list_allowed: Option<bool>,
-    subscribed_all_channels: bool,
-    self_server_groups: Vec<String>,
-    channel_tools: crate::channel_tools::ChannelTools,
+    directory: DirectoryState,
     current_codec: i32,
-    ever_connected: bool,
-    consecutive_timeouts: u32,
-    identity_upgrade: Option<Arc<AbortSignal>>,
-    identity_upgrading: bool,
     next_transfer_id: u64,
     connection_epoch: u64,
     epoch: Arc<AtomicU64>,
-    stream_session: Option<ActiveStreamSession>,
-    stream_epoch: u64,
-    client_channels: HashMap<i32, u64>,
-    last_streams_state: (Vec<StreamView>, Option<String>),
-    next_watch_id: u64,
-    next_stream_token: u64,
+    streams: StreamCoordinatorState,
     network_monitor: Option<crate::network::NetworkMonitor>,
     last_network_sample_error: Option<Instant>,
     open_protocol: OpenProtocolEngine,
@@ -317,19 +292,7 @@ pub(crate) struct Actor {
     #[cfg(test)]
     open_protocol_outbound_log: Vec<(&'static str, Option<i32>, String)>,
     voice_report: VoiceReportState,
-    pending_images: VecDeque<PendingImage>,
-    active_image: Option<ActiveImage>,
-    icons: crate::media::IconCache,
-    active_server_icon_id: Option<u32>,
-    fetching_server_icon: Option<(u64, String, u32)>,
-    in_flight_channel_icons: HashMap<ChannelIconKey, ChannelIconWaiters>,
-    avatar_hashes: HashMap<String, Option<String>>,
-    avatar_negative_cache: HashSet<String>,
-    avatar_cooldowns: HashMap<String, AvatarCooldown>,
-    avatar_revisions: HashMap<String, u64>,
-    avatars_fetched_without_hash: HashSet<String>,
-    in_flight_avatars: HashMap<AvatarFetchKey, AvatarWaiters>,
-    avatar_disk: crate::media::AvatarDiskQueue,
+    media: MediaTransferState,
     disconnect_tx: watch::Sender<u64>,
     disconnect_rx: watch::Receiver<u64>,
 }
@@ -358,15 +321,7 @@ impl Actor {
             .iter()
             .map(|profile| profile.id.as_str())
             .collect();
-        let icons = crate::media::IconCache::load(&store_path, &active_server_ids);
-        let avatar_disk = crate::media::AvatarDiskQueue::new();
-        avatar_disk.prune_orphans(
-            store_path.clone(),
-            active_server_ids
-                .iter()
-                .map(|id| (*id).to_owned())
-                .collect(),
-        );
+        let media = MediaTransferState::new(&store_path, &active_server_ids);
         let initial_audio = if store_path.as_os_str().is_empty() {
             AudioSettings::default()
         } else {
@@ -404,10 +359,7 @@ impl Actor {
             active_server_id: None,
             transfer_target: None,
             dns_resolver: proto::HickoryDnsResolver::new(),
-            last_target: None,
-            generation: 0,
-            reconnect_attempt: 0,
-            auto_reconnect: true,
+            reconnect: ReconnectState::default(),
             voice_state: VoiceStateView::default(),
             input_device: initial_input_device,
             output_device: initial_output_device,
@@ -416,29 +368,12 @@ impl Actor {
             audio_since: Instant::now(),
             audio_enabled,
             voice_tx_gate: Rc::new(RefCell::new(VoiceTxGate::default())),
-            last_snapshot: None,
-            known_clients: HashMap::new(),
-            channel_codecs: HashMap::new(),
-            channel_list_allowed: None,
-            channel_meta_allowed: None,
-            client_list_allowed: None,
-            subscribed_all_channels: false,
-            self_server_groups: Vec::new(),
-            channel_tools: Default::default(),
+            directory: DirectoryState::default(),
             current_codec: VOICE_CODEC,
-            ever_connected: false,
-            consecutive_timeouts: 0,
-            identity_upgrade: None,
-            identity_upgrading: false,
             next_transfer_id: 1,
             connection_epoch: 0,
             epoch: Arc::new(AtomicU64::new(0)),
-            stream_session: None,
-            stream_epoch: 0,
-            client_channels: HashMap::new(),
-            last_streams_state: (Vec::new(), None),
-            next_watch_id: 0,
-            next_stream_token: 0,
+            streams: StreamCoordinatorState::default(),
             network_monitor: None,
             last_network_sample_error: None,
             open_protocol: new_open_protocol_engine(),
@@ -446,19 +381,7 @@ impl Actor {
             #[cfg(test)]
             open_protocol_outbound_log: Vec::new(),
             voice_report: VoiceReportState::default(),
-            pending_images: VecDeque::new(),
-            active_image: None,
-            icons,
-            active_server_icon_id: None,
-            fetching_server_icon: None,
-            in_flight_channel_icons: HashMap::new(),
-            avatar_hashes: HashMap::new(),
-            avatar_negative_cache: HashSet::new(),
-            avatar_cooldowns: HashMap::new(),
-            avatar_revisions: HashMap::new(),
-            avatars_fetched_without_hash: HashSet::new(),
-            in_flight_avatars: HashMap::new(),
-            avatar_disk,
+            media,
             disconnect_tx,
             disconnect_rx,
         }
@@ -514,7 +437,7 @@ impl Actor {
         });
 
         loop {
-            if self.active_image.is_none() && !self.pending_images.is_empty() {
+            if self.media.can_start_next_image() {
                 self.start_next_image();
             }
 
@@ -522,7 +445,7 @@ impl Actor {
                 command = commands.recv() => {
                     match command {
                         Some(SessionCommand::Shutdown) => {
-                            self.cancel_active_image();
+                            self.media.cancel_active_image();
                             break;
                         }
                         Some(command) => {
@@ -531,14 +454,14 @@ impl Actor {
                                 SessionCommand::FetchAvatar { .. } | SessionCommand::FetchIcon { .. }
                             );
                             if !is_image_request {
-                                self.interrupt_active_image();
+                                self.media.interrupt_active_image();
                             }
                             if !self.handle(command).await {
                                 break;
                             }
                         }
                         None => {
-                            self.cancel_active_image();
+                            self.media.cancel_active_image();
                             break;
                         }
                     }
@@ -548,17 +471,12 @@ impl Actor {
                         self.handle_signal(signal).await;
                     }
                 }
-                result = async {
-                    match &mut self.active_image {
-                        Some(active) => active.negotiation.as_mut().await,
-                        None => std::future::pending().await,
-                    }
-                } => {
-                    let active = self.active_image.take().expect("polled image request");
-                    self.finish_server_image(result, active.reply);
+                result = self.media.poll_active_image() => {
+                    let reply = self.media.take_active_image_reply();
+                    self.finish_server_image(result, reply);
                 }
                 _ = snapshots.tick() => {
-                    self.interrupt_active_image();
+                    self.media.interrupt_active_image();
                     self.poll_snapshot().await;
                 }
             }
@@ -593,12 +511,12 @@ impl Actor {
                 let _ = reply.send(self.registry.profiles().to_vec());
             }
             SessionCommand::ListServerIcons { reply } => {
-                let _ = reply.send(self.icons.list_server_icons());
+                let _ = reply.send(self.media.list_server_icons());
             }
             SessionCommand::LoadSelfAvatarSnapshot { reply } => {
                 let (tx, rx) = oneshot::channel();
-                self.avatar_disk
-                    .load_self_snapshot(self.store_path.clone(), move |bytes| {
+                self.media
+                    .load_self_avatar_snapshot(self.store_path.clone(), move |bytes| {
                         let _ = tx.send(bytes);
                     });
                 tokio::task::spawn_local(async move {
@@ -620,20 +538,12 @@ impl Actor {
                 nickname,
                 reply,
             } => {
-                self.generation = self.generation.wrapping_add(1);
-                if let Some(signal) = self.identity_upgrade.take() {
-                    signal.abort();
-                }
-                self.identity_upgrading = false;
-                self.auto_reconnect = true;
-                self.reconnect_attempt = 0;
-                self.consecutive_timeouts = 0;
+                self.reconnect.begin_manual_connect();
                 let _ = reply.send(self.connect(&id, &nickname, false).await);
             }
             SessionCommand::RetryConnect { generation } => {
-                if generation == self.generation
-                    && self.client.is_none()
-                    && let Some(target) = self.last_target.clone()
+                if self.client.is_none()
+                    && let Some(target) = self.reconnect.retry_target_for_generation(generation)
                 {
                     let _ = self.connect(&target.id, &target.nickname, true).await;
                 }
@@ -672,7 +582,7 @@ impl Actor {
                 if result.is_ok() {
                     if self.self_client_id == Some(client_id) && self.self_channel_id != channel_id
                     {
-                        self.reset_directory_permissions();
+                        self.directory.reset_on_channel_change();
                     }
                     let _ = self.refresh_snapshot(true).await;
                     if self.self_client_id == Some(client_id) && channel_id != 0 {
@@ -691,7 +601,7 @@ impl Actor {
                 let _ = reply.send(self.list_clients().await);
             }
             SessionCommand::RequestSnapshot { reply } => {
-                self.reset_directory_permissions();
+                self.directory.reset_permissions();
                 let _ = reply.send(self.refresh_snapshot(true).await);
             }
             SessionCommand::SampleNetwork { reply } => {
@@ -699,12 +609,14 @@ impl Actor {
             }
             SessionCommand::Access { reply } => {
                 let result = match self.connected() {
-                    Ok(client) => crate::channel_tools::access(&client, &mut self.channel_tools)
-                        .await
-                        .map(|mut access| {
-                            access.connection_epoch = Some(self.connection_epoch);
-                            access
-                        }),
+                    Ok(client) => {
+                        crate::channel_tools::access(&client, self.directory.channel_tools_mut())
+                            .await
+                            .map(|mut access| {
+                                access.connection_epoch = Some(self.connection_epoch);
+                                access
+                            })
+                    }
                     Err(error) => Err(error),
                 };
                 let _ = reply.send(result);
@@ -725,7 +637,7 @@ impl Actor {
                         Ok(client) => {
                             crate::channel_tools::kick(
                                 &client,
-                                &mut self.channel_tools,
+                                self.directory.channel_tools_mut(),
                                 &uid,
                                 client_id,
                                 channel_id,
@@ -750,7 +662,7 @@ impl Actor {
                             &client,
                             &uid,
                             client_id,
-                            &mut self.channel_tools,
+                            self.directory.channel_tools_mut(),
                         )
                         .await
                     }
@@ -776,7 +688,7 @@ impl Actor {
                             channel_id,
                             kind,
                             enabled,
-                            &mut self.channel_tools,
+                            self.directory.channel_tools_mut(),
                         )
                         .await
                     }
@@ -826,29 +738,25 @@ impl Actor {
                 let _ = reply.send(self.set_ptt_active(active));
             }
             SessionCommand::CancelIdentityUpgrade { reply } => {
-                if let Some(signal) = self.identity_upgrade.as_ref() {
-                    signal.abort();
-                }
+                self.reconnect.cancel_identity_upgrade();
                 let _ = reply.send(Ok(()));
             }
             SessionCommand::IdentityUpgradeFinished {
                 generation,
                 level,
                 error,
-            } => {
-                if generation != self.generation {
-                    self.identity_upgrading = false;
-                    self.identity_upgrade = None;
-                    return true;
-                }
-                self.identity_upgrading = false;
-                self.identity_upgrade = None;
-                if let Some(level) = level {
-                    self.consecutive_timeouts = 0;
-                    self.reconnect_attempt = 0;
-                    self.emit(SessionEvent::IdentityUpgraded { level });
+            } => match self
+                .reconnect
+                .finish_identity_upgrade(generation, level.is_some())
+            {
+                IdentityUpgradeFinish::StaleGeneration => return true,
+                IdentityUpgradeFinish::Succeeded => {
+                    if let Some(level) = level {
+                        self.emit(SessionEvent::IdentityUpgraded { level });
+                    }
                     self.schedule_reconnect();
-                } else {
+                }
+                IdentityUpgradeFinish::Failed => {
                     let detail = error.unwrap_or_else(|| "identity upgrade failed".into());
                     crate::log_warn!(error = detail; "identity upgrade failed");
                     self.emit(SessionEvent::Failed {
@@ -856,13 +764,9 @@ impl Actor {
                     });
                     self.schedule_reconnect();
                 }
-            }
+            },
             SessionCommand::SetAutoReconnect { enabled, reply } => {
-                self.auto_reconnect = enabled;
-                self.generation = self.generation.wrapping_add(1);
-                if enabled {
-                    self.reconnect_attempt = 0;
-                }
+                self.reconnect.set_auto_reconnect(enabled);
                 let _ = reply.send(Ok(()));
             }
             SessionCommand::ListAudioDevices { reply } => {
@@ -1031,7 +935,7 @@ impl Actor {
                 if epoch != self.connection_epoch {
                     return;
                 }
-                if let Some(prev) = self.known_client_row(client.id) {
+                if let Some(prev) = self.directory.known_client_row(client.id) {
                     if client.nickname.is_empty() && !prev.nickname.is_empty() {
                         client.nickname = prev.nickname;
                     }
@@ -1063,7 +967,7 @@ impl Actor {
                 let client_channel_id = client.channel_id;
                 self.open_protocol_peer_joined(client.id, &client.uid);
                 self.enrich_client(&mut client);
-                self.upsert_client_in_cache(client.clone());
+                self.directory.upsert_client(client.clone());
                 self.emit(SessionEvent::ClientJoined(client));
                 self.record_client_channel(client_id, client_channel_id);
                 self.sync_streams_view();
@@ -1082,12 +986,12 @@ impl Actor {
                     self.on_stream_peer_moved(id, channel_id);
                 }
                 let moved_client = self.build_moved_client_view(id, channel_id);
-                self.upsert_client_in_cache(moved_client.clone());
+                self.directory.upsert_client(moved_client.clone());
                 self.emit(SessionEvent::ClientMoved(moved_client));
             }
             SessionSignal::ClientLeft { epoch, id } => {
                 if epoch == self.connection_epoch {
-                    self.remove_client_from_cache(id);
+                    self.directory.remove_client(id);
                     self.open_protocol_peer_left(id);
                     self.on_stream_peer_left(id);
                 }
@@ -1110,7 +1014,7 @@ impl Actor {
                 stream_id,
                 outcome,
             } => {
-                if epoch == self.connection_epoch && stream_epoch == self.stream_epoch {
+                if epoch == self.connection_epoch && self.streams.matches_epoch(stream_epoch) {
                     self.handle_watch_resolved(watch_id, stream_id, outcome);
                 } else if let Ok(view) = outcome
                     && !view.closed()
@@ -1127,7 +1031,7 @@ impl Actor {
                 stream_id,
                 event,
             } => {
-                if epoch == self.connection_epoch && stream_epoch == self.stream_epoch {
+                if epoch == self.connection_epoch && self.streams.matches_epoch(stream_epoch) {
                     self.handle_viewer_peer_event(watch_id, stream_id, event);
                 }
             }
@@ -1137,7 +1041,7 @@ impl Actor {
                 stream_id,
                 event,
             } => {
-                if epoch == self.connection_epoch && stream_epoch == self.stream_epoch {
+                if epoch == self.connection_epoch && self.streams.matches_epoch(stream_epoch) {
                     self.handle_published_stream_event(stream_id, event);
                 }
             }
@@ -1149,7 +1053,7 @@ impl Actor {
                 token,
                 cause,
             } => {
-                if epoch == self.connection_epoch && stream_epoch == self.stream_epoch {
+                if epoch == self.connection_epoch && self.streams.matches_epoch(stream_epoch) {
                     self.handle_join_request_closed(stream_id, viewer_clid, token, cause);
                 }
             }
@@ -1161,7 +1065,7 @@ impl Actor {
                 token,
                 event,
             } => {
-                if epoch == self.connection_epoch && stream_epoch == self.stream_epoch {
+                if epoch == self.connection_epoch && self.streams.matches_epoch(stream_epoch) {
                     self.handle_publisher_peer_event(stream_id, viewer_clid, token, event);
                 }
             }
@@ -1242,19 +1146,14 @@ impl Actor {
                     return;
                 }
                 let resolved_uid = if uid.is_empty() {
-                    self.last_snapshot
-                        .as_ref()
-                        .and_then(|(_, clients)| {
-                            clients.iter().find(|c| c.id == id).map(|c| c.uid.clone())
-                        })
-                        .unwrap_or_default()
+                    self.directory.snapshot_client_uid(id).unwrap_or_default()
                 } else {
                     uid
                 };
                 self.sync_avatar_hash_from_update(&resolved_uid, avatar_hash);
                 if Some(id) != self.self_client_id
                     && channel_id != 0
-                    && self.client_channels.get(&id).copied() != Some(channel_id)
+                    && self.streams.cached_client_channel(id) != Some(channel_id)
                 {
                     self.on_stream_peer_moved(id, channel_id);
                 }
@@ -1262,7 +1161,7 @@ impl Actor {
                     if !resolved_uid.is_empty() {
                         self.self_uid = Some(resolved_uid.clone());
                     }
-                    self.sync_self_server_groups(&server_groups);
+                    self.directory.sync_self_server_groups(&server_groups);
                     let local = VoiceFlagsSnapshot::from_voice_state(&self.voice_state);
                     let resolved = self.voice_report.resolve_self_flags(
                         local,
@@ -1282,13 +1181,16 @@ impl Actor {
                         }
                     }
                 }
-                self.update_client_flags_in_cache(
+                self.directory.update_client_flags(
                     id,
-                    channel_id,
-                    input_muted,
-                    output_muted,
-                    away,
-                    away_message.as_ref(),
+                    self.self_client_id,
+                    ClientFlagsPatch {
+                        channel_id,
+                        input_muted,
+                        output_muted,
+                        away,
+                        away_message: away_message.as_ref(),
+                    },
                 );
                 self.emit(SessionEvent::ClientUpdated {
                     id,
@@ -1306,7 +1208,7 @@ impl Actor {
             }
             SessionSignal::Kicked { epoch, message } => {
                 if epoch == self.connection_epoch {
-                    self.auto_reconnect = false;
+                    self.reconnect.disable_auto_reconnect();
                     self.on_connection_lost(crate::notices::SESSION_KICKED, message, false)
                         .await;
                 }
@@ -1324,40 +1226,7 @@ impl Actor {
                 icon_id,
                 result,
             } => {
-                if epoch != self.connection_epoch
-                    || self.active_server_id.as_deref() != Some(server_id.as_str())
-                    || self.active_server_icon_id != Some(icon_id)
-                {
-                    return;
-                }
-                self.fetching_server_icon = None;
-                match result {
-                    Ok(bytes) => {
-                        if let Err(error) = self.icons.save_server_icon(
-                            &self.store_path,
-                            &server_id,
-                            icon_id,
-                            bytes.clone(),
-                        ) {
-                            self.emit(SessionEvent::Log {
-                                level: "warn".into(),
-                                message: format!("failed to save the server icon cache: {error}"),
-                            });
-                        }
-                        self.emit(SessionEvent::ServerIconUpdated {
-                            server_id,
-                            bytes: Some(bytes),
-                        });
-                    }
-                    Err(error) => {
-                        if !matches!(error, SessionError::NotConnected) {
-                            self.emit(SessionEvent::Log {
-                                level: "warn".into(),
-                                message: format!("failed to fetch server icon {icon_id}: {error}"),
-                            });
-                        }
-                    }
-                }
+                self.handle_server_icon_fetched(epoch, server_id, icon_id, result);
             }
             SessionSignal::ChannelIconFetched {
                 epoch,
@@ -1443,83 +1312,6 @@ impl Actor {
         emit(&self.events, event);
     }
 
-    pub(super) fn sync_clients_cache(&mut self, clients: &[ClientView]) {
-        self.known_clients = clients
-            .iter()
-            .map(|client| (client.id, client.clone()))
-            .collect();
-        if let Some(self_id) = self.self_client_id
-            && let Some(me) = self.known_clients.get(&self_id)
-            && !me.uid.is_empty()
-        {
-            self.self_uid = Some(me.uid.clone());
-        }
-    }
-
-    fn known_client_row(&self, id: i32) -> Option<ClientView> {
-        self.known_clients.get(&id).cloned().or_else(|| {
-            self.last_snapshot
-                .as_ref()
-                .and_then(|(_, clients)| clients.iter().find(|client| client.id == id).cloned())
-        })
-    }
-
-    fn upsert_client_in_cache(&mut self, client: ClientView) {
-        self.known_clients.insert(client.id, client.clone());
-        if let Some((_, clients)) = &mut self.last_snapshot {
-            match clients.iter_mut().find(|existing| existing.id == client.id) {
-                Some(existing) => *existing = client,
-                None => {
-                    clients.push(client);
-                    clients.sort_by_key(|existing| existing.id);
-                }
-            }
-        }
-    }
-
-    fn remove_client_from_cache(&mut self, id: i32) {
-        self.known_clients.remove(&id);
-        if let Some((_, clients)) = &mut self.last_snapshot {
-            clients.retain(|client| client.id != id);
-        }
-    }
-
-    fn update_client_flags_in_cache(
-        &mut self,
-        id: i32,
-        channel_id: u64,
-        input_muted: Option<bool>,
-        output_muted: Option<bool>,
-        away: Option<bool>,
-        away_message: Option<&String>,
-    ) {
-        let apply = |row: &mut ClientView| {
-            if channel_id != 0 && (Some(id) != self.self_client_id || row.channel_id == 0) {
-                row.channel_id = channel_id;
-            }
-            if let Some(value) = input_muted {
-                row.input_muted = Some(value);
-            }
-            if let Some(value) = output_muted {
-                row.output_muted = Some(value);
-            }
-            if let Some(value) = away {
-                row.away = Some(value);
-            }
-            if let Some(value) = away_message {
-                row.away_message = Some(value.clone());
-            }
-        };
-        if let Some(row) = self.known_clients.get_mut(&id) {
-            apply(row);
-        }
-        if let Some((_, clients)) = &mut self.last_snapshot
-            && let Some(row) = clients.iter_mut().find(|client| client.id == id)
-        {
-            apply(row);
-        }
-    }
-
     fn apply_self_voice_flags_to_row(&mut self, row: &mut ClientView) {
         let local = VoiceFlagsSnapshot::from_voice_state(&self.voice_state);
         let resolved = self.voice_report.resolve_self_flags(
@@ -1535,6 +1327,7 @@ impl Actor {
 
     fn build_moved_client_view(&mut self, id: i32, channel_id: u64) -> ClientView {
         let mut client = self
+            .directory
             .known_client_row(id)
             .or_else(|| {
                 self.client
@@ -1551,9 +1344,9 @@ impl Actor {
             .unwrap_or_else(|| ClientView {
                 id,
                 nickname: if Some(id) == self.self_client_id {
-                    self.last_target
-                        .as_ref()
-                        .map(|target| target.nickname.clone())
+                    self.reconnect
+                        .last_nickname()
+                        .map(str::to_string)
                         .unwrap_or_default()
                 } else {
                     String::new()
