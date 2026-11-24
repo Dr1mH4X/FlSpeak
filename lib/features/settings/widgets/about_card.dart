@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:material_ui/material_ui.dart'
     hide
         AlertDialog,
@@ -35,10 +36,16 @@ const String _openProtocolUrl =
 
 /// 关于页主信息卡片。
 class AboutCard extends ConsumerStatefulWidget {
-  const AboutCard({super.key, this.version, this.onOpenUrl});
+  const AboutCard({
+    super.key,
+    this.version,
+    this.onOpenUrl,
+    this.isDebug = kDebugMode,
+  });
 
   final String? version;
   final Future<bool> Function(String url)? onOpenUrl;
+  final bool isDebug;
 
   @override
   ConsumerState<AboutCard> createState() => _AboutCardState();
@@ -100,8 +107,13 @@ class _AboutCardState extends ConsumerState<AboutCard> {
     final scheme = context.scheme;
     final update = ref.watch(updateProvider);
     final latestVersion = update.latestVersion;
-    final String displayVersion =
-        widget.version ?? ref.watch(appVersionProvider);
+    final String rawVersion = widget.version ?? ref.watch(appVersionProvider);
+    final String displayVersion = widget.isDebug && !rawVersion.contains('-')
+        ? '$rawVersion-debug'
+        : rawVersion;
+    final String displayAppName = widget.isDebug
+        ? '${l10n.appName} Debug'
+        : l10n.appName;
 
     final sectionBg = surfaceColorFor(SurfaceLevel.block, scheme);
 
@@ -128,7 +140,7 @@ class _AboutCardState extends ConsumerState<AboutCard> {
             // 2. 应用名称
             Center(
               child: Text(
-                l10n.appName,
+                displayAppName,
                 style: context.texts.headlineSmall?.copyWith(
                   fontWeight: FontWeight.bold,
                   fontSize: 24,

@@ -26,6 +26,7 @@ void main() {
   Widget buildTestWidget({
     Locale locale = const Locale('zh'),
     String? version,
+    bool isDebug = false,
     Future<bool> Function(String url)? onOpenUrl,
     UpdateStateView updateResult = const UpdateStateView(available: false),
     UpdateCheckClient? checkClient,
@@ -48,6 +49,7 @@ void main() {
           body: SingleChildScrollView(
             child: AboutCard(
               version: version,
+              isDebug: isDebug,
               onOpenUrl: onOpenUrl ?? (_) async => true,
             ),
           ),
@@ -192,6 +194,26 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('v1.0.0'), findsOneWidget);
   });
+
+  testWidgets(
+    'appends debug suffixes in debug mode without duplicating prerelease',
+    (tester) async {
+      await tester.pumpWidget(buildTestWidget(isDebug: true));
+      await tester.pumpAndSettle();
+      expect(find.text('FlSpeak Debug'), findsOneWidget);
+      expect(find.text('v0.1.0-debug'), findsOneWidget);
+
+      await tester.pumpWidget(
+        buildTestWidget(
+          version: '0.1.15-main.123.abc1234',
+          isDebug: true,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('FlSpeak Debug'), findsOneWidget);
+      expect(find.text('v0.1.15-main.123.abc1234'), findsOneWidget);
+    },
+  );
 
   testWidgets('does not make the version pill actionable without an update', (
     tester,
