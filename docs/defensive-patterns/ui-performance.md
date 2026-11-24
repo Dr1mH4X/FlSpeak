@@ -1,6 +1,6 @@
 # Flutter 界面性能与帧预算
 
-本文定义 FlSpeak 前端 UI 线程与光栅线程的强制性反面模式与替代做法；运行期渲染契约与液态玻璃开销见 [Flutter 界面设计规范](../subsystems/ui-design.md)，内置探针与剖析流程见 [fls-ui-performance](../../.agents/skills/fls-ui-performance/SKILL.md)。
+本文定义 FlSpeak 前端 UI 线程与光栅线程的强制性反面模式与替代做法；运行期渲染契约与液态玻璃开销见 [Flutter 界面设计规范](../ui-design.md)，内置探针与剖析流程见 [fls-ui-performance](../../.agents/skills/fls-ui-performance/SKILL.md)。
 
 ## 帧预算基线
 

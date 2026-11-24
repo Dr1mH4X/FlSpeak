@@ -1,6 +1,3 @@
-// dev_dependency 的 flutter_test 在 lib/ 下会触发 depend_on_referenced_packages。
-// ignore_for_file: depend_on_referenced_packages
-
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';

@@ -1,13 +1,5 @@
-// 打包入口：`dart setup.dart <android|macos|linux|windows> [amd64|arm64] [--version x.y.z] [--targets ...]`.
-//
-// 执行 `flutter build <platform> --release` 并按版本号归拢或打包产物到 `dist/`：
-// - macOS：通过 `appdmg` 与 `macos/packaging/dmg/make_config.json` 生成 `.dmg`；
-// - Windows：通过 Inno Setup (`ISCC.exe`) 与 `windows/packaging/exe/` 生成 `-setup.exe` 安装包与便携 `.zip`；
-// - Linux：归拢为 `.tar.gz`；
-// - Android：按 ABI 归拢为 `.apk`。
-//
-// Rust 侧由 plugins/flspeak_ffi 的 native assets 钩子在 `flutter build` 期间自动编译，
-// 这里不直接调用 cargo。
+// 打包入口：`dart setup.dart <android|macos|linux|windows> [amd64|arm64] [--version x.y.z] [--targets ...]`。
+// 把 `flutter build <platform> --release` 的产物按平台归拢或打包进 `dist/`。
 
 import 'dart:convert';
 import 'dart:io';

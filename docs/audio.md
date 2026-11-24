@@ -27,10 +27,15 @@ on_voice_data ──有界通道──> playback 线程
 
 控制命令（mute/deafen/设备/codec/PTT）走独立有界通道；语音帧走另一条有界通道，满了就丢，不会把 mute 之类的控制命令挤掉。
 
+## 设备
+
+- 采集与播放的设备列表由 `cpal` 枚举；切换设备只重建受影响的方向，下次 Start 或再次切设备时重试，不影响会话连接。
+- Android 下 `select_android_device_indices` 过滤虚拟占位、`RemoteSubmix` 虚拟端点与内部未分类系统端点，将多颗内置物理麦克风与重复内置扬声器各自归并为主设备，同时完整保留外接有线/蓝牙/USB 设备。
+
 ## 采集
 
 - 设备回调按设备原生格式写入环形队列；capture 线程每 10ms 排空一次，转成 48kHz 单声道或立体声，追加到采集缓冲。
-- 每 20ms 取一帧，在 codec 4（Opus Voice 单声道）且开启 `audio.noiseSuppression`（默认开启）时先经 `nnnoiseless`（RNNoise）降噪，codec 5（Opus Music 立体声）自动旁路；随后由能量 VAD（默认采用 `AudioSettings` 持久化配置：阈值 0.015、15 帧即 300ms 尾音；含 1 帧 Pre-roll、5ms 淡入、7.5ms 淡出与 0 字节 EOS 尾包）判断是否发送。PTT 模式绕过 VAD，按下才发。VAD 实现是可替换的 `Vad` trait。
+- 每 20ms 取一帧，在 codec 4（Opus Voice 单声道）且开启 `audio.noiseSuppression`（默认开启）时先经 `nnnoiseless`（RNNoise）降噪，codec 5（Opus Music 立体声）自动旁路；随后由能量 VAD（默认采用 `AudioSettings` 持久化配置：阈值 0.015、15 帧即 300ms 尾音；含 1 帧 Pre-roll、5ms 淡入、7.5ms 淡出与 0 字节 EOS 尾包）判断是否发送。PTT 模式绕过 VAD，按下才发；纯能量阈值对机械键盘这类瞬态噪声仍可能误触发。VAD 实现是可替换的 `Vad` trait。
 - 连续静默超过 2 秒（`SILENCE_RESET_FRAMES` = 100 帧）后再次开口时重置 Opus 编码状态（保留运行时丢包率配置）；mute/deafen 立即清空采集与待发音频缓冲并停发（仅在需要结束已开启发言段时补发单个 0 字节 EOS 尾包），解静音后不补发旧音频。
 - `VoicePacer`：空闲复位、稳态每 20ms 一帧、落后超过 200ms 重定位，禁止倾泻。
 - Opus 编码与 actor 发送检查共用 484 字节载荷预算（TS 单包上限 500 字节，扣除 tag/头/语音头）。编码器以此限制单帧输出，保留完整可解码的包；64kbps 人声、128kbps 音乐是 CVBR 的目标平均码率。
@@ -58,36 +63,4 @@ on_voice_data ──有界通道──> playback 线程
 ## 失败语义
 
 - 设备打开失败只发 `Voice` 事件并保持连接；聊天、频道、文件传输继续可用。
-- 设备切换只重建受影响的方向；下次 Start 或切换设备时重试。
 - 音频线程 panic 不会拖死 actor；actor 侧事件通道断开后语音功能停止，但协议会话仍在。
-
-## 测试
-
-- `convert`：直通、单声道↔立体声、24k↔48k、分块边界连续、重采样过冲钳位。
-- `capture`：分帧编码、VAD、PTT、mute/deafen、codec 重建、缓冲水位、pacer、VAD 参数生效。
-- `playback`：自适应延迟、乱序重排、`u16` 回绕、迟到/重复包丢弃、0 字节尾包淡出、FEC/PLC 分层恢复、积压追赶、deafen、混音削波。
-- `device` / `engine`：120ms 队列动态容量、整帧对齐写入、5ms 水位控制。
-- `level`：RMS、dB 映射与噪声门、平滑、50Hz 节拍、调度抖动与延后不补发、发送电平的帧间保持与 EOS 归零。
-- 设备与真实服务器不在单测里碰；真机/真服务器验证由人工完成。
-
-## 依赖与构建
-
-`audio` feature 拉 `cpal`、`rusty-opus`（纯 Rust 实现）、`crossbeam-queue` 与 `nnnoiseless`（RNNoise 降噪）；Windows 与 macOS 无需额外系统 Opus 库，Linux 仅需 ALSA 开发包与 pkg-config：
-
-```sh
-# Debian/Ubuntu
-sudo apt-get install -y libasound2-dev pkg-config
-```
-
-`plugins/flspeak_ffi` 打开了 `audio` feature；只跑档案/协议测试时用：
-
-```sh
-cd plugins/flspeak_ffi/rust
-cargo test -p server -p proto
-```
-
-## 已知限制
-
-- 没有回声消除：外放会回授，当前建议耳机。将来做 AEC 时用 playback 回读 ring + 固定延迟，不在 cpal 回调里做。
-- 没有 AGC、去混响；RNNoise 降噪仅作用于 codec 4 单声道语音上行（codec 5 立体声音乐自动旁路）；VAD 仍基于降噪后的能量阈值，强瞬态声仍可能触发。
-- 界面只收 50Hz 的聚合电平（本端发送、远端混音）；不传音频样本或逐帧波形。`Speaking` 只在活跃集合变化时发低频事件。

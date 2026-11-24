@@ -4,29 +4,10 @@
 
 ## 格式与传输机制
 
-1. TS6 官方客户端的图片消息不是 URL/BBCode，而是一条 JSON 文本：`{"msg_type":"ts.file.myts", ...}`。
-2. 图片数据不在 TeamSpeak 服务器上，而在 myTeamSpeak 的附件服务里；官方客户端通过 `tsclient_internal.tschat_downloadAttachment` 取回。消息里的 `file_id` 只是引用，不是可直接访问的 HTTP 地址。
-3. 依据自托管连接边界（不接入 myTeamSpeak 账号体系与官方媒体服务），FlSpeak 解析其元数据并显示文件信息占位，不发起官方附件下载。
+1. TS6 官方客户端的图片消息不是 URL/BBCode，而是一条 JSON 文本：`{"msg_type":"ts.file.myts", ...}`，关键字段是 `file_id`（myTS 附件标识，Base64 解码后为 60 字符 slug，不是可直接访问的 HTTP 地址）、`file_name`、`file_size`、`body` 与 `v2`。
+2. 图片数据不在 TeamSpeak 服务器上，而在 myTeamSpeak 的附件服务里；官方客户端通过 `tsclient_internal.tschat_downloadAttachment` 取回。
+3. 依据自托管连接边界（不接入 myTeamSpeak 账号体系与官方媒体服务），FlSpeak 解析其元数据并显示文件信息占位，不发起官方附件下载；官方附件标识 `file_id` 绝不进入 URL 抓取器。
 4. 发送侧同样不伪造 `ts.file.myts`：官方发图依赖 myTS 上传；FlSpeak 提供用户自配 HTTP PUT 图床与直接发送公开图片 URL 机制。相关决策见 [.agents/notes/implemented/architecture/2026-10-18-ts6-attachments.md](../.agents/notes/implemented/architecture/2026-10-18-ts6-attachments.md)。
-
-## 抓包原始消息示例
-
-探针捕获的 TS6 私聊原文结构：
-
-```json
-{"msg_type":"ts.file.myts","file_id":"eGNoenZrcmFxbWxxdG1iYmNud3puamFqeHZnd2VwbnJ3b2FzdWZ6dWt1bnJ3ZHVzanNmZHBsbWZubmFl","chat_user_id":"@ahho4uvek3l5db3mwajlpv26a4ewuddtmlmhkgbxucetz65d7y2eu===:chat-2.tmspk.net","file_name":"image_1792291789378.png","file_size":69244,"body":"image_1792291789378.png","v2":true}
-```
-
-| 字段 | 含义 |
-| --- | --- |
-| `msg_type` | 固定为 `ts.file.myts` |
-| `file_id` | myTS 附件标识；Base64 解码后为 60 字符 slug，非直接 HTTP URL |
-| `chat_user_id` | 发送者的 myTS 聊天网络身份（形如 `@...:chat-2.tmspk.net`） |
-| `file_name` / `file_size` | 文件名与字节长度 |
-| `body` | 说明文本/文件名 |
-| `v2` | 协议版本标识，当前为 `true` |
-
-官方附件标识 `file_id` 绝不进入 URL 抓取器。
 
 ## 图片显示
 

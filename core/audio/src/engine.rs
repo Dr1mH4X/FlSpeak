@@ -1,7 +1,4 @@
-//! 音频引擎：采集线程 + 播放线程。
-//!
-//! cpal 回调只搬运 `ArrayQueue` 里的样本；编码/解码/混音都在各自的工作线程。
-//! 两条线程之间没有共享锁，控制命令走独立的有界通道，语音包走另一条有界通道。
+//! 音频引擎：采集与播放各占一条线程，cpal 回调只搬 `ArrayQueue`。
 
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, TrySendError, sync_channel};

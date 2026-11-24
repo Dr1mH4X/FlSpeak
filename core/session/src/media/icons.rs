@@ -1,9 +1,4 @@
-//! 服务器图标与频道自定义图标的统一本地磁盘缓存。
-//!
-//! 磁盘目录布局与 `store_path` 同级：
-//! - 服务器图标存放在 `server-icons/`：`index.json` 记录 `server_id -> icon_id`，`<sha1(server_id)>.bin` 保存原始字节；
-//! - 频道图标存放在 `channel-icons/<sha1(server_id)>/<icon_id>.bin`，按单服 256 个 / 16 MiB 的 LRU 预算淘汰；
-//! - 两者写盘均通过 `cache::write_atomic` 执行 `sync_all` 原子替换。
+//! 服务器图标与频道图标的统一磁盘缓存，写入经 `cache::write_atomic` 原子替换。
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};

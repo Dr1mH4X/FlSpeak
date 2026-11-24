@@ -1,7 +1,4 @@
-//! 设置存储与内存管理层。
-//!
-//! 全局维护单例 `SettingsManager`（OnceLock + RwLock），
-//! 严格限制整仓仅由本文件对设置 JSON 执行底层文件 IO 和 `serde_json` 序列化。
+//! 设置存储：整仓只有这里对设置 JSON 做文件 IO 与序列化。
 
 use std::path::{Path, PathBuf};
 use std::sync::{OnceLock, RwLock};

@@ -1,7 +1,3 @@
-// 用例与实现同目录，与应用入口没有引用关系；analyzer 不知道这一点，
-// dev_dependency 的 flutter_test 在 lib/ 下会触发 depend_on_referenced_packages。
-// ignore_for_file: depend_on_referenced_packages
-
 import 'dart:async';
 
 import 'package:flutter/foundation.dart'

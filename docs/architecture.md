@@ -42,7 +42,7 @@ Dart: listChannels() / moveToChannel() / sendText()
   └─ 全部经同一个命令队列串行执行
 ```
 
-`server::parse_address` 只接受 IP、域名、`localhost` 和可选端口。裸昵称会被拒绝，因此 `named.myteamspeak.com/lookup` 不会从正常录入路径进入。`proto::client` 是唯一的最终出口检查：原始域名与 SRV 返回目标命中官方主机清单时直接拒绝。SRV 查询异常时先记录警告再回退到档案主机；所有域名经 `core/proto` 的 `hickory-resolver` 统一解析为 IPv4 `SocketAddr`（Android 由宿主 `ConnectivityManager` 经 FFI 同步 DNS 上游并保留 `223.5.5.5` / `1.1.1.1` 备用），A 记录解析失败直接报错，不回退给协议库做系统解析。详见 [core/proto 子系统契约](subsystems/proto.md)。
+`server::parse_address` 只接受 IP、域名、`localhost` 和可选端口。裸昵称会被拒绝，因此 `named.myteamspeak.com/lookup` 不会从正常录入路径进入。`proto::client` 是唯一的最终出口检查：原始域名与 SRV 返回目标命中官方主机清单时直接拒绝。SRV 查询异常时先记录警告再回退到档案主机；所有域名经 `core/proto` 的 `hickory-resolver` 统一解析为 IPv4 `SocketAddr`（Android 由宿主 `ConnectivityManager` 经 FFI 同步 DNS 上游并保留 `223.5.5.5` / `1.1.1.1` 备用），A 记录解析失败直接报错，不回退给协议库做系统解析。完整边界规则与 Android DNS 上游注入见[连接边界](connection-boundary.md)。
 
 ## 事件流
 
@@ -90,6 +90,10 @@ Flutter 启动时把 `<应用支持目录>/logs` 传递给 Rust 与 Dart，两�
 | `plugins/flspeak_ffi` | Dart 侧类型、转发、事件桥、生成物 |
 | `lib/` | UI、状态收敛、本地化、Dart 日志观察器 |
 
+## 与 tsclient-rs 的关系
+
+依赖 crates.io 上 `Cargo.toml` 声明的 `tsclient-rs`。上游是 teamspeak-js 的结构化移植，公共 API 刻意与 JS 对齐，所以本项目的连接边界逻辑留在 `core/proto`，不推回上游；只有中性的、纯增量的改动才值得提 PR（候选见[双线程全双工音频架构](../.agents/notes/implemented/architecture/2026-10-18-full-duplex-audio.md)）。上游为每个处理器、每个包 spawn 一个任务，因此每类事件只注册一个处理器。本地替换上游调试的方式见[开发流程](development.md#本地改上游-tsclient-rs)。
+
 ## 尚未接线
 
 - 聊天图片：官方 myTS 附件只显示“不支持的图片格式”；第三方 URL 抓取与 HTTP PUT 图床上传已接线，磁盘缓存与解码像素上限尚未接线。详见 [images.md](images.md)。
@@ -97,6 +101,6 @@ Flutter 启动时把 `<应用支持目录>/logs` 传递给 Rust 与 Dart，两�
 - TSDNS：可选 legacy fallback，当前只做 SRV，未实现 TSDNS。
 - 文件传输：频道文件浏览、下载和进度已接线；普通文件上传 UI、断点续传尚未接线。详见 [channels.md](channels.md)。
 - 历史清除入口：历史已持久化并回放，设置页还不能清除。
-- 音频处理：没有回声消除（AEC）与自动增益控制（AGC）；上行语音降噪见[音频](audio.md)。
+- 音频处理：没有回声消除（AEC）、自动增益控制（AGC）与去混响；上行语音降噪见[音频](audio.md)。
 - 频道创建/删除没有实时事件，靠 30s 轮询快照兜底。
 - 身份升级的挖矿进度只有开始/完成事件，没有百分比。

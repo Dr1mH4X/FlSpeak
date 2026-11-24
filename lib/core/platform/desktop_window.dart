@@ -1,8 +1,4 @@
-// 本文件包含的代码片段来源于 FlClash（https://github.com/chen08209/FlClash）项目。
-// 原始许可证：FlClash 应用代码为 GPL-3.0；其 plugins/window 插件为 MIT。
-// 来源提交：7fd417fb9a9a277c6a9339a8ac87f907df7c25f7 与 be84736605527034689c95bf27828ff27d912c5e。
-// 本片段取自 plugins/window（MIT）：对应 desktop_window.dart 窗口动作与事件；
-// 窗口布局尺寸常量与函数取自 lib/common/layout.dart（GPL-3.0）。
+// Adapted from FlClash (7fd417f/be84736, MIT & GPL-3.0): plugins/window, lib/common/window.dart & lib/common/layout.dart. See docs/THIRD-PARTY.md.
 
 import 'dart:async';
 

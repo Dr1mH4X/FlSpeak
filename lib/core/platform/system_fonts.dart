@@ -1,5 +1,4 @@
-// 本文件包含的代码片段来源于 FlClash（https://github.com/chen08209/FlClash）项目，原始许可证为 GPL-3.0。
-// 来源提交：be84736605527034689c95bf27828ff27d912c5e，对应 lib/common/system_fonts.dart。
+// Adapted from FlClash (be84736, GPL-3.0): lib/common/system_fonts.dart. See docs/THIRD-PARTY.md.
 
 import 'dart:ffi';
 import 'dart:io';

@@ -1,12 +1,12 @@
 # Flutter 界面设计规范
 
-本文定义 FlSpeak Flutter 客户端的组件选型边界、视觉表面层级、超椭圆圆角、排版字阶、按压反馈与设置列表规格。
+本文定义 FlSpeak Flutter 客户端的组件选型边界、视觉表面层级、超椭圆圆角、排版字阶、按压反馈与设置列表规格。高频状态的重建作用域、重绘隔离与后台休眠约束不在这里重复，见 [Flutter 界面性能与帧预算](defensive-patterns/ui-performance.md)。
 
 ## 组件选型与 Prism 优先
 
-所有 Flutter 界面均通过 [lib/widgets/prism.dart](../../lib/widgets/prism.dart) 优先使用 `prism_ui` 提供的原生原语（包括 `FilledButton`、`OutlinedButton`、`TextButton`、`IconButton`、`TonalButton`、`TonalButtonGroup`、`TonalButtonTheme`、`Switch`、`Checkbox`、`Chip`、`SegmentedControl`、`PopupMenu`、`ListRow`、`ListHeader`、`ListFooter`、`LinearProgressIndicator`、`SurfaceScope`、`CardSurface`、`PressSurface`、`ElasticButton`、`ElasticPress`、`FocusRing`、`GooSurface`、`GooPane`、`TextField`、`TextFormField`、`InputDecoration`、`InputDecorationTheme`、`NoInputBorder`、`TextSelectionMenu`、`LiquidGlass` 等）。
+所有 Flutter 界面均通过 [lib/widgets/prism.dart](../lib/widgets/prism.dart) 优先使用 `prism_ui` 提供的原生原语（包括 `FilledButton`、`OutlinedButton`、`TextButton`、`IconButton`、`TonalButton`、`TonalButtonGroup`、`TonalButtonTheme`、`Switch`、`Checkbox`、`Chip`、`SegmentedControl`、`PopupMenu`、`ListRow`、`ListHeader`、`ListFooter`、`LinearProgressIndicator`、`SurfaceScope`、`CardSurface`、`PressSurface`、`ElasticButton`、`ElasticPress`、`FocusRing`、`GooSurface`、`GooPane`、`TextField`、`TextFormField`、`InputDecoration`、`InputDecorationTheme`、`NoInputBorder`、`TextSelectionMenu`、`LiquidGlass` 等）。
 
-- **优先桥接复用**：`prism_ui` 已具备的控件、表面容器或视觉效果（含上游包已导出但尚未经过 `lib/widgets/prism.dart` 转出的模块），在 [lib/widgets/prism.dart](../../lib/widgets/prism.dart) 补充导出与主题适配后直接复用，不在 `lib/` 手写替代实现，也不回退到同名 `package:flutter/material.dart` 控件。
+- **优先桥接复用**：`prism_ui` 已具备的控件、表面容器或视觉效果（含上游包已导出但尚未经过 `lib/widgets/prism.dart` 转出的模块），在 [lib/widgets/prism.dart](../lib/widgets/prism.dart) 补充导出与主题适配后直接复用，不在 `lib/` 手写替代实现，也不回退到同名 `package:flutter/material.dart` 控件。
 - **隐藏冲突控件**：UI 文件同时引入 `package:flutter/material.dart` 时，`hide` 与 `lib/widgets/prism.dart` 同名冲突的 Material 控件与样式类型，确保按钮、开关、进度条、菜单与表单控件统一走 `prism_ui`。
 - **文本输入体系**：表单与单行/多行输入统一采用 `prism_ui` 的 `TextField` / `TextFormField`，由 `PrismRootScope` 注入 `InputDecorationTheme`（填充底色、超椭圆 `AppShape.input` 轮廓与原生编辑菜单 `TextSelectionMenu`）；表单字段标题以独立标签置于输入框上方，横排紧凑槽位直接使用 `hintText`。
 - **自定义组件边界**：`lib/widgets/` 与 `lib/features/` 仅承接业务插槽装配、桌面窗口宿主交互或 `prism_ui` 未覆盖的专项视觉组件（如自定义标识徽章与连接动效框架）。
@@ -60,7 +60,7 @@
 
 - **节结构与间距**：`ListHeader` 使用 `headline` 字阶并可右侧挂载 36 dp 高度的 `TonalButtonSize.section` 操作组；`ListFooter` 使用 `footnote` 字阶（`onSurfaceVariant`）置于卡片下方。
 - **行几何**：`ListRow` 在行高内对 `leading`、标题/副标题列与 `trailing`（如 `Switch` 与收紧 `minimumSize: Size.zero` 的 `OptionsValueButton`）执行纵轴居中对齐，`PopupMenu` 展开后的内部选项行与设置项共享 `prism_ui` 列表规范。
-- **子页面过渡与材质隔离**：设置多级钻取的每级详情通过 `prism_ui` `showExtend(forceFull: true)` 整页推入，详情页自身采用 [lib/widgets/scaffold/scaffold.dart](../../lib/widgets/scaffold/scaffold.dart) 的悬浮 `Scaffold` 承担标题与返回按钮（带 `Semantics` 无障碍标签，内部动作按钮保留 FlClash 原样）；一级概览页作为导航目的地不显示返回按钮，由宽屏全局侧栏或窄屏底部导航离开。窄屏详情得到 `CardPageRoute`，宽屏详情得到 `FadePageRoute` 并覆盖设置侧栏；详情页不绘制设置侧栏，返回键逐级退栈，窗口跨断点时详情页保持在根导航器上，布局随断点切换。各层级视图绑定独立 `ValueKey` 与本地 `Material` 边界。
+- **子页面过渡与材质隔离**：设置多级钻取的推入方式、断点差异与返回栈规则见[设置模块规则](../lib/features/settings/AGENTS.md)；各层级视图绑定独立 `ValueKey` 与本地 `Material` 边界，详情页的悬浮顶栏用 [lib/widgets/scaffold/scaffold.dart](../lib/widgets/scaffold/scaffold.dart) 的 `Scaffold`（内部动作按钮保留 FlClash 原样）。
 - **行内容与分组位置**：前置图标统一为 `24 dp` 裸图标（无额外背景框）；分组内每行经 `ItemPositionScope` 感知首/中/尾/单项位置，中间插入 1 物理像素高的 `14% onSurface` 分隔线。
 
 ## 状态栏与安全区退避
@@ -70,12 +70,14 @@
 - **悬浮顶栏页面**：连接页、设置页与窄屏工作区主区使用 `lib/widgets/scaffold/scaffold.dart` 的 `Scaffold`（基于 `prism_ui` `PrismScaffold`、`ScaffoldBar` 与 `FloatingHeader`），顶栏内部通过 `SafeArea(bottom: false)` 退避状态栏并将渐变背景延伸至状态栏下方，滚动内容按 `context.appBarInset` 预留顶栏高度。
 - **三栏布局与侧栏退避**：宽屏（`>= Breakpoints.compact`）下 `AppNavigationSidebar` 在自身内部包裹 `SafeArea` 并结合 `SidebarContentInset` 剥离已由侧栏承担一侧的水平安全边距，防止右侧内容区重复退避；工作区宽屏三栏中的频道面板顶栏、底部状态卡与主区域 `_ChannelHeader` 各自内置 `SafeArea` 退避状态栏与系统导航栏。
 
-## 外观主题与窄屏底部导航
+## 外观主题与窄屏导航
 
-外观偏好持久化在 Rust `UiSettings`（`core/session`）与 Dart `SessionPreferences`，默认主题种子色为 `#C44D78` 并由 `buildAppColorScheme` 与 `buildPrismTheme` 结合 `seededColorScheme`、`AppColorStyle`、`pureBlack` 及对比度守护统一出表色，支持经 `lib/core/platform/system_fonts.dart` 异步加载并筛选系统字体以及经 `PrismRootScope`、`MediaQuery.textScaler` 与 `MeasureScope` 控制文字缩放比例（`0.8–1.4`）。
+外观偏好同时持久化在 Rust `UiSettings`（`core/session`）与 Dart `SessionPreferences`：默认主题种子色为 `#C44D78`，`buildAppColorScheme` 与 `buildPrismTheme` 结合 `seededColorScheme`、`AppColorStyle`、`pureBlack` 与对比度守护出表色；系统字体经 `lib/core/platform/system_fonts.dart` 异步加载并筛选，文字缩放经 `PrismRootScope`、`MediaQuery.textScaler` 与 `MeasureScope` 控制在 `0.8–1.4`。
 
-- **窄屏底部导航与转场**：窗口宽度低于 `Breakpoints.compact` 时，`lib/router.dart` 将根路径 `/connect`、`/workspace` 与 `/settings` 映射到共享 `ValueKey('compact-navigation-shell')` 的 `CompactNavigationShell`（`context.push(AppRoutes.settings)` 仍按独立页面入栈），底部导航展示「主页 / 工作区 / 设置」三标签（已连接时工作区切换为在线图标，未连接仍可切入查看空态），按 `floatingNavigationBar` 在悬浮胶囊 `NavigationDock`（开启 `LiquidGlassScope` 时附带真实透视玻璃与 `BarItemPresence` 过渡）与停靠 `NavigationBar` 间切换，并以 `SnapshotWidget` 原位交叉淡入淡出（`_FadeTabPage`）；宽屏主页与工作区根标签切换与 FlClash 一致直接替换页面，不做路由转场，淡入淡出只在窄屏底部三标签生效；钻入设置二三级子页时整页详情覆盖根底栏，键盘弹出或进入窄屏工作区二级频道页时自动收起根底栏。窄屏工作区采用两级结构：一级为频道树总览（单行顶栏包含服务器标题与延时胶囊弹窗入口，右侧放置麦克风、扬声器与红色断开按钮，单击频道立即加入并以 `CardPageRoute` 推入二级频道页，长按频道或点按成员弹出菜单或 `showSheet` 详情）；二级为当前频道页，顶部保留返回键与溢出菜单（频道详情、频道文件、频道媒体均经 `showSheet` 呈现），正文包含横向可滚动成员条与聊天区域，底部提供适配 VAD 与按键说话（`pttMode`）的三槽双模式工具栏（随 `floatingNavigationBar` 切换悬浮三槽或贴底停靠栏）。
-- **Android 系统返回导航**：`WorkspaceShell` 的 `PopScope` 按顺序退出全屏观看，或在工作区一级总览页通过 `CompactRootTabScope.onExitToHome` 在不中断当前连接的前提下回到 `/connect`；窄屏二级频道页由 `CardPageRoute` 承载，页面内 `PopScope` 先退出全屏观看，返回键退栈回一级总览并恢复根底栏；`SettingsPage` 总览页由 `CompactRootTabScope.activeTabIndex` 隔离激活页签，顶栏不绘制返回按钮，系统返回切回首页标签（`push` 入栈时直接 `pop` 回原页面）；二三级详情页由整页路由逐级退栈；`ConnectPage` 处于 Android 根界面且无待弹出路由时，已连接/连接中/重连中通过 `AndroidAppLifecycle` 调用原生 `MainActivity` `moveTaskToBack(true)` 退回后台保持语音，未连接时首次返回由 `NoticeCenter` 提示并在 2 秒内二次返回调用 `SystemNavigator.pop()` 退出。
+- **断点策略**：窗口宽度低于 `Breakpoints.compact` 时，`lib/router.dart` 把根路径 `/connect`、`/workspace` 与 `/settings` 映射到共享的 `CompactNavigationShell`；宽屏的根标签切换直接替换页面，不做路由转场，淡入淡出只在窄屏底部三个标签之间生效。
+- **窄屏导航骨架**：底部导航固定「主页 / 工作区 / 设置」三标签，`SessionPreferences.floatingNavigationBar` 决定悬浮胶囊 `NavigationDock` 与停靠 `NavigationBar` 两种形态。钻入设置二三级子页、键盘弹出或进入窄屏工作区二级频道页时，根底栏被整页详情覆盖或自动收起。
+- **窄屏工作区两级结构**：一级是频道树总览（单行顶栏含服务器标题、延时胶囊入口、麦克风、扬声器与断开按钮），单击频道立即加入并以 `CardPageRoute` 推入二级频道页；二级是当前频道页，正文为成员条与聊天区，底部是适配 VAD 与 `pttMode` 的三槽工具栏。
+- **返回栈不变量**：一级总览页与设置概览页是导航目的地，顶栏不绘制返回按钮，系统返回回到首页标签；每级详情页整页推入并逐级退栈；退出全屏观看优先于退栈。Android 根界面已连接、连接中或重连中时把任务移回后台并保持语音，未连接时二次返回才退出应用。
 
 ## 液态玻璃开关与渲染档位
 
@@ -85,12 +87,3 @@
 - **`standard`**：开启 `LiquidGlassScope` 并通过 `LiquidGlassStyle._standard` 省略色散与独立前雾分层，将双层模糊合并为单次降采样的统一 `blur`，`PopupMenu` 弹出形变采用 `coarse` 粗轮廓采样，兼顾透视观感与 GPU 负载。
 - **`ultra`**：启用完整着色参数，保留色散效果、双层 `haze + blur` 混合及精细轮廓采样，适用于高负载渲染性能充裕的设备。
 - **玻璃附着边界**：`LiquidGlass` 仅用于下层有内容滚动或页面正文透出的悬浮组件（聊天页悬浮于 `PrismListView` 之上的输入栏、附件预览条与斜杠命令面板，窄屏悬浮 `NavigationDock`，以及窄屏展开的侧栏浮层 `_SidebarOverlay`）；桌面端固定停靠的侧栏保持纯色 `Surface`，右侧内容面板始终保持不透明。
-
-## 重建作用域、重绘隔离与后台休眠
-
-界面层通过窄订阅、布局/重绘隔离与生命周期门控，将高频状态与后台空转负载隔离在局部叶节点内（强制编码禁忌与正反例见 [ui-performance.md](../defensive-patterns/ui-performance.md)，探针方法见 [fls-ui-performance](../../.agents/skills/fls-ui-performance/SKILL.md)）：
-
-- **窄订阅与列表局部刷新**：根应用与工作区页面仅订阅所需的标量字段或值语义记录（如 `activeServerId`、`reconnecting`、`connected`、单个客户端的 `speaking` / 分享态 / 选中态）；频道树、成员栏、聊天列表、文件列表与侧栏均采用 `PrismListView` / `SliverPrismList` 与 `MemoBuilder` 进行按需渲染与行级剪枝。
-- **重绘隔离边界**：`WorkspaceShell` 各分栏、`WorkspacePage` 主区与 `WidthBuilder`、`NetworkTelemetryPanel`、频道 `ServerRow` 及自绘动画组件（`SignalRibbon`、`ExpressiveFrame`、`MemberAvatar` 说话光环）各自持有独立 `RepaintBoundary`；持续动画与高频频谱直接通过 `CustomPaint(repaint: ...)` 驱动画笔重绘，不在布局作用域内触发 `setState`。
-- **后台休眠门控**：`NetworkTelemetryPanel` 的 `1 s` 周期探测与 `VoiceActivityRibbon` 消费的 `voiceLevelsProvider`（`StreamProvider.autoDispose`）同时受 `WidgetsBindingObserver` 生命周期与 `TickerMode.valuesOf(context).enabled` 门控。进入 `hidden`、`paused`、`detached` 或 `TickerMode` 关闭时，在生命周期与依赖回调内同步停止定时器并通过 `ref.listenManual` 立即关闭流订阅；`resumed` 与桌面端并行窗口失焦的 `inactive` 阶段保持活跃。`ExpressiveFrame` 与 `MemberAvatar` 说话光环同时遵守 `MediaQuery.disableAnimationsOf(context)`。
-

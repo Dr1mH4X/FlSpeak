@@ -5,24 +5,24 @@ description: 发版前写 docs/release/<tag>.md、补写或改写某个版本的
 
 # 发版日志
 
-发版日志是仓库里的一个文件：`docs/release/<tag>.md`，文件名与本版 git tag 完全一致（tag `v0.2.0` 对应 `v0.2.0.md`）。它由 git 提交归纳而成，不依赖生成器；`.github/workflows/release.yml` 在打 tag 时直接以它为 Release 正文、以 `Release v<版本>` 为 Release 标题，文件缺失或首行不合格式就直接失败。
+发版日志是仓库里的一个文件：`docs/release/<tag>.md`，文件名与本版 git tag 完全一致（tag `v0.2.0` 对应 `v0.2.0.md`）。`.github/workflows/release.yml` 在打 tag 时直接以它为 GitHub Release 正文、以 `Release v<版本>` 为标题，文件缺失或首行不合格式就直接失败。
 
 ## Sources of truth
 
-- [docs/release/AGENTS.md](../../../docs/release/AGENTS.md)：文件格式、分类顺序、生命周期与写法规则的唯一归属地，动笔前先读。
+- [docs/release/AGENTS.md](../../../docs/release/AGENTS.md)：文件格式、分类顺序、写法判据与生命周期的唯一归属地，动笔前先读，本技能不复述。
 - [docs/ci-cd.md](../../../docs/ci-cd.md)：发布流程、发布矩阵与 `setup.dart` 的已知简化。
 - [docs/development.md](../../../docs/development.md)：发版打包命令与版本号推导。
 - git：上一个 tag、范围内的提交主题与正文、merge commit 里的 PR 号、提交作者。
 
 ## 工作流步骤
 
-1. **定 tag 与范围**：tag 由用户指定；未指定时按 semver 从上一个 tag 推断——范围内有 `feat` 或破坏性变更进 minor/major，否则进 patch。`git fetch --tags` 后取 `git describe --tags --abbrev=0` 作为上一版，范围是它到 `HEAD`；仓库还没有 tag 时由用户定首版版本号，不要自己发明。
-2. **读全部提交**：逐条看主题与正文，把每个 `Merge pull request #N` 与它带进的改动对应起来，这样条目能附上 `（#N）`；直接提交到主干的提交没有 PR 号，省略即可。不要只读主题就动笔。
-3. **按分类写条目**：分类与顺序见 [docs/release/AGENTS.md](../../../docs/release/AGENTS.md)。每条一句话讲行为或归属上的变化，不抄提交标题原文；只写本版真实存在的内容，没内容的分类整节不写。判断不准某条改动的用户可见性时，用 `git show <sha>` 看它实际改了什么。禁用「本版本引入……」「无需用户额外操作」「全面迁移」等 AI 套话与安抚废话，直接写具体机制、边界与参数。
-4. **写升级注意**：检查范围内是否动了连接边界行为（`core/proto`、`core/server`）、FFI 接口（`api/**` 变更需要重新生成绑定）、`arb/` 文案、打包产物形态或平台矩阵。有人需要动手就写清受影响的人与确切动作；没有就删掉整节。
+1. **定 tag 与范围**：tag 由用户指定；未指定时按 semver 从上一个 tag 推断，范围里有 `feat` 或破坏性变更进 minor/major，否则进 patch。`git fetch --tags` 后取 `git describe --tags --abbrev=0` 作为上一版，范围是它到 `HEAD`；仓库还没有 tag 时由用户定首版版本号，不要自己发明。
+2. **读全部提交**：逐条看主题与正文，把每个 `Merge pull request #N` 与它带进的改动对应起来，这样条目能附上 `（#N）`；直接提交到主干的提交没有 PR 号，省略即可。判断不准某条改动的用户可见性时，用 `git show <sha>` 看它实际改了什么。
+3. **写正文**：首行、分类顺序与每条条目的写法判据见 [docs/release/AGENTS.md](../../../docs/release/AGENTS.md)。
+4. **写升级注意**：检查范围内是否动了连接边界行为（`core/proto`、`core/server`）、FFI 接口（`api/**` 变更需要重新生成绑定）、`arb/` 文案、打包产物形态或平台矩阵；有人需要动手才写，没有就删掉整节。
 5. **写贡献者**：`git log <range> --pretty=%an` 取人类作者，机器人账号（如 `dependabot[bot]`）不计，写成 `@handle`。
-6. **落盘并随改动提交**：写 `docs/release/<tag>.md`，第一行是 `# <版本> (<发布日期>): <主要更新简述>`，例：`# 0.2.0 (2026-10-25): 双线程全双工语音`；写法判据见 [docs/release/AGENTS.md](../../../docs/release/AGENTS.md)。与该版改动同一个 PR。tag 打完后冻结，只有事实写错才回头修改，并在提交信息里说明改的是哪一处。
-7. **发布**：tag 推送后 CI 自动把该文件作为 Release 正文公开发布（若带 `-beta`、`-rc`、`-dev` 自动标为 prerelease）；需要手工补发或改写时用 `gh`（见下）。未知 tag 不要发明版本号：先与用户确认。
+6. **落盘**：写 `docs/release/<tag>.md`，与该版改动同一个 PR 提交。tag 打完后冻结，只有事实写错才回头修改，并在提交信息里说明改的是哪一处。
+7. **发布**：tag 推送后 CI 自动把该文件作为 Release 正文公开发布（带 `-beta`、`-rc`、`-dev` 时自动标为预发布）；需要手工补发或改写时用下面的 `gh` 命令。未知 tag 不要发明版本号，先与用户确认。
 
 ## 验证命令
 
@@ -32,10 +32,9 @@ git describe --tags --abbrev=0
 git log --oneline "$(git describe --tags --abbrev=0)"..HEAD
 
 # 文件与 tag 必须同名
-ls docs/release/
 test -f "docs/release/<tag>.md" && echo ok
 
-# 格式自查：首行的版本、日期与简述，分类节名与顺序符合 AGENTS.md
+# 格式自查：首行的版本、日期与简述，分类节名与顺序
 head -n 1 "docs/release/<tag>.md"
 grep -n '^## ' "docs/release/<tag>.md"
 

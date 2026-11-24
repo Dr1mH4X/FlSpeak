@@ -1,7 +1,4 @@
-//! 音频格式几何：与 TeamSpeak 语音包一致的 48kHz、20ms 帧。
-//!
-//! 上行声道数由频道 codec 决定：codec 4（Opus Voice）单声道，codec 5（Opus Music）
-//! 立体声。下行统一按立体声解码，Opus 会把单声道包展开成双声道。
+//! 音频格式几何：48kHz、20ms 帧，上行声道数由频道 codec 决定。
 
 use std::time::Duration;
 

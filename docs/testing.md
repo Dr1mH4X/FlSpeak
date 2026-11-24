@@ -45,7 +45,7 @@ cargo test -p session --test live_connect -- --ignored --nocapture
 
 快捷命令：`just live-test ts.example.com [昵称]`。
 
-注意：tsclient-rs 走 UDP 9987。`proto::resolve_target` 会先查标准 DNS 的 `_ts3._udp.<domain>` SRV（查询异常时记录警告并回退到档案主机），再统一查询 A 记录直接解析为 IPv4 `SocketAddr`；原始域名与 SRV 目标均由 `core/proto` 检查官方主机清单，A 记录解析失败直接报错。TSDNS 尚未实现。服务器对访客关闭 `channellist` 时，测试只验证连接与状态，列表调用会打印权限拒绝而不判失败。
+注意：tsclient-rs 走 UDP 9987，SRV/A 记录解析与官方主机检查见[连接边界](connection-boundary.md)，TSDNS 尚未实现。服务器对访客关闭 `channellist` 时，测试只验证连接与状态，列表调用会打印权限拒绝而不判失败。
 
 设置 `FLSPEAK_TEST_ICON_DIR` 时，真实连接测试还会通过 actor 下载非零频道图标，并把原始图片和 `channels.json` 保存到该目录；此模式要求目标服务器至少有一个自定义频道图标。
 
@@ -64,7 +64,3 @@ cargo run -p session --example live_probe
 快捷命令：`just probe example.com [昵称] [秒数]`。
 
 访客身份可能没有服务器广播权限（`insufficient client permissions`）；连接、收消息不受影响。停止用 Ctrl-C，或把 `FLSPEAK_PROBE_SECONDS` 设小。
-
-## CI 测试门
-
-本地提交前的聚合门禁是 `just check`。CI 的 `checks.yml` 运行快速检查（`cargo fmt`、`clippy`、`dart format`、`flutter analyze` 与 FFI 生成物一致性），`tests.yml` 运行单测（`cargo test` 与 `flutter test`），见 [ci-cd.md](ci-cd.md)。测试用例本身不写入本文档。

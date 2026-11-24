@@ -1,7 +1,4 @@
-//! Dart 可见的会话 API。
-//!
-//! 这一层只做转发与类型转换：每个函数对应 core 里一个动作，Dart 侧拿到的类型都在
-//! 本文件定义，core 的类型变化不会直接冲进生成代码。
+//! Dart 可见的会话 API：只做转发与类型转换，Dart 拿到的类型都在本文件定义。
 
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;

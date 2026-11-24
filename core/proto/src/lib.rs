@@ -1,8 +1,4 @@
-//! tsclient-rs 的窄封装。
-//!
-//! `resolve_target` 负责域名 SRV（`_ts3._udp.<domain>`）与 IPv4 A 记录解析，
-//! 产出最终 `SocketAddr` 交给 `client`；tsclient-rs 自己的 discovery 仍然被
-//! `DenyResolver` 挡住，因此裸昵称不会请求 `named.myteamspeak.com/lookup`。
+//! tsclient-rs 的窄封装：`resolve_target` 解析 SRV 与 A 记录，`client` 是唯一的最终连接边界。
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};

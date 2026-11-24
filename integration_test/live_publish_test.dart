@@ -1,12 +1,7 @@
-// Live publisher smoke test: runs on the real macOS app bundle, so the real
-// flutter_webrtc stack and the real TeamSpeak client talk to each other.
+// Live screen-share smoke test: the real flutter_webrtc stack against a running
+// TeamSpeak client, joined to the channel that holds `_targetNickname`.
 //
 //   flutter test integration_test/live_publish_test.dart -d macos --timeout none
-//
-// It connects with the stored server profile, joins the channel that holds the
-// client named on the command line (x414 by default), starts a screen share from
-// the first screen source, and prints the offer/answer/ICE evidence while a
-// human clicks "watch" in the official client.
 
 import 'package:flspeak/core/preferences.dart';
 import 'package:flspeak/core/providers.dart';

@@ -1,6 +1,4 @@
-// 搜索按钮展开为搜索栏的弹簧动效与 SearchField 用法参考 FlClash（https://github.com/chen08209/FlClash），原始许可证为 GPL-3.0。
-// 来源提交：be84736605527034689c95bf27828ff27d912c5e。
-// 对应原文件：lib/ui/scaffold/scaffold_search.dart。
+// Adapted from FlClash (be84736, GPL-3.0): lib/ui/scaffold/scaffold_search.dart. See docs/THIRD-PARTY.md.
 
 import 'dart:async';
 import 'dart:math' as math;

@@ -1,11 +1,5 @@
-//! 会话 actor：`Client` 的所有权与并发边界。
-//!
-//! 上一层的所有协议操作都经命令通道串行执行。原因是 tsclient-rs 的 `Client` 内部用
-//! `std::sync::Mutex` 且在建连路径上跨 `.await` 持锁，并发调用会死锁；接收侧的每个
-//! 事件都会 spawn 一个 tokio 任务，所以每类事件只允许注册一个处理器。
-//!
-//! 语音走旁路：编码后的语音包由音频线程回送 actor，仍然由 actor 串行调用
-//! `Client::send_voice`；音频帧本身不进入这条事件流。
+//! 会话 actor：独占 `Client`，所有协议调用经命令通道串行执行。
+//! 编码后的语音包由音频线程回送，仍由 actor 串行调用 `Client::send_voice`。
 
 mod actor;
 mod downloads;

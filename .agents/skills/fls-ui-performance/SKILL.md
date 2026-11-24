@@ -11,7 +11,7 @@ description: 诊断、剖析与优化 Flutter 界面掉帧、过量重建、整�
 
 - [docs/defensive-patterns/README.md](../../../docs/defensive-patterns/README.md)
 - [docs/defensive-patterns/ui-performance.md](../../../docs/defensive-patterns/ui-performance.md)
-- [docs/subsystems/ui-design.md](../../../docs/subsystems/ui-design.md)
+- [docs/ui-design.md](../../../docs/ui-design.md)
 - [lib/AGENTS.md](../../../lib/AGENTS.md)
 - [test/features/workspace/workspace_performance_test.dart](../../../test/features/workspace/workspace_performance_test.dart)
 

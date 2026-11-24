@@ -1,7 +1,4 @@
-//! 版本更新检查：固定 GitHub Releases 主机、SemVer 比较与 6 小时缓存。
-//!
-//! 这是一条旁路，不进入 Session Actor 的命令队列；连接和消息命令不能被更新请求
-//! 排在后面。缓存与 `preferences.json` 同目录，只保存远端候选版本与 ETag。
+//! 版本更新检查：固定 GitHub Releases 主机、SemVer 比较与 6 小时缓存，不进入 Actor 命令队列。
 
 use std::cmp::Ordering;
 use std::path::{Path, PathBuf};

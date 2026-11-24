@@ -1,8 +1,4 @@
-// 本文件包含的代码片段来源于 FlClash（https://github.com/chen08209/FlClash）项目，
-// 原始许可证为 GPL-3.0。来源提交：7fd417fb9a9a277c6a9339a8ac87f907df7c25f7。
-// 片段对应 lib/manager/window_manager.dart 的 WindowHeaderContainer /
-// WindowHeaderLayout / WindowHeaderBar / WindowHeader / WindowHeaderActions，
-// 以及 lib/ui/scaffold.dart 的 _WindowControlsClearance。
+// Adapted from FlClash (7fd417f, GPL-3.0): lib/manager/window_manager.dart & lib/ui/scaffold.dart. See docs/THIRD-PARTY.md.
 
 import 'dart:async';
 import 'dart:math' as math;

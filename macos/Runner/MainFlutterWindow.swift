@@ -1,9 +1,4 @@
-// 本文件包含的代码片段来源于 FlClash（https://github.com/chen08209/FlClash）项目。
-// 原始许可证：FlClash 应用代码为 GPL-3.0；其 plugins/window 插件为 MIT。
-// 来源提交：7fd417fb9a9a277c6a9339a8ac87f907df7c25f7。
-// 本片段取自 plugins/window（MIT），可按 MIT 或 GPL-3.0 使用：对应
-// plugins/window/macos/window/Sources/window/WindowStyle.swift 的 .hidden 分支，
-// 以及同目录 WindowController.swift 的 startDragging / maximize / setFullScreen。
+// Adapted from FlClash plugins/window (7fd417f, MIT): macos/window/Sources/window/WindowStyle.swift & WindowController.swift. See docs/THIRD-PARTY.md.
 
 import Cocoa
 import FlutterMacOS
