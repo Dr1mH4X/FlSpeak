@@ -669,24 +669,70 @@ class SessionController extends Notifier<SessionView> {
     return deleted;
   }
 
-  Future<PickedChatImage?> pickChatImage({required bool paste}) async {
-    final l10n = ref.read(appLocalizationsProvider);
+  Future<bool> _ensureImageHostConfigured(AppLocalizations l10n) async {
     try {
-      final input = ref.read(imageInputProvider);
-      return paste ? await input.paste() : await input.pick();
+      final config = await ref.read(imageHostProvider.future);
+      if (!ref.mounted) return false;
+      if (config == null) {
+        _notify(l10n.imageHostRequired);
+        return false;
+      }
+      return true;
+    } on Exception {
+      if (ref.mounted) _notify(l10n.imageHostStorageFailed);
+      return false;
+    }
+  }
+
+  Future<PickedChatImage?> pickChatImage() async {
+    final l10n = ref.read(appLocalizationsProvider);
+    if (!await _ensureImageHostConfigured(l10n)) {
+      return null;
+    }
+    try {
+      return await ref.read(imageInputProvider).pick();
     } on ImageInputException catch (error) {
       if (ref.mounted) {
         _notify(switch (error.failure) {
           ImageInputFailure.tooLarge => l10n.chatImageTooLargeWithLimit(
             formatByteSize(maxChatImageBytes()),
           ),
-          ImageInputFailure.clipboardEmpty => l10n.chatClipboardEmpty,
         });
       }
     } on Exception {
       if (ref.mounted) _notify(l10n.chatImageInputFailed);
     }
     return null;
+  }
+
+  /// 聊天输入框快捷键粘贴：剪贴板无图时返回 `handled: false` 让文本粘贴继续；
+  /// 有图时先校验图床配置和大小限制，再决定附带预览或报错拦截。
+  Future<ChatImagePasteResult> pasteChatImage() async {
+    final l10n = ref.read(appLocalizationsProvider);
+    Uint8List? bytes;
+    try {
+      bytes = await ref.read(imageInputProvider).readClipboardImageBytes();
+    } on Exception {
+      return (handled: false, image: null);
+    }
+    if (!ref.mounted || bytes == null || bytes.isEmpty) {
+      return (handled: false, image: null);
+    }
+    if (!await _ensureImageHostConfigured(l10n)) {
+      return (handled: true, image: null);
+    }
+    if (bytes.length > maxChatImageBytes()) {
+      if (ref.mounted) {
+        _notify(
+          l10n.chatImageTooLargeWithLimit(formatByteSize(maxChatImageBytes())),
+        );
+      }
+      return (handled: true, image: null);
+    }
+    return (
+      handled: true,
+      image: PickedChatImage(bytes: bytes, name: 'clipboard.png'),
+    );
   }
 
   Future<bool> setMemberGroup(

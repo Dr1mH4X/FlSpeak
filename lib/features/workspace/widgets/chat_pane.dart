@@ -13,6 +13,7 @@ import 'package:material_ui/material_ui.dart'
         Switch,
         TextButton,
         TextField;
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/rendering.dart' show RenderProxyBox, ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -57,7 +58,6 @@ class ChatPane extends StatefulWidget {
     this.onPickImage,
     this.onPasteImage,
     this.onUploadImage,
-    this.onConfigureImageHost,
     this.avatarBuilder,
     super.key,
   });
@@ -82,9 +82,8 @@ class ChatPane extends StatefulWidget {
   final Set<String> unreadPeers;
   final String description;
   final Future<PickedChatImage?> Function()? onPickImage;
-  final Future<PickedChatImage?> Function()? onPasteImage;
+  final Future<ChatImagePasteResult> Function()? onPasteImage;
   final Future<String?> Function(Uint8List)? onUploadImage;
-  final VoidCallback? onConfigureImageHost;
   final Widget Function(ChatMessage message)? avatarBuilder;
 
   @override
@@ -358,15 +357,71 @@ class _ChatPaneState extends State<ChatPane> {
     }
   }
 
-  /// 回车发送、Shift+回车换行；输入法组词期间的回车交给输入法提交候选。
+  Future<void> _pasteFromClipboard() async {
+    final paste = widget.onPasteImage;
+    if (paste == null || _sending || widget.busy || !_canSend) return;
+    final destination = _target(widget);
+    final draft = _snapshot();
+    setState(() => _sending = true);
+    ChatImagePasteResult result = (handled: false, image: null);
+    try {
+      result = await paste();
+      if (mounted && result.image != null) {
+        setState(() {
+          if (destination == _target(widget)) {
+            _image = result.image;
+            _uploadedImageUrl = null;
+          } else {
+            _drafts[destination] = _ComposerDraft(
+              value: draft.value,
+              image: result.image,
+            );
+          }
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+    if (!mounted || result.handled || destination != _target(widget)) {
+      return;
+    }
+    final focusContext = _focus.context;
+    if (focusContext != null) {
+      Actions.maybeInvoke<PasteTextIntent>(
+        focusContext,
+        const PasteTextIntent(SelectionChangedCause.keyboard),
+      );
+    }
+  }
+
+  /// 回车发送、Shift+回车换行，以及 Cmd/Ctrl+V 直接粘贴图片；
+  /// 输入法组词期间的回车交给输入法提交候选。
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
       return KeyEventResult.ignored;
     }
+    final keyboard = HardwareKeyboard.instance;
+    final isApple =
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+    final isPasteShortcut =
+        widget.onPasteImage != null &&
+        event.logicalKey == LogicalKeyboardKey.keyV &&
+        !keyboard.isAltPressed &&
+        !keyboard.isShiftPressed &&
+        (isApple
+            ? keyboard.isMetaPressed && !keyboard.isControlPressed
+            : keyboard.isControlPressed && !keyboard.isMetaPressed);
+    if (isPasteShortcut) {
+      if (event is KeyDownEvent && _canSend && !_sending && !widget.busy) {
+        unawaited(_pasteFromClipboard());
+      }
+      return KeyEventResult.handled;
+    }
     final isEnter =
         event.logicalKey == LogicalKeyboardKey.enter ||
         event.logicalKey == LogicalKeyboardKey.numpadEnter;
-    if (!isEnter || HardwareKeyboard.instance.isShiftPressed) {
+    if (!isEnter || keyboard.isShiftPressed) {
       return KeyEventResult.ignored;
     }
     if (_input.value.composing.isValid) {
@@ -526,10 +581,6 @@ class _ChatPaneState extends State<ChatPane> {
                             onPickImage: widget.onPickImage == null
                                 ? null
                                 : () => _selectImage(widget.onPickImage!),
-                            onPasteImage: widget.onPasteImage == null
-                                ? null
-                                : () => _selectImage(widget.onPasteImage!),
-                            onConfigureImageHost: widget.onConfigureImageHost,
                           )
                         : _buildComposer(context, l10n),
                   ],
@@ -580,53 +631,56 @@ class _ChatPaneState extends State<ChatPane> {
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: _contentMaxWidth),
-          child: _buildFloatingContainer(
-            context,
-            glassStyle: glassPillStyleOf(context),
-            fallbackColor: scheme.surfaceContainerHigh,
-            shadows: dockShadowsOf(context),
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: Row(
-                children: [
-                  ClipRSuperellipse(
-                    borderRadius: AppRadius.md,
-                    child: Image.memory(
-                      _image!.bytes,
-                      width: 64,
-                      height: 64,
-                      fit: BoxFit.cover,
-                      cacheWidth: (64 * MediaQuery.devicePixelRatioOf(context))
-                          .round()
-                          .clamp(1, 256),
-                      errorBuilder: (context, error, stack) =>
-                          const SizedBox.square(
-                            dimension: 64,
-                            child: Icon(Icons.broken_image_rounded),
-                          ),
+          child: TextFieldTapRegion(
+            child: _buildFloatingContainer(
+              context,
+              glassStyle: glassPillStyleOf(context),
+              fallbackColor: scheme.surfaceContainerHigh,
+              shadows: dockShadowsOf(context),
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Row(
+                  children: [
+                    ClipRSuperellipse(
+                      borderRadius: AppRadius.md,
+                      child: Image.memory(
+                        _image!.bytes,
+                        width: 64,
+                        height: 64,
+                        fit: BoxFit.cover,
+                        cacheWidth:
+                            (64 * MediaQuery.devicePixelRatioOf(context))
+                                .round()
+                                .clamp(1, 256),
+                        errorBuilder: (context, error, stack) =>
+                            const SizedBox.square(
+                              dimension: 64,
+                              child: Icon(Icons.broken_image_rounded),
+                            ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      _image!.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        _image!.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                  IconButton(
-                    onPressed: _sending
-                        ? null
-                        : () => setState(() {
-                            _image = null;
-                            _uploadedImageUrl = null;
-                          }),
-                    icon: Icon(
-                      Icons.close_rounded,
-                      semanticLabel: l10n.chatRemoveImage,
+                    IconButton(
+                      onPressed: _sending
+                          ? null
+                          : () => setState(() {
+                              _image = null;
+                              _uploadedImageUrl = null;
+                            }),
+                      icon: Icon(
+                        Icons.close_rounded,
+                        semanticLabel: l10n.chatRemoveImage,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -806,36 +860,15 @@ class _ChatPaneState extends State<ChatPane> {
                       unreadPeers: widget.unreadPeers,
                       enabled: !_sending && !widget.busy,
                     ),
-                    if (widget.onPickImage != null ||
-                        widget.onPasteImage != null)
-                      SecondaryMenu(
-                        enabled: !_sending && !widget.busy,
-                        items: [
-                          if (widget.onPickImage != null)
-                            PopupMenuItem(
-                              label: l10n.chatChooseImage,
-                              onPressed: () =>
-                                  _selectImage(widget.onPickImage!),
-                            ),
-                          if (widget.onPasteImage != null)
-                            PopupMenuItem(
-                              label: l10n.chatPasteImage,
-                              onPressed: () =>
-                                  _selectImage(widget.onPasteImage!),
-                            ),
-                          if (widget.onConfigureImageHost != null)
-                            PopupMenuItem(
-                              label: l10n.imageHostTitle,
-                              onPressed: widget.onConfigureImageHost,
-                            ),
-                        ],
-                        builder: (context, openMenu) => IconButton(
-                          onPressed: openMenu,
-                          icon: Icon(
-                            Icons.add_photo_alternate_outlined,
-                            size: IconSizes.toolbar,
-                            semanticLabel: l10n.chatAttachImage,
-                          ),
+                    if (widget.onPickImage != null)
+                      IconButton(
+                        onPressed: !_sending && !widget.busy
+                            ? () => _selectImage(widget.onPickImage!)
+                            : null,
+                        icon: Icon(
+                          Icons.add_photo_alternate_outlined,
+                          size: IconSizes.toolbar,
+                          semanticLabel: l10n.chatAttachImage,
                         ),
                       ),
                     const SizedBox(width: 4),
@@ -956,8 +989,6 @@ class _CompactWorkspaceBottomBar extends ConsumerStatefulWidget {
     required this.onSend,
     required this.onKeyEvent,
     this.onPickImage,
-    this.onPasteImage,
-    this.onConfigureImageHost,
   });
 
   final TextEditingController input;
@@ -978,8 +1009,6 @@ class _CompactWorkspaceBottomBar extends ConsumerStatefulWidget {
   final Future<void> Function() onSend;
   final KeyEventResult Function(FocusNode, KeyEvent) onKeyEvent;
   final VoidCallback? onPickImage;
-  final VoidCallback? onPasteImage;
-  final VoidCallback? onConfigureImageHost;
 
   @override
   ConsumerState<_CompactWorkspaceBottomBar> createState() =>
@@ -1086,58 +1115,24 @@ class _CompactWorkspaceBottomBarState
     AppLocalizations l10n, {
     required bool floating,
   }) {
-    final canAttach = widget.onPickImage != null || widget.onPasteImage != null;
-    final enabled = canAttach && !widget.sending && !widget.busy;
+    final enabled = widget.onPickImage != null && !widget.sending && !widget.busy;
     final scheme = context.scheme;
     return _buildCircleSlot(
       context,
       floating: floating,
-      child: canAttach
-          ? SecondaryMenu(
-              enabled: enabled,
-              items: [
-                if (widget.onPickImage != null)
-                  PopupMenuItem(
-                    label: l10n.chatChooseImage,
-                    onPressed: widget.onPickImage,
-                  ),
-                if (widget.onPasteImage != null)
-                  PopupMenuItem(
-                    label: l10n.chatPasteImage,
-                    onPressed: widget.onPasteImage,
-                  ),
-                if (widget.onConfigureImageHost != null)
-                  PopupMenuItem(
-                    label: l10n.imageHostTitle,
-                    onPressed: widget.onConfigureImageHost,
-                  ),
-              ],
-              builder: (context, openMenu) => IconButton(
-                onPressed: openMenu,
-                style: ButtonStyle.from(
-                  foregroundColor: scheme.onSurface,
-                  minimumSize: const Size.square(_slotHeight),
-                  padding: EdgeInsets.zero,
-                ),
-                icon: Icon(
-                  Icons.add_photo_alternate_outlined,
-                  size: IconSizes.toolbar,
-                  semanticLabel: l10n.chatAttachImage,
-                ),
-              ),
-            )
-          : IconButton(
-              onPressed: null,
-              style: ButtonStyle.from(
-                minimumSize: const Size.square(_slotHeight),
-                padding: EdgeInsets.zero,
-              ),
-              icon: Icon(
-                Icons.add_photo_alternate_outlined,
-                size: IconSizes.toolbar,
-                semanticLabel: l10n.chatAttachImage,
-              ),
-            ),
+      child: IconButton(
+        onPressed: enabled ? widget.onPickImage : null,
+        style: ButtonStyle.from(
+          foregroundColor: scheme.onSurface,
+          minimumSize: const Size.square(_slotHeight),
+          padding: EdgeInsets.zero,
+        ),
+        icon: Icon(
+          Icons.add_photo_alternate_outlined,
+          size: IconSizes.toolbar,
+          semanticLabel: l10n.chatAttachImage,
+        ),
+      ),
     );
   }
 

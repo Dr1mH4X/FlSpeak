@@ -11,6 +11,7 @@ import 'package:material_ui/material_ui.dart'
         Switch,
         TextButton,
         TextField;
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -114,8 +115,6 @@ void main() {
     await tester.pumpWidget(_ChatHarness(key: key, pick: () => picked.future));
     await tester.tap(find.byIcon(Icons.add_photo_alternate_outlined));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('选择图片'));
-    await tester.pumpAndSettle();
     key.currentState!.select('bob');
     await tester.pump();
     picked.complete(_picked());
@@ -149,8 +148,6 @@ void main() {
       );
       await tester.enterText(find.byType(TextField).last, 'caption');
       await tester.tap(find.byIcon(Icons.add_photo_alternate_outlined));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('选择图片'));
       await tester.pumpAndSettle();
       await tester.tap(find.byIcon(Icons.send_rounded));
       await tester.pump();
@@ -489,8 +486,6 @@ void main() {
         ),
       );
       await tester.tap(find.byIcon(Icons.add_photo_alternate_outlined));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('选择图片'));
       await tester.pump();
       await tester.runAsync(
         () => precacheImage(
@@ -1035,8 +1030,6 @@ void main() {
 
       await tester.tap(find.byIcon(Icons.add_photo_alternate_outlined));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('选择图片'));
-      await tester.pumpAndSettle();
 
       await tester.tap(find.byIcon(Icons.send_rounded));
       await tester.pump();
@@ -1148,6 +1141,134 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('/ask'), findsOneWidget);
       expect(find.byType(LiquidGlass), findsNWidgets(2));
+    },
+  );
+
+  testWidgets(
+    'photo button invokes onPickImage directly without opening a popup menu',
+    (tester) async {
+      var picks = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('zh'),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
+          home: Scaffold(
+            body: ChatPane(
+              channelName: 'Lobby',
+              messages: const [],
+              scope: ChatScope.channel,
+              canSendChannel: true,
+              busy: false,
+              recipients: const [],
+              recipientUid: null,
+              onRecipientChanged: (_) {},
+              onScopeChanged: (_) {},
+              onSend: (_) async => true,
+              onPickImage: () async {
+                picks++;
+                return null;
+              },
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byIcon(Icons.add_photo_alternate_outlined));
+      await tester.pumpAndSettle();
+      expect(picks, 1);
+      expect(find.text('选择图片'), findsNothing);
+      expect(find.text('粘贴图片'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'paste shortcut in composer attaches image, blocks rejected image paste, and falls back to text paste',
+    (tester) async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+            if (call.method == 'Clipboard.getData') {
+              return <String, dynamic>{'text': 'pasted text'};
+            }
+            return null;
+          });
+      addTearDown(
+        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null),
+      );
+
+      var pasteCalls = 0;
+      ChatImagePasteResult nextPaste = (handled: true, image: _picked());
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('zh'),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
+          home: Scaffold(
+            body: ChatPane(
+              channelName: 'Lobby',
+              messages: const [],
+              scope: ChatScope.channel,
+              canSendChannel: true,
+              busy: false,
+              recipients: const [],
+              recipientUid: null,
+              onRecipientChanged: (_) {},
+              onScopeChanged: (_) {},
+              onSend: (_) async => true,
+              onPasteImage: () async {
+                pasteCalls++;
+                return nextPaste;
+              },
+            ),
+          ),
+        ),
+      );
+
+      final field = find.byType(TextField);
+      await tester.tap(field);
+      await tester.pump();
+
+      final modifier =
+          defaultTargetPlatform == TargetPlatform.macOS ||
+              defaultTargetPlatform == TargetPlatform.iOS
+          ? LogicalKeyboardKey.metaLeft
+          : LogicalKeyboardKey.controlLeft;
+
+      Future<void> triggerPaste() async {
+        await tester.sendKeyDownEvent(modifier);
+        await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+        await tester.sendKeyUpEvent(modifier);
+        await tester.pumpAndSettle();
+      }
+
+      // 剪贴板有图片且允许粘贴：直接进入预览，不粘贴文本。
+      await triggerPaste();
+      expect(pasteCalls, 1);
+      expect(find.text('picked.png'), findsOneWidget);
+      expect(tester.widget<TextField>(field).controller!.text, '');
+
+      // 移除预览后输入框保持焦点；模拟图床未配置导致被拒绝（handled: true, image: null）：不回退粘贴文本。
+      await tester.tap(find.byIcon(Icons.close_rounded));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(field).focusNode!.hasFocus, isTrue);
+      nextPaste = (handled: true, image: null);
+      await triggerPaste();
+      expect(pasteCalls, 2);
+      expect(find.text('picked.png'), findsNothing);
+      expect(tester.widget<TextField>(field).controller!.text, '');
+
+      // 剪贴板无图片（handled: false）：回退执行正常文本粘贴。
+      nextPaste = (handled: false, image: null);
+      await triggerPaste();
+      expect(pasteCalls, 3);
+      expect(tester.widget<TextField>(field).controller!.text, 'pasted text');
     },
   );
 }

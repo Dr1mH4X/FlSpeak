@@ -30,7 +30,6 @@ import '../../widgets/monogram.dart';
 import '../../widgets/prism.dart';
 import '../../widgets/scaffold/scaffold.dart' as app_scaffold;
 import '../../widgets/window_header.dart';
-import '../settings/widgets/image_host_dialog.dart';
 import 'widgets/chat_pane.dart';
 import 'widgets/channel_files_pane.dart';
 import 'widgets/channel_details_pane.dart';
@@ -847,10 +846,9 @@ class _ChannelChatBodyState extends ConsumerState<_ChannelChatBody> {
       busy: busy,
       onScopeChanged: controller.selectChatScope,
       onSend: controller.prepareMessageSender(),
-      onPickImage: () => controller.pickChatImage(paste: false),
-      onPasteImage: () => controller.pickChatImage(paste: true),
+      onPickImage: controller.pickChatImage,
+      onPasteImage: controller.pasteChatImage,
       onUploadImage: controller.uploadChatImage,
-      onConfigureImageHost: () => showImageHostSettings(context),
       description: channel.description,
       recipients: _cachedRecipients,
       recipientUid: directRecipientUid,

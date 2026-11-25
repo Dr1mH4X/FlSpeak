@@ -77,7 +77,9 @@ class PickedChatImage {
   final String name;
 }
 
-enum ImageInputFailure { tooLarge, clipboardEmpty }
+typedef ChatImagePasteResult = ({bool handled, PickedChatImage? image});
+
+enum ImageInputFailure { tooLarge }
 
 class ImageInputException implements Exception {
   const ImageInputException(this.failure);
@@ -122,16 +124,7 @@ class ImageInput {
     return PickedChatImage(bytes: bytes, name: file.name);
   }
 
-  Future<PickedChatImage> paste() async {
-    final bytes = await Pasteboard.image;
-    if (bytes == null || bytes.isEmpty) {
-      throw const ImageInputException(ImageInputFailure.clipboardEmpty);
-    }
-    if (bytes.length > maxChatImageBytes()) {
-      throw const ImageInputException(ImageInputFailure.tooLarge);
-    }
-    return PickedChatImage(bytes: bytes, name: 'clipboard.png');
-  }
+  Future<Uint8List?> readClipboardImageBytes() => Pasteboard.image;
 }
 
 /// 可见视图共用受控抓取结果；最后一个视图离开后释放图片字节。

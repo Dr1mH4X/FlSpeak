@@ -696,20 +696,11 @@ class AppLocalizationsEn extends AppLocalizations {
       'Choose a PNG, JPEG, GIF, or WebP image.';
 
   @override
-  String get chatClipboardEmpty => 'No image in the clipboard';
-
-  @override
   String get chatImageInputFailed =>
       'Could not read the image. Please choose it again.';
 
   @override
   String get chatAttachImage => 'Attach image';
-
-  @override
-  String get chatChooseImage => 'Choose image';
-
-  @override
-  String get chatPasteImage => 'Paste image';
 
   @override
   String get chatRemoveImage => 'Remove image';
