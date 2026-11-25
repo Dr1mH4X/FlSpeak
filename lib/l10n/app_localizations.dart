@@ -2491,6 +2491,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Switch to voice controls'**
   String get chatSwitchToVoice;
+
+  /// No description provided for @sessionNotificationChannelName.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice session'**
+  String get sessionNotificationChannelName;
+
+  /// No description provided for @sessionNotificationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{server} · {channel}'**
+  String sessionNotificationTitle(String server, String channel);
+
+  /// No description provided for @sessionNotificationStatusInVoice.
+  ///
+  /// In en, this message translates to:
+  /// **'In voice'**
+  String get sessionNotificationStatusInVoice;
+
+  /// No description provided for @sessionNotificationStatusMuted.
+  ///
+  /// In en, this message translates to:
+  /// **'Muted'**
+  String get sessionNotificationStatusMuted;
+
+  /// No description provided for @sessionNotificationStatusDeafened.
+  ///
+  /// In en, this message translates to:
+  /// **'Deafened'**
+  String get sessionNotificationStatusDeafened;
+
+  /// No description provided for @sessionNotificationStatusSharingScreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Sharing screen'**
+  String get sessionNotificationStatusSharingScreen;
+
+  /// No description provided for @sessionNotificationStatusReconnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnecting…'**
+  String get sessionNotificationStatusReconnecting;
+
+  /// No description provided for @sessionNotificationStatusCombined.
+  ///
+  /// In en, this message translates to:
+  /// **'{primary} · {secondary}'**
+  String sessionNotificationStatusCombined(String primary, String secondary);
+
+  /// No description provided for @sessionNotificationDisconnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnect'**
+  String get sessionNotificationDisconnect;
 }
 
 class _AppLocalizationsDelegate

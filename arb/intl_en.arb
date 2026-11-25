@@ -598,5 +598,34 @@
   "voiceHoldToTalk": "Hold to talk",
   "voiceTalking": "Talking…",
   "chatSwitchToText": "Switch to text input",
-  "chatSwitchToVoice": "Switch to voice controls"
+  "chatSwitchToVoice": "Switch to voice controls",
+  "sessionNotificationChannelName": "Voice session",
+  "sessionNotificationTitle": "{server} · {channel}",
+  "@sessionNotificationTitle": {
+    "placeholders": {
+      "server": {
+        "type": "String"
+      },
+      "channel": {
+        "type": "String"
+      }
+    }
+  },
+  "sessionNotificationStatusInVoice": "In voice",
+  "sessionNotificationStatusMuted": "Muted",
+  "sessionNotificationStatusDeafened": "Deafened",
+  "sessionNotificationStatusSharingScreen": "Sharing screen",
+  "sessionNotificationStatusReconnecting": "Reconnecting…",
+  "sessionNotificationStatusCombined": "{primary} · {secondary}",
+  "@sessionNotificationStatusCombined": {
+    "placeholders": {
+      "primary": {
+        "type": "String"
+      },
+      "secondary": {
+        "type": "String"
+      }
+    }
+  },
+  "sessionNotificationDisconnect": "Disconnect"
 }

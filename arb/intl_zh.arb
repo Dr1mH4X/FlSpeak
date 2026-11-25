@@ -591,5 +591,34 @@
   "voiceHoldToTalk": "按住说话",
   "voiceTalking": "正在说话…",
   "chatSwitchToText": "切换到文字输入",
-  "chatSwitchToVoice": "切换到语音控制"
+  "chatSwitchToVoice": "切换到语音控制",
+  "sessionNotificationChannelName": "语音会话",
+  "sessionNotificationTitle": "{server} · {channel}",
+  "@sessionNotificationTitle": {
+    "placeholders": {
+      "server": {
+        "type": "String"
+      },
+      "channel": {
+        "type": "String"
+      }
+    }
+  },
+  "sessionNotificationStatusInVoice": "语音中",
+  "sessionNotificationStatusMuted": "已静音",
+  "sessionNotificationStatusDeafened": "已闭麦",
+  "sessionNotificationStatusSharingScreen": "正在共享屏幕",
+  "sessionNotificationStatusReconnecting": "正在重连…",
+  "sessionNotificationStatusCombined": "{primary} · {secondary}",
+  "@sessionNotificationStatusCombined": {
+    "placeholders": {
+      "primary": {
+        "type": "String"
+      },
+      "secondary": {
+        "type": "String"
+      }
+    }
+  },
+  "sessionNotificationDisconnect": "断开连接"
 }

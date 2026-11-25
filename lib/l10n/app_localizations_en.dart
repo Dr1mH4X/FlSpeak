@@ -1313,4 +1313,35 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chatSwitchToVoice => 'Switch to voice controls';
+
+  @override
+  String get sessionNotificationChannelName => 'Voice session';
+
+  @override
+  String sessionNotificationTitle(String server, String channel) {
+    return '$server · $channel';
+  }
+
+  @override
+  String get sessionNotificationStatusInVoice => 'In voice';
+
+  @override
+  String get sessionNotificationStatusMuted => 'Muted';
+
+  @override
+  String get sessionNotificationStatusDeafened => 'Deafened';
+
+  @override
+  String get sessionNotificationStatusSharingScreen => 'Sharing screen';
+
+  @override
+  String get sessionNotificationStatusReconnecting => 'Reconnecting…';
+
+  @override
+  String sessionNotificationStatusCombined(String primary, String secondary) {
+    return '$primary · $secondary';
+  }
+
+  @override
+  String get sessionNotificationDisconnect => 'Disconnect';
 }
