@@ -11,6 +11,8 @@ import 'package:material_ui/material_ui.dart'
         Switch,
         TextButton,
         TextField;
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform;
+import 'package:flutter/gestures.dart' show kSecondaryMouseButton;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -20,6 +22,7 @@ import 'package:flspeak/l10n/app_localizations.dart';
 import 'package:flspeak/localization.dart';
 import 'package:flspeak/theme/app_theme.dart';
 import 'package:flspeak/features/workspace/widgets/chat_pane.dart';
+import 'package:flspeak/features/workspace/widgets/message_content.dart';
 import 'package:flspeak/widgets/prism.dart';
 
 class _ChatHarness extends StatefulWidget {
@@ -114,8 +117,6 @@ void main() {
     await tester.pumpWidget(_ChatHarness(key: key, pick: () => picked.future));
     await tester.tap(find.byIcon(Icons.add_photo_alternate_outlined));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('选择图片'));
-    await tester.pumpAndSettle();
     key.currentState!.select('bob');
     await tester.pump();
     picked.complete(_picked());
@@ -149,8 +150,6 @@ void main() {
       );
       await tester.enterText(find.byType(TextField).last, 'caption');
       await tester.tap(find.byIcon(Icons.add_photo_alternate_outlined));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('选择图片'));
       await tester.pumpAndSettle();
       await tester.tap(find.byIcon(Icons.send_rounded));
       await tester.pump();
@@ -489,8 +488,6 @@ void main() {
         ),
       );
       await tester.tap(find.byIcon(Icons.add_photo_alternate_outlined));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('选择图片'));
       await tester.pump();
       await tester.runAsync(
         () => precacheImage(
@@ -1035,8 +1032,6 @@ void main() {
 
       await tester.tap(find.byIcon(Icons.add_photo_alternate_outlined));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('选择图片'));
-      await tester.pumpAndSettle();
 
       await tester.tap(find.byIcon(Icons.send_rounded));
       await tester.pump();
@@ -1148,6 +1143,280 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('/ask'), findsOneWidget);
       expect(find.byType(LiquidGlass), findsNWidgets(2));
+    },
+  );
+
+  testWidgets(
+    'photo button invokes onPickImage directly without opening a popup menu',
+    (tester) async {
+      var picks = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('zh'),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
+          home: Scaffold(
+            body: ChatPane(
+              channelName: 'Lobby',
+              messages: const [],
+              scope: ChatScope.channel,
+              canSendChannel: true,
+              busy: false,
+              recipients: const [],
+              recipientUid: null,
+              onRecipientChanged: (_) {},
+              onScopeChanged: (_) {},
+              onSend: (_) async => true,
+              onPickImage: () async {
+                picks++;
+                return null;
+              },
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byIcon(Icons.add_photo_alternate_outlined));
+      await tester.pumpAndSettle();
+      expect(picks, 1);
+      expect(find.text('选择图片'), findsNothing);
+      expect(find.text('粘贴图片'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'paste shortcut in composer attaches image, blocks rejected image paste, and falls back to text paste',
+    (tester) async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+            if (call.method == 'Clipboard.getData') {
+              return <String, dynamic>{'text': 'pasted text'};
+            }
+            return null;
+          });
+      addTearDown(
+        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null),
+      );
+
+      var pasteCalls = 0;
+      ChatImagePasteResult nextPaste = (handled: true, image: _picked());
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('zh'),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
+          home: Scaffold(
+            body: ChatPane(
+              channelName: 'Lobby',
+              messages: const [],
+              scope: ChatScope.channel,
+              canSendChannel: true,
+              busy: false,
+              recipients: const [],
+              recipientUid: null,
+              onRecipientChanged: (_) {},
+              onScopeChanged: (_) {},
+              onSend: (_) async => true,
+              onPasteImage: () async {
+                pasteCalls++;
+                return nextPaste;
+              },
+            ),
+          ),
+        ),
+      );
+
+      final field = find.byType(TextField);
+      await tester.tap(field);
+      await tester.pump();
+
+      final modifier =
+          defaultTargetPlatform == TargetPlatform.macOS ||
+              defaultTargetPlatform == TargetPlatform.iOS
+          ? LogicalKeyboardKey.metaLeft
+          : LogicalKeyboardKey.controlLeft;
+
+      Future<void> triggerPaste() async {
+        await tester.sendKeyDownEvent(modifier);
+        await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+        await tester.sendKeyUpEvent(modifier);
+        await tester.pumpAndSettle();
+      }
+
+      // 剪贴板有图片且允许粘贴：直接进入预览，不粘贴文本。
+      await triggerPaste();
+      expect(pasteCalls, 1);
+      expect(find.text('picked.png'), findsOneWidget);
+      expect(tester.widget<TextField>(field).controller!.text, '');
+
+      // 移除预览后输入框保持焦点；模拟图床未配置导致被拒绝（handled: true, image: null）：不回退粘贴文本。
+      await tester.tap(find.byIcon(Icons.close_rounded));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(field).focusNode!.hasFocus, isTrue);
+      nextPaste = (handled: true, image: null);
+      await triggerPaste();
+      expect(pasteCalls, 2);
+      expect(find.text('picked.png'), findsNothing);
+      expect(tester.widget<TextField>(field).controller!.text, '');
+
+      // 剪贴板无图片（handled: false）：回退执行正常文本粘贴。
+      nextPaste = (handled: false, image: null);
+      await triggerPaste();
+      expect(pasteCalls, 3);
+      expect(tester.widget<TextField>(field).controller!.text, 'pasted text');
+    },
+  );
+
+  test('formatChatMessagesForCopy formats single-day, multiline, multi-day, and TS6 attachments', () {
+    ChatMessage msg(String from, String text, DateTime at) => ChatMessage(
+      from: from,
+      fromUid: from.toLowerCase(),
+      fromId: 1,
+      text: text,
+      at: at,
+      scope: ChatScope.channel,
+      targetId: 5,
+    );
+
+    final sameDay = formatChatMessagesForCopy([
+      msg('Alice', '晚上打一把吗', DateTime(2026, 11, 25, 14, 2)),
+      msg('Bob', '行\n等我十分钟', DateTime(2026, 11, 25, 14, 3)),
+      msg(
+        'Carol',
+        '{"msg_type":"ts.file.myts","file_id":"abc","file_name":"shot.png","file_size":1024,"body":"截图"}',
+        DateTime(2026, 11, 25, 14, 5),
+      ),
+    ]);
+    expect(
+      sameDay,
+      '14:02 Alice: 晚上打一把吗\n14:03 Bob:\n行\n等我十分钟\n14:05 Carol: [shot.png] 截图',
+    );
+
+    final multiDay = formatChatMessagesForCopy([
+      msg('Alice', '昨天', DateTime(2026, 11, 24, 23, 58)),
+      msg('Bob', '今天', DateTime(2026, 11, 25, 0, 2)),
+    ]);
+    expect(multiDay, '11-24 23:58 Alice: 昨天\n11-25 00:02 Bob: 今天');
+
+    final multiYear = formatChatMessagesForCopy([
+      msg('Alice', '去年', DateTime(2025, 12, 31, 23, 59)),
+      msg('Bob', '新年', DateTime(2026, 1, 1, 0, 1)),
+    ]);
+    expect(
+      multiYear,
+      '2025-12-31 23:59 Alice: 去年\n2026-01-01 00:01 Bob: 新年',
+    );
+  });
+
+  testWidgets(
+    'chat feed shares SelectionArea and supports multi-select formatted copy',
+    (tester) async {
+      String? copied;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+            if (call.method == 'Clipboard.setData') {
+              copied = (call.arguments as Map)['text'] as String?;
+            }
+            return null;
+          });
+      addTearDown(
+        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null),
+      );
+
+      var copyNoticeCount = 0;
+      final messages = [
+        ChatMessage(
+          from: 'Alice',
+          fromUid: 'alice',
+          fromId: 2,
+          text: 'first line',
+          at: DateTime(2026, 11, 25, 14, 2),
+          scope: ChatScope.channel,
+          targetId: 5,
+        ),
+        ChatMessage(
+          from: 'Bob',
+          fromUid: 'bob',
+          fromId: 3,
+          text: 'middle line',
+          at: DateTime(2026, 11, 25, 14, 3),
+          scope: ChatScope.channel,
+          targetId: 5,
+        ),
+        ChatMessage(
+          from: 'Carol',
+          fromUid: 'carol',
+          fromId: 4,
+          text: 'third line',
+          at: DateTime(2026, 11, 25, 14, 4),
+          scope: ChatScope.channel,
+          targetId: 5,
+        ),
+      ];
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildAppTheme(Brightness.light),
+          locale: const Locale('zh'),
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          builder: (context, child) =>
+              PrismRootScope(brightness: Brightness.light, child: child!),
+          home: Scaffold(
+            body: ChatPane(
+              channelName: 'Lobby',
+              messages: messages,
+              scope: ChatScope.channel,
+              canSendChannel: true,
+              busy: false,
+              recipients: const [],
+              recipientUid: null,
+              onRecipientChanged: (_) {},
+              onScopeChanged: (_) {},
+              onSend: (_) async => true,
+              onMessagesCopied: () => copyNoticeCount++,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 聊天列表由统一的 SelectionArea 托管，消息正文不各自隔离 SelectableText。
+      expect(find.byType(SelectionArea), findsOneWidget);
+      for (final widget in tester.widgetList<MessageContent>(
+        find.byType(MessageContent),
+      )) {
+        expect(widget.selectable, isFalse);
+      }
+
+      // 右键第三条消息进入多选，再补选第一条，复制时按时间顺序输出格式化记录。
+      await tester.tap(
+        find.text('third line'),
+        buttons: kSecondaryMouseButton,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('多选'));
+      await tester.pumpAndSettle();
+      expect(find.text('已选 1 条'), findsOneWidget);
+
+      await tester.tap(find.text('first line'));
+      await tester.pumpAndSettle();
+      expect(find.text('已选 2 条'), findsOneWidget);
+
+      await tester.tap(find.text('复制'));
+      await tester.pumpAndSettle();
+
+      expect(copied, '14:02 Alice: first line\n14:04 Carol: third line');
+      expect(copyNoticeCount, 1);
+      expect(find.text('已选 2 条'), findsNothing);
     },
   );
 }

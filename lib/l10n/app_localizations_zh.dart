@@ -680,22 +680,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatImageUnsupportedFormat => '请选择 PNG、JPEG、GIF 或 WebP 图片。';
 
   @override
-  String get chatClipboardEmpty => '剪贴板中没有图片';
-
-  @override
   String get chatImageInputFailed => '无法读取图片，请重新选择';
 
   @override
   String get chatAttachImage => '添加图片';
 
   @override
-  String get chatChooseImage => '选择图片';
-
-  @override
-  String get chatPasteImage => '粘贴图片';
-
-  @override
   String get chatRemoveImage => '移除图片';
+
+  @override
+  String get chatSelectMessages => '多选';
+
+  @override
+  String chatSelectedCount(int count) {
+    return '已选 $count 条';
+  }
 
   @override
   String get imageHostTitle => '图片上传';

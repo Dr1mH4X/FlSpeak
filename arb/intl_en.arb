@@ -351,12 +351,18 @@
     }
   },
   "chatImageUnsupportedFormat": "Choose a PNG, JPEG, GIF, or WebP image.",
-  "chatClipboardEmpty": "No image in the clipboard",
   "chatImageInputFailed": "Could not read the image. Please choose it again.",
   "chatAttachImage": "Attach image",
-  "chatChooseImage": "Choose image",
-  "chatPasteImage": "Paste image",
   "chatRemoveImage": "Remove image",
+  "chatSelectMessages": "Select messages",
+  "chatSelectedCount": "{count} selected",
+  "@chatSelectedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "imageHostTitle": "Image uploads",
   "imageHostRequired": "Configure an image host in Image uploads first",
   "imageHostStorageFailed": "Could not access secure storage for image uploads",

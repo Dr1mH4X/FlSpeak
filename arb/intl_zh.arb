@@ -351,12 +351,18 @@
     }
   },
   "chatImageUnsupportedFormat": "请选择 PNG、JPEG、GIF 或 WebP 图片。",
-  "chatClipboardEmpty": "剪贴板中没有图片",
   "chatImageInputFailed": "无法读取图片，请重新选择",
   "chatAttachImage": "添加图片",
-  "chatChooseImage": "选择图片",
-  "chatPasteImage": "粘贴图片",
   "chatRemoveImage": "移除图片",
+  "chatSelectMessages": "多选",
+  "chatSelectedCount": "已选 {count} 条",
+  "@chatSelectedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "imageHostTitle": "图片上传",
   "imageHostRequired": "请先在图片上传设置中配置图床",
   "imageHostStorageFailed": "无法访问图片上传的安全存储",

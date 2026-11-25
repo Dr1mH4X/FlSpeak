@@ -124,7 +124,7 @@ void main() {
     },
   );
   test(
-    'clipboard image input handles empty content and enforces the size limit',
+    'clipboard image input returns null when empty and raw bytes when present',
     () async {
       Object? content;
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -139,29 +139,9 @@ void main() {
             .setMockMethodCallHandler(const MethodChannel('pasteboard'), null),
       );
       const input = ImageInput();
-      await expectLater(
-        input.paste(),
-        throwsA(
-          isA<ImageInputException>().having(
-            (e) => e.failure,
-            'failure',
-            ImageInputFailure.clipboardEmpty,
-          ),
-        ),
-      );
+      expect(await input.readClipboardImageBytes(), isNull);
       content = Uint8List.fromList([1, 2, 3]);
-      expect((await input.paste()).bytes, [1, 2, 3]);
-      content = Uint8List(maxChatImageBytes() + 1);
-      await expectLater(
-        input.paste(),
-        throwsA(
-          isA<ImageInputException>().having(
-            (e) => e.failure,
-            'failure',
-            ImageInputFailure.tooLarge,
-          ),
-        ),
-      );
+      expect(await input.readClipboardImageBytes(), [1, 2, 3]);
     },
   );
 

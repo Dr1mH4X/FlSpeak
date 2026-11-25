@@ -18,6 +18,7 @@ import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../../core/channel_display.dart';
 import '../../core/models.dart';
+import '../../core/notices.dart';
 import '../../core/providers.dart';
 import '../../core/stream_publisher.dart';
 import '../../core/stream_viewer.dart';
@@ -30,7 +31,6 @@ import '../../widgets/monogram.dart';
 import '../../widgets/prism.dart';
 import '../../widgets/scaffold/scaffold.dart' as app_scaffold;
 import '../../widgets/window_header.dart';
-import '../settings/widgets/image_host_dialog.dart';
 import 'widgets/chat_pane.dart';
 import 'widgets/channel_files_pane.dart';
 import 'widgets/channel_details_pane.dart';
@@ -847,10 +847,15 @@ class _ChannelChatBodyState extends ConsumerState<_ChannelChatBody> {
       busy: busy,
       onScopeChanged: controller.selectChatScope,
       onSend: controller.prepareMessageSender(),
-      onPickImage: () => controller.pickChatImage(paste: false),
-      onPasteImage: () => controller.pickChatImage(paste: true),
+      onPickImage: controller.pickChatImage,
+      onPasteImage: controller.pasteChatImage,
       onUploadImage: controller.uploadChatImage,
-      onConfigureImageHost: () => showImageHostSettings(context),
+      onMessagesCopied: () => ref
+          .read(noticeCenterProvider.notifier)
+          .show(
+            AppLocalizations.of(context).commonCopied,
+            tone: NoticeTone.info,
+          ),
       description: channel.description,
       recipients: _cachedRecipients,
       recipientUid: directRecipientUid,

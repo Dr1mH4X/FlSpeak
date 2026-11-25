@@ -1340,12 +1340,6 @@ abstract class AppLocalizations {
   /// **'Choose a PNG, JPEG, GIF, or WebP image.'**
   String get chatImageUnsupportedFormat;
 
-  /// No description provided for @chatClipboardEmpty.
-  ///
-  /// In en, this message translates to:
-  /// **'No image in the clipboard'**
-  String get chatClipboardEmpty;
-
   /// No description provided for @chatImageInputFailed.
   ///
   /// In en, this message translates to:
@@ -1358,23 +1352,23 @@ abstract class AppLocalizations {
   /// **'Attach image'**
   String get chatAttachImage;
 
-  /// No description provided for @chatChooseImage.
-  ///
-  /// In en, this message translates to:
-  /// **'Choose image'**
-  String get chatChooseImage;
-
-  /// No description provided for @chatPasteImage.
-  ///
-  /// In en, this message translates to:
-  /// **'Paste image'**
-  String get chatPasteImage;
-
   /// No description provided for @chatRemoveImage.
   ///
   /// In en, this message translates to:
   /// **'Remove image'**
   String get chatRemoveImage;
+
+  /// No description provided for @chatSelectMessages.
+  ///
+  /// In en, this message translates to:
+  /// **'Select messages'**
+  String get chatSelectMessages;
+
+  /// No description provided for @chatSelectedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} selected'**
+  String chatSelectedCount(int count);
 
   /// No description provided for @imageHostTitle.
   ///
