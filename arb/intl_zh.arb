@@ -528,6 +528,7 @@
   "streamPickerResolution": "清晰度",
   "streamPickerFrameRate": "帧率",
   "streamPickerStart": "开始共享",
+  "streamAndroidDefaultSourceName": "设备屏幕",
   "settingsScreenShare": "屏幕共享",
   "settingsScreenShareCapture": "默认画质",
   "settingsScreenShareResolution": "默认分辨率",

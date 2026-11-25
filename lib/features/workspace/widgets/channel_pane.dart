@@ -975,19 +975,7 @@ class _UserFooterState extends ConsumerState<_UserFooter> {
                             ? Icons.stop_screen_share_rounded
                             : Icons.screen_share_rounded,
                         active: sharingScreen,
-                        onTap: () {
-                          if (sharingScreen) {
-                            unawaited(
-                              ref
-                                  .read(sessionViewProvider.notifier)
-                                  .stopScreenShare(),
-                            );
-                          } else {
-                            unawaited(
-                              showScreenSharePickerAndStart(context, ref),
-                            );
-                          }
-                        },
+                        onTap: () => unawaited(toggleScreenShare(context, ref)),
                       ),
                     if (widget.onDisconnect != null)
                       IconButton.filled(

@@ -2108,6 +2108,12 @@ abstract class AppLocalizations {
   /// **'Start sharing'**
   String get streamPickerStart;
 
+  /// No description provided for @streamAndroidDefaultSourceName.
+  ///
+  /// In en, this message translates to:
+  /// **'Device screen'**
+  String get streamAndroidDefaultSourceName;
+
   /// No description provided for @settingsScreenShare.
   ///
   /// In en, this message translates to:

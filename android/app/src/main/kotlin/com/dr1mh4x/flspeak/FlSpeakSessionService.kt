@@ -191,6 +191,7 @@ class FlSpeakSessionService : Service() {
 
         when (intent.action) {
             ACTION_SYNC -> {
+                val startedViaForegroundService = pendingForegroundStart
                 pendingForegroundStart = false
                 val requestId = intent.getLongExtra(EXTRA_REQUEST_ID, 0L)
                 val payload = extractPayload(intent)
@@ -211,7 +212,12 @@ class FlSpeakSessionService : Service() {
                 }
                 val ok = startForegroundSafely(payload, mediaPlaybackOnly = false)
                 if (!ok && !isForegroundActive) {
-                    stopSelf()
+                    if (startedViaForegroundService) {
+                        startForegroundSafely(payload, mediaPlaybackOnly = true)
+                        stopForegroundAndSelf(startId)
+                    } else {
+                        stopSelf(startId)
+                    }
                 }
                 pendingSyncCallbacks.remove(requestId)?.invoke(ok)
             }

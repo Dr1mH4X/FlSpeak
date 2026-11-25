@@ -528,6 +528,7 @@
   "streamPickerResolution": "Resolution",
   "streamPickerFrameRate": "Frame rate",
   "streamPickerStart": "Start sharing",
+  "streamAndroidDefaultSourceName": "Device screen",
   "settingsScreenShare": "Screen share",
   "settingsScreenShareCapture": "Default capture quality",
   "settingsScreenShareResolution": "Default resolution",

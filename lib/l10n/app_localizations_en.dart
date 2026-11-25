@@ -1120,6 +1120,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get streamPickerStart => 'Start sharing';
 
   @override
+  String get streamAndroidDefaultSourceName => 'Device screen';
+
+  @override
   String get settingsScreenShare => 'Screen share';
 
   @override

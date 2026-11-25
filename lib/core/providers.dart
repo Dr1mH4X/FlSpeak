@@ -231,8 +231,10 @@ class SessionController extends Notifier<SessionView> {
   bool _notificationPermissionRequested = false;
   bool _androidSessionServiceActive = false;
   bool _androidSessionServiceStarted = false;
+  bool _androidMediaProjectionActive = false;
   AndroidSessionNotificationState? _lastAndroidNotificationState;
   int _androidSessionServiceOpGen = 0;
+  Future<bool>? _inFlightAndroidSync;
 
   /// 最近一次已提示的语音错误；Voice 事件重复带同一句时不再刷新提示。
   String? _lastVoiceNotice;
@@ -245,8 +247,10 @@ class SessionController extends Notifier<SessionView> {
     _notificationPermissionRequested = false;
     _androidSessionServiceActive = false;
     _androidSessionServiceStarted = false;
+    _androidMediaProjectionActive = false;
     _lastAndroidNotificationState = null;
     _androidSessionServiceOpGen = 0;
+    _inFlightAndroidSync = null;
 
     final session = ref.watch(coreSessionProvider);
     final subscription = session.events().listen(_onEvent);
@@ -269,9 +273,12 @@ class SessionController extends Notifier<SessionView> {
         _syncAndroidSessionService(androidSessionService, view: next);
       });
       ref.listen<bool>(streamPublisherProvider.select((s) => s.isSharing), (
-        _,
+        previous,
         isSharing,
       ) {
+        if (previous == true && !isSharing && _androidMediaProjectionActive) {
+          return;
+        }
         _syncAndroidSessionService(
           androidSessionService,
           isSharingScreen: isSharing,
@@ -298,14 +305,30 @@ class SessionController extends Notifier<SessionView> {
     bool? isSharingScreen,
     AppLocalizations? l10n,
   }) {
-    if (!ref.mounted) return;
+    unawaited(
+      _syncAndroidSessionServiceAsync(
+        service,
+        view: view,
+        isSharingScreen: isSharingScreen,
+        l10n: l10n,
+      ),
+    );
+  }
+
+  Future<bool> _syncAndroidSessionServiceAsync(
+    AndroidSessionServiceGateway service, {
+    SessionView? view,
+    bool? isSharingScreen,
+    AppLocalizations? l10n,
+  }) {
+    if (!ref.mounted) return Future<bool>.value(false);
     final currentView = view ?? state;
     final shouldBeActive =
         currentView.connected ||
         (currentView.reconnecting && _androidSessionServiceActive);
     if (!shouldBeActive) {
       _stopAndroidSessionServiceIfNeeded(service);
-      return;
+      return Future<bool>.value(false);
     }
 
     final sharing =
@@ -316,40 +339,63 @@ class SessionController extends Notifier<SessionView> {
       view: currentView,
       l10n: localizations,
       isSharingScreen: sharing,
+      includeMediaProjection: _androidMediaProjectionActive,
     );
     if (desired == _lastAndroidNotificationState) {
-      return;
+      return _inFlightAndroidSync ??
+          Future<bool>.value(_androidSessionServiceStarted);
     }
     _lastAndroidNotificationState = desired;
     _androidSessionServiceActive = true;
     final generation = ++_androidSessionServiceOpGen;
-    unawaited(_applyAndroidSessionServiceSync(service, desired, generation));
+    final syncFuture = _applyAndroidSessionServiceSync(
+      service,
+      desired,
+      generation,
+    );
+    _inFlightAndroidSync = syncFuture;
+    syncFuture.whenComplete(() {
+      if (identical(_inFlightAndroidSync, syncFuture)) {
+        _inFlightAndroidSync = null;
+      }
+    });
+    return syncFuture;
   }
 
-  Future<void> _applyAndroidSessionServiceSync(
+  Future<bool> _applyAndroidSessionServiceSync(
     AndroidSessionServiceGateway service,
     AndroidSessionNotificationState desired,
     int generation,
   ) async {
     final ok = await service.syncSession(desired);
-    if (!ref.mounted || generation != _androidSessionServiceOpGen) {
-      return;
+    if (!ref.mounted) {
+      return false;
     }
-    if (ok) {
-      _androidSessionServiceStarted = true;
-    } else {
-      _lastAndroidNotificationState = null;
-      if (!_androidSessionServiceStarted) {
-        _androidSessionServiceActive = false;
+    if (generation == _androidSessionServiceOpGen) {
+      if (ok) {
+        _androidSessionServiceStarted = true;
+      } else {
+        _lastAndroidNotificationState = null;
+        if (!_androidSessionServiceStarted) {
+          _androidSessionServiceActive = false;
+        }
       }
+    } else if (ok) {
+      _androidSessionServiceStarted = true;
     }
+    return ok;
   }
 
   void _stopAndroidSessionServiceIfNeeded(
     AndroidSessionServiceGateway service,
   ) {
-    if (!_androidSessionServiceActive &&
-        _lastAndroidNotificationState == null) {
+    final hadState =
+        _androidSessionServiceActive ||
+        _androidMediaProjectionActive ||
+        _lastAndroidNotificationState != null;
+    _androidMediaProjectionActive = false;
+    _inFlightAndroidSync = null;
+    if (!hadState) {
       return;
     }
     _androidSessionServiceActive = false;
@@ -357,6 +403,40 @@ class SessionController extends Notifier<SessionView> {
     _lastAndroidNotificationState = null;
     _androidSessionServiceOpGen++;
     unawaited(service.stopSession());
+  }
+
+  /// 同步调整 Android 会话前台服务的 `mediaProjection` 类型位，并等待原生 `startForeground` 完成。
+  Future<bool> setAndroidMediaProjectionActive(bool active) async {
+    if (!ref.mounted) return false;
+    final service = ref.read(androidSessionServiceProvider);
+    if (!service.isSupported) return true;
+
+    if (active) {
+      if (!state.connected) return false;
+      _androidMediaProjectionActive = true;
+      final ok = await _syncAndroidSessionServiceAsync(service);
+      if (!ref.mounted || !_androidMediaProjectionActive || !state.connected) {
+        return false;
+      }
+      if (!ok) {
+        _androidMediaProjectionActive = false;
+        _lastAndroidNotificationState = null;
+        return false;
+      }
+      return true;
+    }
+
+    if (!_androidMediaProjectionActive &&
+        _lastAndroidNotificationState?.includeMediaProjection != true) {
+      return true;
+    }
+    _androidMediaProjectionActive = false;
+    if (!(state.connected ||
+        (state.reconnecting && _androidSessionServiceActive))) {
+      _stopAndroidSessionServiceIfNeeded(service);
+      return true;
+    }
+    return _syncAndroidSessionServiceAsync(service, isSharingScreen: false);
   }
 
   void _handleAndroidSessionServiceAction(AndroidSessionServiceAction action) {
@@ -751,7 +831,7 @@ class SessionController extends Notifier<SessionView> {
     }
   }
 
-  /// 开启桌面屏幕或窗口共享。
+  /// 开启屏幕或窗口共享。
   Future<bool> startScreenShare({
     required String sourceId,
     required String sourceName,
@@ -769,6 +849,7 @@ class SessionController extends Notifier<SessionView> {
             resolution: resolution,
             frameRate: frameRate,
             audio: audio,
+            onAndroidMediaProjectionChanged: setAndroidMediaProjectionActive,
           );
     } on CoreError catch (error) {
       if (ref.mounted) {

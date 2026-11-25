@@ -1078,6 +1078,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get streamPickerStart => '开始共享';
 
   @override
+  String get streamAndroidDefaultSourceName => '设备屏幕';
+
+  @override
   String get settingsScreenShare => '屏幕共享';
 
   @override

@@ -119,9 +119,13 @@ final streamPublisherProvider =
       StreamPublisherController.new,
     );
 
+/// Synthetic source identifier used on Android where the system prompt owns source selection.
+const String androidScreenShareSourceId = 'android-screen';
+
 /// Computes the `RTCRtpEncoding.scaleResolutionDownBy` factor needed to fit a
-/// captured desktop source of `[sourceWidth] x [sourceHeight]` within
-/// [resolution], matching WebSpeak's sender scaling logic.
+/// captured desktop or mobile source of `[sourceWidth] x [sourceHeight]` within
+/// [resolution], matching WebSpeak's sender scaling logic while aligning target
+/// long/short edges for portrait mobile captures.
 double computeScaleResolutionDownBy({
   required int sourceWidth,
   required int sourceHeight,
@@ -130,8 +134,11 @@ double computeScaleResolutionDownBy({
   if (sourceWidth <= 0 || sourceHeight <= 0) {
     return 1.0;
   }
-  final widthRatio = sourceWidth / resolution.width;
-  final heightRatio = sourceHeight / resolution.height;
+  final portrait = sourceHeight > sourceWidth;
+  final targetWidth = portrait ? resolution.height : resolution.width;
+  final targetHeight = portrait ? resolution.width : resolution.height;
+  final widthRatio = sourceWidth / targetWidth;
+  final heightRatio = sourceHeight / targetHeight;
   final scale = widthRatio > heightRatio ? widthRatio : heightRatio;
   return scale > 1.01 ? scale : 1.0;
 }
@@ -162,6 +169,8 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
   int _generation = 0;
   int _peerGenerationCounter = 0;
   bool _stopping = false;
+  bool _androidMediaProjectionUpgraded = false;
+  Future<bool> Function(bool active)? _androidMediaProjectionHandler;
 
   /// Read-only view of active viewer `RTCPeerConnection`s keyed by `viewerClid`.
   Map<int, RTCPeerConnection> get activePeers => Map.unmodifiable({
@@ -199,6 +208,7 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
     ScreenShareFrameRatePreset? frameRate,
     bool audio = false,
     int? maxViewers,
+    Future<bool> Function(bool active)? onAndroidMediaProjectionChanged,
   }) async {
     await _disposeAllResources();
     final currentGeneration = ++_generation;
@@ -214,29 +224,69 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
 
     final bindings = ref.read(webRtcBindingsProvider);
     final coreSession = ref.read(coreSessionProvider);
+    final isAndroidCapture = ref
+        .read(androidSessionServiceProvider)
+        .isSupported;
+    final effectiveAudio = isAndroidCapture ? false : audio;
 
     state = StreamPublisherState(
       sourceId: sourceId,
       sourceName: normalizedName,
       resolution: selectedResolution,
       frameRate: selectedFrameRate,
-      hasAudio: audio,
+      hasAudio: effectiveAudio,
       isStarting: true,
       isSharing: false,
     );
 
     try {
-      final mediaConstraints = <String, dynamic>{
-        'video': <String, dynamic>{
-          'deviceId': <String, dynamic>{'exact': sourceId},
-          'mandatory': <String, dynamic>{'frameRate': selectedFrameRate.fps},
-        },
-        'audio': audio,
-      };
+      if (isAndroidCapture) {
+        final granted = await bindings.requestCapturePermission();
+        if (!_isCurrentGeneration(currentGeneration)) return false;
+        if (!granted) {
+          await _disposeAllResources();
+          return false;
+        }
+
+        final projectionHandler = onAndroidMediaProjectionChanged;
+        final promoted =
+            projectionHandler != null && await projectionHandler(true);
+        if (!_isCurrentGeneration(currentGeneration)) {
+          if (promoted) {
+            await _invokeAndroidMediaProjectionDowngrade(projectionHandler);
+          }
+          return false;
+        }
+        if (!promoted) {
+          throw StateError(
+            'Failed to promote Android foreground service for media projection',
+          );
+        }
+        _androidMediaProjectionUpgraded = true;
+        _androidMediaProjectionHandler = projectionHandler;
+      }
+
+      final mediaConstraints = isAndroidCapture
+          ? <String, dynamic>{
+              'video': <String, dynamic>{'frameRate': selectedFrameRate.fps},
+              'audio': false,
+            }
+          : <String, dynamic>{
+              'video': <String, dynamic>{
+                'deviceId': <String, dynamic>{'exact': sourceId},
+                'mandatory': <String, dynamic>{
+                  'frameRate': selectedFrameRate.fps,
+                },
+              },
+              'audio': effectiveAudio,
+            };
 
       final stream = await bindings.getDisplayMedia(mediaConstraints);
       if (!_isCurrentGeneration(currentGeneration)) {
         await _disposeMediaStream(stream);
+        if (isAndroidCapture) {
+          await _downgradeAndroidMediaProjection();
+        }
         return false;
       }
 
@@ -277,7 +327,8 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
       };
       renderer.srcObject = stream;
 
-      final hasAudioTrack = audio && stream.getAudioTracks().isNotEmpty;
+      final hasAudioTrack =
+          effectiveAudio && stream.getAudioTracks().isNotEmpty;
       state = state.copyWith(
         hasAudio: hasAudioTrack,
         isStarting: true,
@@ -1175,8 +1226,36 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
     } catch (_) {}
   }
 
+  Future<void> _downgradeAndroidMediaProjection() async {
+    final handler = _androidMediaProjectionHandler;
+    _androidMediaProjectionUpgraded = false;
+    _androidMediaProjectionHandler = null;
+    if (handler == null) {
+      return;
+    }
+    await _invokeAndroidMediaProjectionDowngrade(handler);
+  }
+
+  Future<void> _invokeAndroidMediaProjectionDowngrade(
+    Future<bool> Function(bool active) handler,
+  ) async {
+    try {
+      await handler(false);
+    } catch (error) {
+      logWarn(
+        'Failed to downgrade Android media projection foreground service',
+        target: 'stream',
+        error: error,
+      );
+    }
+  }
+
   Future<void> _disposeAllResources({bool updateState = true}) async {
     _generation++;
+    final shouldDowngradeMediaProjection = _androidMediaProjectionUpgraded;
+    final projectionHandler = _androidMediaProjectionHandler;
+    _androidMediaProjectionUpgraded = false;
+    _androidMediaProjectionHandler = null;
     final sessions = _viewerSessions.values.toList(growable: false);
     _viewerSessions.clear();
     for (final session in sessions) {
@@ -1214,6 +1293,13 @@ class StreamPublisherController extends Notifier<StreamPublisherState> {
 
     if (localStream != null) {
       await _disposeMediaStream(localStream);
+    }
+
+    if (shouldDowngradeMediaProjection &&
+        projectionHandler != null &&
+        updateState &&
+        ref.mounted) {
+      await _invokeAndroidMediaProjectionDowngrade(projectionHandler);
     }
   }
 }
