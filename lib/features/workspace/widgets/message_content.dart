@@ -151,6 +151,7 @@ class MessageContent extends StatefulWidget {
   const MessageContent({
     required this.text,
     required this.style,
+    this.selectable = true,
     this.onImageTap,
     this.onLinkTap,
     super.key,
@@ -158,6 +159,9 @@ class MessageContent extends StatefulWidget {
 
   final String text;
   final TextStyle style;
+
+  /// 独立使用时默认开启 `SelectableText`；处于外层 `SelectionArea` 内时关闭以支持跨消息连续拖选。
+  final bool selectable;
 
   /// 点击正文图片时把 URL 交给上层（例如打开全屏浏览）。
   final ValueChanged<String>? onImageTap;
@@ -298,7 +302,7 @@ class _MessageContentState extends State<MessageContent> {
 
     return MarkdownBody(
       data: text,
-      selectable: true,
+      selectable: widget.selectable,
       softLineBreak: true,
       styleSheet: sheet,
       inlineSyntaxes: [ColorInlineSyntax(), UnderlineInlineSyntax()],

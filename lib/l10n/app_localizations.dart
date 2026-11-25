@@ -1358,6 +1358,18 @@ abstract class AppLocalizations {
   /// **'Remove image'**
   String get chatRemoveImage;
 
+  /// No description provided for @chatSelectMessages.
+  ///
+  /// In en, this message translates to:
+  /// **'Select messages'**
+  String get chatSelectMessages;
+
+  /// No description provided for @chatSelectedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} selected'**
+  String chatSelectedCount(int count);
+
   /// No description provided for @imageHostTitle.
   ///
   /// In en, this message translates to:

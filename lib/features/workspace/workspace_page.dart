@@ -18,6 +18,7 @@ import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../../core/channel_display.dart';
 import '../../core/models.dart';
+import '../../core/notices.dart';
 import '../../core/providers.dart';
 import '../../core/stream_publisher.dart';
 import '../../core/stream_viewer.dart';
@@ -849,6 +850,9 @@ class _ChannelChatBodyState extends ConsumerState<_ChannelChatBody> {
       onPickImage: controller.pickChatImage,
       onPasteImage: controller.pasteChatImage,
       onUploadImage: controller.uploadChatImage,
+      onMessagesCopied: () => ref
+          .read(noticeCenterProvider.notifier)
+          .show(AppLocalizations.of(context).commonCopied, tone: NoticeTone.info),
       description: channel.description,
       recipients: _cachedRecipients,
       recipientUid: directRecipientUid,

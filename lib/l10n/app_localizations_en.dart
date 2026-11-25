@@ -706,6 +706,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatRemoveImage => 'Remove image';
 
   @override
+  String get chatSelectMessages => 'Select messages';
+
+  @override
+  String chatSelectedCount(int count) {
+    return '$count selected';
+  }
+
+  @override
   String get imageHostTitle => 'Image uploads';
 
   @override

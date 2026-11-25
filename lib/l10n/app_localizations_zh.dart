@@ -689,6 +689,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatRemoveImage => '移除图片';
 
   @override
+  String get chatSelectMessages => '多选';
+
+  @override
+  String chatSelectedCount(int count) {
+    return '已选 $count 条';
+  }
+
+  @override
   String get imageHostTitle => '图片上传';
 
   @override

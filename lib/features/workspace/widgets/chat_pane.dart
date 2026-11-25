@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:material_ui/material_ui.dart'
     hide
         ButtonStyle,
+        Checkbox,
         FilledButton,
         IconButton,
         InputBorder,
@@ -32,6 +33,60 @@ import '../../../widgets/prism.dart' hide Divider;
 import 'media_viewer.dart';
 import 'message_content.dart';
 
+/// 将一条或多条聊天消息格式化为适合粘贴分享的对话记录文本。
+///
+/// 同一天内的消息使用 `HH:MM`，跨天自动补齐日期；单行紧凑输出 `时间 昵称: 内容`，
+/// 多行正文另起一行，TS6 官方附件转为 `[文件名]` 避免导出原始 JSON。
+String formatChatMessagesForCopy(List<ChatMessage> messages) {
+  if (messages.isEmpty) return '';
+  final first = messages.first.at;
+  final multiDay = messages.any(
+    (m) =>
+        m.at.year != first.year ||
+        m.at.month != first.month ||
+        m.at.day != first.day,
+  );
+  final multiYear = messages.any((m) => m.at.year != first.year);
+
+  String formatTime(DateTime at) {
+    final time = clockTime(at);
+    if (!multiDay) return time;
+    final month = at.month.toString().padLeft(2, '0');
+    final day = at.day.toString().padLeft(2, '0');
+    if (!multiYear) return '$month-$day $time';
+    return '${at.year}-$month-$day $time';
+  }
+
+  String formatBody(String raw) {
+    final attachment = parseTs6Attachment(raw);
+    if (attachment != null) {
+      final body = attachment.body.trim();
+      if (body.isNotEmpty && body != attachment.fileName) {
+        return '[${attachment.fileName}] $body';
+      }
+      return '[${attachment.fileName}]';
+    }
+    return raw.trim();
+  }
+
+  final buffer = StringBuffer();
+  for (var i = 0; i < messages.length; i++) {
+    if (i > 0) buffer.writeln();
+    final message = messages[i];
+    final header = '${formatTime(message.at)} ${message.from}:';
+    final body = formatBody(message.text);
+    if (body.isEmpty) {
+      buffer.write(header);
+    } else if (body.contains('\n')) {
+      buffer.writeln(header);
+      buffer.write(body);
+    } else {
+      buffer.write('$header $body');
+    }
+  }
+  return buffer.toString();
+}
+
 /// 频道消息：居中的消息流 + 底部胶囊输入框。
 ///
 /// 消息不做气泡：原型的聊天是可读的长文流，气泡会把每行都切碎。
@@ -58,6 +113,7 @@ class ChatPane extends StatefulWidget {
     this.onPickImage,
     this.onPasteImage,
     this.onUploadImage,
+    this.onMessagesCopied,
     this.avatarBuilder,
     super.key,
   });
@@ -84,6 +140,7 @@ class ChatPane extends StatefulWidget {
   final Future<PickedChatImage?> Function()? onPickImage;
   final Future<ChatImagePasteResult> Function()? onPasteImage;
   final Future<String?> Function(Uint8List)? onUploadImage;
+  final VoidCallback? onMessagesCopied;
   final Widget Function(ChatMessage message)? avatarBuilder;
 
   @override
@@ -95,12 +152,17 @@ class _ChatPaneState extends State<ChatPane> {
 
   final _input = TextEditingController();
   final _focus = FocusNode();
+  final _selectionFocus = FocusNode();
   final _scroll = ScrollController();
   final _dockInset = ValueNotifier<double>(90);
   int _scrollRequest = 0;
   bool _followingMessages = true;
   bool _scrollingToEnd = false;
   ChatMessage? _animatedMessage;
+
+  bool _selecting = false;
+  final Set<ChatMessage> _selectedMessages = <ChatMessage>{};
+  String _dragSelection = '';
 
   bool _sending = false;
   PickedChatImage? _image;
@@ -226,6 +288,12 @@ class _ChatPaneState extends State<ChatPane> {
       _input.value = draft.value;
       _image = draft.image;
       _uploadedImageUrl = draft.uploadedUrl;
+      _selecting = false;
+      _selectedMessages.clear();
+      _dragSelection = '';
+    } else if (_selectedMessages.isNotEmpty) {
+      final visible = widget.messages.toSet();
+      _selectedMessages.removeWhere((m) => !visible.contains(m));
     }
     final latest = widget.messages.lastOrNull;
     final newMessage =
@@ -248,9 +316,87 @@ class _ChatPaneState extends State<ChatPane> {
   void dispose() {
     _input.dispose();
     _focus.dispose();
+    _selectionFocus.dispose();
     _scroll.dispose();
     _dockInset.dispose();
     super.dispose();
+  }
+
+  void _enterSelectionMode(ChatMessage initial) {
+    _focus.unfocus();
+    setState(() {
+      _selecting = true;
+      _dragSelection = '';
+      _selectedMessages
+        ..clear()
+        ..add(initial);
+    });
+    _selectionFocus.requestFocus();
+  }
+
+  void _exitSelectionMode() {
+    if (!_selecting) return;
+    setState(() {
+      _selecting = false;
+      _selectedMessages.clear();
+    });
+  }
+
+  void _toggleMessageSelection(ChatMessage message) {
+    setState(() {
+      if (!_selectedMessages.remove(message)) {
+        _selectedMessages.add(message);
+      }
+    });
+  }
+
+  Future<void> _copyText(String text) async {
+    if (text.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: text));
+    if (mounted) {
+      widget.onMessagesCopied?.call();
+    }
+  }
+
+  Future<void> _copyMessages(List<ChatMessage> messages) async {
+    final formatted = formatChatMessagesForCopy(messages);
+    await _copyText(formatted);
+  }
+
+  Future<void> _copySelectedMessages() async {
+    if (_selectedMessages.isEmpty) return;
+    final ordered = [
+      for (final message in widget.messages)
+        if (_selectedMessages.contains(message)) message,
+    ];
+    await _copyMessages(ordered);
+    if (mounted) _exitSelectionMode();
+  }
+
+  KeyEventResult _handleSelectionKeyEvent(FocusNode node, KeyEvent event) {
+    if (!_selecting || event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      _exitSelectionMode();
+      return KeyEventResult.handled;
+    }
+    final keyboard = HardwareKeyboard.instance;
+    final isApple =
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.iOS;
+    final isCopyShortcut =
+        event.logicalKey == LogicalKeyboardKey.keyC &&
+        !keyboard.isAltPressed &&
+        !keyboard.isShiftPressed &&
+        (isApple
+            ? keyboard.isMetaPressed && !keyboard.isControlPressed
+            : keyboard.isControlPressed && !keyboard.isMetaPressed);
+    if (isCopyShortcut && _selectedMessages.isNotEmpty) {
+      unawaited(_copySelectedMessages());
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   void _handleDockHeightChanged(double height) {
@@ -457,139 +603,233 @@ class _ChatPaneState extends State<ChatPane> {
               : widget.description)
         : '';
 
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: NotificationListener<ScrollMetricsNotification>(
-            onNotification: (notification) {
-              // 富文本、图片与惰性列表布局都可能修正底部的实际位置。
-              if (notification.depth == 0 &&
-                  _followingMessages &&
-                  _scroll.hasClients &&
-                  _scroll.position.userScrollDirection ==
-                      ScrollDirection.idle) {
-                _scheduleScrollToEnd();
-              }
-              return false;
-            },
-            child: NotificationListener<ScrollNotification>(
+    return Focus(
+      focusNode: _selectionFocus,
+      onKeyEvent: _handleSelectionKeyEvent,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: NotificationListener<ScrollMetricsNotification>(
               onNotification: (notification) {
-                if (notification.depth == 0) {
-                  if (notification is UserScrollNotification &&
-                      notification.direction != ScrollDirection.idle) {
-                    _scrollRequest++;
-                    _scrollingToEnd = false;
-                  }
-                  if (notification is ScrollUpdateNotification &&
-                      !_scrollingToEnd) {
-                    _followingMessages = notification.metrics.extentAfter < 72;
-                  }
+                // 富文本、图片与惰性列表布局都可能修正底部的实际位置。
+                if (notification.depth == 0 &&
+                    _followingMessages &&
+                    _scroll.hasClients &&
+                    _scroll.position.userScrollDirection ==
+                        ScrollDirection.idle) {
+                  _scheduleScrollToEnd();
                 }
                 return false;
               },
-              child: ValueListenableBuilder<double>(
-                valueListenable: _dockInset,
-                builder: (context, dockInset, _) => PrismListView(
-                  controller: _scroll,
-                  // 拖动消息列表时收起键盘，避免触屏上键盘挡住输入区。
-                  keyboardDismissBehavior:
-                      ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding: EdgeInsets.fromLTRB(
-                    horizontal,
-                    24,
-                    horizontal,
-                    24 + dockInset,
-                  ),
-                  estimatedItemExtent: 84,
-                  itemCount: widget.messages.length + 1,
-                  itemBuilder: (context, index) {
-                    if (index == 0) {
-                      return Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(
-                            maxWidth: _contentMaxWidth,
-                          ),
-                          child: _Welcome(
-                            title: welcomeTitle,
-                            body: welcomeBody,
-                          ),
-                        ),
-                      );
+              child: NotificationListener<ScrollNotification>(
+                onNotification: (notification) {
+                  if (notification.depth == 0) {
+                    if (notification is UserScrollNotification &&
+                        notification.direction != ScrollDirection.idle) {
+                      _scrollRequest++;
+                      _scrollingToEnd = false;
                     }
-                    final message = widget.messages[index - 1];
-                    final animateEntry = identical(message, _animatedMessage);
-                    return Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(
-                          maxWidth: _contentMaxWidth,
-                        ),
-                        child: MemoBuilder(
-                          inputs: [message, animateEntry, context.isCompact],
-                          builder: (context) => _MessageRow(
-                            avatar: widget.avatarBuilder?.call(message),
-                            message: message,
-                            onImageTap: _openImage,
-                            animateEntry: animateEntry,
-                          ),
-                        ),
-                      ),
-                    );
+                    if (notification is ScrollUpdateNotification &&
+                        !_scrollingToEnd) {
+                      _followingMessages =
+                          notification.metrics.extentAfter < 72;
+                    }
+                  }
+                  return false;
+                },
+                child: SelectionArea(
+                  onSelectionChanged: (content) {
+                    _dragSelection = content?.plainText ?? '';
                   },
+                  child: ValueListenableBuilder<double>(
+                    valueListenable: _dockInset,
+                    builder: (context, dockInset, _) => PrismListView(
+                      controller: _scroll,
+                      // 拖动消息列表时收起键盘，避免触屏上键盘挡住输入区。
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
+                      padding: EdgeInsets.fromLTRB(
+                        horizontal,
+                        24,
+                        horizontal,
+                        24 + dockInset,
+                      ),
+                      estimatedItemExtent: 84,
+                      itemCount: widget.messages.length + 1,
+                      itemBuilder: (context, index) {
+                        if (index == 0) {
+                          return Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                maxWidth: _contentMaxWidth,
+                              ),
+                              child: _Welcome(
+                                title: welcomeTitle,
+                                body: welcomeBody,
+                              ),
+                            ),
+                          );
+                        }
+                        final message = widget.messages[index - 1];
+                        final animateEntry = identical(
+                          message,
+                          _animatedMessage,
+                        );
+                        final isSelected =
+                            _selecting && _selectedMessages.contains(message);
+                        return Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(
+                              maxWidth: _contentMaxWidth,
+                            ),
+                            child: MemoBuilder(
+                              inputs: [
+                                message,
+                                animateEntry,
+                                context.isCompact,
+                                _selecting,
+                                isSelected,
+                              ],
+                              builder: (context) => _MessageRow(
+                                avatar: widget.avatarBuilder?.call(message),
+                                message: message,
+                                onImageTap: _openImage,
+                                animateEntry: animateEntry,
+                                selecting: _selecting,
+                                selected: isSelected,
+                                onCopy: () => unawaited(
+                                  _dragSelection.isNotEmpty
+                                      ? _copyText(_dragSelection)
+                                      : _copyMessages([message]),
+                                ),
+                                onStartSelect: () =>
+                                    _enterSelectionMode(message),
+                                onToggleSelect: () =>
+                                    _toggleMessageSelection(message),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-        Align(
-          alignment: Alignment.bottomCenter,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              ValueListenableBuilder<TextEditingValue>(
-                valueListenable: _input,
-                builder: (context, value, _) =>
-                    _buildSlashCommandAutocomplete(context, value.text),
-              ),
-              _MeasureDockHeight(
-                onHeightChanged: _handleDockHeightChanged,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // 没有当前投递目标时保留范围选择入口，禁止发送。
-                    if (_image != null) _buildImagePreview(context, l10n),
-                    context.isCompact
-                        ? _CompactWorkspaceBottomBar(
-                            input: _input,
-                            focusNode: _focus,
-                            canSend: _canSend,
-                            sending: _sending,
-                            busy: widget.busy,
-                            hasImage: _image != null,
-                            hintText: _composerHintText(context, l10n),
-                            scope: widget.scope,
-                            onScopeChanged: widget.onScopeChanged,
-                            recipients: widget.recipients,
-                            onRecipientChanged: widget.onRecipientChanged,
-                            onRecipientSelected: widget.onRecipientSelected,
-                            selectedRecipient: _selectedRecipient,
-                            unreadScopes: widget.unreadScopes,
-                            unreadPeers: widget.unreadPeers,
-                            onSend: _send,
-                            onKeyEvent: _handleKeyEvent,
-                            onPickImage: widget.onPickImage == null
-                                ? null
-                                : () => _selectImage(widget.onPickImage!),
-                          )
-                        : _buildComposer(context, l10n),
-                  ],
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (!_selecting)
+                  ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _input,
+                    builder: (context, value, _) =>
+                        _buildSlashCommandAutocomplete(context, value.text),
+                  ),
+                _MeasureDockHeight(
+                  onHeightChanged: _handleDockHeightChanged,
+                  child: _selecting
+                      ? _buildSelectionBar(context, l10n)
+                      : Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // 没有当前投递目标时保留范围选择入口，禁止发送。
+                            if (_image != null)
+                              _buildImagePreview(context, l10n),
+                            context.isCompact
+                                ? _CompactWorkspaceBottomBar(
+                                    input: _input,
+                                    focusNode: _focus,
+                                    canSend: _canSend,
+                                    sending: _sending,
+                                    busy: widget.busy,
+                                    hasImage: _image != null,
+                                    hintText: _composerHintText(context, l10n),
+                                    scope: widget.scope,
+                                    onScopeChanged: widget.onScopeChanged,
+                                    recipients: widget.recipients,
+                                    onRecipientChanged:
+                                        widget.onRecipientChanged,
+                                    onRecipientSelected:
+                                        widget.onRecipientSelected,
+                                    selectedRecipient: _selectedRecipient,
+                                    unreadScopes: widget.unreadScopes,
+                                    unreadPeers: widget.unreadPeers,
+                                    onSend: _send,
+                                    onKeyEvent: _handleKeyEvent,
+                                    onPickImage: widget.onPickImage == null
+                                        ? null
+                                        : () =>
+                                              _selectImage(widget.onPickImage!),
+                                  )
+                                : _buildComposer(context, l10n),
+                          ],
+                        ),
                 ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSelectionBar(BuildContext context, AppLocalizations l10n) {
+    final scheme = context.scheme;
+    final texts = context.texts;
+    final horizontal = context.isCompact ? 16.0 : 32.0;
+    final safeBottom = MediaQuery.paddingOf(context).bottom;
+    final bottom = context.isCompact ? math.max(16.0, safeBottom) : 24.0;
+    final count = _selectedMessages.length;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(horizontal, 8, horizontal, bottom),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: _contentMaxWidth),
+          child: _buildFloatingContainer(
+            context,
+            glassStyle: glassPillStyleOf(context),
+            fallbackColor: scheme.surfaceContainerHigh,
+            shadows: dockShadowsOf(context),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: _exitSelectionMode,
+                    icon: Icon(
+                      Icons.close_rounded,
+                      size: IconSizes.toolbar,
+                      semanticLabel: l10n.commonCancel,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      l10n.chatSelectedCount(count),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: texts.titleSmall,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: count == 0
+                        ? null
+                        : () => unawaited(_copySelectedMessages()),
+                    child: Text(l10n.commonCopy),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
-      ],
+      ),
     );
   }
 
@@ -1964,6 +2204,7 @@ class _Welcome extends StatelessWidget {
               const SizedBox(height: 4),
               MessageContent(
                 text: body,
+                selectable: false,
                 style:
                     texts.bodyMedium?.copyWith(
                       fontSize: 14,
@@ -1985,71 +2226,136 @@ class _MessageRow extends StatelessWidget {
     required this.message,
     required this.onImageTap,
     this.animateEntry = false,
+    this.selecting = false,
+    this.selected = false,
+    this.onCopy,
+    this.onStartSelect,
+    this.onToggleSelect,
   });
 
   final ChatMessage message;
   final Widget? avatar;
   final ValueChanged<String> onImageTap;
   final bool animateEntry;
+  final bool selecting;
+  final bool selected;
+  final VoidCallback? onCopy;
+  final VoidCallback? onStartSelect;
+  final VoidCallback? onToggleSelect;
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final scheme = context.scheme;
     final texts = context.texts;
 
-    final row = Padding(
-      padding: const EdgeInsets.only(bottom: 20),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          avatar ??
-              ClientAvatar(nickname: message.from, size: AvatarSize.medium),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        message.from,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: texts.labelLarge?.copyWith(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      clockTime(message.at),
-                      style: texts.labelSmall?.copyWith(
-                        fontSize: 12,
-                        color: scheme.onSurfaceVariant,
-                        fontFeatures: tabularFigures,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                MessageContent(
-                  text: message.text,
-                  style:
-                      texts.bodyMedium?.copyWith(
-                        color: scheme.onSurface,
-                        height: 1.5,
-                      ) ??
-                      const TextStyle(),
-                  onImageTap: onImageTap,
-                ),
-              ],
+    final content = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (selecting) ...[
+          SelectionContainer.disabled(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 6, right: 8),
+              child: Checkbox(
+                value: selected,
+                onChanged: (_) => onToggleSelect?.call(),
+              ),
             ),
           ),
         ],
-      ),
+        SelectionContainer.disabled(
+          child:
+              avatar ??
+              ClientAvatar(nickname: message.from, size: AvatarSize.medium),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      message.from,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: texts.labelLarge?.copyWith(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    clockTime(message.at),
+                    style: texts.labelSmall?.copyWith(
+                      fontSize: 12,
+                      color: scheme.onSurfaceVariant,
+                      fontFeatures: tabularFigures,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 2),
+              MessageContent(
+                text: message.text,
+                selectable: false,
+                style:
+                    texts.bodyMedium?.copyWith(
+                      color: scheme.onSurface,
+                      height: 1.5,
+                    ) ??
+                    const TextStyle(),
+                onImageTap: selecting ? null : onImageTap,
+              ),
+            ],
+          ),
+        ),
+      ],
     );
+
+    final Widget row;
+    if (selecting) {
+      row = Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: SelectionContainer.disabled(
+          child: DecoratedBox(
+            decoration: ShapeDecoration(
+              color: selected
+                  ? scheme.primaryContainer.withValues(alpha: 0.35)
+                  : Colors.transparent,
+              shape: AppShape.md,
+            ),
+            child: AnimatedInkWell(
+              customBorder: AppShape.md,
+              onTap: onToggleSelect,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 8,
+                ),
+                child: content,
+              ),
+            ),
+          ),
+        ),
+      );
+    } else {
+      row = Padding(
+        padding: const EdgeInsets.only(bottom: 20),
+        child: ContextMenuRegion(
+          menuItems: [
+            PopupMenuItem(label: l10n.commonCopy, onPressed: onCopy),
+            PopupMenuItem(
+              label: l10n.chatSelectMessages,
+              onPressed: onStartSelect,
+            ),
+          ],
+          child: content,
+        ),
+      );
+    }
 
     if (!animateEntry || MediaQuery.disableAnimationsOf(context)) {
       return row;

@@ -354,6 +354,15 @@
   "chatImageInputFailed": "无法读取图片，请重新选择",
   "chatAttachImage": "添加图片",
   "chatRemoveImage": "移除图片",
+  "chatSelectMessages": "多选",
+  "chatSelectedCount": "已选 {count} 条",
+  "@chatSelectedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "imageHostTitle": "图片上传",
   "imageHostRequired": "请先在图片上传设置中配置图床",
   "imageHostStorageFailed": "无法访问图片上传的安全存储",
