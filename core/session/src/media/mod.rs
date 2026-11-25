@@ -1,5 +1,3 @@
-//! 本地媒体磁盘缓存与第三方图片传输模块。
-
 mod avatars;
 mod cache;
 mod icons;

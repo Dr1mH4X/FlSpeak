@@ -1,7 +1,4 @@
-// 本文件包含的代码片段来源于 FlClash（https://github.com/chen08209/FlClash）项目，
-// 原始许可证为 GPL-3.0，来源提交 be84736605527034689c95bf27828ff27d912c5e。
-// 对应 lib/views/theme.dart 中的主题模式、纯黑模式、主题色/配色风格/自定义调色板、
-// 底部导航栏、液态玻璃、字体与文字缩放设置项。
+// Adapted from FlClash (be84736, GPL-3.0): lib/views/theme.dart. See docs/THIRD-PARTY.md.
 
 import 'dart:async';
 import 'dart:math' as math;

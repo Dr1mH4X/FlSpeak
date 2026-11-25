@@ -1,9 +1,4 @@
-//! 通用按服隔离的本地媒体磁盘缓存原语。
-//!
-//! 缓存文件存放在 `store_path` 同级的 `<dir_name>/<sha1(server_id)>/<file_name>`：
-//! - 使用 `Sha1` 目录隔离不同服务器（规避同 ID 串图与 Windows 路径中的 `:` 限制）；
-//! - 写盘采用临时文件 + 原子 `rename`，按规格决定是否调用 `sync_all`；
-//! - 命中时刷新文件修改时间，写入后按单服数量与字节上限执行 LRU 淘汰。
+//! 按服隔离的媒体磁盘缓存原语：`Sha1` 目录隔离、临时文件原子替换与 LRU 淘汰。
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};

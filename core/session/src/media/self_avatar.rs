@@ -1,7 +1,4 @@
-//! 本机自头像快照：单文件、独立于 `avatars/` 的 LRU 预算。
-//!
-//! 文件位于 `store_path` 同级的 `identity-avatar.bin`；读写与清理都由
-//! `AvatarDiskQueue` 的单一 FIFO 阻塞线程执行，避免阻塞 Actor 主线程。
+//! 本机自头像快照：单文件存储，读写与清理都由 `AvatarDiskQueue` 串行执行。
 
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};

@@ -12,4 +12,4 @@
   pnpm --dir website run build
   ```
 - 保持静态产物（`dist/`）干净，不手动提交构建产物或临时缓存。
-- 子目录规则见 [src/AGENTS.md](src/AGENTS.md)。
+- `src/` 下的组件、样式与页面渲染遵循 React 19 函数式组件与 TypeScript 类型安全标准；多语言文案统一放 `src/i18n/`，中英文同时维护。

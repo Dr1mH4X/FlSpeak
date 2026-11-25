@@ -12,6 +12,13 @@ FlSpeak 的 TeamSpeak 连接只面向 TeamSpeak 服务器。边界由录入格�
 - 第三方图片 URL 仍然经过 `core/session/src/media/images.rs` 的 SSRF 检查（只允许 http/https、公网地址、有限重定向和大小）；官方媒体和 `ts.file.myts` 附件不访问。
 - 文件传输主机必须等于会话主机（`proto::check_transfer_host`）。
 - 版本更新检查只访问 `https://api.github.com/repos/Dr1mH4X/FlSpeak/releases`：固定主机与路径、不跟随重定向、8s 超时、4 MiB 响应上限、失败静默、不内置 token。请求携带 `User-Agent`、`Accept: application/vnd.github+json` 与 `X-GitHub-Api-Version: 2022-11-28`。
+- 放宽边界是一次需要留痕的决策：先在 `.agents/notes/` 按[笔记规则](../.agents/notes/AGENTS.md)写清理由与残余风险，并在同一改动里补上相似域名与目标重定向的测试。
+
+## 域名解析
+
+- 只做标准 DNS：域名的 `_ts3._udp.<domain>` SRV 与 IPv4 A 记录；IPv4 字面量与 `localhost`（映射为 `127.0.0.1`）直接产出 `SocketAddr`，IPv6 字面量与裸昵称直接拒绝。SRV 查询异常时先记录警告再回退到档案主机，A 记录解析失败直接报 `ConnectError::Dns`，不交给协议库做系统解析。
+- 桌面端 resolver 取系统 DNS 配置（`tokio_from_system_conf()`）。Android 的活跃网络 DNS 上游由宿主 `ConnectivityManager` 经 FFI `set_android_dns_servers` 注入，查询超时 2 秒；系统 DNS 为空或查询异常时回退到 `ANDROID_FALLBACK_DNS` 的 `223.5.5.5` 与 `1.1.1.1`。
+- `proto::DenyResolver` 恒定拒绝任何解析请求，既挡住 tsclient-rs 自带的官方昵称 discovery，也绕开底层 `tokio::net::lookup_host`。
 
 ## 代码位置
 

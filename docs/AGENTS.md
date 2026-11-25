@@ -6,7 +6,7 @@
 
 文档按用途分为两类：
 - **教程（Tutorial）**：按序推进以达成某一特定结果，每一步只引入该步所需的信息与前置条件（如 `docs/cookbook/`）。
-- **参考（Reference）**：定义清晰的查询边界与当前运行期行为，不包含教学推演时序（如 `docs/subsystems/`、`docs/architecture.md`）。
+- **参考（Reference）**：定义清晰的查询边界与当前运行期行为，不包含教学推演时序（如 `docs/architecture.md`）。
 
 编写前先明确读者与文档类型，严禁把故障排查、长篇推导过程或历史演化记录混入规格参考文档。
 
@@ -18,23 +18,21 @@
 |---|---|---|
 | 根 `README.md` / `README.zh.md` | 面向终端用户与社区：项目定位、核心特性、快速体验下载、源码构建与平台支持 | 内部架构细节、长篇推导过程、代码审查反面模式 |
 | 根 `AGENTS.md` | 全局 standing orders：每个 session 都必须知道的规则与拓扑，每条一两行并链向归属地 | 展开细节、步骤式流程、任何从归属地重复的内容 |
-| `.agents/project.md` | 仓库结构、模块职责分层、核心架构不变量、与 tsclient-rs 的关系 | 决策理由（→ `.agents/notes/`）、命令（→ `development.md`） |
 | `.github/` | CI/CD 工作流、PR 模板与协作规范 | 业务逻辑、运行期契约 |
-| `docs/architecture.md` | 索引与拓扑：分层、一次连接的时序、事件流、线程模型、目录职责与「尚未接线」 | 跨文件契约与序列（→ 主题文档或 `docs/subsystems/`）、决策理由 |
-| `docs/` 主题文档（`audio.md`、`backend.md`、`channels.md`、`connection-boundary.md`、`images.md`、`permissions.md`） | 跨 crate 端到端业务链路与安全边界：多模块协作契约、关键时序与已知限制 | 单一 crate 内部私有实现、决策理由（→ `.agents/notes/`） |
-| `docs/subsystems/` | 单一 crate 架构与模块契约：内部公开 API、核心类型定义、关键路径与子系统不变量 | 跨 crate 业务端到端串联（→ 主题文档）、决策理由（→ `.agents/notes/`） |
-| [docs/defensive-patterns/](defensive-patterns/README.md) | 编码反面与规范替代：[README.md](defensive-patterns/README.md) 独占承载「你在改什么 \| 动手前必读」映射表，子篇按领域承载审查强制准则（general, connection, audio, review, ui, ui-performance, logging） | 子系统内部契约、常规开发流程、重复的全局声明 |
+| `docs/architecture.md` | 索引与拓扑：分层、一次连接的时序、事件流、线程模型、目录职责、与 tsclient-rs 的关系及「尚未接线」 | 跨文件契约与序列（→ 主题文档）、决策理由 |
+| `docs/` 主题文档（`audio.md`、`backend.md`、`channels.md`、`connection-boundary.md`、`images.md`、`permissions.md`、`ui-design.md`） | 跨 crate 端到端业务链路与安全边界：多模块协作契约、关键时序与已知限制 | 单一 crate 内部私有实现、决策理由（→ `.agents/notes/`）|
+| [docs/defensive-patterns/](defensive-patterns/README.md) | 编码反面与规范替代：[README.md](defensive-patterns/README.md) 独占承载「你在改什么 \| 动手前必读」映射表，子篇按领域承载审查强制准则（general, review, ui, ui-performance, logging） | 子系统内部契约、常规开发流程、重复的全局声明 |
 | `docs/cookbook/` | 任务驱动式 Step-by-Step 实操指南，带带号步骤与验证命令 | 架构设计决策理由、语法级参考手册 |
 | `docs/development.md` | 开发流程与环境：常用命令、构建依赖与平台细节、FFI 绑定生成、语言约定、发版打包 | 架构图、测试约定、决策理由 |
-| `docs/testing.md` | 测试约定：单测摆放、测试范围选择、真实服务器手动测试、CI 测试门 | 测试用例代码誊写 |
+| `docs/testing.md` | 测试约定：单测摆放、测试范围选择、真实服务器手动测试 | 测试用例代码誊写、CI 作业清单（→ `ci-cd.md`） |
 | `docs/ci-cd.md` | 各 GitHub Actions workflow 的触发条件与职责、发布矩阵、打包产物与已知简化 | 架构决策 |
 | `docs/release/` | 发版日志：每个 tag 一篇 Release 正文；格式与生命周期见其 `AGENTS.md` | 当前机制的说明（→ docs 各归属地）、下一版的计划 |
 | `docs/THIRD-PARTY.md` | 第三方代码的来源、来源提交、原始许可证与文件清单 | 决策理由（→ `.agents/notes/`） |
-| `.agents/notes/` | 决策记录：为什么这么做、放弃了什么、如何验证；路径编码生命周期与类目，规则见其 `README.md` | 迁移计划、验收清单、spec 语气 |
+| `.agents/notes/` | 决策记录：为什么这么做、放弃了什么、如何验证；路径编码生命周期与类目，规则见其 `AGENTS.md` | 迁移计划、验收清单、spec 语气 |
 | `.agents/skills/` | agent 侧复用工作流与判定标准（`SKILL.md`，只放流程与命令，规则正文只链接不复述） | 产品与运行期契约（→ docs 或源码） |
-| 模块内 `AGENTS.md` | 目录级特有不变量与硬性约束，如 `core/AGENTS.md`、`lib/AGENTS.md`、`website/AGENTS.md`、各子 crate | 仓库级全局规则与全局阅读门禁（→ 根 AGENTS.md） |
+| 目录级 `AGENTS.md` | 目录特有不变量与硬性约束，只保留 `core/`、`lib/`、`plugins/flspeak_ffi/`、`.agents/`、`docs/`、`website/` 与四个平台根 | 仓库级全局规则与全局阅读门禁（→ 根 AGENTS.md） |
 
-放置速查：产品简介与体验 → `README.md` / `README.zh.md`；standing orders → 根 `AGENTS.md`；结构与不变量 → `project.md`；命令与流程 → `development.md`；测试 → `testing.md`；编码反面 → `docs/defensive-patterns/`；实操指引 → `docs/cookbook/`；拓扑与索引 → `architecture.md`；跨 crate 业务链路 → 主题文档；单 crate 契约 → `docs/subsystems/`；workflow 与 PR 模板 → `.github/` 及 `ci-cd.md`；发版日志 → `docs/release/`；第三方代码 → `docs/THIRD-PARTY.md`；决策理由 → `.agents/notes/`；复用流程 → `.agents/skills/`；目录规则 → 该目录的 `AGENTS.md`。
+放置速查：产品简介与体验 → `README.md` / `README.zh.md`；standing orders → 根 `AGENTS.md`；结构与不变量 → `architecture.md`；命令与流程 → `development.md`；测试 → `testing.md`；编码反面 → `docs/defensive-patterns/`；实操指引 → `docs/cookbook/`；拓扑与索引 → `architecture.md`；跨 crate 业务链路与界面设计 → 主题文档；workflow、PR 模板与 CI 作业 → `.github/` 及 `ci-cd.md`；发版日志 → `docs/release/`；第三方代码 → `docs/THIRD-PARTY.md`；决策理由 → `.agents/notes/`；复用流程 → `.agents/skills/`；目录规则 → 该目录的 `AGENTS.md`。
 
 ## 写作规则
 
@@ -44,12 +42,13 @@
 - **一段一物理行。** Markdown 每段只占一行，用编辑器软换行；代码块、表格、列表结构保持原格式。
 - **相对 Markdown 链接。** 引用其他文档用仓库内相对路径，禁用绝对路径与纯文件名参引；引用代码写模块路径与符号名（如 `core/session` 的 `SessionHandle::spawn`、`core/proto` 的 `resolve_target`），不写 `file:line` 行号。
 - **命令直接复制执行。** 各文档出现的命令写明工作目录，与 `development.md` 保持完全一致。
+- **实操指南按序带验证。** `docs/cookbook/` 每篇按序推进、只引入该步所需的信息，每个操作步骤都给出可执行的验证命令或确切操作途径；设计取舍不写进指南，链接到 `.agents/notes/`。
 - **源码注释只保留不可变契约**：注释只记录代码本身无法表达的不变量、跨模块约束、生命周期所有权、安全边界与意外失败行为。严禁控制流流水账（“先做A再做B”）、复述代码字面意思、向维护者辩解“为什么安全/正确”。
 - **界面文案杜绝实现细节外溢**：终端用户界面只展示用户关心的业务事实与操作结果；严禁将采样机制、命令限流、协议库缺陷或架构妥协等技术细节写上 UI（参见 [docs/defensive-patterns/ui.md](defensive-patterns/ui.md)）。
 - **未完成显式标注「尚未接线」**，不写成已完成，不模糊处理。
 - **禁 emoji**，禁叙述历史与变更叙事。
 - **直接陈述事实**，不用「应当/可能/似乎」等含糊推测词，用明确的主谓宾结构；直接命名确切的检查点、类型、API、异常或操作，不使用抽象隐喻。
-- **文档与代码同提交更新**：改动公开 API、协议边界、状态流或行为时，在同一提交中同步更新对应子系统文档与注释契约。
+- **文档与代码同提交更新**：改动公开 API、协议边界、状态流或行为时，在同一提交中同步更新对应主题文档与注释契约。
 
 ## 精简版 slop checklist
 

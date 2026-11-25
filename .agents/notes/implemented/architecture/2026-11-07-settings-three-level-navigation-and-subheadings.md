@@ -33,5 +33,5 @@ Status: implemented
 
 ## Testing
 
-- 自动化回归用例：[`test/features/settings/settings_page_test.dart`](../../../test/features/settings/settings_page_test.dart) 覆盖一级无标题、二级通用无标题、三级语音/屏幕共享小标题存在性，以及逐级返回与 `ESC` 键行为。
-- 全流程集成测试：[`test/app_test.dart`](../../../test/app_test.dart) 覆盖穿透至三级录制按键与退回全链路。
+- 自动化回归用例：[`test/features/settings/settings_page_test.dart`](../../../../test/features/settings/settings_page_test.dart) 覆盖一级无标题、二级通用无标题、三级语音/屏幕共享小标题存在性，以及逐级返回与 `ESC` 键行为。
+- 全流程集成测试：[`test/app_test.dart`](../../../../test/app_test.dart) 覆盖穿透至三级录制按键与退回全链路。

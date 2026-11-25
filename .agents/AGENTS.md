@@ -4,8 +4,7 @@
 
 ## 子树分工
 
-- [project.md](project.md)：仓库核心不变量、分层架构与依赖边界总览。
-- [notes/](notes/AGENTS.md)：不可变技术决策记录（ADR），分为 active (`notes/`)、已落地 (`implemented/`) 与历史归档 (`archived/`)。
+- [notes/](notes/AGENTS.md)：不可变技术决策记录（ADR），按生命周期与类目分目录存放。
 - [skills/](skills/AGENTS.md)：Agent 自有复用工作流与自动化操作标准（`SKILL.md`）。
 
 ## 写作规则

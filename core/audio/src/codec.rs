@@ -1,9 +1,4 @@
-//! Opus 编解码（基于纯 Rust `rusty-opus`）。
-//!
-//! 编码器按频道 codec 配置：codec 4 单声道 Voip（64 kbps CVBR，开启带内 FEC），
-//! codec 5 立体声 Audio（128 kbps CVBR，关闭 FEC）。Opus 不支持中途切换声道数，
-//! 切频道时必须重建编码器。解码器统一按 48kHz 立体声初始化，`rusty-opus` 会把
-//! 单声道包展开成双声道。
+//! Opus 编解码：编码器按频道 codec 重建（4 单声道 / 5 立体声），解码器统一按立体声初始化。
 
 use rusty_opus::{
     Application, Error as OpusError, OpusDecoder as RawDecoder, OpusEncoder as RawEncoder,

@@ -1,9 +1,4 @@
-//! 第三方图片 URL 的最小抓取器。
-//!
-//! 只用于聊天里用户明确粘贴/图床返回的图片 URL；不走 myTeamSpeak，也不处理
-//! `ts.file.myts` 附件。抓取前校验 scheme/官方域名/DNS 结果，抓取时限制重定向、
-//! 大小与 content-type，避免把聊天变成任意 SSRF/下载器。官方域名清单与连接
-//! 共用 `proto` 的一份定义。
+//! 第三方图片 URL 的抓取器：只服务聊天里明确出现的 URL，官方主机清单与连接共用一份。
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::time::Duration;

@@ -1,6 +1,4 @@
-// 本文件包含的代码片段来源于 FlClash（https://github.com/chen08209/FlClash）项目，
-// 原始许可证为 GPL-3.0，来源提交 be84736605527034689c95bf27828ff27d912c5e。
-// 对应 lib/widgets/palette.dart 中的 Palette（网格/光谱/HSV 滑块）与 HexColorField。
+// Adapted from FlClash (be84736, GPL-3.0): lib/widgets/palette.dart. See docs/THIRD-PARTY.md.
 
 import 'package:flutter/foundation.dart' show clampDouble, listEquals;
 import 'package:flutter/gestures.dart';

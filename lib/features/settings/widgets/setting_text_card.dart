@@ -1,3 +1,5 @@
+// Adapted from FlClash (be84736, GPL-3.0): lib/ui/setting_text_card.dart. See docs/THIRD-PARTY.md.
+
 import 'package:material_ui/material_ui.dart' hide Card;
 
 import '../../../widgets/prism.dart';

@@ -4,6 +4,7 @@
 
 - `rust/src/api/` 下的模块都由 flutter_rust_bridge 解析。新增或修改 Dart 可见类型时只改这里（会话在 `session.rs`，更新检查在 `update.rs`），不要把 `core/` 的内部类型直接暴露给桥。
 - 这一层只做转发和类型转换。协议、连接边界、音频、日志订阅器和持久化逻辑留在 `core/`。
+- `CoreSession.create(dbPath, storagePath)` 在这里拉起 FFI 侧的 Tokio 运行时并构建 `SessionHandle`；日志初始化与停机只转发到 `core/session::logging`，这一层不自建文件句柄，也不管理日志订阅器状态。
 - 改完 `rust/src/api/**` 后重跑：
 
   ```sh

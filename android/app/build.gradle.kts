@@ -73,6 +73,7 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["appName"] = "FlSpeak"
     }
 
     signingConfigs {
@@ -97,6 +98,10 @@ android {
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+            manifestPlaceholders["appName"] = "FlSpeak Debug"
+        }
         release {
             signingConfig =
                 if (hasReleaseSigning) {

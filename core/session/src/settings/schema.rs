@@ -1,8 +1,4 @@
-//! 应用程序设置 Schema 声明层。
-//!
-//! 所有设置按职责拆分为子结构体，统一挂载到根结构体 `AppSettings` 下。
-//! 所有结构体均标记 `#[serde(default, rename_all = "camelCase")]`，
-//! 确保在字段缺失或跨版本读取时能够自动回退到默认值。
+//! 设置 Schema：子结构体挂到 `AppSettings`，全部带 `#[serde(default, rename_all = "camelCase")]`。
 
 use std::collections::HashMap;
 

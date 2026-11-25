@@ -1,8 +1,4 @@
-//! Actor 与 `tsclient_rs::stream::Streams` 的桥接层。
-//!
-//! 连接期由单个 [`ActiveStreamSession`] 持有 `Streams`、当前观看句柄与本地推流句柄；
-//! `Streams` 以全服维度缓存流信息，Actor 只负责按当前所在频道投影 `SessionView.streams`
-//! 并将推拉流指令与信令经异步任务转发给 UI。
+//! Actor 与 `tsclient_rs::stream::Streams` 的桥接：`ActiveStreamSession` 持有观看与本地推流句柄。
 
 use std::cell::RefCell;
 use std::collections::HashMap;

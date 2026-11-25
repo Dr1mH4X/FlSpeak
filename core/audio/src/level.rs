@@ -1,7 +1,4 @@
-//! 低频电平聚合：音频线程只把 0–1 的响度送给界面。
-//!
-//! 语音样本本身仍然不跨 FFI；这里输出的是给电平条用的轻量指标，按
-//! [`METER_INTERVAL`] 节流。dB 映射让轻声也有可见高度，噪声门压掉底噪。
+//! 低频电平聚合：经 dB 映射与噪声门后按 `METER_INTERVAL` 节流输出 0–1 响度。
 
 #[cfg(any(feature = "audio", test))]
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};

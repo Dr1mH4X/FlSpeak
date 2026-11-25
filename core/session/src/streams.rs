@@ -1,8 +1,4 @@
-//! TS6 屏幕共享会话视图类型与协议映射辅助函数。
-//!
-//! 底层信令交互、全服流缓存与 `joinstreamrequest` / `streamsignaling` 命令构造均由
-//! `tsclient_rs::stream::Streams` 负责；本模块将上游事件和 `StreamInfo` 投影为
-//! 面向前端与 FFI 的 [`StreamView`]、[`StreamEndReason`] 和 [`PublisherSignal`]。
+//! TS6 屏幕共享视图类型：把上游 `Streams` 事件与 `StreamInfo` 投影成面向前端的视图。
 
 use tsclient_rs::stream::{
     IceCandidate, PeerCloseCause, PublishOptions, StreamAccessibility, StreamError, StreamInfo,

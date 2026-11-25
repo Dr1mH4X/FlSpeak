@@ -1,9 +1,4 @@
-//! 全局日志订阅器与滚动文件输出。
-//!
-//! 日志目录由 Dart 启动阶段传入；Flutter 热重启会再次调用 [`init`]，必须幂等。
-//! 写入使用 tracing-appender 的 non-blocking worker，队列满时丢日志而不是阻塞
-//! 采集/会话线程。保留策略由 Dart 扫描日志目录统一执行，这里的
-//! `max_log_files` 只兜住 Rust 单独运行时的文件数量。
+//! 全局日志订阅器与滚动文件输出：初始化幂等，队列满时丢日志而不阻塞会话或采集线程。
 
 use std::fs;
 use std::path::Path;

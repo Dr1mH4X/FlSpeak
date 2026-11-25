@@ -1,5 +1,3 @@
-// ignore_for_file: depend_on_referenced_packages
-
 // 回归用例校验 SDK 与 material_ui 两套本地化类型同时可查。
 // ignore: deprecated_member_use
 import 'package:flutter/cupertino.dart' as sdk_cupertino;

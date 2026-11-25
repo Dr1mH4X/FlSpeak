@@ -1,5 +1,3 @@
-// ignore_for_file: depend_on_referenced_packages
-
 import 'package:flutter/gestures.dart';
 // flutter_markdown_plus 内部构建的是 SDK SelectableText。
 // ignore: deprecated_member_use

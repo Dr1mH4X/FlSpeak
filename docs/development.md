@@ -1,6 +1,6 @@
 # 开发流程
 
-所有命令都在仓库根目录执行，除非写明工作目录。日常入口是仓库根的 `justfile`：`just`（或 `just --list`）列出全部任务，`just check` 是提交前的聚合验证，`just ci` 对齐 CI 的静态检查，`just codegen-check` 校验 FFI 生成物。本文保留原始命令，作为各任务的展开与平台细节。编码反面见 [defensive-patterns/AGENTS.md](defensive-patterns/AGENTS.md)，测试约定见 [testing.md](testing.md)。
+所有命令都在仓库根目录执行，除非写明工作目录。日常入口是仓库根的 `justfile`：`just`（或 `just --list`）列出全部任务，`just check` 是提交前的聚合验证，`just ci` 对齐 CI 的静态检查，`just codegen-check` 校验 FFI 生成物。本文保留原始命令，作为各任务的展开与平台细节。编码反面见 [defensive-patterns/README.md](defensive-patterns/README.md)，测试约定见 [testing.md](testing.md)。
 
 ## Rust
 
@@ -50,6 +50,12 @@ cd plugins/flspeak_ffi && flutter analyze
 
 `just language-check` 扫描 Rust 字符串、Dart 日志与测试输出、`tool/` 与 workflow echo；`just language-test` 跑扫描器单测。判据见本文「语言约定」与 [testing.md](testing.md) 的测试输出语言。
 
+## 仓库脚本与构建配置
+
+`tool/` 下的维护脚本一律用 Dart 写，`dart run tool/<script>.dart` 直接可跑，不引入未锁定的二进制依赖；每个脚本在同目录配一份单测（如 `bump_version.dart` 与 `bump_version_test.dart`），由 `just test` 覆盖。跨平台逻辑归 Dart 或 `setup.dart`，不放按操作系统分叉的 shell 脚本。
+
+`.cargo/config.toml` 只固化确有需要的跨平台构建参数，不写包含个人机器路径的配置；跨平台构建环境变量由 CI 或 `setup.dart` 统一注入。
+
 ## 开发流程
 
 动手前先读完相关文件与全部需求，不盲目编辑；只修改当前任务涉及的文件，不给未改动的代码补 docstring 或类型注解，避免无谓 diff。注释只写「为什么」，不写「是什么」，且只在逻辑不清晰处添加。
@@ -92,4 +98,4 @@ Android 的 debug 与 release 签名分开配置，都写进 `android/key.proper
 tsclient-rs = { path = "../tsclient-rs" }
 ```
 
-调试结束后恢复 `Cargo.toml` 中的版本号及对应 `Cargo.lock`，不提交本地路径。上游关系的其余约定见 [项目结构](../.agents/project.md)。
+调试结束后恢复 `Cargo.toml` 中的版本号及对应 `Cargo.lock`，不提交本地路径。上游关系的其余约定见[与 tsclient-rs 的关系](architecture.md#与-tsclient-rs-的关系)。

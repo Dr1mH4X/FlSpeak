@@ -1,9 +1,4 @@
-//! 成员头像的按需本地磁盘缓存与阻塞线程 FIFO 调度队列。
-//!
-//! 缓存文件存放在 `store_path` 同级的 `avatars/<sha1(server_id)>/`：
-//! - 已知合法 `avatar_hash` 时使用 `<sha1(uid)>.<avatar_hash>.bin`，写入新 hash 后删除同一 UID 的旧文件；
-//! - 因权限等原因缺失或校验未通过时退回 `<sha1(uid)>.bin`；
-//! - 单服预算 512 个 / 32 MiB（LRU），写盘跳过 `sync_all`，全部磁盘读写与删除均经阻塞工作线程串行执行。
+//! 成员头像的按需磁盘缓存：读写与删除都经 `AvatarDiskQueue` 的单一 FIFO 阻塞线程。
 
 use std::path::{Path, PathBuf};
 

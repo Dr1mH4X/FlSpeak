@@ -26,6 +26,41 @@ env:
   NDK_VERSION: r28c
 
 jobs:
+  meta:
+    name: Version
+    runs-on: ubuntu-latest
+    outputs:
+      build_name: ${{ steps.version.outputs.build_name }}
+      build_number: ${{ steps.version.outputs.build_number }}
+      display_version: ${{ steps.version.outputs.display_version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Derive debug version
+        id: version
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          base_version=$(sed -n 's/^version:[[:space:]]*\([^+[:space:]]*\).*/\1/p' pubspec.yaml | head -n 1)
+          test -n "$base_version" || { echo 'could not read the base version from pubspec.yaml' >&2; exit 1; }
+          build_number="${{ github.run_number }}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            short_sha="${PR_HEAD_SHA:0:7}"
+            version_name="${base_version}-pr.${PR_NUMBER}.${build_number}.${short_sha}"
+          elif [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref_name }}" = "main" ]; then
+            short_sha="${GITHUB_SHA:0:7}"
+            version_name="${base_version}-main.${build_number}.${short_sha}"
+          else
+            short_sha="${GITHUB_SHA:0:7}"
+            version_name="${base_version}-dev.${build_number}.${short_sha}"
+          fi
+          echo "build_name=${version_name}" >> "$GITHUB_OUTPUT"
+          echo "build_number=${build_number}" >> "$GITHUB_OUTPUT"
+          echo "display_version=${version_name}" >> "$GITHUB_OUTPUT"
+          echo "Debug build version: ${version_name} (${build_number})"
+
   checks:
     name: Checks
     uses: ./.github/workflows/checks.yml
@@ -36,7 +71,7 @@ jobs:
 
   desktop:
     name: Desktop ${{ matrix.platform }}
-    needs: [checks]
+    needs: [meta, checks]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -137,6 +172,8 @@ jobs:
 
       # 保留完整 bundle，包含 Rust 动态库与 Flutter 资源。
       - name: Build debug bundle
+        env:
+          APP_DISPLAY_VERSION: ${{ needs.meta.outputs.display_version }}
         run: flutter build ${{ matrix.platform }} --debug
 
       - name: Archive Linux bundle
@@ -168,7 +205,7 @@ jobs:
 
   android:
     name: Android
-    needs: [checks]
+    needs: [meta, checks]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -232,42 +269,23 @@ jobs:
           printf '%s' "$ANDROID_DEBUG_KEYSTORE_BASE64" | base64 --decode > android/app/debug-upload.jks
           echo 'ANDROID_DEBUG_KEYSTORE_PATH=debug-upload.jks' >> "$GITHUB_ENV"
 
-      - name: Derive debug version
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          base_version=$(sed -n 's/^version:[[:space:]]*\([^+[:space:]]*\).*/\1/p' pubspec.yaml | head -n 1)
-          test -n "$base_version" || { echo 'could not read the base version from pubspec.yaml' >&2; exit 1; }
-          build_number="${{ github.run_number }}"
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            short_sha="${PR_HEAD_SHA:0:7}"
-            version_name="${base_version}-pr.${PR_NUMBER}.${build_number}.${short_sha}"
-          elif [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref_name }}" = "main" ]; then
-            short_sha="${GITHUB_SHA:0:7}"
-            version_name="${base_version}-main.${build_number}.${short_sha}"
-          else
-            short_sha="${GITHUB_SHA:0:7}"
-            version_name="${base_version}-dev.${build_number}.${short_sha}"
-          fi
-          echo "APP_BUILD_NAME=${version_name}" >> "$GITHUB_ENV"
-          echo "APP_BUILD_NUMBER=${build_number}" >> "$GITHUB_ENV"
-          echo "APP_DISPLAY_VERSION=${version_name}" >> "$GITHUB_ENV"
-          echo "Debug APK version: ${version_name} (${build_number})"
-
       - name: Build debug apk
         env:
           ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
           ANDROID_DEBUG_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_DEBUG_KEYSTORE_PASSWORD }}
           ANDROID_DEBUG_KEY_ALIAS: ${{ secrets.ANDROID_DEBUG_KEY_ALIAS }}
           ANDROID_DEBUG_KEY_PASSWORD: ${{ secrets.ANDROID_DEBUG_KEY_PASSWORD }}
-          APP_DISPLAY_VERSION: ${{ env.APP_DISPLAY_VERSION }}
+          APP_BUILD_NAME: ${{ needs.meta.outputs.build_name }}
+          APP_BUILD_NUMBER: ${{ needs.meta.outputs.build_number }}
+          APP_DISPLAY_VERSION: ${{ needs.meta.outputs.display_version }}
         run: |
           flutter build apk --debug \
             --build-name "${APP_BUILD_NAME}" \
             --build-number "${APP_BUILD_NUMBER}"
 
       - name: Archive Android APK
+        env:
+          APP_BUILD_NAME: ${{ needs.meta.outputs.build_name }}
         run: |
           mkdir -p dist
           cp build/app/outputs/flutter-apk/app-debug.apk "dist/flspeak-${APP_BUILD_NAME}-android-debug.apk"

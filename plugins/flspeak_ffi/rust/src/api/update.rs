@@ -1,7 +1,4 @@
-//! 版本更新检查的 FFI 边界。
-//!
-//! 检查本身是 `core/session` 的旁路，不挂在 `CoreSession` 上，也不进入
-//! Session Actor 的命令队列。
+//! 版本更新检查的 FFI 边界：检查是 `core/session` 的旁路，不挂在 `CoreSession` 上。
 
 use flutter_rust_bridge::frb;
 use session::UpdateState as CoreUpdateState;

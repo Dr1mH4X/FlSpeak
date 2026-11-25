@@ -1,3 +1,5 @@
+// Adapted from FlClash (be84736, GPL-3.0): lib/ui/list_item.dart. See docs/THIRD-PARTY.md.
+
 import 'package:material_ui/material_ui.dart'
     hide Checkbox, PopupMenuItem, Switch;
 
