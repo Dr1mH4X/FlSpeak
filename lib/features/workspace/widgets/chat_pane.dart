@@ -14,7 +14,8 @@ import 'package:material_ui/material_ui.dart'
         Switch,
         TextButton,
         TextField;
-import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/rendering.dart' show RenderProxyBox, ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -27,7 +28,6 @@ import '../../../core/providers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
-import '../../../widgets/common.dart';
 import '../../../widgets/monogram.dart';
 import '../../../widgets/prism.dart' hide Divider;
 import 'media_viewer.dart';
@@ -532,7 +532,7 @@ class _ChatPaneState extends State<ChatPane> {
       return;
     }
     final focusContext = _focus.context;
-    if (focusContext != null) {
+    if (focusContext != null && focusContext.mounted) {
       Actions.maybeInvoke<PasteTextIntent>(
         focusContext,
         const PasteTextIntent(SelectionChangedCause.keyboard),
@@ -1355,7 +1355,8 @@ class _CompactWorkspaceBottomBarState
     AppLocalizations l10n, {
     required bool floating,
   }) {
-    final enabled = widget.onPickImage != null && !widget.sending && !widget.busy;
+    final enabled =
+        widget.onPickImage != null && !widget.sending && !widget.busy;
     final scheme = context.scheme;
     return _buildCircleSlot(
       context,
@@ -2331,10 +2332,7 @@ class _MessageRow extends StatelessWidget {
               customBorder: AppShape.md,
               onTap: onToggleSelect,
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 8,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                 child: content,
               ),
             ),

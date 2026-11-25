@@ -852,7 +852,10 @@ class _ChannelChatBodyState extends ConsumerState<_ChannelChatBody> {
       onUploadImage: controller.uploadChatImage,
       onMessagesCopied: () => ref
           .read(noticeCenterProvider.notifier)
-          .show(AppLocalizations.of(context).commonCopied, tone: NoticeTone.info),
+          .show(
+            AppLocalizations.of(context).commonCopied,
+            tone: NoticeTone.info,
+          ),
       description: channel.description,
       recipients: _cachedRecipients,
       recipientUid: directRecipientUid,
