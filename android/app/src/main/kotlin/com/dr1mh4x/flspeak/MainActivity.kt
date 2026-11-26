@@ -22,6 +22,7 @@ import java.io.File
 class MainActivity : FlutterActivity() {
     companion object {
         private const val MIC_PERMISSION_REQUEST_CODE = 1001
+        private const val NOTIFICATION_PERMISSION_REQUEST_CODE = 1002
 
         init {
             System.loadLibrary("flspeak_ffi")
@@ -30,6 +31,10 @@ class MainActivity : FlutterActivity() {
 
     private var dnsCallback: ConnectivityManager.NetworkCallback? = null
     private var pendingMicPermissionResult: MethodChannel.Result? = null
+    private var pendingNotificationPermissionResult: MethodChannel.Result? = null
+    private val pendingSessionSyncResults = mutableSetOf<MethodChannel.Result>()
+    private var sessionActionSink: EventChannel.EventSink? = null
+    private var sessionActionListener: ((String) -> Unit)? = null
 
     private external fun nativeInitAndroidContext(context: Context)
 
@@ -40,11 +45,22 @@ class MainActivity : FlutterActivity() {
         registerNetworkDnsChannels(flutterEngine)
         registerAudioPermissionChannel(flutterEngine)
         registerAppLifecycleChannel(flutterEngine)
+        registerSessionServiceChannels(flutterEngine)
     }
 
     override fun onDestroy() {
         pendingMicPermissionResult?.success("denied")
         pendingMicPermissionResult = null
+        pendingNotificationPermissionResult?.success(false)
+        pendingNotificationPermissionResult = null
+        val pendingSyncs = pendingSessionSyncResults.toList()
+        pendingSessionSyncResults.clear()
+        for (result in pendingSyncs) {
+            result.success(false)
+        }
+        sessionActionSink = null
+        sessionActionListener?.let { FlSpeakSessionService.clearActionListener(it) }
+        sessionActionListener = null
         unregisterDnsCallback()
         super.onDestroy()
     }
@@ -55,21 +71,32 @@ class MainActivity : FlutterActivity() {
         grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode != MIC_PERMISSION_REQUEST_CODE) {
-            return
-        }
-        val result = pendingMicPermissionResult ?: return
-        pendingMicPermissionResult = null
-        val granted =
-            grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
-        val status =
-            when {
-                granted -> "granted"
-                !shouldShowRequestPermissionRationale(Manifest.permission.RECORD_AUDIO) ->
-                    "permanentlyDenied"
-                else -> "denied"
+        when (requestCode) {
+            MIC_PERMISSION_REQUEST_CODE -> {
+                val result = pendingMicPermissionResult ?: return
+                pendingMicPermissionResult = null
+                val granted =
+                    grantResults.isNotEmpty() &&
+                        grantResults[0] == PackageManager.PERMISSION_GRANTED
+                val status =
+                    when {
+                        granted -> "granted"
+                        !shouldShowRequestPermissionRationale(
+                            Manifest.permission.RECORD_AUDIO,
+                        ) -> "permanentlyDenied"
+                        else -> "denied"
+                    }
+                result.success(status)
             }
-        result.success(status)
+            NOTIFICATION_PERMISSION_REQUEST_CODE -> {
+                val result = pendingNotificationPermissionResult ?: return
+                pendingNotificationPermissionResult = null
+                val granted =
+                    grantResults.isNotEmpty() &&
+                        grantResults[0] == PackageManager.PERMISSION_GRANTED
+                result.success(granted)
+            }
+        }
     }
 
     private fun registerAudioPermissionChannel(flutterEngine: FlutterEngine) {
@@ -126,6 +153,100 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    private fun registerSessionServiceChannels(flutterEngine: FlutterEngine) {
+        val messenger = flutterEngine.dartExecutor.binaryMessenger
+        MethodChannel(messenger, "flspeak/session_service")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "requestNotificationPermission" -> {
+                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                            result.success(true)
+                            return@setMethodCallHandler
+                        }
+                        if (
+                            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
+                                PackageManager.PERMISSION_GRANTED
+                        ) {
+                            result.success(true)
+                            return@setMethodCallHandler
+                        }
+                        if (pendingNotificationPermissionResult != null) {
+                            result.error(
+                                "permission_in_progress",
+                                "Notification permission request already in progress",
+                                null,
+                            )
+                            return@setMethodCallHandler
+                        }
+                        pendingNotificationPermissionResult = result
+                        requestPermissions(
+                            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                            NOTIFICATION_PERMISSION_REQUEST_CODE,
+                        )
+                    }
+                    "syncSession" -> {
+                        val payload =
+                            FlSpeakSessionService.SessionNotificationPayload(
+                                title = call.argument<String>("title").orEmpty(),
+                                subtitle = call.argument<String>("subtitle").orEmpty(),
+                                channelName = call.argument<String>("channelName").orEmpty(),
+                                muteActionLabel =
+                                    call.argument<String>("muteActionLabel").orEmpty(),
+                                stopScreenShareActionLabel =
+                                    call.argument<String>("stopScreenShareActionLabel").orEmpty(),
+                                disconnectActionLabel =
+                                    call.argument<String>("disconnectActionLabel").orEmpty(),
+                                isMuted = call.argument<Boolean>("isMuted") ?: false,
+                                isSharingScreen =
+                                    call.argument<Boolean>("isSharingScreen") ?: false,
+                                includeMediaProjection =
+                                    call.argument<Boolean>("includeMediaProjection") ?: false,
+                                sessionEpoch =
+                                    call.argument<Number>("sessionEpoch")?.toInt() ?: 0,
+                            )
+                        pendingSessionSyncResults.add(result)
+                        FlSpeakSessionService.sync(applicationContext, payload) { ok ->
+                            runOnUiThread {
+                                if (pendingSessionSyncResults.remove(result)) {
+                                    result.success(ok)
+                                }
+                            }
+                        }
+                    }
+                    "stopSession" -> {
+                        FlSpeakSessionService.stop(applicationContext)
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+
+        EventChannel(messenger, "flspeak/session_service_actions")
+            .setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                    sessionActionListener?.let { FlSpeakSessionService.clearActionListener(it) }
+                    sessionActionListener = null
+                    sessionActionSink = events
+                    val sink = events ?: return
+                    val listener: (String) -> Unit = { action ->
+                        runOnUiThread {
+                            if (sessionActionSink === sink) {
+                                sink.success(action)
+                            }
+                        }
+                    }
+                    sessionActionListener = listener
+                    FlSpeakSessionService.setActionListener(listener)
+                }
+
+                override fun onCancel(arguments: Any?) {
+                    sessionActionSink = null
+                    sessionActionListener?.let { FlSpeakSessionService.clearActionListener(it) }
+                    sessionActionListener = null
+                }
+            })
     }
 
     private fun registerFilesChannel(flutterEngine: FlutterEngine) {

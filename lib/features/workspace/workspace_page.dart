@@ -41,6 +41,7 @@ import 'widgets/media_viewer.dart';
 import 'widgets/members_pane.dart';
 import 'widgets/member_avatar.dart';
 import 'widgets/member_status_flags.dart';
+import 'widgets/screen_share_picker_dialog.dart';
 import 'widgets/stream_viewer_pane.dart';
 import 'workspace_shell.dart';
 import 'workspace_state.dart';
@@ -181,6 +182,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
       :activeServerId,
       :connectionEpoch,
       :identityUpgradeTarget,
+      :selfChannelId,
       :channel,
     ) = ref.watch(
       sessionViewProvider.select(
@@ -192,6 +194,7 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
           activeServerId: view.activeServerId,
           connectionEpoch: view.connectionEpoch,
           identityUpgradeTarget: view.identityUpgradeTarget,
+          selfChannelId: view.selfChannelId,
           channel: channelId == null ? null : view.channelById(channelId),
         ),
       ),
@@ -332,6 +335,10 @@ class _WorkspacePageState extends ConsumerState<WorkspacePage> {
           backgroundColor: context.pageColor,
           title: channel != null ? channelDisplayName(channel) : l10n.appName,
           backAction: () => navigateWorkspaceBack(context),
+          actions: [
+            if (connected && selfChannelId != null)
+              const _CompactScreenShareButton(),
+          ],
           menuItems: [
             if (channel != null) ...[
               PopupMenuItem(
@@ -1088,6 +1095,39 @@ class _DeviceChip extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _CompactScreenShareButton extends ConsumerWidget {
+  const _CompactScreenShareButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
+    final scheme = context.scheme;
+    final sharingScreen = ref.watch(
+      streamPublisherProvider.select((state) => state.isActive),
+    );
+    return IconButton(
+      key: const ValueKey('compact-screen-share-toggle'),
+      onPressed: () => unawaited(toggleScreenShare(context, ref)),
+      isSelected: sharingScreen,
+      style: sharingScreen
+          ? ButtonStyle.from(
+              backgroundColor: scheme.errorContainer,
+              foregroundColor: scheme.onErrorContainer,
+            )
+          : null,
+      icon: Icon(
+        sharingScreen
+            ? Icons.stop_screen_share_rounded
+            : Icons.screen_share_rounded,
+        size: IconSizes.toolbar,
+        semanticLabel: sharingScreen
+            ? l10n.streamStopShare
+            : l10n.streamStartShare,
       ),
     );
   }

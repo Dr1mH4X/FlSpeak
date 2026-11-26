@@ -9,8 +9,10 @@ import 'package:flspeak/core/audio_selection.dart';
 import 'package:flspeak/core/models.dart';
 import 'package:flspeak/core/notices.dart';
 import 'package:flspeak/core/platform/android_audio_permission.dart';
+import 'package:flspeak/core/platform/android_session_service.dart';
 import 'package:flspeak/core/preferences.dart';
 import 'package:flspeak/core/providers.dart';
+import 'package:flspeak/core/stream_publisher.dart';
 
 class _Core extends Fake implements CoreSession {
   _Core(this.eventsController);
@@ -1796,6 +1798,303 @@ void main() {
       expect(await reloaded, [7, 8]);
     },
   );
+
+  test('Android session service starts on connect, deduplicates unrelated events, updates on state/locale changes, and stops on disconnect', () async {
+    final events = StreamController<CoreEvent>.broadcast(sync: true);
+    final core = _SessionServiceCore(events);
+    final micGateway = _FakePermissionGateway();
+    final serviceGateway = _FakeAndroidSessionServiceGateway(
+      isSupported: true,
+      notificationPermissionGranted: false,
+    );
+    final publisher = _FakeStreamPublisher();
+    final prefsStore = PreferencesStore.inMemory(
+      preferences: const SessionPreferences(nickname: 'Tester', locale: 'en'),
+    );
+
+    final container = ProviderContainer(
+      overrides: [
+        coreSessionProvider.overrideWithValue(core),
+        microphonePermissionProvider.overrideWithValue(micGateway),
+        androidSessionServiceProvider.overrideWithValue(serviceGateway),
+        streamPublisherProvider.overrideWith(() => publisher),
+        preferencesStoreProvider.overrideWithValue(prefsStore),
+      ],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await serviceGateway.dispose();
+      await events.close();
+    });
+
+    final sub = container.listen(sessionViewProvider, (_, _) {});
+    addTearDown(sub.close);
+    final controller = container.read(sessionViewProvider.notifier);
+
+    // First connection requests notification permission even if denied, without blocking connect.
+    expect(await controller.connect(id: 'srv-1', nickname: 'Tester'), isTrue);
+    expect(serviceGateway.permissionRequests, 1);
+    expect(core.calls, contains('connect:srv-1'));
+    expect(serviceGateway.syncedStates, isEmpty);
+
+    events.add(
+      const CoreEvent.servers(
+        profiles: [
+          ServerProfileView(
+            id: 'srv-1',
+            label: 'Alpha',
+            host: 'ts.example.com',
+            port: 9987,
+          ),
+        ],
+      ),
+    );
+    events.add(
+      const CoreEvent.state(
+        state: CoreSessionState.connected(clientId: 1, channelId: 10),
+      ),
+    );
+    events.add(
+      const CoreEvent.snapshot(
+        channels: [
+          ChannelView(id: 10, parentId: 0, name: 'Lobby', description: ''),
+          ChannelView(id: 20, parentId: 0, name: 'Game', description: ''),
+        ],
+        clients: [
+          ClientView(id: 1, nickname: 'Tester', uid: 'u1', channelId: 10),
+        ],
+      ),
+    );
+    await pumpEventQueue();
+
+    expect(serviceGateway.syncedStates.last.title, 'Alpha · Lobby');
+    expect(serviceGateway.syncedStates.last.subtitle, 'In voice');
+    expect(serviceGateway.syncedStates.last.muteActionLabel, 'Mute');
+    expect(
+      serviceGateway.syncedStates.last.disconnectActionLabel,
+      'Disconnect',
+    );
+    expect(serviceGateway.syncedStates.last.isSharingScreen, isFalse);
+    expect(serviceGateway.syncedStates.last.sessionEpoch, 1);
+
+    final countAfterSnapshot = serviceGateway.syncedStates.length;
+
+    // Unrelated high-frequency events should not cause duplicate service syncs.
+    events.add(CoreEvent.speaking(clientIds: Int32List.fromList([1])));
+    events.add(const CoreEvent.selfSpeaking(speaking: true));
+    events.add(
+      const CoreEvent.network(
+        telemetry: NetworkTelemetry(
+          roundTripMs: 18,
+          recentFailurePercent: 0,
+          probesSent: 2,
+          probesFailed: 0,
+          connectedSeconds: 5,
+          sampledAt: 100,
+        ),
+      ),
+    );
+    await pumpEventQueue();
+    expect(serviceGateway.syncedStates.length, countAfterSnapshot);
+
+    // Voice mute/deafen and screen sharing update subtitle and actions.
+    events.add(
+      const CoreEvent.voice(
+        state: CoreVoiceState(
+          muted: true,
+          deafened: false,
+          away: false,
+          pttMode: false,
+          pttActive: false,
+          inputReady: true,
+          outputReady: true,
+        ),
+      ),
+    );
+    await pumpEventQueue();
+    expect(serviceGateway.syncedStates.last.subtitle, 'Muted');
+    expect(serviceGateway.syncedStates.last.muteActionLabel, 'Unmute');
+    expect(serviceGateway.syncedStates.last.isMuted, isTrue);
+
+    events.add(
+      const CoreEvent.voice(
+        state: CoreVoiceState(
+          muted: true,
+          deafened: true,
+          away: false,
+          pttMode: false,
+          pttActive: false,
+          inputReady: true,
+          outputReady: true,
+        ),
+      ),
+    );
+    await pumpEventQueue();
+    expect(serviceGateway.syncedStates.last.subtitle, 'Deafened');
+
+    publisher.setSharing(true);
+    await pumpEventQueue();
+    expect(
+      serviceGateway.syncedStates.last.subtitle,
+      'Sharing screen · Deafened',
+    );
+    expect(serviceGateway.syncedStates.last.isSharingScreen, isTrue);
+
+    // Locale update refreshes localized notification labels.
+    container.read(preferencesProvider.notifier).setLocale('zh');
+    await pumpEventQueue();
+    expect(serviceGateway.syncedStates.last.channelName, '语音会话');
+    expect(serviceGateway.syncedStates.last.muteActionLabel, '取消静音');
+
+    // Reconnecting keeps the foreground service alive in the same epoch.
+    final stopsBeforeReconnect = serviceGateway.stopCalls;
+    events.add(
+      const CoreEvent.state(
+        state: CoreSessionState.reconnecting(attempt: 1, delayMs: 1000),
+      ),
+    );
+    await pumpEventQueue();
+    expect(serviceGateway.stopCalls, stopsBeforeReconnect);
+    expect(serviceGateway.syncedStates.last.subtitle, '正在重连…');
+    expect(serviceGateway.syncedStates.last.sessionEpoch, 1);
+
+    // Disconnecting stops the foreground service cleanly.
+    events.add(const CoreEvent.state(state: CoreSessionState.disconnected()));
+    await pumpEventQueue();
+    expect(serviceGateway.stopCalls, stopsBeforeReconnect + 1);
+
+    // Second connect in the same session controller does not re-prompt notification permission.
+    expect(await controller.connect(id: 'srv-1', nickname: 'Tester'), isTrue);
+    expect(serviceGateway.permissionRequests, 1);
+  });
+
+  test('Android session notification actions trigger mute, stopScreenShare, and disconnect, and dispose stops service', () async {
+    final events = StreamController<CoreEvent>.broadcast(sync: true);
+    final core = _SessionServiceCore(events);
+    final serviceGateway = _FakeAndroidSessionServiceGateway(isSupported: true);
+    final publisher = _FakeStreamPublisher();
+
+    final container = ProviderContainer(
+      overrides: [
+        coreSessionProvider.overrideWithValue(core),
+        microphonePermissionProvider.overrideWithValue(
+          _FakePermissionGateway(),
+        ),
+        androidSessionServiceProvider.overrideWithValue(serviceGateway),
+        streamPublisherProvider.overrideWith(() => publisher),
+        preferencesStoreProvider.overrideWithValue(
+          PreferencesStore.inMemory(
+            preferences: const SessionPreferences(
+              nickname: 'Tester',
+              locale: 'en',
+            ),
+          ),
+        ),
+      ],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await serviceGateway.dispose();
+      await events.close();
+    });
+
+    final sub = container.listen(sessionViewProvider, (_, _) {});
+    addTearDown(sub.close);
+    events.add(
+      const CoreEvent.state(
+        state: CoreSessionState.connected(clientId: 1, channelId: 10),
+      ),
+    );
+    await pumpEventQueue();
+
+    serviceGateway.emitAction(AndroidSessionServiceAction.toggleMute);
+    await pumpEventQueue();
+    expect(core.calls, contains('muted:true'));
+
+    events.add(
+      const CoreEvent.voice(
+        state: CoreVoiceState(
+          muted: true,
+          deafened: false,
+          away: false,
+          pttMode: false,
+          pttActive: false,
+          inputReady: true,
+          outputReady: true,
+        ),
+      ),
+    );
+    await pumpEventQueue();
+    core.calls.clear();
+    serviceGateway.emitAction(AndroidSessionServiceAction.toggleMute);
+    await pumpEventQueue();
+    expect(core.calls, contains('muted:false'));
+
+    serviceGateway.emitAction(AndroidSessionServiceAction.stopScreenShare);
+    await pumpEventQueue();
+    expect(publisher.stopCalls, [true]);
+
+    core.calls.clear();
+    serviceGateway.emitAction(AndroidSessionServiceAction.disconnect);
+    await pumpEventQueue();
+    expect(core.calls, contains('disconnect'));
+    expect(serviceGateway.stopCalls, 1);
+
+    events.add(
+      const CoreEvent.state(
+        state: CoreSessionState.connected(clientId: 2, channelId: 10),
+      ),
+    );
+    await pumpEventQueue();
+    expect(serviceGateway.syncedStates.last.sessionEpoch, 2);
+
+    final stopsBeforeDispose = serviceGateway.stopCalls;
+    container.dispose();
+    await pumpEventQueue();
+    expect(serviceGateway.stopCalls, stopsBeforeDispose + 1);
+    expect(serviceGateway.hasListeners, isFalse);
+  });
+
+  test(
+    'unsupported platform skips Android session service calls completely',
+    () async {
+      final events = StreamController<CoreEvent>.broadcast(sync: true);
+      final core = _SessionServiceCore(events);
+      final serviceGateway = _FakeAndroidSessionServiceGateway(
+        isSupported: false,
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(core),
+          microphonePermissionProvider.overrideWithValue(
+            _FakePermissionGateway(),
+          ),
+          androidSessionServiceProvider.overrideWithValue(serviceGateway),
+        ],
+      );
+      addTearDown(() async {
+        container.dispose();
+        await serviceGateway.dispose();
+        await events.close();
+      });
+
+      final controller = container.read(sessionViewProvider.notifier);
+      await controller.connect(id: 'srv-1', nickname: 'Tester');
+      events.add(
+        const CoreEvent.state(
+          state: CoreSessionState.connected(clientId: 1, channelId: 10),
+        ),
+      );
+      events.add(const CoreEvent.state(state: CoreSessionState.disconnected()));
+      await pumpEventQueue();
+
+      expect(serviceGateway.permissionRequests, 0);
+      expect(serviceGateway.syncedStates, isEmpty);
+      expect(serviceGateway.stopCalls, 0);
+      expect(serviceGateway.hasListeners, isFalse);
+    },
+  );
 }
 
 class _ChannelIconCore extends Fake implements CoreSession {
@@ -1875,4 +2174,86 @@ class _FakePermissionGateway implements MicrophonePermissionGateway {
     openSettingsCalls++;
     return true;
   }
+}
+
+class _SessionServiceCore extends _PermissionCore {
+  _SessionServiceCore(super.eventsController);
+
+  @override
+  Future<void> disconnect() async {
+    await super.disconnect();
+    eventsController.add(
+      const CoreEvent.state(state: CoreSessionState.disconnected()),
+    );
+  }
+
+  @override
+  Future<void> stopScreenShare() async {
+    calls.add('stopScreenShare');
+  }
+}
+
+class _FakeStreamPublisher extends StreamPublisherController {
+  final stopCalls = <bool>[];
+
+  @override
+  StreamPublisherState build() => const StreamPublisherState();
+
+  void setSharing(bool isSharing) {
+    state = state.copyWith(isSharing: isSharing);
+  }
+
+  @override
+  Future<void> stopScreenShare({bool notifyServer = true}) async {
+    stopCalls.add(notifyServer);
+    state = state.copyWith(isSharing: false, isStarting: false);
+  }
+}
+
+class _FakeAndroidSessionServiceGateway
+    implements AndroidSessionServiceGateway {
+  _FakeAndroidSessionServiceGateway({
+    required this.isSupported,
+    this.notificationPermissionGranted = true,
+  });
+
+  @override
+  final bool isSupported;
+
+  final bool notificationPermissionGranted;
+  final syncedStates = <AndroidSessionNotificationState>[];
+  final _actions = StreamController<AndroidSessionServiceAction>.broadcast(
+    sync: true,
+  );
+  int permissionRequests = 0;
+  int stopCalls = 0;
+
+  bool get hasListeners => _actions.hasListener;
+
+  void emitAction(AndroidSessionServiceAction action) {
+    _actions.add(action);
+  }
+
+  @override
+  Future<bool> requestNotificationPermission() async {
+    permissionRequests++;
+    return notificationPermissionGranted;
+  }
+
+  @override
+  Future<bool> syncSession(AndroidSessionNotificationState state) async {
+    syncedStates.add(state);
+    return true;
+  }
+
+  @override
+  Future<void> stopSession() async {
+    stopCalls++;
+  }
+
+  @override
+  Stream<AndroidSessionServiceAction> get actions =>
+      isSupported ? _actions.stream : const Stream.empty();
+
+  Future<void> dispose() => _actions.close();
 }

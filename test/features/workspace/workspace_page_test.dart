@@ -17,6 +17,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import 'package:flspeak/core/models.dart';
 import 'package:flspeak/core/notices.dart';
+import 'package:flspeak/core/platform/android_session_service.dart';
 import 'package:flspeak/core/preferences.dart';
 import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/core/stream_publisher.dart';
@@ -233,16 +234,46 @@ class _FakeWidgetMediaStream extends Fake implements MediaStream {
   Future<void> dispose() async {}
 }
 
+class _FakeAndroidSessionService implements AndroidSessionServiceGateway {
+  @override
+  bool get isSupported => true;
+
+  final syncedStates = <AndroidSessionNotificationState>[];
+  int stopCalls = 0;
+
+  @override
+  Stream<AndroidSessionServiceAction> get actions => const Stream.empty();
+
+  @override
+  Future<bool> requestNotificationPermission() async => true;
+
+  @override
+  Future<bool> syncSession(AndroidSessionNotificationState state) async {
+    syncedStates.add(state);
+    return true;
+  }
+
+  @override
+  Future<void> stopSession() async {
+    stopCalls++;
+  }
+}
+
 class _FakeWidgetWebRtcBindings extends WebRtcBindings {
   final renderers = <_FakeWidgetRenderer>[];
   final peers = <_FakeWidgetPeer>[];
   bool failDesktopSources = false;
+  bool capturePermissionGranted = true;
+  int desktopSourceRequests = 0;
+  int capturePermissionRequests = 0;
+  Map<String, dynamic>? lastDisplayMediaConstraints;
 
   @override
   Future<List<DesktopCapturerSource>> getDesktopSources({
     List<SourceType> types = const [SourceType.Screen, SourceType.Window],
     ThumbnailSize? thumbnailSize,
   }) async {
+    desktopSourceRequests++;
     if (failDesktopSources) {
       throw StateError('desktop source enumeration failed');
     }
@@ -256,9 +287,18 @@ class _FakeWidgetWebRtcBindings extends WebRtcBindings {
   }
 
   @override
+  Future<bool> requestCapturePermission() async {
+    capturePermissionRequests++;
+    return capturePermissionGranted;
+  }
+
+  @override
   Future<MediaStream> getDisplayMedia(
     Map<String, dynamic> mediaConstraints,
-  ) async => _FakeWidgetMediaStream();
+  ) async {
+    lastDisplayMediaConstraints = mediaConstraints;
+    return _FakeWidgetMediaStream();
+  }
 
   @override
   Future<RTCPeerConnection> createPeer(
@@ -365,6 +405,8 @@ Future<ProviderContainer> _mountChannelPanel(
   WidgetTester tester, {
   required _Core core,
   required _FakeWidgetWebRtcBindings bindings,
+  AndroidSessionServiceGateway? androidService,
+  PreferencesStore? prefsStore,
 }) async {
   tester.view.physicalSize = const Size(1000, 800);
   tester.view.devicePixelRatio = 1;
@@ -374,6 +416,10 @@ Future<ProviderContainer> _mountChannelPanel(
     overrides: [
       coreSessionProvider.overrideWithValue(core),
       webRtcBindingsProvider.overrideWithValue(bindings),
+      if (androidService != null)
+        androidSessionServiceProvider.overrideWithValue(androidService),
+      if (prefsStore != null)
+        preferencesStoreProvider.overrideWithValue(prefsStore),
       sessionViewProvider.overrideWith(_Session.new),
     ],
   );
@@ -1162,6 +1208,122 @@ void main() {
             .dy,
         greaterThanOrEqualTo(40.0),
       );
+    },
+  );
+
+  testWidgets(
+    'Android screen share button skips the desktop picker, uses preferences, and downgrades FGS on stop',
+    (tester) async {
+      final core = _Core();
+      final bindings = _FakeWidgetWebRtcBindings();
+      final androidService = _FakeAndroidSessionService();
+      final prefsStore = PreferencesStore.inMemory(
+        preferences: const SessionPreferences(
+          nickname: 'Me',
+          screenShareResolution: ScreenShareResolutionPreset.p1080,
+          screenShareFrameRate: ScreenShareFrameRatePreset.fps60,
+        ),
+      );
+      final container = await _mountChannelPanel(
+        tester,
+        core: core,
+        bindings: bindings,
+        androidService: androidService,
+        prefsStore: prefsStore,
+      );
+
+      final shareBtn = find.byKey(const ValueKey('voice-screen-share-toggle'));
+      expect(shareBtn, findsOneWidget);
+      expect(find.byType(Tooltip), findsNothing);
+
+      await tester.tap(shareBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.text('选择共享内容'), findsNothing);
+      expect(bindings.desktopSourceRequests, 0);
+      expect(bindings.capturePermissionRequests, 1);
+      expect(bindings.lastDisplayMediaConstraints, {
+        'video': {'frameRate': 60},
+        'audio': false,
+      });
+      expect(core.startedShares, [
+        (
+          name: '设备屏幕',
+          audio: false,
+          bitrate: 8000,
+          viewerLimit: defaultMaxStreamViewers(),
+        ),
+      ]);
+      expect(androidService.syncedStates.last.includeMediaProjection, isTrue);
+      expect(container.read(streamPublisherProvider).isActive, isTrue);
+
+      await tester.tap(shareBtn);
+      await tester.pumpAndSettle();
+
+      expect(core.stoppedShares, 1);
+      expect(androidService.syncedStates.last.includeMediaProjection, isFalse);
+      expect(container.read(streamPublisherProvider).isActive, isFalse);
+    },
+  );
+
+  testWidgets(
+    'compact Android channel page exposes screen share toggle without desktop picker or Tooltip',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final core = _Core();
+      final bindings = _FakeWidgetWebRtcBindings();
+      final androidService = _FakeAndroidSessionService();
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(core),
+          webRtcBindingsProvider.overrideWithValue(bindings),
+          androidSessionServiceProvider.overrideWithValue(androidService),
+          sessionViewProvider.overrideWith(_Session.new),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            theme: buildAppTheme(Brightness.light),
+            locale: const Locale('zh'),
+            localizationsDelegates: appLocalizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            builder: (context, child) =>
+                PrismRootScope(brightness: Brightness.light, child: child!),
+            home: const WorkspacePage(forceCompact: true),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final compactShareBtn = find.byKey(
+        const ValueKey('compact-screen-share-toggle'),
+      );
+      expect(compactShareBtn, findsOneWidget);
+      expect(find.byType(Tooltip), findsNothing);
+
+      await tester.tap(compactShareBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.text('选择共享内容'), findsNothing);
+      expect(bindings.desktopSourceRequests, 0);
+      expect(bindings.capturePermissionRequests, 1);
+      expect(androidService.syncedStates.last.includeMediaProjection, isTrue);
+      expect(container.read(streamPublisherProvider).isActive, isTrue);
+
+      await tester.tap(compactShareBtn);
+      await tester.pumpAndSettle();
+
+      expect(core.stoppedShares, 1);
+      expect(androidService.syncedStates.last.includeMediaProjection, isFalse);
+      expect(container.read(streamPublisherProvider).isActive, isFalse);
     },
   );
 }

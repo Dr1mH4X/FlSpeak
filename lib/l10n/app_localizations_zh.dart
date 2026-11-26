@@ -1078,6 +1078,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get streamPickerStart => '开始共享';
 
   @override
+  String get streamAndroidDefaultSourceName => '设备屏幕';
+
+  @override
   String get settingsScreenShare => '屏幕共享';
 
   @override
@@ -1270,4 +1273,35 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get chatSwitchToVoice => '切换到语音控制';
+
+  @override
+  String get sessionNotificationChannelName => '语音会话';
+
+  @override
+  String sessionNotificationTitle(String server, String channel) {
+    return '$server · $channel';
+  }
+
+  @override
+  String get sessionNotificationStatusInVoice => '语音中';
+
+  @override
+  String get sessionNotificationStatusMuted => '已静音';
+
+  @override
+  String get sessionNotificationStatusDeafened => '已闭麦';
+
+  @override
+  String get sessionNotificationStatusSharingScreen => '正在共享屏幕';
+
+  @override
+  String get sessionNotificationStatusReconnecting => '正在重连…';
+
+  @override
+  String sessionNotificationStatusCombined(String primary, String secondary) {
+    return '$primary · $secondary';
+  }
+
+  @override
+  String get sessionNotificationDisconnect => '断开连接';
 }

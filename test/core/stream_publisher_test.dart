@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:fake_async/fake_async.dart';
+import 'package:flspeak/core/notices.dart';
+import 'package:flspeak/core/platform/android_session_service.dart';
 import 'package:flspeak/core/preferences.dart';
 import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/core/stream_publisher.dart';
@@ -11,12 +13,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 class _FakeCoreSession extends Fake implements CoreSession {
-  _FakeCoreSession(this.eventsController);
+  _FakeCoreSession(this.eventsController, {this.callLog});
 
   final StreamController<CoreEvent> eventsController;
+  final List<String>? callLog;
   final startedShares =
       <({String name, bool audio, int bitrate, int viewerLimit})>[];
   int stopShareCalls = 0;
+  Exception? startScreenShareError;
   final joinResponses = <({int viewerClid, bool accept, String offerSdp})>[];
   final sentPublisherCandidates =
       <({int viewerClid, String sdp, String? mid, int? mLine})>[];
@@ -37,12 +41,26 @@ class _FakeCoreSession extends Fake implements CoreSession {
   Future<List<ServerIconView>> listServerIcons() async => const [];
 
   @override
+  Future<void> disconnect() async {
+    callLog?.add('core.disconnect');
+  }
+
+  @override
+  Future<void> setMuted({required bool muted}) async {
+    callLog?.add('core.setMuted:$muted');
+  }
+
+  @override
   Future<void> startScreenShare({
     required String name,
     required bool audio,
     required int bitrate,
     required int viewerLimit,
   }) async {
+    callLog?.add('core.startScreenShare');
+    if (startScreenShareError != null) {
+      throw startScreenShareError!;
+    }
     _activeViewerLimit = viewerLimit;
     _acceptedViewers.clear();
     startedShares.add((
@@ -165,10 +183,15 @@ class _FakeTransceiver extends Fake implements RTCRtpTransceiver {
 }
 
 class _FakeMediaStreamTrack extends Fake implements MediaStreamTrack {
-  _FakeMediaStreamTrack({required this.trackId, required this.trackKind});
+  _FakeMediaStreamTrack({
+    required this.trackId,
+    required this.trackKind,
+    this.callLog,
+  });
 
   final String trackId;
   final String trackKind;
+  final List<String>? callLog;
   bool isEnabled = true;
   bool isStopped = false;
   Map<String, dynamic>? appliedConstraints;
@@ -198,6 +221,7 @@ class _FakeMediaStreamTrack extends Fake implements MediaStreamTrack {
   @override
   Future<void> stop() async {
     isStopped = true;
+    callLog?.add('track.stop:$trackId');
   }
 }
 
@@ -206,12 +230,14 @@ class _FakeMediaStream extends Fake implements MediaStream {
     this.streamId, {
     List<MediaStreamTrack> audioTracks = const [],
     List<MediaStreamTrack> videoTracks = const [],
+    this.callLog,
   }) : _audioTracks = List<MediaStreamTrack>.of(audioTracks),
        _videoTracks = List<MediaStreamTrack>.of(videoTracks);
 
   final String streamId;
   final List<MediaStreamTrack> _audioTracks;
   final List<MediaStreamTrack> _videoTracks;
+  final List<String>? callLog;
   bool disposed = false;
 
   @override
@@ -232,6 +258,7 @@ class _FakeMediaStream extends Fake implements MediaStream {
   @override
   Future<void> dispose() async {
     disposed = true;
+    callLog?.add('stream.dispose:$streamId');
   }
 }
 
@@ -403,12 +430,67 @@ class _FakePeerConnection extends Fake implements RTCPeerConnection {
   }
 }
 
+class _FakePublisherAndroidSessionService
+    implements AndroidSessionServiceGateway {
+  _FakePublisherAndroidSessionService({this.isSupported = true, this.callLog});
+
+  @override
+  final bool isSupported;
+
+  final List<String>? callLog;
+  final syncedStates = <AndroidSessionNotificationState>[];
+  int permissionRequests = 0;
+  int stopCalls = 0;
+  bool nextSyncResult = true;
+  bool? nextProjectionSyncResult;
+  Completer<bool>? projectionSyncGate;
+  final _actions = StreamController<AndroidSessionServiceAction>.broadcast();
+
+  void emitAction(AndroidSessionServiceAction action) {
+    _actions.add(action);
+  }
+
+  Future<void> dispose() => _actions.close();
+
+  @override
+  Stream<AndroidSessionServiceAction> get actions => _actions.stream;
+
+  @override
+  Future<bool> requestNotificationPermission() async {
+    permissionRequests++;
+    return true;
+  }
+
+  @override
+  Future<bool> syncSession(AndroidSessionNotificationState state) async {
+    syncedStates.add(state);
+    callLog?.add(
+      'syncSession:${state.includeMediaProjection}:${state.isSharingScreen}',
+    );
+    if (state.includeMediaProjection && projectionSyncGate != null) {
+      return projectionSyncGate!.future;
+    }
+    if (state.includeMediaProjection && nextProjectionSyncResult != null) {
+      return nextProjectionSyncResult!;
+    }
+    return nextSyncResult;
+  }
+
+  @override
+  Future<void> stopSession() async {
+    stopCalls++;
+    callLog?.add('stopSession');
+  }
+}
+
 class _FakePublisherWebRtcBindings extends WebRtcBindings {
   _FakePublisherWebRtcBindings({
     List<DesktopCapturerSource>? sources,
     _FakeMediaStream? displayStream,
     this.remoteDescriptionGate,
     this.offerSdp,
+    this.callLog,
+    this.capturePermissionGranted = true,
   }) : sources =
            sources ??
            [
@@ -428,18 +510,29 @@ class _FakePublisherWebRtcBindings extends WebRtcBindings {
            _FakeMediaStream(
              'local-display-stream',
              videoTracks: [
-               _FakeMediaStreamTrack(trackId: 'video-0', trackKind: 'video'),
+               _FakeMediaStreamTrack(
+                 trackId: 'video-0',
+                 trackKind: 'video',
+                 callLog: callLog,
+               ),
              ],
+             callLog: callLog,
            );
 
   final List<DesktopCapturerSource> sources;
   final _FakeMediaStream displayStream;
   final Completer<void>? remoteDescriptionGate;
   final String? offerSdp;
+  final List<String>? callLog;
+  bool capturePermissionGranted;
+  Exception? capturePermissionError;
+  Exception? displayMediaError;
   bool throwOnModifiedSetLocalDescription = false;
   final List<_FakePeerConnection> createdPeers = [];
   final List<_FakeVideoRenderer> createdRenderers = [];
   Map<String, dynamic>? lastDisplayMediaConstraints;
+  int capturePermissionRequests = 0;
+  int displayMediaRequests = 0;
 
   @override
   Future<List<DesktopCapturerSource>> getDesktopSources({
@@ -450,10 +543,25 @@ class _FakePublisherWebRtcBindings extends WebRtcBindings {
   }
 
   @override
+  Future<bool> requestCapturePermission() async {
+    capturePermissionRequests++;
+    callLog?.add('requestCapturePermission');
+    if (capturePermissionError != null) {
+      throw capturePermissionError!;
+    }
+    return capturePermissionGranted;
+  }
+
+  @override
   Future<MediaStream> getDisplayMedia(
     Map<String, dynamic> mediaConstraints,
   ) async {
+    displayMediaRequests++;
+    callLog?.add('getDisplayMedia');
     lastDisplayMediaConstraints = mediaConstraints;
+    if (displayMediaError != null) {
+      throw displayMediaError!;
+    }
     return displayStream;
   }
 
@@ -1667,6 +1775,535 @@ void main() {
       expect(container.read(streamPublisherProvider.notifier).activePeers, {
         909: peer3,
       });
+    });
+
+    test('Android screen share runs consent -> awaited FGS promotion -> getDisplayMedia, preserves projection across voice updates, and rescales portrait/rotated frames', () async {
+      final callLog = <String>[];
+      final events = StreamController<CoreEvent>.broadcast(sync: true);
+      final core = _FakeCoreSession(events, callLog: callLog);
+      final bindings = _FakePublisherWebRtcBindings(callLog: callLog);
+      final projectionGate = Completer<bool>();
+      final androidService = _FakePublisherAndroidSessionService(
+        isSupported: true,
+        callLog: callLog,
+      )..projectionSyncGate = projectionGate;
+
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(core),
+          webRtcBindingsProvider.overrideWithValue(bindings),
+          androidSessionServiceProvider.overrideWithValue(androidService),
+        ],
+      );
+      addTearDown(() async {
+        if (!projectionGate.isCompleted) {
+          projectionGate.complete(false);
+        }
+        container.dispose();
+        await androidService.dispose();
+        await events.close();
+      });
+
+      final sub = container.listen(sessionViewProvider, (_, _) {});
+      addTearDown(sub.close);
+
+      events.add(
+        const CoreEvent.state(
+          state: CoreSessionState.connected(clientId: 1, channelId: 5),
+        ),
+      );
+      await _pumpEventQueue();
+      callLog.clear();
+
+      final startFuture = container
+          .read(sessionViewProvider.notifier)
+          .startScreenShare(
+            sourceId: androidScreenShareSourceId,
+            sourceName: 'Device screen',
+            resolution: ScreenShareResolutionPreset.p720,
+            frameRate: ScreenShareFrameRatePreset.fps60,
+            audio: true,
+          );
+      await _pumpEventQueue();
+
+      // Must pause after FGS promotion request before calling getDisplayMedia.
+      expect(callLog, ['requestCapturePermission', 'syncSession:true:false']);
+      expect(bindings.displayMediaRequests, 0);
+
+      projectionGate.complete(true);
+      expect(await startFuture, isTrue);
+
+      expect(callLog, [
+        'requestCapturePermission',
+        'syncSession:true:false',
+        'getDisplayMedia',
+        'syncSession:true:true',
+        'core.startScreenShare',
+      ]);
+      expect(bindings.lastDisplayMediaConstraints, {
+        'video': {'frameRate': 60},
+        'audio': false,
+      });
+      expect(
+        bindings.lastDisplayMediaConstraints!['video'],
+        isNot(contains('deviceId')),
+      );
+      expect(core.startedShares, [
+        (
+          name: 'Device screen',
+          audio: false,
+          bitrate: 5000,
+          viewerLimit: defaultMaxStreamViewers(),
+        ),
+      ]);
+
+      // Reactive mute update during active sharing must preserve includeMediaProjection: true.
+      events.add(
+        const CoreEvent.voice(
+          state: CoreVoiceState(
+            muted: true,
+            deafened: false,
+            away: false,
+            pttMode: false,
+            pttActive: false,
+            inputReady: true,
+            outputReady: true,
+          ),
+        ),
+      );
+      await _pumpEventQueue();
+      expect(androidService.syncedStates.last.isMuted, isTrue);
+      expect(androidService.syncedStates.last.isSharingScreen, isTrue);
+      expect(androidService.syncedStates.last.includeMediaProjection, isTrue);
+
+      // Portrait & single-app resize updates scaleResolutionDownBy symmetrically.
+      events.add(
+        const CoreEvent.screenSharePublished(streamId: 'android-pub-1'),
+      );
+      await _pumpEventQueue();
+      events.add(
+        const CoreEvent.streamViewerJoinRequested(
+          streamId: 'android-pub-1',
+          viewerClid: 303,
+        ),
+      );
+      await _pumpEventQueue();
+
+      final sender = bindings.createdPeers.single.sendersList.single;
+      final renderer = bindings.createdRenderers.single;
+
+      // Portrait 1080x2400 within 720p -> target box flips to 720x1280 -> scale = 2400/1280 = 1.875.
+      expect(
+        computeScaleResolutionDownBy(
+          sourceWidth: 1080,
+          sourceHeight: 2400,
+          resolution: ScreenShareResolutionPreset.p720,
+        ),
+        closeTo(2400 / 1280, 0.0001),
+      );
+      renderer.value = renderer.value.copyWith(width: 1080, height: 2400);
+      renderer.onResize?.call();
+      await _pumpEventQueue();
+      expect(
+        sender.updatedParameters?.encodings?.single.scaleResolutionDownBy,
+        closeTo(2400 / 1280, 0.0001),
+      );
+
+      // Rotating to landscape 2400x1080 -> target box is 1280x720 -> scale = 2400/1280 = 1.875.
+      renderer.value = renderer.value.copyWith(width: 2400, height: 1080);
+      renderer.onResize?.call();
+      await _pumpEventQueue();
+      expect(
+        sender.updatedParameters?.encodings?.single.scaleResolutionDownBy,
+        closeTo(2400 / 1280, 0.0001),
+      );
+
+      // Single-app share smaller than 720p portrait -> no upscaling, factor = 1.0.
+      renderer.value = renderer.value.copyWith(width: 640, height: 960);
+      renderer.onResize?.call();
+      await _pumpEventQueue();
+      expect(
+        sender.updatedParameters?.encodings?.single.scaleResolutionDownBy,
+        1.0,
+      );
+    });
+
+    test('Android screen share user consent denial skips FGS upgrade, getDisplayMedia, and error notices', () async {
+      final events = StreamController<CoreEvent>.broadcast(sync: true);
+      final core = _FakeCoreSession(events);
+      final bindings = _FakePublisherWebRtcBindings(
+        capturePermissionGranted: false,
+      );
+      final androidService = _FakePublisherAndroidSessionService(
+        isSupported: true,
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(core),
+          webRtcBindingsProvider.overrideWithValue(bindings),
+          androidSessionServiceProvider.overrideWithValue(androidService),
+        ],
+      );
+      addTearDown(() async {
+        container.dispose();
+        await androidService.dispose();
+        await events.close();
+      });
+
+      final sub = container.listen(sessionViewProvider, (_, _) {});
+      addTearDown(sub.close);
+      events.add(
+        const CoreEvent.state(
+          state: CoreSessionState.connected(clientId: 1, channelId: 5),
+        ),
+      );
+      await _pumpEventQueue();
+
+      final started = await container
+          .read(sessionViewProvider.notifier)
+          .startScreenShare(
+            sourceId: androidScreenShareSourceId,
+            sourceName: 'Device screen',
+          );
+
+      expect(started, isFalse);
+      expect(bindings.capturePermissionRequests, 1);
+      expect(bindings.displayMediaRequests, 0);
+      expect(core.startedShares, isEmpty);
+      expect(
+        androidService.syncedStates.any((s) => s.includeMediaProjection),
+        isFalse,
+      );
+      expect(container.read(noticeCenterProvider), isEmpty);
+      expect(container.read(streamPublisherProvider).isActive, isFalse);
+    });
+
+    test('Android screen share FGS promotion failure aborts before getDisplayMedia and shows notice', () async {
+      final events = StreamController<CoreEvent>.broadcast(sync: true);
+      final core = _FakeCoreSession(events);
+      final bindings = _FakePublisherWebRtcBindings();
+      final androidService = _FakePublisherAndroidSessionService(
+        isSupported: true,
+      )..nextProjectionSyncResult = false;
+
+      final container = ProviderContainer(
+        overrides: [
+          coreSessionProvider.overrideWithValue(core),
+          webRtcBindingsProvider.overrideWithValue(bindings),
+          androidSessionServiceProvider.overrideWithValue(androidService),
+        ],
+      );
+      addTearDown(() async {
+        container.dispose();
+        await androidService.dispose();
+        await events.close();
+      });
+
+      final sub = container.listen(sessionViewProvider, (_, _) {});
+      addTearDown(sub.close);
+      events.add(
+        const CoreEvent.state(
+          state: CoreSessionState.connected(clientId: 1, channelId: 5),
+        ),
+      );
+      await _pumpEventQueue();
+
+      final started = await container
+          .read(sessionViewProvider.notifier)
+          .startScreenShare(
+            sourceId: androidScreenShareSourceId,
+            sourceName: 'Device screen',
+          );
+
+      expect(started, isFalse);
+      expect(bindings.capturePermissionRequests, 1);
+      expect(
+        androidService.syncedStates.where((s) => s.includeMediaProjection),
+        hasLength(1),
+      );
+      expect(bindings.displayMediaRequests, 0);
+      expect(core.startedShares, isEmpty);
+      expect(container.read(streamPublisherProvider).isActive, isFalse);
+      expect(container.read(noticeCenterProvider), hasLength(1));
+
+      // Subsequent voice updates must remain downgraded (includeMediaProjection == false).
+      events.add(
+        const CoreEvent.voice(
+          state: CoreVoiceState(
+            muted: true,
+            deafened: false,
+            away: false,
+            pttMode: false,
+            pttActive: false,
+            inputReady: true,
+            outputReady: true,
+          ),
+        ),
+      );
+      await _pumpEventQueue();
+      expect(androidService.syncedStates.last.includeMediaProjection, isFalse);
+      expect(androidService.syncedStates.last.isSharingScreen, isFalse);
+    });
+
+    test('Android screen share downgrades FGS cleanly when getDisplayMedia or core startScreenShare fails', () async {
+      // Failure 1: getDisplayMedia throws after FGS promotion.
+      {
+        final callLog = <String>[];
+        final events = StreamController<CoreEvent>.broadcast(sync: true);
+        final core = _FakeCoreSession(events, callLog: callLog);
+        final bindings = _FakePublisherWebRtcBindings(callLog: callLog)
+          ..displayMediaError = Exception('capture failed');
+        final androidService = _FakePublisherAndroidSessionService(
+          isSupported: true,
+          callLog: callLog,
+        );
+
+        final container = ProviderContainer(
+          overrides: [
+            coreSessionProvider.overrideWithValue(core),
+            webRtcBindingsProvider.overrideWithValue(bindings),
+            androidSessionServiceProvider.overrideWithValue(androidService),
+          ],
+        );
+        final sub = container.listen(sessionViewProvider, (_, _) {});
+
+        events.add(
+          const CoreEvent.state(
+            state: CoreSessionState.connected(clientId: 1, channelId: 5),
+          ),
+        );
+        await _pumpEventQueue();
+        callLog.clear();
+
+        final started = await container
+            .read(sessionViewProvider.notifier)
+            .startScreenShare(
+              sourceId: androidScreenShareSourceId,
+              sourceName: 'Device screen',
+            );
+
+        expect(started, isFalse);
+        expect(callLog, [
+          'requestCapturePermission',
+          'syncSession:true:false',
+          'getDisplayMedia',
+          'syncSession:false:false',
+        ]);
+        expect(
+          androidService.syncedStates.last.includeMediaProjection,
+          isFalse,
+        );
+        expect(androidService.syncedStates.last.isSharingScreen, isFalse);
+        expect(container.read(streamPublisherProvider).isActive, isFalse);
+        expect(container.read(noticeCenterProvider), hasLength(1));
+
+        sub.close();
+        container.dispose();
+        await androidService.dispose();
+        await events.close();
+      }
+
+      // Failure 2: coreSession.startScreenShare throws after local capture started.
+      {
+        final callLog = <String>[];
+        final events = StreamController<CoreEvent>.broadcast(sync: true);
+        final core = _FakeCoreSession(events, callLog: callLog)
+          ..startScreenShareError = const CoreError.connection(
+            message: 'server rejected share',
+          );
+        final bindings = _FakePublisherWebRtcBindings(callLog: callLog);
+        final androidService = _FakePublisherAndroidSessionService(
+          isSupported: true,
+          callLog: callLog,
+        );
+
+        final container = ProviderContainer(
+          overrides: [
+            coreSessionProvider.overrideWithValue(core),
+            webRtcBindingsProvider.overrideWithValue(bindings),
+            androidSessionServiceProvider.overrideWithValue(androidService),
+          ],
+        );
+        final sub = container.listen(sessionViewProvider, (_, _) {});
+
+        events.add(
+          const CoreEvent.state(
+            state: CoreSessionState.connected(clientId: 1, channelId: 5),
+          ),
+        );
+        await _pumpEventQueue();
+        callLog.clear();
+
+        final started = await container
+            .read(sessionViewProvider.notifier)
+            .startScreenShare(
+              sourceId: androidScreenShareSourceId,
+              sourceName: 'Device screen',
+            );
+
+        expect(started, isFalse);
+        expect(callLog, [
+          'requestCapturePermission',
+          'syncSession:true:false',
+          'getDisplayMedia',
+          'syncSession:true:true',
+          'core.startScreenShare',
+          'track.stop:video-0',
+          'stream.dispose:local-display-stream',
+          'syncSession:false:false',
+        ]);
+        expect(
+          androidService.syncedStates.last.includeMediaProjection,
+          isFalse,
+        );
+        expect(androidService.syncedStates.last.isSharingScreen, isFalse);
+        expect(container.read(streamPublisherProvider).isActive, isFalse);
+
+        sub.close();
+        container.dispose();
+        await androidService.dispose();
+        await events.close();
+      }
+    });
+
+    test('Android screen share releases stream before downgrading FGS on stopScreenShare, notification action, and videoTrack.onEnded while keeping voice alive', () async {
+      // Scenario A: OS videoTrack.onEnded (e.g. Android 15 status bar pill / lock screen).
+      {
+        final callLog = <String>[];
+        final events = StreamController<CoreEvent>.broadcast(sync: true);
+        final core = _FakeCoreSession(events, callLog: callLog);
+        final bindings = _FakePublisherWebRtcBindings(callLog: callLog);
+        final androidService = _FakePublisherAndroidSessionService(
+          isSupported: true,
+          callLog: callLog,
+        );
+
+        final container = ProviderContainer(
+          overrides: [
+            coreSessionProvider.overrideWithValue(core),
+            webRtcBindingsProvider.overrideWithValue(bindings),
+            androidSessionServiceProvider.overrideWithValue(androidService),
+          ],
+        );
+        final sub = container.listen(sessionViewProvider, (_, _) {});
+
+        events.add(
+          const CoreEvent.state(
+            state: CoreSessionState.connected(clientId: 1, channelId: 5),
+          ),
+        );
+        await _pumpEventQueue();
+
+        expect(
+          await container
+              .read(sessionViewProvider.notifier)
+              .startScreenShare(
+                sourceId: androidScreenShareSourceId,
+                sourceName: 'Device screen',
+              ),
+          isTrue,
+        );
+        callLog.clear();
+
+        final track =
+            bindings.displayStream.getVideoTracks().single
+                as _FakeMediaStreamTrack;
+        track.onEnded?.call();
+        await _pumpEventQueue();
+
+        expect(callLog, [
+          'track.stop:video-0',
+          'stream.dispose:local-display-stream',
+          'syncSession:false:false',
+        ]);
+        expect(
+          androidService.syncedStates.last.includeMediaProjection,
+          isFalse,
+        );
+        expect(androidService.syncedStates.last.isSharingScreen, isFalse);
+        expect(androidService.stopCalls, 0);
+        expect(core.stopShareCalls, 1);
+
+        sub.close();
+        container.dispose();
+        await androidService.dispose();
+        await events.close();
+      }
+
+      // Scenario B: Notification stopScreenShare action, followed by second share & disconnect.
+      {
+        final callLog = <String>[];
+        final events = StreamController<CoreEvent>.broadcast(sync: true);
+        final core = _FakeCoreSession(events, callLog: callLog);
+        final bindings = _FakePublisherWebRtcBindings(callLog: callLog);
+        final androidService = _FakePublisherAndroidSessionService(
+          isSupported: true,
+          callLog: callLog,
+        );
+
+        final container = ProviderContainer(
+          overrides: [
+            coreSessionProvider.overrideWithValue(core),
+            webRtcBindingsProvider.overrideWithValue(bindings),
+            androidSessionServiceProvider.overrideWithValue(androidService),
+          ],
+        );
+        final sub = container.listen(sessionViewProvider, (_, _) {});
+
+        events.add(
+          const CoreEvent.state(
+            state: CoreSessionState.connected(clientId: 1, channelId: 5),
+          ),
+        );
+        await _pumpEventQueue();
+
+        expect(
+          await container
+              .read(sessionViewProvider.notifier)
+              .startScreenShare(
+                sourceId: androidScreenShareSourceId,
+                sourceName: 'Device screen',
+              ),
+          isTrue,
+        );
+        callLog.clear();
+
+        androidService.emitAction(AndroidSessionServiceAction.stopScreenShare);
+        await _pumpEventQueue();
+
+        expect(callLog, [
+          'track.stop:video-0',
+          'stream.dispose:local-display-stream',
+          'syncSession:false:false',
+        ]);
+        expect(androidService.stopCalls, 0);
+        expect(core.stopShareCalls, 1);
+
+        // Start a second session, then disconnect -> stopSession once and no FGS restart.
+        expect(
+          await container
+              .read(sessionViewProvider.notifier)
+              .startScreenShare(
+                sourceId: androidScreenShareSourceId,
+                sourceName: 'Device screen',
+              ),
+          isTrue,
+        );
+        final syncsBeforeDisconnect = androidService.syncedStates.length;
+        events.add(
+          const CoreEvent.state(state: CoreSessionState.disconnected()),
+        );
+        await _pumpEventQueue();
+
+        expect(androidService.stopCalls, 1);
+        expect(androidService.syncedStates.length, syncsBeforeDisconnect);
+
+        sub.close();
+        container.dispose();
+        await androidService.dispose();
+        await events.close();
+      }
     });
   });
 }

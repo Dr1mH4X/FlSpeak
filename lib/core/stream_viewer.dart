@@ -578,6 +578,10 @@ abstract class WebRtcBindings {
   Future<MediaStream> getDisplayMedia(Map<String, dynamic> mediaConstraints) {
     throw UnimplementedError('getDisplayMedia is not implemented');
   }
+
+  Future<bool> requestCapturePermission() {
+    throw UnimplementedError('requestCapturePermission is not implemented');
+  }
 }
 
 /// Default production bindings backed by `flutter_webrtc`.
@@ -643,6 +647,11 @@ class FlutterWebRtcBindings implements WebRtcBindings {
   @override
   Future<MediaStream> getDisplayMedia(Map<String, dynamic> mediaConstraints) {
     return navigator.mediaDevices.getDisplayMedia(mediaConstraints);
+  }
+
+  @override
+  Future<bool> requestCapturePermission() {
+    return Helper.requestCapturePermission();
   }
 }
 

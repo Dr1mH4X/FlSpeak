@@ -9,12 +9,14 @@ import 'package:flspeak_ffi/flspeak_ffi.dart';
 
 import '../l10n/app_localizations.dart';
 import 'audio_selection.dart';
+import 'channel_display.dart';
 import 'identity/identity.dart';
 import 'image_host.dart';
 import 'models.dart';
 import 'notices.dart';
 import 'platform/android_app_lifecycle.dart';
 import 'platform/android_audio_permission.dart';
+import 'platform/android_session_service.dart';
 import 'platform/file_export.dart';
 import 'platform/global_hotkey.dart';
 import 'preferences.dart';
@@ -42,6 +44,70 @@ final microphonePermissionProvider = Provider<MicrophonePermissionGateway>(
 final androidAppLifecycleProvider = Provider<AndroidAppLifecycleGateway>(
   (ref) => const AndroidAppLifecycle(),
 );
+
+final androidSessionServiceProvider = Provider<AndroidSessionServiceGateway>(
+  (ref) => const AndroidSessionService(),
+);
+
+AndroidSessionNotificationState buildAndroidSessionNotificationState({
+  required SessionView view,
+  required AppLocalizations l10n,
+  required bool isSharingScreen,
+  bool includeMediaProjection = false,
+}) {
+  final activeServer = view.activeServer;
+  final rawLabel = activeServer?.label.trim() ?? '';
+  final rawHost = activeServer?.host.trim() ?? '';
+  final fallbackAddress = activeServer == null || rawHost.isEmpty
+      ? ''
+      : (rawHost.contains(':')
+            ? '[$rawHost]:${activeServer.port}'
+            : '$rawHost:${activeServer.port}');
+  final serverName = rawLabel.isNotEmpty
+      ? rawLabel
+      : (fallbackAddress.isNotEmpty ? fallbackAddress : l10n.appName);
+
+  final channelId = view.selfChannelId;
+  final channel = channelId == null ? null : view.channelById(channelId);
+  final channelName = channel == null ? null : channelDisplayName(channel);
+  final title = channelName != null && channelName.isNotEmpty
+      ? l10n.sessionNotificationTitle(serverName, channelName)
+      : serverName;
+
+  final String subtitle;
+  if (view.reconnecting) {
+    subtitle = l10n.sessionNotificationStatusReconnecting;
+  } else {
+    final voiceStatus = view.deafened
+        ? l10n.sessionNotificationStatusDeafened
+        : (view.muted
+              ? l10n.sessionNotificationStatusMuted
+              : l10n.sessionNotificationStatusInVoice);
+    if (isSharingScreen) {
+      subtitle = !view.deafened && !view.muted
+          ? l10n.sessionNotificationStatusSharingScreen
+          : l10n.sessionNotificationStatusCombined(
+              l10n.sessionNotificationStatusSharingScreen,
+              voiceStatus,
+            );
+    } else {
+      subtitle = voiceStatus;
+    }
+  }
+
+  return AndroidSessionNotificationState(
+    title: title,
+    subtitle: subtitle,
+    channelName: l10n.sessionNotificationChannelName,
+    muteActionLabel: view.muted ? l10n.voiceUnmute : l10n.voiceMute,
+    stopScreenShareActionLabel: l10n.streamStopShare,
+    disconnectActionLabel: l10n.sessionNotificationDisconnect,
+    isMuted: view.muted,
+    isSharingScreen: isSharingScreen,
+    includeMediaProjection: includeMediaProjection,
+    sessionEpoch: view.connectionEpoch,
+  );
+}
 
 final clockProvider = Provider<DateTime Function()>((ref) => DateTime.now);
 
@@ -162,6 +228,13 @@ class SessionController extends Notifier<SessionView> {
   String? _connectingServerId;
   bool _awaitingDisconnect = false;
   bool _samplingNetwork = false;
+  bool _notificationPermissionRequested = false;
+  bool _androidSessionServiceActive = false;
+  bool _androidSessionServiceStarted = false;
+  bool _androidMediaProjectionActive = false;
+  AndroidSessionNotificationState? _lastAndroidNotificationState;
+  int _androidSessionServiceOpGen = 0;
+  Future<bool>? _inFlightAndroidSync;
 
   /// 最近一次已提示的语音错误；Voice 事件重复带同一句时不再刷新提示。
   String? _lastVoiceNotice;
@@ -171,6 +244,14 @@ class SessionController extends Notifier<SessionView> {
 
   @override
   SessionView build() {
+    _notificationPermissionRequested = false;
+    _androidSessionServiceActive = false;
+    _androidSessionServiceStarted = false;
+    _androidMediaProjectionActive = false;
+    _lastAndroidNotificationState = null;
+    _androidSessionServiceOpGen = 0;
+    _inFlightAndroidSync = null;
+
     final session = ref.watch(coreSessionProvider);
     final subscription = session.events().listen(_onEvent);
     ref.onDispose(subscription.cancel);
@@ -181,11 +262,195 @@ class SessionController extends Notifier<SessionView> {
         if (!reply.isCompleted) reply.complete(false);
       }
     });
+
+    final androidSessionService = ref.watch(androidSessionServiceProvider);
+    if (androidSessionService.isSupported) {
+      final actionSub = androidSessionService.actions.listen(
+        _handleAndroidSessionServiceAction,
+      );
+      ref.onDispose(actionSub.cancel);
+      listenSelf((_, next) {
+        _syncAndroidSessionService(androidSessionService, view: next);
+      });
+      ref.listen<bool>(streamPublisherProvider.select((s) => s.isSharing), (
+        previous,
+        isSharing,
+      ) {
+        if (previous == true && !isSharing && _androidMediaProjectionActive) {
+          return;
+        }
+        _syncAndroidSessionService(
+          androidSessionService,
+          isSharingScreen: isSharing,
+        );
+      });
+      ref.listen<AppLocalizations>(appLocalizationsProvider, (_, l10n) {
+        _syncAndroidSessionService(androidSessionService, l10n: l10n);
+      });
+      ref.onDispose(() {
+        _stopAndroidSessionServiceIfNeeded(androidSessionService);
+      });
+    }
+
     // 初始档案在 spawn 时就广播过一次，广播通道不补发给订阅者；订阅后主动拉一遍，
     // 否则打开应用时已保存的服务器列表要等下一次增删才会出现。
     unawaited(_loadServers(session));
     unawaited(_loadServerIcons(session));
     return const SessionView();
+  }
+
+  void _syncAndroidSessionService(
+    AndroidSessionServiceGateway service, {
+    SessionView? view,
+    bool? isSharingScreen,
+    AppLocalizations? l10n,
+  }) {
+    unawaited(
+      _syncAndroidSessionServiceAsync(
+        service,
+        view: view,
+        isSharingScreen: isSharingScreen,
+        l10n: l10n,
+      ),
+    );
+  }
+
+  Future<bool> _syncAndroidSessionServiceAsync(
+    AndroidSessionServiceGateway service, {
+    SessionView? view,
+    bool? isSharingScreen,
+    AppLocalizations? l10n,
+  }) {
+    if (!ref.mounted) return Future<bool>.value(false);
+    final currentView = view ?? state;
+    final shouldBeActive =
+        currentView.connected ||
+        (currentView.reconnecting && _androidSessionServiceActive);
+    if (!shouldBeActive) {
+      _stopAndroidSessionServiceIfNeeded(service);
+      return Future<bool>.value(false);
+    }
+
+    final sharing =
+        isSharingScreen ?? ref.read(streamPublisherProvider).isSharing;
+    final AppLocalizations localizations =
+        l10n ?? ref.read<AppLocalizations>(appLocalizationsProvider);
+    final desired = buildAndroidSessionNotificationState(
+      view: currentView,
+      l10n: localizations,
+      isSharingScreen: sharing,
+      includeMediaProjection: _androidMediaProjectionActive,
+    );
+    if (desired == _lastAndroidNotificationState) {
+      return _inFlightAndroidSync ??
+          Future<bool>.value(_androidSessionServiceStarted);
+    }
+    _lastAndroidNotificationState = desired;
+    _androidSessionServiceActive = true;
+    final generation = ++_androidSessionServiceOpGen;
+    final syncFuture = _applyAndroidSessionServiceSync(
+      service,
+      desired,
+      generation,
+    );
+    _inFlightAndroidSync = syncFuture;
+    syncFuture.whenComplete(() {
+      if (identical(_inFlightAndroidSync, syncFuture)) {
+        _inFlightAndroidSync = null;
+      }
+    });
+    return syncFuture;
+  }
+
+  Future<bool> _applyAndroidSessionServiceSync(
+    AndroidSessionServiceGateway service,
+    AndroidSessionNotificationState desired,
+    int generation,
+  ) async {
+    final ok = await service.syncSession(desired);
+    if (!ref.mounted) {
+      return false;
+    }
+    if (generation == _androidSessionServiceOpGen) {
+      if (ok) {
+        _androidSessionServiceStarted = true;
+      } else {
+        _lastAndroidNotificationState = null;
+        if (!_androidSessionServiceStarted) {
+          _androidSessionServiceActive = false;
+        }
+      }
+    } else if (ok) {
+      _androidSessionServiceStarted = true;
+    }
+    return ok;
+  }
+
+  void _stopAndroidSessionServiceIfNeeded(
+    AndroidSessionServiceGateway service,
+  ) {
+    final hadState =
+        _androidSessionServiceActive ||
+        _androidMediaProjectionActive ||
+        _lastAndroidNotificationState != null;
+    _androidMediaProjectionActive = false;
+    _inFlightAndroidSync = null;
+    if (!hadState) {
+      return;
+    }
+    _androidSessionServiceActive = false;
+    _androidSessionServiceStarted = false;
+    _lastAndroidNotificationState = null;
+    _androidSessionServiceOpGen++;
+    unawaited(service.stopSession());
+  }
+
+  /// 同步调整 Android 会话前台服务的 `mediaProjection` 类型位，并等待原生 `startForeground` 完成。
+  Future<bool> setAndroidMediaProjectionActive(bool active) async {
+    if (!ref.mounted) return false;
+    final service = ref.read(androidSessionServiceProvider);
+    if (!service.isSupported) return true;
+
+    if (active) {
+      if (!state.connected) return false;
+      _androidMediaProjectionActive = true;
+      final ok = await _syncAndroidSessionServiceAsync(service);
+      if (!ref.mounted || !_androidMediaProjectionActive || !state.connected) {
+        return false;
+      }
+      if (!ok) {
+        _androidMediaProjectionActive = false;
+        _lastAndroidNotificationState = null;
+        return false;
+      }
+      return true;
+    }
+
+    if (!_androidMediaProjectionActive &&
+        _lastAndroidNotificationState?.includeMediaProjection != true) {
+      return true;
+    }
+    _androidMediaProjectionActive = false;
+    if (!(state.connected ||
+        (state.reconnecting && _androidSessionServiceActive))) {
+      _stopAndroidSessionServiceIfNeeded(service);
+      return true;
+    }
+    return _syncAndroidSessionServiceAsync(service, isSharingScreen: false);
+  }
+
+  void _handleAndroidSessionServiceAction(AndroidSessionServiceAction action) {
+    if (!ref.mounted) return;
+    switch (action) {
+      case AndroidSessionServiceAction.toggleMute:
+        if (state.connected) {
+          unawaited(setMuted(!state.muted));
+        }
+      case AndroidSessionServiceAction.stopScreenShare:
+        unawaited(stopScreenShare());
+      case AndroidSessionServiceAction.disconnect:
+        unawaited(disconnect());
+    }
   }
 
   Future<void> _loadServers(CoreSession session) async {
@@ -281,6 +546,12 @@ class SessionController extends Notifier<SessionView> {
         }
       }
       if (!ref.mounted || _connectingServerId != id) return;
+      final sessionService = ref.read(androidSessionServiceProvider);
+      if (sessionService.isSupported && !_notificationPermissionRequested) {
+        _notificationPermissionRequested = true;
+        await sessionService.requestNotificationPermission();
+        if (!ref.mounted || _connectingServerId != id) return;
+      }
       attempted = true;
       await session.connect(id: id, nickname: nickname);
     }, recordFailure: true);
@@ -560,7 +831,7 @@ class SessionController extends Notifier<SessionView> {
     }
   }
 
-  /// 开启桌面屏幕或窗口共享。
+  /// 开启屏幕或窗口共享。
   Future<bool> startScreenShare({
     required String sourceId,
     required String sourceName,
@@ -578,6 +849,7 @@ class SessionController extends Notifier<SessionView> {
             resolution: resolution,
             frameRate: frameRate,
             audio: audio,
+            onAndroidMediaProjectionChanged: setAndroidMediaProjectionActive,
           );
     } on CoreError catch (error) {
       if (ref.mounted) {

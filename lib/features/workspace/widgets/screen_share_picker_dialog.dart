@@ -41,13 +41,26 @@ class ScreenSharePickerSelection {
   final bool shareAudio;
 }
 
-/// Opens the desktop screen/window source picker modal and starts screen
-/// sharing if the user confirms a selection.
+/// Starts screen sharing for the current platform: Android routes directly
+/// through MediaProjection using saved capture preferences, while desktop opens
+/// the screen/window source picker modal first.
 Future<bool> showScreenSharePickerAndStart(
   BuildContext context,
   WidgetRef ref,
 ) async {
   final l10n = AppLocalizations.of(context);
+  if (ref.read(androidSessionServiceProvider).isSupported) {
+    final prefs = ref.read(preferencesProvider);
+    return ref
+        .read(sessionViewProvider.notifier)
+        .startScreenShare(
+          sourceId: androidScreenShareSourceId,
+          sourceName: l10n.streamAndroidDefaultSourceName,
+          resolution: prefs.screenShareResolution,
+          frameRate: prefs.screenShareFrameRate,
+          audio: false,
+        );
+  }
   final selection = await showAppModal<ScreenSharePickerSelection>(
     context,
     title: l10n.streamPickerTitle,
@@ -65,6 +78,15 @@ Future<bool> showScreenSharePickerAndStart(
         frameRate: selection.frameRate,
         audio: selection.shareAudio,
       );
+}
+
+/// Toggles local screen sharing from UI triggers.
+Future<void> toggleScreenShare(BuildContext context, WidgetRef ref) async {
+  if (ref.read(streamPublisherProvider).isActive) {
+    await ref.read(sessionViewProvider.notifier).stopScreenShare();
+  } else {
+    await showScreenSharePickerAndStart(context, ref);
+  }
 }
 
 /// Modal body for picking a screen or window to share along with resolution
