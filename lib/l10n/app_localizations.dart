@@ -476,6 +476,12 @@ abstract class AppLocalizations {
   /// **'The avatar could not be updated. Try again.'**
   String get avatarUnavailable;
 
+  /// No description provided for @avatarRequiresConnection.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect to a server to manage your avatar.'**
+  String get avatarRequiresConnection;
+
   /// No description provided for @workspaceDropped.
   ///
   /// In en, this message translates to:

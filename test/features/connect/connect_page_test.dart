@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flspeak/core/identity/identity.dart';
 import 'package:flspeak/core/models.dart';
+import 'package:flspeak/core/notices.dart';
 import 'package:flspeak/core/preferences.dart';
 import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
@@ -299,34 +300,53 @@ void main() {
     expect(find.text(l10n.identityTitle), findsNothing);
   });
 
-  testWidgets('disconnected identity avatar is not tappable', (tester) async {
-    tester.view.physicalSize = const Size(1200, 900);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
+  for (final size in [const Size(1200, 900), const Size(600, 800)]) {
+    testWidgets(
+      'disconnected identity avatar shows a connection notice at ${size.width.toInt()}px',
+      (tester) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          coreSessionProvider.overrideWithValue(_FakeCore()),
-          sessionViewProvider.overrideWith(_TestSessionController.new),
-        ],
-        child: MaterialApp(
-          theme: buildAppTheme(Brightness.light),
-          locale: const Locale('en'),
-          localizationsDelegates: appLocalizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          builder: (context, child) =>
-              PrismRootScope(brightness: Brightness.light, child: child!),
-          home: const ConnectPage(),
-        ),
-      ),
+        final container = ProviderContainer(
+          overrides: [
+            coreSessionProvider.overrideWithValue(_FakeCore()),
+            sessionViewProvider.overrideWith(_TestSessionController.new),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+              theme: buildAppTheme(Brightness.light),
+              locale: const Locale('en'),
+              localizationsDelegates: appLocalizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              builder: (context, child) =>
+                  PrismRootScope(brightness: Brightness.light, child: child!),
+              home: const ConnectPage(),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final l10n = lookupAppLocalizations(const Locale('en'));
+        expect(find.bySemanticsLabel(l10n.avatarManage), findsOneWidget);
+        await tester.tap(find.bySemanticsLabel(l10n.avatarManage));
+        await tester.pumpAndSettle();
+
+        expect(find.text(l10n.avatarTitle), findsNothing);
+        expect(find.text(l10n.identityTitle), findsNothing);
+        final notices = container.read(noticeCenterProvider);
+        expect(notices, hasLength(1));
+        expect(notices.single.message, l10n.avatarRequiresConnection);
+        expect(notices.single.tone, NoticeTone.info);
+      },
     );
-    await tester.pumpAndSettle();
-
-    final l10n = lookupAppLocalizations(const Locale('en'));
-    expect(find.bySemanticsLabel(l10n.avatarManage), findsNothing);
-  });
+  }
 
   testWidgets('disconnected identity card shows the cached snapshot', (
     tester,

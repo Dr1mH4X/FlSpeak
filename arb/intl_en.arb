@@ -119,6 +119,7 @@
   "avatarPermissionDenied": "You cannot change your avatar on this server.",
   "avatarUnsupportedFormat": "Choose a PNG, JPEG, GIF, or WebP image.",
   "avatarUnavailable": "The avatar could not be updated. Try again.",
+  "avatarRequiresConnection": "Connect to a server to manage your avatar.",
   "workspaceDropped": "Disconnected",
   "workspaceRetrying": "Retrying…",
   "channelsSection": "Channels",

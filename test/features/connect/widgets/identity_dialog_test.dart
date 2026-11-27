@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:flspeak/core/models.dart';
+import 'package:flspeak/core/notices.dart';
 import 'package:flspeak/core/providers.dart';
 import 'package:flspeak/l10n/app_localizations.dart';
 import 'package:flspeak/localization.dart';
@@ -57,8 +58,9 @@ void main() {
     required String nickname,
     required ValueChanged<String> onRename,
     Uint8List? avatarBytes,
+    ProviderContainer? container,
   }) {
-    return MaterialApp(
+    final app = MaterialApp(
       locale: const Locale('zh'),
       localizationsDelegates: appLocalizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
@@ -77,6 +79,9 @@ void main() {
         ),
       ),
     );
+    return container == null
+        ? ProviderScope(child: app)
+        : UncontrolledProviderScope(container: container, child: app);
   }
 
   testWidgets(
@@ -95,28 +100,37 @@ void main() {
     },
   );
 
-  testWidgets('disconnected identity dialog shows the cached snapshot', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      buildTestWidget(
-        nickname: 'FlSpeakUser',
-        onRename: (_) {},
-        avatarBytes: _previewAvatar,
-      ),
-    );
-    await tester.tap(find.text('Open'));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'disconnected identity dialog shows the cached snapshot and notifies on avatar tap',
+    (tester) async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      await tester.pumpWidget(
+        buildTestWidget(
+          nickname: 'FlSpeakUser',
+          onRename: (_) {},
+          avatarBytes: _previewAvatar,
+          container: container,
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
 
-    final avatar = tester.widget<IdentityAvatar>(find.byType(IdentityAvatar));
-    expect(avatar.image, _previewAvatar);
-    expect(
-      find.bySemanticsLabel(
-        lookupAppLocalizations(const Locale('zh')).avatarManage,
-      ),
-      findsNothing,
-    );
-  });
+      final l10n = lookupAppLocalizations(const Locale('zh'));
+      final avatar = tester.widget<IdentityAvatar>(find.byType(IdentityAvatar));
+      expect(avatar.image, _previewAvatar);
+      expect(find.bySemanticsLabel(l10n.avatarManage), findsOneWidget);
+
+      await tester.tap(find.bySemanticsLabel(l10n.avatarManage));
+      await tester.pumpAndSettle();
+
+      expect(find.text(l10n.avatarTitle), findsNothing);
+      final notices = container.read(noticeCenterProvider);
+      expect(notices, hasLength(1));
+      expect(notices.single.message, l10n.avatarRequiresConnection);
+      expect(notices.single.tone, NoticeTone.info);
+    },
+  );
 
   testWidgets(
     'submitting without changes closes the dialog without calling onRename',

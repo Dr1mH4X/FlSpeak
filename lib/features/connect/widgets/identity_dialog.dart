@@ -13,6 +13,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/identity/avatars.dart';
+import '../../../core/notices.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../theme/app_motion.dart';
 import '../../../theme/app_theme.dart';
@@ -130,10 +131,22 @@ class _IdentityDialogContentState extends State<_IdentityDialogContent> {
   }) {
     final uid = widget.avatarUid;
     if (uid == null) {
-      return IdentityAvatar(
-        nickname: labelNickname,
-        size: 36,
-        image: widget.avatarBytes,
+      return Consumer(
+        builder: (context, ref, _) => Semantics(
+          button: true,
+          label: l10n.avatarManage,
+          child: AnimatedInkWell(
+            customBorder: AppShape.circle,
+            onTap: () => ref
+                .read(noticeCenterProvider.notifier)
+                .show(l10n.avatarRequiresConnection, tone: NoticeTone.info),
+            child: IdentityAvatar(
+              nickname: labelNickname,
+              size: 36,
+              image: widget.avatarBytes,
+            ),
+          ),
+        ),
       );
     }
     return Consumer(

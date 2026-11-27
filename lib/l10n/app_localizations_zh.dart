@@ -220,6 +220,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get avatarUnavailable => '头像未能更新，请重试。';
 
   @override
+  String get avatarRequiresConnection => '连接到服务器后即可管理头像。';
+
+  @override
   String get workspaceDropped => '连接丢失';
 
   @override

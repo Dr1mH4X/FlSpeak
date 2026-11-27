@@ -135,7 +135,15 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
   Future<void> _openAvatar() async {
     final view = ref.read(sessionViewProvider);
     final self = view.selfClient;
-    if (!view.connected || self == null || self.uid.isEmpty) return;
+    if (!view.connected || self == null || self.uid.isEmpty) {
+      ref
+          .read(noticeCenterProvider.notifier)
+          .show(
+            AppLocalizations.of(context).avatarRequiresConnection,
+            tone: NoticeTone.info,
+          );
+      return;
+    }
     await showAvatarDialog(context, uid: self.uid, nickname: self.nickname);
   }
 
@@ -156,7 +164,6 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
       :reconnecting,
       :activeServerId,
       :sessionBusy,
-      :selfUid,
     ) = ref.watch(
       sessionViewProvider.select(
         (view) => (
@@ -166,11 +173,9 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
           reconnecting: view.reconnecting,
           activeServerId: view.activeServerId,
           sessionBusy: view.busy,
-          selfUid: view.selfClient?.uid ?? '',
         ),
       ),
     );
-    final canManageAvatar = connected && selfUid.isNotEmpty;
     final avatarBytes = ref.watch(identityAvatarProvider);
     final nickname = ref.watch(
       activeIdentityProvider.select((identity) => identity.nickname),
@@ -279,14 +284,14 @@ class _ConnectPageState extends ConsumerState<ConnectPage> {
             nickname: nickname,
             onManage: _openIdentity,
             avatarBytes: avatarBytes,
-            onAvatarTap: canManageAvatar ? _openAvatar : null,
+            onAvatarTap: _openAvatar,
           )
         : IdentityStrip(
             nickname: nickname,
             serverCount: servers.length,
             onManage: _openIdentity,
             avatarBytes: avatarBytes,
-            onAvatarTap: canManageAvatar ? _openAvatar : null,
+            onAvatarTap: _openAvatar,
           );
 
     final horizontal = wide ? 40.0 : 20.0;

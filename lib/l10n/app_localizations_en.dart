@@ -224,6 +224,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get avatarUnavailable => 'The avatar could not be updated. Try again.';
 
   @override
+  String get avatarRequiresConnection =>
+      'Connect to a server to manage your avatar.';
+
+  @override
   String get workspaceDropped => 'Disconnected';
 
   @override
