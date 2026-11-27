@@ -134,7 +134,7 @@ jobs:
         if: matrix.platform == 'linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build libgtk-3-dev libx11-dev libxi-dev libasound2-dev libsecret-1-dev
+          sudo apt-get install -y ninja-build libgtk-3-dev libx11-dev libxi-dev libasound2-dev libpulse-dev libsecret-1-dev
 
       - name: Enable git long paths (Windows)
         if: startsWith(matrix.os, 'windows')
